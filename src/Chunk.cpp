@@ -51,7 +51,6 @@ Chunk& Chunk::operator=(Chunk&& other) noexcept {
 }
 
 void Chunk::GenerateMesh(World& world) {
-    std::cout << chunkX << ", " << chunkY << ", " << chunkZ << std::endl;
     mesh.GenerateMesh(*this, world, chunkX, chunkY, chunkZ);
 }
 

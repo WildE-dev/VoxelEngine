@@ -81,54 +81,57 @@ void World::SetBlock(int x, int y, int z, unsigned char type) {
     }
 }
 
-void World::UpdateAdjacentChunks(int x, int y, int z) { // Works sometimes
+void World::UpdateAdjacentChunks(int x, int y, int z) {
     Chunk* chunk = nullptr;
     std::tuple<int, int, int> chunkCoords;
-    if (x == 0)
-    {
+    std::tuple<int, int, int> blockCoords = GetBlockCoordinates(x, y, z);
+
+    // Check -X boundary
+    if (std::get<0>(blockCoords) == 0) {
         chunkCoords = GetChunkCoordinates(x - 1, y, z);
         if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
             chunk->GenerateMesh(*this);
         }
-    } 
-    else if (x == 15)
-    {
+    }
+    // Check +X boundary
+    if (std::get<0>(blockCoords) == Chunk::CHUNK_SIZE - 1) {
         chunkCoords = GetChunkCoordinates(x + 1, y, z);
         if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
             chunk->GenerateMesh(*this);
         }
     }
 
-    if (y == 0)
-    {
+    // Check -Y boundary
+    if (std::get<1>(blockCoords) == 0) {
         chunkCoords = GetChunkCoordinates(x, y - 1, z);
         if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
             chunk->GenerateMesh(*this);
         }
     }
-    else if (y == 15)
-    {
+    // Check +Y boundary
+    if (std::get<1>(blockCoords) == Chunk::CHUNK_SIZE - 1) {
         chunkCoords = GetChunkCoordinates(x, y + 1, z);
         if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
             chunk->GenerateMesh(*this);
         }
     }
 
-    if (z == 0)
-    {
+    // Check -Z boundary
+    if (std::get<2>(blockCoords) == 0) {
         chunkCoords = GetChunkCoordinates(x, y, z - 1);
         if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
             chunk->GenerateMesh(*this);
         }
     }
-    else if (z == 15)
-    {
+    // Check +Z boundary
+    if (std::get<2>(blockCoords) == Chunk::CHUNK_SIZE - 1) {
         chunkCoords = GetChunkCoordinates(x, y, z + 1);
         if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
             chunk->GenerateMesh(*this);
         }
     }
 }
+
 
 void World::Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight) {
     shader.Use();
