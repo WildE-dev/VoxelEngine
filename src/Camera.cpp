@@ -67,3 +67,8 @@ glm::vec3 Camera::GetPosition() const {
 glm::vec3 Camera::GetDirection() const {
     return cameraFront;
 }
+
+glm::vec2 Camera::GetDirectionAngles() const
+{
+    return glm::vec2(pitch, yaw);
+}

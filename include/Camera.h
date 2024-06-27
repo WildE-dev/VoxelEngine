@@ -15,6 +15,7 @@ public:
 	glm::mat4 GetProjectionMatrix(float frameWidth, float frameHeight) const;
 	glm::vec3 GetPosition() const;
 	glm::vec3 GetDirection() const;
+	glm::vec2 GetDirectionAngles() const;
 private:
 	glm::vec3 cameraPos = glm::vec3(7.0f, 7.0f, 7.0f);
 	glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);

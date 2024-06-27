@@ -82,7 +82,8 @@ bool Chunk::GetBlockCulls(int x, int y, int z) const
     return true;
 }
 
-void Chunk::SetBlock(int x, int y, int z, unsigned char type) {
+void Chunk::SetBlock(int x, int y, int z, unsigned char type, bool regenerateMesh) {
     blocks[Index(x, y, z)] = Block(type);
-    GenerateMesh(*world);
+    if (regenerateMesh)
+        GenerateMesh(*world);
 }

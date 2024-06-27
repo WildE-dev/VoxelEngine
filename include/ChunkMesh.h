@@ -27,8 +27,8 @@ public:
     void Render(Shader& shader);
 
 private:
-    GLuint VAO, VBO, EBO;
-    GLsizei indexCount;
+    GLuint VAO, VBO;
+    GLsizei vertexCount;
 
     void Initialize();
     void Clear();

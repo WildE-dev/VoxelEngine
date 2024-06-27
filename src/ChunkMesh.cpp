@@ -8,7 +8,7 @@
 #include "Shader.h"
 #include "World.h"
 
-ChunkMesh::ChunkMesh() : VAO(0), VBO(0), EBO(0), indexCount(0) {
+ChunkMesh::ChunkMesh() : VAO(0), VBO(0), vertexCount(0) {
     Initialize();
 }
 
@@ -16,7 +16,7 @@ ChunkMesh::~ChunkMesh() {
     Clear();
 }
 
-ChunkMesh::ChunkMesh(const ChunkMesh& other) : VAO(0), VBO(0), EBO(0), indexCount(other.indexCount) {
+ChunkMesh::ChunkMesh(const ChunkMesh& other) : VAO(0), VBO(0), vertexCount(other.vertexCount) {
     Initialize();
     //CopyFrom(other);
 }
@@ -25,16 +25,15 @@ ChunkMesh& ChunkMesh::operator=(const ChunkMesh& other) { // Move
     if (this != &other) {
         Clear();
         Initialize();
-        indexCount = other.indexCount;
+        vertexCount = other.vertexCount;
         //CopyFrom(other);
     }
     return *this;
 }
 
-ChunkMesh::ChunkMesh(ChunkMesh&& other) noexcept : VAO(other.VAO), VBO(other.VBO), EBO(other.EBO), indexCount(other.indexCount) {
+ChunkMesh::ChunkMesh(ChunkMesh&& other) noexcept : VAO(other.VAO), VBO(other.VBO), vertexCount(other.vertexCount) {
     other.VAO = 0;
     other.VBO = 0;
-    other.EBO = 0;
 }
 
 ChunkMesh& ChunkMesh::operator=(ChunkMesh&& other) noexcept { // Copy
@@ -42,12 +41,10 @@ ChunkMesh& ChunkMesh::operator=(ChunkMesh&& other) noexcept { // Copy
         Clear();
         VAO = other.VAO;
         VBO = other.VBO;
-        EBO = other.EBO;
-        indexCount = other.indexCount;
+        vertexCount = other.vertexCount;
 
         other.VAO = 0;
         other.VBO = 0;
-        other.EBO = 0;
     }
     return *this;
 }
@@ -55,83 +52,14 @@ ChunkMesh& ChunkMesh::operator=(ChunkMesh&& other) noexcept { // Copy
 void ChunkMesh::Initialize() {
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
     //std::cout << "INIT" << std::endl;
 }
 
 void ChunkMesh::Clear() {
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
-    glDeleteBuffers(1, &EBO);
 }
 
-const float blockVertices[6][48] = {
-    // +X
-    {
-        0.5f, -0.5f, -0.5f, 0.0f, 0.0f,  1.0f,  0.0f,  0.0f,
-        0.5f,  0.5f,  0.5f, 1.0f, 1.0f,  1.0f,  0.0f,  0.0f,
-        0.5f,  0.5f, -0.5f, 0.0f, 1.0f,  1.0f,  0.0f,  0.0f,
-
-        0.5f, -0.5f, -0.5f, 0.0f, 0.0f,  1.0f,  0.0f,  0.0f,
-        0.5f, -0.5f,  0.5f, 1.0f, 0.0f,  1.0f,  0.0f,  0.0f,
-        0.5f,  0.5f,  0.5f, 1.0f, 1.0f,  1.0f,  0.0f,  0.0f,
-    },
-
-    // -X                                           
-    {
-         -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, -1.0f,  0.0f,  0.0f,
-         -0.5f,  0.5f, -0.5f, 1.0f, 1.0f, -1.0f,  0.0f,  0.0f,
-         -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, -1.0f,  0.0f,  0.0f,
-
-         -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, -1.0f,  0.0f,  0.0f,
-         -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, -1.0f,  0.0f,  0.0f,
-         -0.5f,  0.5f, -0.5f, 1.0f, 1.0f, -1.0f,  0.0f,  0.0f,
-    },
-
-    // +Y                                           
-    {
-          0.5f,  0.5f, -0.5f, 0.0f, 1.0f,  0.0f,  1.0f,  0.0f,
-          0.5f,  0.5f,  0.5f, 0.0f, 0.0f,  0.0f,  1.0f,  0.0f,
-         -0.5f,  0.5f,  0.5f, 1.0f, 0.0f,  0.0f,  1.0f,  0.0f,
-
-          0.5f,  0.5f, -0.5f, 0.0f, 1.0f,  0.0f,  1.0f,  0.0f,
-         -0.5f,  0.5f,  0.5f, 1.0f, 0.0f,  0.0f,  1.0f,  0.0f,
-         -0.5f,  0.5f, -0.5f, 1.0f, 1.0f,  0.0f,  1.0f,  0.0f,
-    },
-
-    // -Y
-    {
-          0.5f, -0.5f, -0.5f, 1.0f, 0.0f,  0.0f, -1.0f,  0.0f,
-         -0.5f, -0.5f,  0.5f, 0.0f, 1.0f,  0.0f, -1.0f,  0.0f,
-          0.5f, -0.5f,  0.5f, 1.0f, 1.0f,  0.0f, -1.0f,  0.0f,
-
-          0.5f, -0.5f, -0.5f, 1.0f, 0.0f,  0.0f, -1.0f,  0.0f,
-         -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,  0.0f, -1.0f,  0.0f,
-         -0.5f, -0.5f,  0.5f, 0.0f, 1.0f,  0.0f, -1.0f,  0.0f,
-    },
-
-    // +Z
-    {
-           0.5f, -0.5f,  0.5f, 1.0f, 0.0f,  0.0f,  0.0f,  1.0f,
-          -0.5f,  0.5f,  0.5f, 0.0f, 1.0f,  0.0f,  0.0f,  1.0f,
-           0.5f,  0.5f,  0.5f, 1.0f, 1.0f,  0.0f,  0.0f,  1.0f,
-
-           0.5f, -0.5f,  0.5f, 1.0f, 0.0f,  0.0f,  0.0f,  1.0f,
-          -0.5f, -0.5f,  0.5f, 0.0f, 0.0f,  0.0f,  0.0f,  1.0f,
-          -0.5f,  0.5f,  0.5f, 0.0f, 1.0f,  0.0f,  0.0f,  1.0f,
-    },
-
-    // -Z
-    {
-          -0.5f, -0.5f, -0.5f, 1.0f, 0.0f,  0.0f,  0.0f, -1.0f,
-           0.5f,  0.5f, -0.5f, 0.0f, 1.0f,  0.0f,  0.0f, -1.0f,
-          -0.5f,  0.5f, -0.5f, 1.0f, 1.0f,  0.0f,  0.0f, -1.0f,
-
-          -0.5f, -0.5f, -0.5f, 1.0f, 0.0f,  0.0f,  0.0f, -1.0f,
-           0.5f, -0.5f, -0.5f, 0.0f, 0.0f,  0.0f,  0.0f, -1.0f,
-           0.5f,  0.5f, -0.5f, 0.0f, 1.0f,  0.0f,  0.0f, -1.0f,
-    }
-};
 const int kFaceNeighborOffsets[6][3] = {
     { 1,  0,  0},  // Right face
     {-1,  0,  0},  // Left face
@@ -143,8 +71,8 @@ const int kFaceNeighborOffsets[6][3] = {
 
 void ChunkMesh::GenerateMesh(const Chunk& chunk, World& world, int chunkX, int chunkY, int chunkZ) {
     //std::cout << "MESH GEN" << std::endl;
-    std::vector<float> vertices;
-    std::vector<unsigned int> indices;
+    std::vector<uint32_t> vertices;
+    //std::vector<unsigned int> indices;
 
     for (int x = 0; x < Chunk::CHUNK_SIZE; ++x) {
         for (int y = 0; y < Chunk::CHUNK_SIZE; ++y) {
@@ -172,10 +100,10 @@ void ChunkMesh::GenerateMesh(const Chunk& chunk, World& world, int chunkX, int c
                         }
 
                         if (!neighborBlockCulls) {
-                            unsigned int indexOffset = static_cast<unsigned int>(vertices.size() / 8);
+                            //unsigned int indexOffset = static_cast<unsigned int>(vertices.size());
 
                             block.AddFaceVertices(vertices, face, x, y, z);
-                            block.GenerateFaceIndices(indices, indexOffset);
+                            //block.GenerateFaceIndices(indices, indexOffset);
                         }
                     }
                 }
@@ -183,28 +111,33 @@ void ChunkMesh::GenerateMesh(const Chunk& chunk, World& world, int chunkX, int c
         }
     }
 
-    indexCount = static_cast<GLsizei>(indices.size());
+    //indexCount = static_cast<GLsizei>(indices.size());
+    vertexCount = static_cast<GLsizei>(vertices.size());
 
     glBindVertexArray(VAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(uint32_t), vertices.data(), GL_STATIC_DRAW);
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+    //if (vertices.size() > 0)
+        //std::cout << vertices.size() << ", " << sizeof(uint32_t) << ", " << vertices.data()[4] << std::endl;
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(5 * sizeof(float)));
+    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    //glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+
+    //glVertexAttribPointer(0, 1, GL_UNSIGNED_INT, GL_FALSE, 0, (void*)0);
+    glVertexAttribIPointer(0, 1, GL_UNSIGNED_INT, sizeof(uint32_t), (void*)0);
+    //glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    //glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(5 * sizeof(float)));
     glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glEnableVertexAttribArray(2);
+    //glEnableVertexAttribArray(1);
+    //glEnableVertexAttribArray(2);
 
     glBindVertexArray(0);
 }
 
 void ChunkMesh::Render(Shader& shader) {
     glBindVertexArray(VAO);
-    glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
+    glDrawArrays(GL_TRIANGLES, 0, vertexCount);
     glBindVertexArray(0);
 }

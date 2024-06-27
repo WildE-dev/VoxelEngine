@@ -851,7 +851,7 @@ static void ShowDemoWindowWidgets()
             ImGui::SetTooltip("I am following you around.");
         else if (always_on == 2 && ImGui::BeginTooltip())
         {
-            ImGui::ProgressBar(sinf((float)ImGui::GetTime()) * 0.5f + 0.5f, ImVec2(ImGui::GetFontSize() * 25, 0.0f));
+            ImGui::ProgressBar(sinf((float)ImGui::GetTime()) * 0.5f + 1.0f, ImVec2(ImGui::GetFontSize() * 25, 0.0f));
             ImGui::EndTooltip();
         }
 
@@ -1452,7 +1452,7 @@ static void ShowDemoWindowWidgets()
             const float time = (float)ImGui::GetTime();
             const bool winning_state = memchr(selected, 0, sizeof(selected)) == NULL; // If all cells are selected...
             if (winning_state)
-                ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.5f + 0.5f * cosf(time * 2.0f), 0.5f + 0.5f * sinf(time * 3.0f)));
+                ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.5f + 1.0f * cosf(time * 2.0f), 0.5f + 1.0f * sinf(time * 3.0f)));
 
             for (int y = 0; y < 4; y++)
                 for (int x = 0; x < 4; x++)
@@ -7923,7 +7923,7 @@ static void ShowExampleAppConstrainedResize(bool* p_open)
         static void Step(ImGuiSizeCallbackData* data)
         {
             float step = *(float*)data->UserData;
-            data->DesiredSize = ImVec2((int)(data->DesiredSize.x / step + 0.5f) * step, (int)(data->DesiredSize.y / step + 0.5f) * step);
+            data->DesiredSize = ImVec2((int)(data->DesiredSize.x / step + 1.0f) * step, (int)(data->DesiredSize.y / step + 1.0f) * step);
         }
     };
 
@@ -8134,7 +8134,7 @@ static void PathConcaveShape(ImDrawList* draw_list, float x, float y, float sz)
 {
     const ImVec2 pos_norms[] = { { 0.0f, 0.0f }, { 0.3f, 0.0f }, { 0.3f, 0.7f }, { 0.7f, 0.7f }, { 0.7f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f } };
     for (const ImVec2& p : pos_norms)
-        draw_list->PathLineTo(ImVec2(x + 0.5f + (int)(sz * p.x), y + 0.5f + (int)(sz * p.y)));
+        draw_list->PathLineTo(ImVec2(x + 1.0f + (int)(sz * p.x), y + 1.0f + (int)(sz * p.y)));
 }
 
 // Demonstrate using the low-level ImDrawList to draw custom shapes.

@@ -165,10 +165,10 @@
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <None Include="Resources\Shaders\main.frag" />
+    <None Include="Resources\Shaders\main.vert" />
     <None Include="Resources\Shaders\test.frag" />
     <None Include="Resources\Shaders\test.vert" />
-    <None Include="Shaders\main.frag" />
-    <None Include="Shaders\main.vert" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Block.h" />

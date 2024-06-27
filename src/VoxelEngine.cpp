@@ -170,9 +170,9 @@ bool GetTargetBlock(World& world, const glm::vec3& rayOrigin, const glm::vec3& r
     float t = 0.0f;
     for (int i = 0; i < maxDistance * 10; ++i) {
         glm::vec3 point = rayOrigin + (t * rayDirection);
-        int x = static_cast<int>(std::round(point.x));
-        int y = static_cast<int>(std::round(point.y));
-        int z = static_cast<int>(std::round(point.z));
+        int x = static_cast<int>(std::floor(point.x));
+        int y = static_cast<int>(std::floor(point.y));
+        int z = static_cast<int>(std::floor(point.z));
 
         Block block = world.GetBlock(x, y, z);
         if (block.type != 0) {
@@ -243,13 +243,18 @@ int main()
                 for (size_t z = 0; z < 16; z++)
                 {
                     if (square(x - 7) + square(y - 7) + square(z - 7) < 16)
-                        chunk->SetBlock(x, y, z, 0);
+                        chunk->SetBlock(x, y, z, 0, false);
                 }
             }
         }
 
         chunk->GenerateMesh(world);
     }
+
+    /*Chunk* chunk = nullptr;
+    if (world.GetChunk(chunk, 0, 0, 0)) {
+        chunk->SetBlock(0, 0, 0, 1);
+    }*/
 
     bool vsync = true;
     ImVec4 clear_color = ImVec4(0.26f, 0.47f, 0.71f, 1.0f);
@@ -293,6 +298,10 @@ int main()
         if (ImGui::Begin("Debug", (bool *)0, window_flags)) {
             ImGui::Checkbox("VSync", &vsync);
             ImGui::ColorEdit3("Clear Color", (float*)&clear_color);
+            auto pos = camera.GetPosition();
+            auto angles = camera.GetDirectionAngles();
+            ImGui::Text("Position %.3f, %.3f, %.3f", pos.x, pos.y, pos.z);
+            ImGui::Text("Angles %.3f, %.3f", angles.x, angles.y);
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", frameTime, fps);
             ImGui::PlotLines("Frame Time (ms)", frameTimes, 100, i);
         }

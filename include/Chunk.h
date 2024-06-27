@@ -27,7 +27,7 @@ public:
 
 	const Block& GetBlock(int x, int y, int z) const;
 	bool GetBlockCulls(int x, int y, int z) const;
-	void SetBlock(int x, int y, int z, unsigned char type);
+	void SetBlock(int x, int y, int z, unsigned char type, bool regenerateMesh = true);
 private:
 	std::array<Block, CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE> blocks;
 	ChunkMesh mesh;

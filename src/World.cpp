@@ -21,6 +21,9 @@ World::World() {
         }
     }
 
+    //auto key = std::make_tuple(0, 0, 0);
+    //chunks[key] = std::unique_ptr<Chunk>(new Chunk(this, 0, 0, 0));
+
     for (auto& pair : chunks) {
         int chunkX = std::get<0>(pair.first);
         int chunkY = std::get<1>(pair.first);
