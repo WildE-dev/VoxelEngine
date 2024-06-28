@@ -166,7 +166,7 @@ glm::vec3 ScreenToWorldRay(const Camera& camera, float screenX, float screenY, i
 
 
 // Perform raycasting to find the target block
-bool GetTargetBlock(World& world, const glm::vec3& rayOrigin, const glm::vec3& rayDirection, int maxDistance, glm::ivec3& hitBlock) {
+bool GetTargetBlock(World& world, const glm::vec3& rayOrigin, const glm::vec3& rayDirection, int maxDistance, glm::ivec3& hitBlockPos, Block& hitBlock) {
     float t = 0.0f;
     for (int i = 0; i < maxDistance * 10; ++i) {
         glm::vec3 point = rayOrigin + (t * rayDirection);
@@ -174,9 +174,9 @@ bool GetTargetBlock(World& world, const glm::vec3& rayOrigin, const glm::vec3& r
         int y = static_cast<int>(std::floor(point.y));
         int z = static_cast<int>(std::floor(point.z));
 
-        Block block = world.GetBlock(x, y, z);
-        if (block.type != BlockType::AIR) {
-            hitBlock = glm::ivec3(x, y, z);
+        hitBlock = world.GetBlock(x, y, z);
+        if (hitBlock.type != BlockType::AIR) {
+            hitBlockPos = glm::ivec3(x, y, z);
             return true;
         }
 
@@ -191,9 +191,22 @@ void ChangeTargetBlock(World& world, const Camera& camera, BlockType type, int s
     glm::vec3 rayDirection = camera.GetDirection();// ScreenToWorldRay(camera, screenWidth / 2.0f, screenHeight / 2.0f, screenWidth, screenHeight);
     glm::vec3 rayOrigin = camera.GetPosition();
 
-    glm::ivec3 hitBlock;
-    if (GetTargetBlock(world, rayOrigin, rayDirection, maxDistance, hitBlock)) {
-        world.SetBlock(hitBlock.x, hitBlock.y, hitBlock.z, type);
+    glm::ivec3 pos;
+    Block block;
+    if (GetTargetBlock(world, rayOrigin, rayDirection, maxDistance, pos, block)) {
+        world.SetBlock(pos.x, pos.y, pos.z, type);
+    }
+}
+
+void ShrinkTargetBlock(World& world, const Camera& camera, int screenWidth, int screenHeight, int maxDistance) {
+    glm::vec3 rayDirection = camera.GetDirection();// ScreenToWorldRay(camera, screenWidth / 2.0f, screenHeight / 2.0f, screenWidth, screenHeight);
+    glm::vec3 rayOrigin = camera.GetPosition();
+
+    glm::ivec3 pos;
+    Block block;
+    if (GetTargetBlock(world, rayOrigin, rayDirection, maxDistance, pos, block)) {
+        block.Shrink();
+        world.SetBlock(pos.x, pos.y, pos.z, block);
     }
 }
 
@@ -312,7 +325,8 @@ int main()
         camera.UpdateMove(window, deltaTime);
 
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS && !mousePressed) {
-            ChangeTargetBlock(world, camera, BlockType::AIR, frameWidth, frameHeight, 10);
+            //ChangeTargetBlock(world, camera, BlockType::AIR, frameWidth, frameHeight, 10);
+            ShrinkTargetBlock(world, camera, frameWidth, frameHeight, 10);
             mousePressed = true;
         }
         else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_RELEASE) {

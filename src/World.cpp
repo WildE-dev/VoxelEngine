@@ -74,12 +74,33 @@ bool World::GetBlockCulls(int x, int y, int z) {
     return false;
 }
 
+void World::SetBlock(int x, int y, int z, Block block)
+{
+    auto chunkCoords = GetChunkCoordinates(x, y, z);
+    auto blockCoords = GetBlockCoordinates(x, y, z);
+    Chunk* chunk = nullptr;
+    if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
+        chunk->SetBlock(std::get<0>(blockCoords), std::get<1>(blockCoords), std::get<2>(blockCoords), block);
+        UpdateAdjacentChunks(x, y, z);
+    }
+}
+
 void World::SetBlock(int x, int y, int z, BlockType type) {
     auto chunkCoords = GetChunkCoordinates(x, y, z);
     auto blockCoords = GetBlockCoordinates(x, y, z);
     Chunk* chunk = nullptr;
     if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
         chunk->SetBlock(std::get<0>(blockCoords), std::get<1>(blockCoords), std::get<2>(blockCoords), type);
+        UpdateAdjacentChunks(x, y, z);
+    }
+}
+
+void World::SetBlock(int x, int y, int z, EdgeData edges) {
+    auto chunkCoords = GetChunkCoordinates(x, y, z);
+    auto blockCoords = GetBlockCoordinates(x, y, z);
+    Chunk* chunk = nullptr;
+    if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
+        chunk->SetBlock(std::get<0>(blockCoords), std::get<1>(blockCoords), std::get<2>(blockCoords), edges);
         UpdateAdjacentChunks(x, y, z);
     }
 }

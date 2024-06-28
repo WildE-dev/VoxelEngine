@@ -87,17 +87,24 @@ bool Chunk::GetBlockCulls(int x, int y, int z) const
     if (b.type == BlockType::AIR)
         return false;
 
-    for (size_t i = 0; i < 4; i++)
-    {
-        if (b.edgeData.edges[i] != 0x80)
-            return false;
-    }
+    return b.IsFullBlock();
+}
 
-    return true;
+void Chunk::SetBlock(int x, int y, int z, Block block, bool regenerateMesh)
+{
+    blocks[Index(x, y, z)] = block;
+    if (regenerateMesh)
+        GenerateMesh(*world);
 }
 
 void Chunk::SetBlock(int x, int y, int z, BlockType type, bool regenerateMesh) {
-    blocks[Index(x, y, z)] = Block(type);
+    blocks[Index(x, y, z)].type = type;
+    if (regenerateMesh)
+        GenerateMesh(*world);
+}
+
+void Chunk::SetBlock(int x, int y, int z, EdgeData edges, bool regenerateMesh) {
+    blocks[Index(x, y, z)].SetEdgeData(edges);
     if (regenerateMesh)
         GenerateMesh(*world);
 }

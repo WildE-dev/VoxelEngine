@@ -12,6 +12,31 @@ struct EdgeData {
         }
     }
 
+    bool IsValid()
+    {
+        int sameCount = 0;
+        for (size_t i = 0; i < 4; i++)
+        {
+            uint8_t top = GetTopY(i);
+            uint8_t bottom = GetBottomY(i);
+
+            if (top == bottom)
+                sameCount++;
+        }
+
+        if (sameCount == 4)
+            return false;
+
+        return true;
+    }
+
+    void Shrink() {
+        for (size_t i = 0; i < 4; i++)
+        {
+            SetTopY(i, GetTopY(i) - 1);
+        }
+    }
+
     void SetBottomY(int edgeIndex, uint8_t value) {
         if (edgeIndex < 0 || edgeIndex >= 4 || value > 8) return;
         edges[edgeIndex] = (edges[edgeIndex] & 0xF0) | (value & 0x0F);
@@ -95,9 +120,9 @@ static std::unordered_map<BlockType, TextureData> blockTextureMap = {
 
 class Block
 {
+    EdgeData edgeData;
 public:
     BlockType type;
-    EdgeData edgeData;
 
     Block();
     Block(BlockType t);
@@ -109,5 +134,9 @@ public:
     Block& operator=(const Block& other);
 
     void AddFaceVertices(std::vector<uint32_t>& vertices, int face, int x, int y, int z) const;
+    void Shrink();
+    void SetEdgeData(EdgeData edgeData);
+
+    bool IsFullBlock();
 };
 

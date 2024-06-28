@@ -92,11 +92,27 @@ void Block::AddFaceVertices(std::vector<uint32_t>& vertices, int face, int x, in
         vertices.push_back(faceVertices[order[i]].GetVertexInt());
         vertices.push_back(faceVertices[order[i]].GetVertexNormInt());
     }
+}
 
-    //vertices.push_back(faceVertices[0].GetVertexInt());
-    //vertices.push_back(faceVertices[1].GetVertexInt());
-    //vertices.push_back(faceVertices[2].GetVertexInt());
-    //vertices.push_back(faceVertices[2].GetVertexInt());
-    //vertices.push_back(faceVertices[1].GetVertexInt());
-    //vertices.push_back(faceVertices[3].GetVertexInt());
+void Block::Shrink() {
+    edgeData.Shrink();
+    if (!edgeData.IsValid()) {
+        type = BlockType::AIR;
+    }
+}
+
+void Block::SetEdgeData(EdgeData edgeData)
+{
+    this->edgeData = edgeData;
+}
+
+bool Block::IsFullBlock()
+{
+    for (size_t i = 0; i < 4; i++)
+    {
+        if (edgeData.edges[i] != 0x80)
+            return false;
+    }
+
+    return true;
 }

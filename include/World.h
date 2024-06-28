@@ -26,7 +26,9 @@ public:
 
     Block GetBlock(int x, int y, int z);
     bool GetBlockCulls(int x, int y, int z);
+    void SetBlock(int x, int y, int z, Block block);
     void SetBlock(int x, int y, int z, BlockType type);
+    void SetBlock(int x, int y, int z, EdgeData edges);
 
     void Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight);
 
