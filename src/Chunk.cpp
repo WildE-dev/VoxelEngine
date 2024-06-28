@@ -5,7 +5,21 @@
 Chunk::Chunk() : world(0), chunkX(0), chunkY(0), chunkZ(0) {}
 
 Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ) : world(world), chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ) {
-    blocks.fill(Block(1));
+    blocks.fill(Block(BlockType::STONE));
+
+    for (size_t x = 0; x < CHUNK_SIZE; x++)
+    {
+        for (size_t y = 11; y < CHUNK_SIZE; y++)
+        {
+            for (size_t z = 0; z < CHUNK_SIZE; z++)
+            {
+                if (y < CHUNK_SIZE - 1)
+                    SetBlock(x, y, z, BlockType::DIRT, false);
+                else
+                    SetBlock(x, y, z, BlockType::GRASS, false);
+            }
+        }
+    }
 
     //GenerateMesh(*world);
 }
@@ -70,7 +84,7 @@ bool Chunk::GetBlockCulls(int x, int y, int z) const
 {
     Block b = blocks[Index(x, y, z)];
 
-    if (b.type == 0)
+    if (b.type == BlockType::AIR)
         return false;
 
     for (size_t i = 0; i < 4; i++)
@@ -82,7 +96,7 @@ bool Chunk::GetBlockCulls(int x, int y, int z) const
     return true;
 }
 
-void Chunk::SetBlock(int x, int y, int z, unsigned char type, bool regenerateMesh) {
+void Chunk::SetBlock(int x, int y, int z, BlockType type, bool regenerateMesh) {
     blocks[Index(x, y, z)] = Block(type);
     if (regenerateMesh)
         GenerateMesh(*world);

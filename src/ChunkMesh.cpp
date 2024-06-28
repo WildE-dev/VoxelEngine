@@ -78,7 +78,7 @@ void ChunkMesh::GenerateMesh(const Chunk& chunk, World& world, int chunkX, int c
         for (int y = 0; y < Chunk::CHUNK_SIZE; ++y) {
             for (int z = 0; z < Chunk::CHUNK_SIZE; ++z) {
                 const Block& block = chunk.GetBlock(x, y, z);
-                if (block.type != 0) {
+                if (block.type != BlockType::AIR) {
                     for (int face = 0; face < 6; ++face) {
                         int neighborX = x + kFaceNeighborOffsets[face][0];
                         int neighborY = y + kFaceNeighborOffsets[face][1];
@@ -126,11 +126,12 @@ void ChunkMesh::GenerateMesh(const Chunk& chunk, World& world, int chunkX, int c
     //glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
 
     //glVertexAttribPointer(0, 1, GL_UNSIGNED_INT, GL_FALSE, 0, (void*)0);
-    glVertexAttribIPointer(0, 1, GL_UNSIGNED_INT, sizeof(uint32_t), (void*)0);
+    glVertexAttribIPointer(0, 1, GL_UNSIGNED_INT, 2 * sizeof(uint32_t), (void*)0);
+    glVertexAttribIPointer(1, 1, GL_UNSIGNED_INT, 2 * sizeof(uint32_t), (void*)sizeof(uint32_t));
     //glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
     //glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(5 * sizeof(float)));
     glEnableVertexAttribArray(0);
-    //glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(1);
     //glEnableVertexAttribArray(2);
 
     glBindVertexArray(0);

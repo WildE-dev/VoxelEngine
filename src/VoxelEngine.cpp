@@ -175,7 +175,7 @@ bool GetTargetBlock(World& world, const glm::vec3& rayOrigin, const glm::vec3& r
         int z = static_cast<int>(std::floor(point.z));
 
         Block block = world.GetBlock(x, y, z);
-        if (block.type != 0) {
+        if (block.type != BlockType::AIR) {
             hitBlock = glm::ivec3(x, y, z);
             return true;
         }
@@ -187,7 +187,7 @@ bool GetTargetBlock(World& world, const glm::vec3& rayOrigin, const glm::vec3& r
 }
 
 // Change the target block
-void ChangeTargetBlock(World& world, const Camera& camera, unsigned char type, int screenWidth, int screenHeight, int maxDistance) {
+void ChangeTargetBlock(World& world, const Camera& camera, BlockType type, int screenWidth, int screenHeight, int maxDistance) {
     glm::vec3 rayDirection = camera.GetDirection();// ScreenToWorldRay(camera, screenWidth / 2.0f, screenHeight / 2.0f, screenWidth, screenHeight);
     glm::vec3 rayOrigin = camera.GetPosition();
 
@@ -203,19 +203,22 @@ int main()
         return -1;
     }
 
-    int width, height, nrChannels;
-    unsigned char* data = stbi_load("Resources/Textures/test.png", &width, &height, &nrChannels, 0);
-
     Shader s = Shader("Resources/Shaders/main.vert", "Resources/Shaders/main.frag");
     shader = &s;
+
+    int width, height, nrChannels;
+    unsigned char* data = stbi_load("Resources/Textures/atlas.png", &width, &height, &nrChannels, 0);
 
     GLuint texture;
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
 
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
     if (data)
     {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
     }
     else
@@ -236,25 +239,20 @@ int main()
 
     Chunk* chunk = nullptr;
     if (world.GetChunk(chunk, 0, 0, 0)) {
-        for (size_t x = 0; x < 16; x++)
+        for (size_t x = 0; x < Chunk::CHUNK_SIZE; x++)
         {
-            for (size_t y = 0; y < 16; y++)
+            for (size_t y = 0; y < Chunk::CHUNK_SIZE; y++)
             {
-                for (size_t z = 0; z < 16; z++)
+                for (size_t z = 0; z < Chunk::CHUNK_SIZE; z++)
                 {
                     if (square(x - 7) + square(y - 7) + square(z - 7) < 16)
-                        chunk->SetBlock(x, y, z, 0, false);
+                        chunk->SetBlock(x, y, z, BlockType::AIR, false);
                 }
             }
         }
 
         chunk->GenerateMesh(world);
     }
-
-    /*Chunk* chunk = nullptr;
-    if (world.GetChunk(chunk, 0, 0, 0)) {
-        chunk->SetBlock(0, 0, 0, 1);
-    }*/
 
     bool vsync = true;
     ImVec4 clear_color = ImVec4(0.26f, 0.47f, 0.71f, 1.0f);
@@ -283,8 +281,6 @@ int main()
             if (i >= 100) i = 0;
             frameTimer = 0.0f;
         }
-
-        //double fps = _update_fps_counter(window);
         
         glfwPollEvents();
         
@@ -316,7 +312,7 @@ int main()
         camera.UpdateMove(window, deltaTime);
 
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS && !mousePressed) {
-            ChangeTargetBlock(world, camera, 0, frameWidth, frameHeight, 10);
+            ChangeTargetBlock(world, camera, BlockType::AIR, frameWidth, frameHeight, 10);
             mousePressed = true;
         }
         else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_RELEASE) {

@@ -69,12 +69,12 @@ bool World::GetBlockCulls(int x, int y, int z) {
     auto blockCoords = GetBlockCoordinates(x, y, z);
     Chunk* chunk = nullptr;
     if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
-        return chunk->GetBlock(std::get<0>(blockCoords), std::get<1>(blockCoords), std::get<2>(blockCoords)).type != 0;
+        return chunk->GetBlock(std::get<0>(blockCoords), std::get<1>(blockCoords), std::get<2>(blockCoords)).type != BlockType::AIR;
     }
     return false;
 }
 
-void World::SetBlock(int x, int y, int z, unsigned char type) {
+void World::SetBlock(int x, int y, int z, BlockType type) {
     auto chunkCoords = GetChunkCoordinates(x, y, z);
     auto blockCoords = GetBlockCoordinates(x, y, z);
     Chunk* chunk = nullptr;
