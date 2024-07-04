@@ -99,7 +99,7 @@ void ChunkMesh::GenerateMesh(const Chunk& chunk, World& world, int chunkX, int c
                             neighborBlockCulls = world.GetBlockCulls(globalNeighborX, globalNeighborY, globalNeighborZ);
                         }
 
-                        if (!neighborBlockCulls) {
+                        if (!neighborBlockCulls || !block.IsFullBlock()) {
                             //unsigned int indexOffset = static_cast<unsigned int>(vertices.size());
 
                             block.AddFaceVertices(vertices, face, x, y, z);

@@ -137,6 +137,6 @@ public:
     void Shrink();
     void SetEdgeData(EdgeData edgeData);
 
-    bool IsFullBlock();
+    bool IsFullBlock() const;
 };
 

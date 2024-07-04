@@ -106,7 +106,7 @@ void Block::SetEdgeData(EdgeData edgeData)
     this->edgeData = edgeData;
 }
 
-bool Block::IsFullBlock()
+bool Block::IsFullBlock() const
 {
     for (size_t i = 0; i < 4; i++)
     {

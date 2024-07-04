@@ -23,6 +23,7 @@
 
 bool captureCursor = true;
 bool wireframe = false;
+bool debug = false;
 
 float frameWidth = 800.0f, frameHeight = 600.0f;
 
@@ -47,18 +48,20 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
         shader->ReloadShader();
     if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
         captureCursor = !captureCursor;
-        glfwSetInputMode(window, GLFW_CURSOR, captureCursor ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
     }
     if (key == GLFW_KEY_F1 && action == GLFW_PRESS) {
         wireframe = !wireframe;
         glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
         if (wireframe) glDisable(GL_CULL_FACE); else glEnable(GL_CULL_FACE);
     }
+    if (key == GLFW_KEY_F2 && action == GLFW_PRESS) {
+        debug = !debug;
+    }
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 {
-    if (captureCursor)
+    if (captureCursor && !debug)
         camera.UpdateLook(xpos, ypos);
     else
         camera.firstMouse = true;
@@ -297,41 +300,46 @@ int main()
         
         glfwPollEvents();
         
+        glfwSetInputMode(window, GLFW_CURSOR, captureCursor && !debug ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        ImGuiWindowFlags window_flags = 0;
-        window_flags |= ImGuiWindowFlags_NoTitleBar;
+        if (debug) {
+            if (ImGui::Begin("Debug", &debug)) {
+                ImGui::Checkbox("VSync", &vsync);
+                ImGui::ColorEdit3("Clear Color", (float*)&clear_color);
+                auto pos = camera.GetPosition();
+                auto angles = camera.GetDirectionAngles();
+                ImGui::Text("Position %.3f, %.3f, %.3f", pos.x, pos.y, pos.z);
+                ImGui::Text("Angles %.3f, %.3f", angles.x, angles.y);
+                ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", frameTime, fps);
+                ImGui::PlotLines("Frame Time (ms)", frameTimes, 100, i);
+            }
 
-        if (ImGui::Begin("Debug", (bool *)0, window_flags)) {
-            ImGui::Checkbox("VSync", &vsync);
-            ImGui::ColorEdit3("Clear Color", (float*)&clear_color);
-            auto pos = camera.GetPosition();
-            auto angles = camera.GetDirectionAngles();
-            ImGui::Text("Position %.3f, %.3f, %.3f", pos.x, pos.y, pos.z);
-            ImGui::Text("Angles %.3f, %.3f", angles.x, angles.y);
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", frameTime, fps);
-            ImGui::PlotLines("Frame Time (ms)", frameTimes, 100, i);
+            ImGui::End();
         }
-
-        ImGui::End();
+        
 
         ImGui::Render();
 
         glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        camera.UpdateMove(window, deltaTime);
+        if (!debug) {
+            camera.UpdateMove(window, deltaTime);
 
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS && !mousePressed) {
-            //ChangeTargetBlock(world, camera, BlockType::AIR, frameWidth, frameHeight, 10);
-            ShrinkTargetBlock(world, camera, frameWidth, frameHeight, 10);
-            mousePressed = true;
+            if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS && !mousePressed) {
+                //ChangeTargetBlock(world, camera, BlockType::AIR, frameWidth, frameHeight, 10);
+                ShrinkTargetBlock(world, camera, frameWidth, frameHeight, 10);
+                mousePressed = true;
+            }
+            else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_RELEASE) {
+                mousePressed = false;
+            }
         }
-        else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_RELEASE) {
-            mousePressed = false;
-        }
+        
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
