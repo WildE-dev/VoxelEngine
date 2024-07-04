@@ -42,16 +42,16 @@ std::array<VertexData, 4> GetFaceVertices(Face face, const EdgeData& edgeData, i
 
     switch (face) {
     case Face::Right:
-        vertices[0] = VertexData(x + 1.0f, y + bottomY1, z,         1.0f, 1.0f, textureData.right, 1.0f, 0.0f, 0.0f);
-        vertices[1] = VertexData(x + 1.0f, y + bottomY3, z + 1.0f,  0.0f, 1.0f, textureData.right, 1.0f, 0.0f, 0.0f);
-        vertices[2] = VertexData(x + 1.0f, y + topY1, z,            1.0f, 0.0f, textureData.right, 1.0f, 0.0f, 0.0f);
-        vertices[3] = VertexData(x + 1.0f, y + topY3, z + 1.0f,     0.0f, 0.0f, textureData.right, 1.0f, 0.0f, 0.0f);
+        vertices[0] = VertexData(x + 1.0f, y + bottomY1, z,         1.0f, topY1, textureData.right, 1.0f, 0.0f, 0.0f);
+        vertices[1] = VertexData(x + 1.0f, y + bottomY3, z + 1.0f,  0.0f, topY3, textureData.right, 1.0f, 0.0f, 0.0f);
+        vertices[2] = VertexData(x + 1.0f, y + topY1, z,            1.0f, bottomY1, textureData.right, 1.0f, 0.0f, 0.0f);
+        vertices[3] = VertexData(x + 1.0f, y + topY3, z + 1.0f,     0.0f, bottomY3, textureData.right, 1.0f, 0.0f, 0.0f);
         break;
     case Face::Left:
-        vertices[0] = VertexData(x, y + bottomY0, z + 1.0f,         1.0f, 1.0f, textureData.left, -1.0f, 0.0f, 0.0f);
-        vertices[1] = VertexData(x, y + bottomY2, z,                0.0f, 1.0f, textureData.left, -1.0f, 0.0f, 0.0f);
-        vertices[2] = VertexData(x, y + topY0, z + 1.0f,            1.0f, 0.0f, textureData.left, -1.0f, 0.0f, 0.0f);
-        vertices[3] = VertexData(x, y + topY2, z,                   0.0f, 0.0f, textureData.left, -1.0f, 0.0f, 0.0f);
+        vertices[0] = VertexData(x, y + bottomY0, z + 1.0f,         1.0f, topY0, textureData.left, -1.0f, 0.0f, 0.0f);
+        vertices[1] = VertexData(x, y + bottomY2, z,                0.0f, topY2, textureData.left, -1.0f, 0.0f, 0.0f);
+        vertices[2] = VertexData(x, y + topY0, z + 1.0f,            1.0f, bottomY0, textureData.left, -1.0f, 0.0f, 0.0f);
+        vertices[3] = VertexData(x, y + topY2, z,                   0.0f, bottomY2, textureData.left, -1.0f, 0.0f, 0.0f);
         break;
     case Face::Top:
         vertices[0] = VertexData(x + 1.0f, y + topY3, z + 1.0f,     1.0f, 1.0f, textureData.top, 0.0f, 1.0f, 0.0f);
@@ -66,16 +66,16 @@ std::array<VertexData, 4> GetFaceVertices(Face face, const EdgeData& edgeData, i
         vertices[3] = VertexData(x + 1.0f, y + bottomY3, z + 1.0f,  0.0f, 0.0f, textureData.bottom, 0.0f, -1.0f, 0.0f);
         break;
     case Face::Back:
-        vertices[0] = VertexData(x, y + bottomY0, z + 1.0f,         0.0f, 1.0f, textureData.back, 0.0f, 0.0f, -1.0f);
-        vertices[1] = VertexData(x, y + topY0, z + 1.0f,            0.0f, 0.0f, textureData.back, 0.0f, 0.0f, -1.0f);
-        vertices[2] = VertexData(x + 1.0f, y + bottomY3, z + 1.0f,  1.0f, 1.0f, textureData.back, 0.0f, 0.0f, -1.0f);
-        vertices[3] = VertexData(x + 1.0f, y + topY3, z + 1.0f,     1.0f, 0.0f, textureData.back, 0.0f, 0.0f, -1.0f);
+        vertices[0] = VertexData(x, y + bottomY0, z + 1.0f, 0.0f, topY0, textureData.back, 0.0f, 0.0f, -1.0f);
+        vertices[1] = VertexData(x, y + topY0, z + 1.0f, 0.0f, bottomY0, textureData.back, 0.0f, 0.0f, -1.0f);
+        vertices[2] = VertexData(x + 1.0f, y + bottomY3, z + 1.0f, 1.0f, topY3, textureData.back, 0.0f, 0.0f, -1.0f);
+        vertices[3] = VertexData(x + 1.0f, y + topY3, z + 1.0f, 1.0f, bottomY3, textureData.back, 0.0f, 0.0f, -1.0f);
         break;
     case Face::Front:
-        vertices[0] = VertexData(x + 1.0f, y + bottomY1, z,         0.0f, 1.0f, textureData.front, 0.0f, 0.0f, 1.0f);
-        vertices[1] = VertexData(x + 1.0f, y + topY1, z,            0.0f, 0.0f, textureData.front, 0.0f, 0.0f, 1.0f);
-        vertices[2] = VertexData(x, y + bottomY2, z,                1.0f, 1.0f, textureData.front, 0.0f, 0.0f, 1.0f);
-        vertices[3] = VertexData(x, y + topY2, z,                   1.0f, 0.0f, textureData.front, 0.0f, 0.0f, 1.0f);
+        vertices[0] = VertexData(x + 1.0f, y + bottomY1, z, 0.0f, topY1, textureData.front, 0.0f, 0.0f, 1.0f);
+        vertices[1] = VertexData(x + 1.0f, y + topY1, z, 0.0f, bottomY1, textureData.front, 0.0f, 0.0f, 1.0f);
+        vertices[2] = VertexData(x, y + bottomY2, z, 1.0f, topY2, textureData.front, 0.0f, 0.0f, 1.0f);
+        vertices[3] = VertexData(x, y + topY2, z, 1.0f, bottomY2, textureData.front, 0.0f, 0.0f, 1.0f);
         break;
     }
 

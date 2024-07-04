@@ -71,15 +71,14 @@ struct VertexData {
         uint32_t x = this->x * 8;
         uint32_t y = this->y * 8;
         uint32_t z = this->z * 8;
-        uint32_t u = this->u;
-        uint32_t v = this->v;
+        uint32_t u = this->u * 8;
+        uint32_t v = this->v * 8;
         uint32_t result = 0;
         result |= (x & 0xFFu) << 24;
         result |= (y & 0xFFu) << 16;
         result |= (z & 0xFFu) << 8;
-        result |= (u & 0xFu) << 7;
-        result |= (v & 0xFu) << 6;
-        result |= (textureIndex & 0x3Fu);
+        result |= (u & 0xFu) << 4;
+        result |= v & 0xFu;
         
         return result;
     }
@@ -92,6 +91,7 @@ struct VertexData {
         result |= (normX & 0xFu) << 28;
         result |= (normY & 0xFu) << 24;
         result |= (normZ & 0xFu) << 20;
+        result |= textureIndex & 0xFFFFFu;
 
         return result;
     }

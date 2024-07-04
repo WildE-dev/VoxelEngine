@@ -1,7 +1,7 @@
 #version 330 core
 
-layout (location = 0) in uint aData;
-layout (location = 1) in uint aNorm;
+layout (location = 0) in uint aData1;
+layout (location = 1) in uint aData2;
 //layout (location = 2) in vec3 aNorm;
 
 uniform mat4 model;
@@ -11,7 +11,7 @@ uniform mat4 projection;
 out vec2 TexCoord;
 out float Light;
 
-vec2 getTextureCoords(int textureIndex, int texturesPerRow, int textureSize, int atlasSize, int u, int v) {
+vec2 getTextureCoords(int textureIndex, int texturesPerRow, int textureSize, int atlasSize, float u, float v) {
     int x = textureIndex % texturesPerRow;
     int y = textureIndex / texturesPerRow;
     
@@ -33,20 +33,20 @@ struct Data
 
 Data getData()
 {
-    float x = ((aData >> 24) & 0xFFu) / 8.0f;
-    float y = ((aData >> 16) & 0xFFu) / 8.0f;
-    float z = ((aData >> 8) & 0xFFu) / 8.0f;
+    float x = ((aData1 >> 24) & 0xFFu) / 8.0f;
+    float y = ((aData1 >> 16) & 0xFFu) / 8.0f;
+    float z = ((aData1 >> 8) & 0xFFu) / 8.0f;
     
-    int u = int((aData >> 7) & 0x1u);
-    int v = int((aData >> 6) & 0x1u);
+    float u = ((aData1 >> 4) & 0xFu) / 8.0f;
+    float v = (aData1 & 0xFu) / 8.0f;
 
-    int textureIndex = int(aData & 0x3Fu);
+    int textureIndex = int(aData2 & 0xFFFFFu);
     
     vec2 coords = getTextureCoords(textureIndex, 2, 16, 32, u, v);
 
-    float nX = ((aNorm >> 28) & 0xFu) / 7.5f - 1.0f;
-    float nY = ((aNorm >> 24) & 0xFu) / 7.5f - 1.0f;
-    float nZ = ((aNorm >> 20) & 0xFu) / 7.5f - 1.0f;
+    float nX = ((aData2 >> 28) & 0xFu) / 7.5f - 1.0f;
+    float nY = ((aData2 >> 24) & 0xFu) / 7.5f - 1.0f;
+    float nZ = ((aData2 >> 20) & 0xFu) / 7.5f - 1.0f;
 
     return Data(vec3(x, y, z), coords, normalize(vec3(nX, nY, nZ)));
 }
