@@ -2,9 +2,9 @@
 #include "Shader.h"
 #include <iostream>
 
-Chunk::Chunk() : world(0), chunkX(0), chunkY(0), chunkZ(0) {}
+Chunk::Chunk() : world(0), chunkX(0), chunkY(0), chunkZ(0), isGenerated(false) {}
 
-Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ) : world(world), chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ) {
+Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ) : world(world), chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ), isGenerated(false) {
     blocks.fill(Block(BlockType::STONE));
 
     for (size_t x = 0; x < CHUNK_SIZE; x++)
@@ -27,7 +27,7 @@ Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ) : world(world), c
 Chunk::~Chunk() {}
 
 Chunk::Chunk(const Chunk& other) : blocks(), mesh(other.mesh), world(other.world),
-chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ) {
+chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), isGenerated(other.isGenerated) {
     //GenerateMesh(*other.world);
 }
 
@@ -39,6 +39,7 @@ Chunk& Chunk::operator=(const Chunk& other) {
         chunkX = other.chunkX;
         chunkY = other.chunkY;
         chunkZ = other.chunkZ;
+        isGenerated = other.isGenerated;
         //GenerateMesh(*other.world);
     }
     //std::cout << "const Chunk& other" << std::endl;
@@ -46,7 +47,7 @@ Chunk& Chunk::operator=(const Chunk& other) {
 }
 
 Chunk::Chunk(Chunk&& other) noexcept : blocks(std::move(other.blocks)), mesh(std::move(other.mesh)),
-world(other.world), chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ) {
+world(other.world), chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), isGenerated(other.isGenerated) {
     // No need to generate mesh, as it's moved
 }
 
@@ -58,6 +59,7 @@ Chunk& Chunk::operator=(Chunk&& other) noexcept {
         chunkX = std::move(other.chunkX);
         chunkY = std::move(other.chunkY);
         chunkZ = std::move(other.chunkZ);
+        isGenerated = std::move(other.isGenerated);
         // No need to generate mesh, as it's moved
     }
     //std::cout << "Chunk&& other" << std::endl;
@@ -66,6 +68,7 @@ Chunk& Chunk::operator=(Chunk&& other) noexcept {
 
 void Chunk::GenerateMesh(World& world) {
     mesh.GenerateMesh(*this, world, chunkX, chunkY, chunkZ);
+    isGenerated = true;
 }
 
 void Chunk::Render(Shader& shader) {
@@ -78,6 +81,21 @@ int Chunk::Index(int x, int y, int z) const {
 
 const Block& Chunk::GetBlock(int x, int y, int z) const {
     return blocks[Index(x, y, z)];
+}
+
+bool Chunk::GetIsGenerated()
+{
+    return isGenerated;
+}
+
+void Chunk::SetIsGenerated(bool value)
+{
+    isGenerated = value;
+}
+
+std::tuple<int, int, int> Chunk::GetCoords()
+{
+    return std::make_tuple(chunkX, chunkY, chunkZ);
 }
 
 bool Chunk::GetBlockCulls(int x, int y, int z) const

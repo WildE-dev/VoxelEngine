@@ -15,11 +15,14 @@
 
 #include <iostream>
 #include <string>
+#include <thread>
+#include <chrono>
+
 #include "Camera.h"
 #include "Shader.h"
-
 #include "World.h"
 #include "Block.h"
+#include <mutex>
 
 bool captureCursor = true;
 bool wireframe = false;
@@ -213,6 +216,18 @@ void ShrinkTargetBlock(World& world, const Camera& camera, int screenWidth, int 
     }
 }
 
+std::mutex worldMutex;
+bool closeWindow = false;
+
+void LoadChunks(World& world) {
+    while (!closeWindow) {
+        worldMutex.lock();
+        world.LoadChunks(camera.GetPosition());
+        worldMutex.unlock();
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+}
+
 int main()
 {
     if (init_glfw()) {
@@ -253,6 +268,8 @@ int main()
 
     World world = World();
 
+    //std::thread chunkLoading(LoadChunks, std::ref(world));
+
     Chunk* chunk = nullptr;
     if (world.GetChunk(chunk, 0, 0, 0)) {
         for (size_t x = 0; x < Chunk::CHUNK_SIZE; x++)
@@ -282,6 +299,8 @@ int main()
 
     while (!glfwWindowShouldClose(window))
     {
+        worldMutex.lock();
+
         double currentFrame = glfwGetTime();
         double deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
@@ -339,14 +358,18 @@ int main()
                 mousePressed = false;
             }
         }
-        
+
+        world.LoadChunks(camera.GetPosition());
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
         
         glm::mat4 view = camera.GetViewMatrix();
         glm::mat4 projection = camera.GetProjectionMatrix(frameWidth, frameHeight);
+
         world.Render(*shader, view, projection, frameWidth, frameHeight);
+
+        worldMutex.unlock();
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -354,6 +377,9 @@ int main()
 
         glfwSwapBuffers(window);
     }
+
+    closeWindow = true;
+    //chunkLoading.join();
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

@@ -25,6 +25,11 @@ public:
 	void GenerateMesh(World& world);
 	void Render(Shader& shader);
 
+	bool GetIsGenerated();
+	void SetIsGenerated(bool value);
+
+	std::tuple<int, int, int> GetCoords();
+
 	const Block& GetBlock(int x, int y, int z) const;
 	bool GetBlockCulls(int x, int y, int z) const;
 	void SetBlock(int x, int y, int z, Block block, bool regenerateMesh = true);
@@ -37,6 +42,7 @@ private:
 	World* world;
 
 	int chunkX, chunkY, chunkZ;
+	bool isGenerated;
 
 	int Index(int x, int y, int z) const;
 };
