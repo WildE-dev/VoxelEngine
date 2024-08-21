@@ -10,27 +10,27 @@ inline int rem(int a, int b) {
     return ((a % b) + b) % b;
 }
 
-World::World() {
+World::World(TerrainGenerator& terrainGenerator) : terrainGenerator(terrainGenerator) {
     //chunks.reserve(128);
-    for (int x = -RENDER_DISTANCE; x < RENDER_DISTANCE; ++x) {
+    /*for (int x = -RENDER_DISTANCE; x < RENDER_DISTANCE; ++x) {
         for (int y = -RENDER_DISTANCE; y < RENDER_DISTANCE; ++y) {
             for (int z = -RENDER_DISTANCE; z < RENDER_DISTANCE; ++z) {
                 auto key = std::make_tuple(x, y, z);
                 chunks[key] = std::unique_ptr<Chunk>(new Chunk(this, x, y, z));
             }
         }
-    }
+    }*/
 
     //auto key = std::make_tuple(0, 0, 0);
     //chunks[key] = std::unique_ptr<Chunk>(new Chunk(this, 0, 0, 0));
 
-    for (auto& pair : chunks) {
+    /*for (auto& pair : chunks) {
         int chunkX = std::get<0>(pair.first);
         int chunkY = std::get<1>(pair.first);
         int chunkZ = std::get<2>(pair.first);
 
         pair.second.get()->GenerateMesh(*this);
-    }
+    }*/
 }
 
 std::tuple<int, int, int> World::WorldToChunkCoordinates(glm::vec3 position) {

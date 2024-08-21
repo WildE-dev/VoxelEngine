@@ -17,12 +17,12 @@
 #include <string>
 #include <thread>
 #include <chrono>
+#include <mutex>
 
 #include "Camera.h"
 #include "Shader.h"
 #include "World.h"
 #include "Block.h"
-#include <mutex>
 
 bool captureCursor = true;
 bool wireframe = false;
@@ -266,11 +266,13 @@ int main()
     glCullFace(GL_BACK);
     glFrontFace(GL_CW);
 
-    World world = World();
+    TerrainGenerator generator = TerrainGenerator();
+
+    World world = World(generator);
 
     //std::thread chunkLoading(LoadChunks, std::ref(world));
 
-    Chunk* chunk = nullptr;
+    /*Chunk* chunk = nullptr;
     if (world.GetChunk(chunk, 0, 0, 0)) {
         for (size_t x = 0; x < Chunk::CHUNK_SIZE; x++)
         {
@@ -285,7 +287,7 @@ int main()
         }
 
         chunk->GenerateMesh(world);
-    }
+    }*/
 
     bool vsync = true;
     ImVec4 clear_color = ImVec4(0.26f, 0.47f, 0.71f, 1.0f);

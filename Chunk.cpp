@@ -1,22 +1,53 @@
 #include "Chunk.h"
 #include "Shader.h"
+#include "World.h"
 #include <iostream>
 
 Chunk::Chunk() : world(0), chunkX(0), chunkY(0), chunkZ(0), isGenerated(false) {}
 
 Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ) : world(world), chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ), isGenerated(false) {
-    blocks.fill(Block(BlockType::STONE));
+    blocks.fill(Block(BlockType::AIR));
 
-    for (size_t x = 0; x < CHUNK_SIZE; x++)
+    for (int x = 0; x < CHUNK_SIZE; x++)
     {
-        for (size_t y = 11; y < CHUNK_SIZE; y++)
+        for (int y = 0; y < CHUNK_SIZE; y++)
         {
-            for (size_t z = 0; z < CHUNK_SIZE; z++)
+            for (int z = 0; z < CHUNK_SIZE; z++)
             {
-                if (y < CHUNK_SIZE - 1)
-                    SetBlock(x, y, z, BlockType::DIRT, false);
-                else
-                    SetBlock(x, y, z, BlockType::GRASS, false);
+                int blockY = chunkY * CHUNK_SIZE + y;
+
+                float worldHeight1 = world->terrainGenerator.GetHeight(chunkX * CHUNK_SIZE + x, chunkZ * CHUNK_SIZE + z + 1);
+                float worldHeight2 = world->terrainGenerator.GetHeight(chunkX * CHUNK_SIZE + x + 1, chunkZ * CHUNK_SIZE + z);
+                float worldHeight3 = world->terrainGenerator.GetHeight(chunkX * CHUNK_SIZE + x, chunkZ * CHUNK_SIZE + z);
+                float worldHeight4 = world->terrainGenerator.GetHeight(chunkX * CHUNK_SIZE + x + 1, chunkZ * CHUNK_SIZE + z + 1);
+                float fWorldHeight1 = worldHeight1 - blockY;
+                float fWorldHeight2 = worldHeight2 - blockY;
+                float fWorldHeight3 = worldHeight3 - blockY;
+                float fWorldHeight4 = worldHeight4 - blockY;
+                
+                // Ceil just feels like a hacky workaround and doesn't address the actual issue
+                int blockHeight1 = static_cast<int>(ceil(fWorldHeight1 * 8));
+                int blockHeight2 = static_cast<int>(ceil(fWorldHeight2 * 8));
+                int blockHeight3 = static_cast<int>(ceil(fWorldHeight3 * 8));
+                int blockHeight4 = static_cast<int>(ceil(fWorldHeight4 * 8));
+                
+                float minHeight1 = worldHeight1 < worldHeight2 ? worldHeight1 : worldHeight2;
+                float minHeight2 = worldHeight3 < worldHeight4 ? worldHeight3 : worldHeight4;
+                int minHeight = static_cast<int>(floor(minHeight1 < minHeight2 ? minHeight1 : minHeight2));
+
+                // This still creates ridges where there should be thin voxels
+
+                if (blockY == minHeight) {
+                    EdgeData edges = EdgeData();
+                    edges.SetTopY(0, blockHeight1);
+                    edges.SetTopY(1, blockHeight2);
+                    edges.SetTopY(2, blockHeight3);
+                    edges.SetTopY(3, blockHeight4);
+                    SetBlock(x, y, z, BlockType::STONE, edges, false);
+                }
+                else if (blockY < minHeight) {
+                    SetBlock(x, y, z, BlockType::STONE, false);
+                }
             }
         }
     }
@@ -122,6 +153,13 @@ void Chunk::SetBlock(int x, int y, int z, BlockType type, bool regenerateMesh) {
 }
 
 void Chunk::SetBlock(int x, int y, int z, EdgeData edges, bool regenerateMesh) {
+    blocks[Index(x, y, z)].SetEdgeData(edges);
+    if (regenerateMesh)
+        GenerateMesh(*world);
+}
+
+void Chunk::SetBlock(int x, int y, int z, BlockType type, EdgeData edges, bool regenerateMesh) {
+    blocks[Index(x, y, z)].type = type;
     blocks[Index(x, y, z)].SetEdgeData(edges);
     if (regenerateMesh)
         GenerateMesh(*world);

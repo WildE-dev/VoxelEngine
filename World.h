@@ -6,6 +6,7 @@
 
 #include "Block.h"
 #include "Chunk.h"
+#include "TerrainGenerator.h"
 
 inline int cantor(int a, int b) {
     return (a + b + 1) * (a + b) / 2 + b;
@@ -24,7 +25,7 @@ class World
 public:
     static const int RENDER_DISTANCE = 4;
 
-    World();
+    World(TerrainGenerator& terrainGenerator);
     bool GetChunk(Chunk*& chunk, int chunkX, int chunkY, int chunkZ);
 
     Block GetBlock(int x, int y, int z);
@@ -36,6 +37,8 @@ public:
     void LoadChunks(glm::vec3 position);
 
     void Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight);
+
+    TerrainGenerator& terrainGenerator;
 
 private:
     std::unordered_map<std::tuple<int, int, int>, std::unique_ptr<Chunk>, hash_tuple> chunks;
