@@ -6,32 +6,13 @@
 #include "World.h"
 #include "Shader.h"
 
-inline int rem(int a, int b) {
+inline static int rem(int a, int b) {
     return ((a % b) + b) % b;
 }
 
-World::World(TerrainGenerator& terrainGenerator) : terrainGenerator(terrainGenerator) {
-    //chunks.reserve(128);
-    /*for (int x = -RENDER_DISTANCE; x < RENDER_DISTANCE; ++x) {
-        for (int y = -RENDER_DISTANCE; y < RENDER_DISTANCE; ++y) {
-            for (int z = -RENDER_DISTANCE; z < RENDER_DISTANCE; ++z) {
-                auto key = std::make_tuple(x, y, z);
-                chunks[key] = std::unique_ptr<Chunk>(new Chunk(this, x, y, z));
-            }
-        }
-    }*/
+World::World(TerrainGenerator* terrainGenerator) : terrainGenerator(terrainGenerator) {}
 
-    //auto key = std::make_tuple(0, 0, 0);
-    //chunks[key] = std::unique_ptr<Chunk>(new Chunk(this, 0, 0, 0));
-
-    /*for (auto& pair : chunks) {
-        int chunkX = std::get<0>(pair.first);
-        int chunkY = std::get<1>(pair.first);
-        int chunkZ = std::get<2>(pair.first);
-
-        pair.second.get()->GenerateMesh(*this);
-    }*/
-}
+World::World(const World& other) : terrainGenerator(other.terrainGenerator) {}
 
 std::tuple<int, int, int> World::WorldToChunkCoordinates(glm::vec3 position) {
     return World::WorldToChunkCoordinates((int)position.x, (int)position.y, (int)position.z);
@@ -51,6 +32,10 @@ bool World::GetChunk(Chunk*& chunk, int chunkX, int chunkY, int chunkZ)
 {
     auto key = std::make_tuple(chunkX, chunkY, chunkZ);
     if (chunks.find(key) == chunks.end()) {
+        return false;
+    }
+
+    if (!chunks[key].get()->GetIsGenerated()) {
         return false;
     }
 
@@ -118,14 +103,16 @@ void World::UpdateAdjacentChunks(int x, int y, int z) {
     if (std::get<0>(blockCoords) == 0) {
         chunkCoords = WorldToChunkCoordinates(x - 1, y, z);
         if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
-            chunk->GenerateMesh(*this);
+            //chunk->GenerateMesh(*this);
+            chunk->SetIsGenerated(false);
         }
     }
     // Check +X boundary
     if (std::get<0>(blockCoords) == Chunk::CHUNK_SIZE - 1) {
         chunkCoords = WorldToChunkCoordinates(x + 1, y, z);
         if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
-            chunk->GenerateMesh(*this);
+            //chunk->GenerateMesh(*this);
+            chunk->SetIsGenerated(false);
         }
     }
 
@@ -133,14 +120,16 @@ void World::UpdateAdjacentChunks(int x, int y, int z) {
     if (std::get<1>(blockCoords) == 0) {
         chunkCoords = WorldToChunkCoordinates(x, y - 1, z);
         if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
-            chunk->GenerateMesh(*this);
+            //chunk->GenerateMesh(*this);
+            chunk->SetIsGenerated(false);
         }
     }
     // Check +Y boundary
     if (std::get<1>(blockCoords) == Chunk::CHUNK_SIZE - 1) {
         chunkCoords = WorldToChunkCoordinates(x, y + 1, z);
         if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
-            chunk->GenerateMesh(*this);
+            //chunk->GenerateMesh(*this);
+            chunk->SetIsGenerated(false);
         }
     }
 
@@ -148,14 +137,16 @@ void World::UpdateAdjacentChunks(int x, int y, int z) {
     if (std::get<2>(blockCoords) == 0) {
         chunkCoords = WorldToChunkCoordinates(x, y, z - 1);
         if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
-            chunk->GenerateMesh(*this);
+            //chunk->GenerateMesh(*this);
+            chunk->SetIsGenerated(false);
         }
     }
     // Check +Z boundary
     if (std::get<2>(blockCoords) == Chunk::CHUNK_SIZE - 1) {
         chunkCoords = WorldToChunkCoordinates(x, y, z + 1);
         if (GetChunk(chunk, std::get<0>(chunkCoords), std::get<1>(chunkCoords), std::get<2>(chunkCoords))) {
-            chunk->GenerateMesh(*this);
+            //chunk->GenerateMesh(*this);
+            chunk->SetIsGenerated(false);
         }
     }
 }
@@ -184,7 +175,30 @@ void World::MarkAdjacentChunks(std::tuple<int, int, int> chunkCoords) {
     }
 }
 
-void World::LoadChunks(glm::vec3 position) {
+void World::QueueChunkLoad(std::shared_ptr<Chunk> chunk) {
+    std::lock_guard<std::mutex> guard(loadQueueLock);
+    
+    assert((tail_ + 1) % LOAD_QUEUE_SIZE != head_);
+
+    // Add to the end of the list.
+    loadQueue[tail_] = chunk;
+    tail_ = (tail_ + 1) % LOAD_QUEUE_SIZE;
+}
+
+void World::LoadChunks() {
+    // If there are no pending requests, do nothing.
+    if (head_ == tail_) return;
+
+    loadQueueLock.lock();
+    Chunk* chunk = loadQueue[head_].get();
+    loadQueueLock.unlock();
+    
+    chunk->LoadChunk();
+
+    head_ = (head_ + 1) % LOAD_QUEUE_SIZE;
+}
+
+void World::UpdateChunks(glm::vec3 position) {
     auto chunkCoords = WorldToChunkCoordinates(position);
 
     auto i = chunks.begin();
@@ -194,7 +208,7 @@ void World::LoadChunks(glm::vec3 position) {
         int distY = std::abs(std::get<1>(i->first) - std::get<1>(chunkCoords));
         int distZ = std::abs(std::get<2>(i->first) - std::get<2>(chunkCoords));
 
-        if (distX > RENDER_DISTANCE || distY > RENDER_DISTANCE || distZ > RENDER_DISTANCE) {
+        if (distX > UNLOAD_DISTANCE || distY > UNLOAD_DISTANCE || distZ > UNLOAD_DISTANCE) {
             MarkAdjacentChunks(i->second.get()->GetCoords());
             i = chunks.erase(i);
         }
@@ -212,16 +226,19 @@ void World::LoadChunks(glm::vec3 position) {
                 auto key = std::make_tuple(chunkX, chunkY, chunkZ);
                 auto search = chunks.find(key);
                 if (search == chunks.end()) {
-                    chunks[key] = std::unique_ptr<Chunk>(new Chunk(this, chunkX, chunkY, chunkZ));
-                    MarkAdjacentChunks(key);
+                    chunks[key] = std::make_shared<Chunk>(this, chunkX, chunkY, chunkZ);
+                    // Does not work because the chunks are regenerated before this chunk gets loaded
+                    // Probably need to make a queue for regenerating chunk meshes
+                    //MarkAdjacentChunks(key);
+                    QueueChunkLoad(chunks[key]);
                 }
             }
         }
     }
 
     for (auto const& pair : chunks) {
-        if (!pair.second.get()->GetIsGenerated()) {
-            pair.second.get()->GenerateMesh(*this);
+        if (pair.second.get()->ShouldGenerateMesh()) {
+            pair.second.get()->GenerateMesh();
         }
     }
 }
@@ -235,6 +252,10 @@ void World::Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionM
     shader.SetUniform("projection", projectionMatrix);
 
     for (auto& pair : chunks) {
+        if (!pair.second.get()->GetIsGenerated()) {
+            continue;
+        }
+
         int chunkX = std::get<0>(pair.first);
         int chunkY = std::get<1>(pair.first);
         int chunkZ = std::get<2>(pair.first);

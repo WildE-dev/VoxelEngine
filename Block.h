@@ -2,6 +2,9 @@
 #include <vector>
 #include <iostream>
 #include <unordered_map>
+#include <tuple>
+#include <array>
+#include <glm.hpp>
 
 struct EdgeData {
     uint8_t edges[4];
@@ -59,20 +62,20 @@ struct EdgeData {
 };
 
 struct VertexData {
-    float x, y, z;
-    float u, v;
+    glm::vec3 pos;
+    glm::vec2 tex;
     int textureIndex;
-    float normX, normY, normZ;
+    glm::vec3 norm;
 
-    VertexData() : x(0), y(0), z(0), u(0), v(0), textureIndex(0), normX(0), normY(0), normZ(0) {}
-    VertexData(float x, float y, float z, float u, float v, int textureIndex, float normX, float normY, float normZ) : x(x), y(y), z(z), u(u), v(v), textureIndex(textureIndex), normX(normX), normY(normY), normZ(normZ) {}
+    VertexData() : pos(glm::vec3(0, 0, 0)), tex(glm::vec2(0, 0)), textureIndex(0), norm(glm::vec3(0, 0, 0)) {}
+    VertexData(glm::vec3 pos, glm::vec2 tex, int textureIndex, glm::vec3 norm) : pos(pos), tex(tex), textureIndex(textureIndex), norm(norm) {}
 
     uint32_t GetVertexInt() {
-        uint32_t x = this->x * 8;
-        uint32_t y = this->y * 8;
-        uint32_t z = this->z * 8;
-        uint32_t u = this->u * 8;
-        uint32_t v = this->v * 8;
+        uint32_t x = this->pos.x * 8;
+        uint32_t y = this->pos.y * 8;
+        uint32_t z = this->pos.z * 8;
+        uint32_t u = this->tex.x * 8;
+        uint32_t v = this->tex.y * 8;
         uint32_t result = 0;
         result |= (x & 0xFFu) << 24;
         result |= (y & 0xFFu) << 16;
@@ -84,9 +87,9 @@ struct VertexData {
     }
 
     uint32_t GetVertexNormInt() {
-        uint32_t normX = (this->normX + 1.0f) * 7.5f;
-        uint32_t normY = (this->normY + 1.0f) * 7.5f;
-        uint32_t normZ = (this->normZ + 1.0f) * 7.5f;
+        uint32_t normX = (this->norm.x + 1.0f) * 7.5f;
+        uint32_t normY = (this->norm.y + 1.0f) * 7.5f;
+        uint32_t normZ = (this->norm.z + 1.0f) * 7.5f;
         uint32_t result = 0;
         result |= (normX & 0xFu) << 28;
         result |= (normY & 0xFu) << 24;

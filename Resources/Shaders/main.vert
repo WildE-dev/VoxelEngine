@@ -61,7 +61,7 @@ void main()
     float l = dot((model * vec4(data.norm, 1.0f)).xyz, vec3(0.0f, 1.0f, 0.0f));
 
     l = (l + 1.0f) / 2.0f;
-    l = clamp(l + 0.12f, 0.0f, 1.0f);
+    l = clamp(l, 0.0f, 1.0f);
 
     Light = l;
 };

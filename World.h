@@ -3,6 +3,8 @@
 #include <unordered_map>
 #include <tuple>
 #include <mutex>
+#include <glm.hpp>
+#include <atomic>
 
 #include "Block.h"
 #include "Chunk.h"
@@ -24,8 +26,10 @@ class World
 {
 public:
     static const int RENDER_DISTANCE = 4;
+    static const int UNLOAD_DISTANCE = 6;
 
-    World(TerrainGenerator& terrainGenerator);
+    World(TerrainGenerator* terrainGenerator);
+    World(const World& other);
     bool GetChunk(Chunk*& chunk, int chunkX, int chunkY, int chunkZ);
 
     Block GetBlock(int x, int y, int z);
@@ -34,19 +38,27 @@ public:
     void SetBlock(int x, int y, int z, BlockType type);
     void SetBlock(int x, int y, int z, EdgeData edges);
 
-    void LoadChunks(glm::vec3 position);
+    void UpdateChunks(glm::vec3 position);
+    void LoadChunks();
 
     void Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight);
 
-    TerrainGenerator& terrainGenerator;
+    TerrainGenerator* terrainGenerator;
 
 private:
-    std::unordered_map<std::tuple<int, int, int>, std::unique_ptr<Chunk>, hash_tuple> chunks;
+    std::unordered_map<std::tuple<int, int, int>, std::shared_ptr<Chunk>, hash_tuple> chunks;
+
+    static const size_t LOAD_QUEUE_SIZE = 1024;
+    std::mutex loadQueueLock;
+    std::array<std::shared_ptr<Chunk>, LOAD_QUEUE_SIZE> loadQueue;
+    std::atomic_int head_;
+    std::atomic_int tail_;
 
     std::tuple<int, int, int> WorldToChunkCoordinates(glm::vec3 position);
     std::tuple<int, int, int> WorldToChunkCoordinates(int x, int y, int z);
     std::tuple<int, int, int> WorldToBlockCoordinates(int x, int y, int z);
     void UpdateAdjacentChunks(int x, int y, int z);
     void MarkAdjacentChunks(std::tuple<int, int, int> chunkCoords);
+    void QueueChunkLoad(std::shared_ptr<Chunk> chunk);
 };
 

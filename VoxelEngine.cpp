@@ -216,15 +216,12 @@ void ShrinkTargetBlock(World& world, const Camera& camera, int screenWidth, int 
     }
 }
 
-std::mutex worldMutex;
 bool closeWindow = false;
 
 void LoadChunks(World& world) {
     while (!closeWindow) {
-        worldMutex.lock();
-        world.LoadChunks(camera.GetPosition());
-        worldMutex.unlock();
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        world.LoadChunks();
+        //std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 }
 
@@ -268,9 +265,9 @@ int main()
 
     TerrainGenerator generator = TerrainGenerator();
 
-    World world = World(generator);
+    World world = World(&generator);
 
-    //std::thread chunkLoading(LoadChunks, std::ref(world));
+    std::thread chunkLoading(LoadChunks, std::ref(world));
 
     /*Chunk* chunk = nullptr;
     if (world.GetChunk(chunk, 0, 0, 0)) {
@@ -301,8 +298,6 @@ int main()
 
     while (!glfwWindowShouldClose(window))
     {
-        worldMutex.lock();
-
         double currentFrame = glfwGetTime();
         double deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
@@ -361,7 +356,7 @@ int main()
             }
         }
 
-        world.LoadChunks(camera.GetPosition());
+        world.UpdateChunks(camera.GetPosition());
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
@@ -371,8 +366,6 @@ int main()
 
         world.Render(*shader, view, projection, frameWidth, frameHeight);
 
-        worldMutex.unlock();
-
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapInterval(vsync); // vsync
@@ -381,7 +374,7 @@ int main()
     }
 
     closeWindow = true;
-    //chunkLoading.join();
+    chunkLoading.join();
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

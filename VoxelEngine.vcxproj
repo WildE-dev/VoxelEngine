@@ -174,7 +174,6 @@
     <ClInclude Include="Block.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="Chunk.h" />
-    <ClInclude Include="ChunkMesh.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="TerrainGenerator.h" />
     <ClInclude Include="World.h" />
@@ -183,7 +182,6 @@
     <ClCompile Include="Block.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="Chunk.cpp" />
-    <ClCompile Include="ChunkMesh.cpp" />
     <ClCompile Include="dependencies\glad\src\gl.c" />
     <ClCompile Include="dependencies\imgui\backends\imgui_impl_glfw.cpp" />
     <ClCompile Include="dependencies\imgui\backends\imgui_impl_opengl3.cpp" />

@@ -3,18 +3,21 @@
 #include <glad/gl.h>
 #include <map>
 #include <memory>
+#include <atomic>
 
-#include "Block.h";
-#include "ChunkMesh.h"
+#include "Block.h"
 
+class World;
 class Shader;
 
 class Chunk
 {
 public:
-	static const int CHUNK_SIZE = 16;
+	// 31 is the max because the shader uses 1 byte for position and 32 * 8 = 256
+	// which is greater than 255, the max 1 byte can store
+	static const int CHUNK_SIZE = 16; 
 
-	Chunk();
+	//Chunk();
 	Chunk(World* world, int chunkX, int chunkY, int chunkZ);
 	~Chunk();
 	Chunk(const Chunk& other);
@@ -22,28 +25,37 @@ public:
 	Chunk(Chunk&& other) noexcept;
 	Chunk& operator=(Chunk&& other) noexcept;
 
-	void GenerateMesh(World& world);
-	void Render(Shader& shader);
-
+	bool ShouldGenerateMesh();
 	bool GetIsGenerated();
 	void SetIsGenerated(bool value);
 
 	std::tuple<int, int, int> GetCoords();
 
-	const Block& GetBlock(int x, int y, int z) const;
-	bool GetBlockCulls(int x, int y, int z) const;
-	void SetBlock(int x, int y, int z, Block block, bool regenerateMesh = true);
-	void SetBlock(int x, int y, int z, BlockType type, bool regenerateMesh = true);
-	void SetBlock(int x, int y, int z, EdgeData edges, bool regenerateMesh = true);
-	void SetBlock(int x, int y, int z, BlockType type, EdgeData edges, bool regenerateMesh = true);
+	const Block& GetBlock(int x, int y, int z);
+	bool GetBlockCulls(int x, int y, int z);
+	void SetBlock(int x, int y, int z, Block block);
+	void SetBlock(int x, int y, int z, BlockType type);
+	void SetBlock(int x, int y, int z, EdgeData edges);
+	void SetBlock(int x, int y, int z, BlockType type, EdgeData edges);
+
+	void LoadChunk();
+	void GenerateMesh();
+	void SendVertexData();
+	void Render(Shader& shader);
+
 private:
 	std::array<Block, CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE> blocks;
-	ChunkMesh mesh;
+	std::vector<uint32_t> vertices;
 
 	World* world;
 
+	GLuint VAO, VBO;
 	int chunkX, chunkY, chunkZ;
+	std::atomic_bool isLoaded;
 	bool isGenerated;
+
+	void Initialize();
+	void Clear();
 
 	int Index(int x, int y, int z) const;
 };

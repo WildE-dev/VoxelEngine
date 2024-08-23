@@ -85,8 +85,8 @@ float TerrainGenerator::GetHeight(int x, int z) {
     float amp = 1;
     float ampAcc = 0;
 
-    x += 32849;
-    z += 93642;
+    //x += 32849;
+    //z += 93642;
 
     for (int i = 0; i < OCTAVES; i++)
     {
