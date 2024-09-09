@@ -28,8 +28,13 @@ public:
 	bool ShouldGenerateMesh();
 	bool GetIsGenerated();
 	void SetIsGenerated(bool value);
+	
+	bool IsLoaded();
+	bool IsSetup();
 
-	std::tuple<int, int, int> GetCoords();
+	bool ShouldRender();
+
+	glm::ivec3 GetCoords();
 
 	const Block& GetBlock(int x, int y, int z);
 	bool GetBlockCulls(int x, int y, int z);
@@ -39,6 +44,8 @@ public:
 	void SetBlock(int x, int y, int z, BlockType type, EdgeData edges);
 
 	void LoadChunk();
+	void SetupChunk();
+	void UnloadChunk();
 	void GenerateMesh();
 	void SendVertexData();
 	void Render(Shader& shader);
@@ -51,7 +58,8 @@ private:
 
 	GLuint VAO, VBO;
 	int chunkX, chunkY, chunkZ;
-	std::atomic_bool isLoaded;
+	bool isLoaded;
+	bool isSetup;
 	bool isGenerated;
 
 	void Initialize();

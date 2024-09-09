@@ -232,8 +232,7 @@ int main()
         return -1;
     }
 
-    Shader s = Shader("Resources/Shaders/main.vert", 
-                        "Resources/Shaders/main.frag");
+    Shader s = Shader("Resources/Shaders/main.vert", "Resources/Shaders/main.frag");
     shader = &s;
 
     int width, height, nrChannels;
@@ -269,7 +268,7 @@ int main()
 
     World world = World(&generator);
 
-    std::thread chunkLoading(LoadChunks, std::ref(world));
+    //std::thread chunkLoading(LoadChunks, std::ref(world));
 
     /*Chunk* chunk = nullptr;
     if (world.GetChunk(chunk, 0, 0, 0)) {
@@ -358,7 +357,7 @@ int main()
             }
         }
 
-        world.UpdateChunks(camera.GetPosition());
+        world.Update(camera.GetPosition(), camera.GetDirection());
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
@@ -376,7 +375,7 @@ int main()
     }
 
     closeWindow = true;
-    chunkLoading.join();
+    //chunkLoading.join();
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

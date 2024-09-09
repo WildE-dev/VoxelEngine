@@ -5,7 +5,8 @@
 
 //Chunk::Chunk() : world(0), chunkX(0), chunkY(0), chunkZ(0), isGenerated(false) {}
 
-Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ) : world(world), chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ), isGenerated(false), VAO(0), VBO(0) {
+Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ) : world(world), chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ),
+isGenerated(false), isSetup(false), isLoaded(false), VAO(0), VBO(0) {
     Initialize();
 }
 
@@ -13,7 +14,7 @@ Chunk::~Chunk() {
     Clear();
 }
 
-Chunk::Chunk(const Chunk& other) : blocks(), world(other.world),
+Chunk::Chunk(const Chunk& other) : blocks(), world(other.world), isSetup(other.isSetup), isLoaded(other.isLoaded),
 chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), isGenerated(other.isGenerated), VAO(other.VAO), VBO(other.VBO) {}
 
 Chunk& Chunk::operator=(const Chunk& other) {
@@ -30,7 +31,7 @@ Chunk& Chunk::operator=(const Chunk& other) {
     return *this;
 }
 
-Chunk::Chunk(Chunk&& other) noexcept : blocks(std::move(other.blocks)),
+Chunk::Chunk(Chunk&& other) noexcept : blocks(std::move(other.blocks)), isSetup(other.isSetup), isLoaded(other.isLoaded),
 world(other.world), chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), isGenerated(other.isGenerated), VAO(other.VAO), VBO(other.VBO) {}
 
 Chunk& Chunk::operator=(Chunk&& other) noexcept {
@@ -98,6 +99,16 @@ void Chunk::LoadChunk() {
     isLoaded = true;
 }
 
+void Chunk::SetupChunk()
+{
+    isSetup = true;
+}
+
+void Chunk::UnloadChunk()
+{
+    isLoaded = false;
+}
+
 int Chunk::Index(int x, int y, int z) const {
     return x + CHUNK_SIZE * (y + CHUNK_SIZE * z);
 }
@@ -111,9 +122,24 @@ bool Chunk::ShouldGenerateMesh()
     return !isGenerated && isLoaded;
 }
 
+bool Chunk::ShouldRender()
+{
+    return true;
+}
+
 bool Chunk::GetIsGenerated()
 {
     return isGenerated;
+}
+
+bool Chunk::IsLoaded()
+{
+    return isLoaded;
+}
+
+bool Chunk::IsSetup()
+{
+    return isSetup;
 }
 
 void Chunk::SetIsGenerated(bool value)
@@ -121,9 +147,9 @@ void Chunk::SetIsGenerated(bool value)
     isGenerated = value;
 }
 
-std::tuple<int, int, int> Chunk::GetCoords()
+glm::ivec3 Chunk::GetCoords()
 {
-    return std::make_tuple(chunkX, chunkY, chunkZ);
+    return glm::ivec3(chunkX, chunkY, chunkZ);
 }
 
 bool Chunk::GetBlockCulls(int x, int y, int z)
@@ -244,7 +270,8 @@ void Chunk::SendVertexData() {
 }
 
 void Chunk::Render(Shader& shader) {
-    assert(isGenerated && isLoaded);
+    if (!isGenerated || !isLoaded)
+        return;
 
     /*if (!meshSentToGPU) {
         SendVertexData();
