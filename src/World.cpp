@@ -187,17 +187,6 @@ void World::MarkAdjacentChunks(glm::ivec3 chunkCoords) {
     }
 }
 
-void World::QueueChunkLoad(std::shared_ptr<Chunk> chunk) {
-    //chunkQueue.Add(chunk);
-}
-
-void World::LoadChunks() {
-    //auto chunk = chunkQueue.Get();
-    
-    //if (chunk != NULL)
-        //chunk->LoadChunk();
-}
-
 void World::Update(glm::vec3 cameraPosition, glm::vec3 cameraView) {
     UpdateAsyncChunker(cameraPosition);
     UpdateLoadList();
@@ -206,11 +195,48 @@ void World::Update(glm::vec3 cameraPosition, glm::vec3 cameraView) {
     UpdateFlagsList();
     UpdateUnloadList();
     UpdateVisibilityList(cameraPosition);
-    if (m_cameraPosition != cameraPosition || m_cameraView != cameraView) {
+    if (m_cameraPosition != cameraPosition || m_cameraView != cameraView || m_forceVisibilityUpdate) {
         UpdateRenderList();
     }
     m_cameraPosition = cameraPosition;
     m_cameraView = cameraView;
+}
+
+void World::UpdateAsyncChunker(glm::vec3 position) {
+    auto chunkCoords = WorldToChunkCoordinates(position);
+
+    for (auto iterator = chunks.begin(); iterator != chunks.end(); ++iterator) {
+        std::shared_ptr<Chunk> pChunk = (*iterator).second;
+        auto coords = pChunk->GetCoords();
+
+        int distX = abs((coords.x - chunkCoords.x));
+        int distY = abs((coords.y - chunkCoords.y));
+        int distZ = abs((coords.z - chunkCoords.z));
+
+
+        if (distX > UNLOAD_DISTANCE || distY > UNLOAD_DISTANCE || distZ > UNLOAD_DISTANCE) {
+            m_vpChunkUnloadList.push_back(pChunk);
+        }
+    }
+
+    for (int x = -RENDER_DISTANCE; x < RENDER_DISTANCE; ++x) {
+        for (int y = -RENDER_DISTANCE; y < RENDER_DISTANCE; ++y) {
+            for (int z = -RENDER_DISTANCE; z < RENDER_DISTANCE; ++z) {
+                int chunkX = x + chunkCoords.x;
+                int chunkY = y + chunkCoords.y;
+                int chunkZ = z + chunkCoords.z;
+                auto key = std::make_tuple(chunkX, chunkY, chunkZ);
+                auto search = chunks.find(key);
+                if (search == chunks.end()) {
+                    chunks[key] = std::make_shared<Chunk>(this, chunkX, chunkY, chunkZ);
+                    m_vpChunkLoadList.push_back(chunks[key]);
+                }
+                else if (!search->second->IsLoaded()) {
+                    m_vpChunkLoadList.push_back(chunks[key]);
+                }
+            }
+        }
+    }
 }
 
 void World::UpdateLoadList() {
@@ -220,7 +246,7 @@ void World::UpdateLoadList() {
         if (!pChunk->IsLoaded()) {
             pChunk->LoadChunk();
             lNumOfChunksLoaded++;
-            //m_forceVisibilityUpdate = true;
+            m_forceVisibilityUpdate = true;
 
             m_vpChunkSetupList.push_back(pChunk);
         }
@@ -233,7 +259,8 @@ void World::UpdateSetupList() {
         std::shared_ptr<Chunk> pChunk = *iterator;
         if (!pChunk->IsSetup()) {
             pChunk->SetupChunk();
-            //m_forceVisibilityUpdate = true;
+            m_vpChunkRebuildList.push_back(pChunk);
+            m_forceVisibilityUpdate = true;
         }
     }
     m_vpChunkSetupList.clear();
@@ -268,7 +295,7 @@ void World::UpdateRebuildList() {
                 
                 // Only rebuild a certain number of chunks per frame
                 lNumRebuiltChunkThisFrame++;
-                //m_forceVisibilityUpdate = true;
+                m_forceVisibilityUpdate = true;
             }
         }
     }
@@ -285,13 +312,16 @@ void World::UpdateFlagsList() {
 }
 
 void World::UpdateUnloadList() {
-    for (auto iterator = m_vpChunkUnloadList.begin(); iterator != m_vpChunkUnloadList.end(); ++iterator) {
+    //std::cout << "Unload list size: " << m_vpChunkUnloadList.size() << std::endl;
+    int lNumUnloadedChunkThisFrame = 0;
+    for (auto iterator = m_vpChunkUnloadList.begin(); iterator != m_vpChunkUnloadList.end() && (lNumUnloadedChunkThisFrame < ASYNC_NUM_CHUNKS_PER_FRAME); ++iterator) {
         std::shared_ptr<Chunk> pChunk = *iterator;
         if (pChunk->IsLoaded()) {
             pChunk->UnloadChunk();
             auto coords = pChunk->GetCoords();
             chunks.erase(std::make_tuple(coords.x, coords.y, coords.z));
-            //m_forceVisibilityUpdate = true;
+            lNumUnloadedChunkThisFrame++;
+            m_forceVisibilityUpdate = true;
         }
     } 
     m_vpChunkUnloadList.clear();
@@ -308,6 +338,8 @@ void World::UpdateVisibilityList(glm::vec3 cameraPosition) {
             }
         }
     }
+
+    //std::cout << "Visibility list size: " << m_vpChunkVisibilityList.size() << std::endl;
 }
 
 void World::UpdateRenderList() {
@@ -332,40 +364,8 @@ void World::UpdateRenderList() {
             }
         }
     }
-}
 
-void World::UpdateAsyncChunker(glm::vec3 position) {
-    auto chunkCoords = WorldToChunkCoordinates(position);
-
-    for (auto iterator = chunks.begin(); iterator != chunks.end(); ++iterator) {
-        std::shared_ptr<Chunk> pChunk = (*iterator).second;
-        auto coords = pChunk->GetCoords();
-
-        int distX = abs((coords.x - chunkCoords.x));
-        int distY = abs((coords.y - chunkCoords.y));
-        int distZ = abs((coords.z - chunkCoords.z));
-        
-
-        if (distX > UNLOAD_DISTANCE || distY > UNLOAD_DISTANCE || distZ > UNLOAD_DISTANCE) {
-            m_vpChunkUnloadList.push_back(pChunk);
-        }
-    }
-
-    for (int x = -RENDER_DISTANCE; x < RENDER_DISTANCE; ++x) {
-        for (int y = -RENDER_DISTANCE; y < RENDER_DISTANCE; ++y) {
-            for (int z = -RENDER_DISTANCE; z < RENDER_DISTANCE; ++z) {
-                int chunkX = x + chunkCoords.x;
-                int chunkY = y + chunkCoords.y;
-                int chunkZ = z + chunkCoords.z;
-                auto key = std::make_tuple(chunkX, chunkY, chunkZ);
-                auto search = chunks.find(key);
-                if (search == chunks.end()) {
-                    chunks[key] = std::make_shared<Chunk>(this, chunkX, chunkY, chunkZ);
-                    m_vpChunkLoadList.push_back(chunks[key]);
-                }
-            }
-        }
-    }
+    //std::cout << "Render list size: " << m_vpChunkRenderList.size() << std::endl;
 }
 
 void World::Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight) {

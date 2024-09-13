@@ -41,7 +41,6 @@ public:
     void SetBlock(int x, int y, int z, EdgeData edges);
 
     void Update(glm::vec3 cameraPosition, glm::vec3 cameraView);
-    void LoadChunks();
 
     void Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight);
 
@@ -50,7 +49,7 @@ public:
 private:
     std::unordered_map<std::tuple<int, int, int>, std::shared_ptr<Chunk>, hash_tuple> chunks;
 
-    static const int ASYNC_NUM_CHUNKS_PER_FRAME = 8;
+    static const int ASYNC_NUM_CHUNKS_PER_FRAME = 1;
 
     //AsyncCircularQueue<std::shared_ptr<Chunk>> chunkQueue;
 
@@ -63,7 +62,8 @@ private:
     glm::ivec3 WorldToBlockCoordinates(int x, int y, int z);
     void UpdateAdjacentChunks(int x, int y, int z);
     void MarkAdjacentChunks(glm::ivec3 chunkCoords);
-    void QueueChunkLoad(std::shared_ptr<Chunk> chunk);
+
+    bool m_forceVisibilityUpdate;
 
     void UpdateAsyncChunker(glm::vec3 position);
     void UpdateLoadList();

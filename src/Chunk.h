@@ -17,6 +17,8 @@ public:
 	// which is greater than 255, the max 1 byte can store
 	static const int CHUNK_SIZE = 16; 
 
+	static int chunkCount;
+
 	//Chunk();
 	Chunk(World* world, int chunkX, int chunkY, int chunkZ);
 	~Chunk();

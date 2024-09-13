@@ -35,6 +35,8 @@ Camera camera = Camera();
 Shader *shader;
 GLFWwindow* window;
 
+int Chunk::chunkCount = 0;
+
 inline int square(int x) {
     return x * x;
 }
@@ -221,7 +223,7 @@ bool closeWindow = false;
 
 void LoadChunks(World& world) {
     while (!closeWindow) {
-        world.LoadChunks();
+        //world.LoadChunks();
         //std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 }
@@ -333,6 +335,7 @@ int main()
                 ImGui::Text("Angles %.3f, %.3f", angles.x, angles.y);
                 ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", frameTime, fps);
                 ImGui::PlotLines("Frame Time (ms)", frameTimes, 100, i);
+                ImGui::Text("Chunk count: %d", Chunk::chunkCount);
             }
 
             ImGui::End();

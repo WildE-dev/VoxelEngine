@@ -8,10 +8,12 @@
 Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ) : world(world), chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ),
 isGenerated(false), isSetup(false), isLoaded(false), VAO(0), VBO(0) {
     Initialize();
+    chunkCount++;
 }
 
 Chunk::~Chunk() {
     Clear();
+    chunkCount--;
 }
 
 Chunk::Chunk(const Chunk& other) : blocks(), world(other.world), isSetup(other.isSetup), isLoaded(other.isLoaded),
