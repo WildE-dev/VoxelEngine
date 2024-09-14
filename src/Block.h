@@ -10,8 +10,12 @@ struct EdgeData {
     uint8_t edges[4];
 
     EdgeData() {
+        MakeFull();
+    }
+
+    void MakeFull() {
         for (int i = 0; i < 4; ++i) {
-            edges[i] = 0x80;// +i - (i << 4);
+            edges[i] = 0x80;
         }
     }
 

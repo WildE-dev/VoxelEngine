@@ -26,13 +26,15 @@ public:
 	Chunk& operator=(const Chunk& other);
 	Chunk(Chunk&& other) noexcept;
 	Chunk& operator=(Chunk&& other) noexcept;
-
-	bool ShouldGenerateMesh();
-	bool GetIsGenerated();
-	void SetIsGenerated(bool value);
 	
-	bool IsLoaded();
-	bool IsSetup();
+	bool IsLoaded() const;
+	bool IsSetup() const;
+	bool IsEmpty() const;
+	bool IsFull() const;
+	bool IsSurrounded() const;
+
+	void UpdateEmptyFullFlags();
+	void SetIsSurrounded(bool value);
 
 	bool ShouldRender();
 
@@ -62,7 +64,9 @@ private:
 	int chunkX, chunkY, chunkZ;
 	bool isLoaded;
 	bool isSetup;
-	bool isGenerated;
+	bool isEmpty;
+	bool isFull;
+	bool isSurrounded;
 
 	void Initialize();
 	void Clear();

@@ -35,10 +35,6 @@ bool World::GetChunk(Chunk*& chunk, int chunkX, int chunkY, int chunkZ)
         return false;
     }
 
-    if (!chunks[key].get()->GetIsGenerated()) {
-        return false;
-    }
-
     chunk = chunks[key].get();
     return true;
 }
@@ -55,134 +51,99 @@ std::shared_ptr<Chunk> World::GetChunk(int chunkX, int chunkY, int chunkZ)
     return ptr;
 }
 
-Block World::GetBlock(int x, int y, int z) {
+bool World::GetBlock(int x, int y, int z, Block& block) {
     auto chunkCoords = WorldToChunkCoordinates(x, y, z);
     auto blockCoords = WorldToBlockCoordinates(x, y, z);
     Chunk* chunk = nullptr;
     if (GetChunk(chunk, chunkCoords.x, chunkCoords.y, chunkCoords.z)) {
-        return chunk->GetBlock(blockCoords.x, blockCoords.y, blockCoords.z);
+        block = chunk->GetBlock(blockCoords.x, blockCoords.y, blockCoords.z);
+        return true;
     }
-    return Block();
+    return false;
 }
 
 bool World::GetBlockCulls(int x, int y, int z) {
     auto chunkCoords = WorldToChunkCoordinates(x, y, z);
     auto blockCoords = WorldToBlockCoordinates(x, y, z);
-    Chunk* chunk = nullptr;
-    if (GetChunk(chunk, chunkCoords.x, chunkCoords.y, chunkCoords.z)) {
-        return chunk->GetBlockCulls(blockCoords.x, blockCoords.y, blockCoords.z);
+    auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
+    if (pChunk) {
+        return pChunk->GetBlockCulls(blockCoords.x, blockCoords.y, blockCoords.z);
     }
-    return false;
+    return true;
 }
 
 void World::SetBlock(int x, int y, int z, Block block)
 {
     auto chunkCoords = WorldToChunkCoordinates(x, y, z);
     auto blockCoords = WorldToBlockCoordinates(x, y, z);
-    Chunk* chunk = nullptr;
-    if (GetChunk(chunk, chunkCoords.x, chunkCoords.y, chunkCoords.z)) {
-        chunk->SetBlock(blockCoords.x, blockCoords.y, blockCoords.z, block);
+    auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
+    if (pChunk) {
+        pChunk->SetBlock(blockCoords.x, blockCoords.y, blockCoords.z, block);
         UpdateAdjacentChunks(x, y, z);
+        m_vpChunkRebuildList.push_back(pChunk);
     }
 }
 
 void World::SetBlock(int x, int y, int z, BlockType type) {
     auto chunkCoords = WorldToChunkCoordinates(x, y, z);
     auto blockCoords = WorldToBlockCoordinates(x, y, z);
-    Chunk* chunk = nullptr;
-    if (GetChunk(chunk, chunkCoords.x, chunkCoords.y, chunkCoords.z)) {
-        chunk->SetBlock(blockCoords.x, blockCoords.y, blockCoords.z, type);
+    auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
+    if (pChunk) {
+        pChunk->SetBlock(blockCoords.x, blockCoords.y, blockCoords.z, type);
         UpdateAdjacentChunks(x, y, z);
+        m_vpChunkRebuildList.push_back(pChunk);
     }
 }
 
 void World::SetBlock(int x, int y, int z, EdgeData edges) {
     auto chunkCoords = WorldToChunkCoordinates(x, y, z);
     auto blockCoords = WorldToBlockCoordinates(x, y, z);
-    Chunk* chunk = nullptr;
-    if (GetChunk(chunk, chunkCoords.x, chunkCoords.y, chunkCoords.z)) {
-        chunk->SetBlock(blockCoords.x, blockCoords.y, blockCoords.z, edges);
+    auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
+    if (pChunk) {
+        pChunk->SetBlock(blockCoords.x, blockCoords.y, blockCoords.z, edges);
         UpdateAdjacentChunks(x, y, z);
+        m_vpChunkRebuildList.push_back(pChunk);
     }
 }
 
 void World::UpdateAdjacentChunks(int x, int y, int z) {
-    Chunk* chunk = nullptr;
-    glm::ivec3 chunkCoords;
     glm::ivec3 blockCoords = WorldToBlockCoordinates(x, y, z);
 
-    // Check -X boundary
-    if (blockCoords.x == 0) {
-        chunkCoords = WorldToChunkCoordinates(x - 1, y, z);
-        if (GetChunk(chunk, chunkCoords.x, chunkCoords.y, chunkCoords.z)) {
-            //chunk->GenerateMesh(*this);
-            chunk->SetIsGenerated(false);
-        }
-    }
-    // Check +X boundary
-    if (blockCoords.x == Chunk::CHUNK_SIZE - 1) {
-        chunkCoords = WorldToChunkCoordinates(x + 1, y, z);
-        if (GetChunk(chunk, chunkCoords.x, chunkCoords.y, chunkCoords.z)) {
-            //chunk->GenerateMesh(*this);
-            chunk->SetIsGenerated(false);
-        }
-    }
+    std::vector<glm::ivec3> chunksToRebuild;
 
-    // Check -Y boundary
-    if (blockCoords.y == 0) {
-        chunkCoords = WorldToChunkCoordinates(x, y - 1, z);
-        if (GetChunk(chunk, chunkCoords.x, chunkCoords.y, chunkCoords.z)) {
-            //chunk->GenerateMesh(*this);
-            chunk->SetIsGenerated(false);
-        }
-    }
-    // Check +Y boundary
-    if (blockCoords.y == Chunk::CHUNK_SIZE - 1) {
-        chunkCoords = WorldToChunkCoordinates(x, y + 1, z);
-        if (GetChunk(chunk, chunkCoords.x, chunkCoords.y, chunkCoords.z)) {
-            //chunk->GenerateMesh(*this);
-            chunk->SetIsGenerated(false);
-        }
-    }
+    if (blockCoords.x == 0) chunksToRebuild.push_back(WorldToChunkCoordinates(x - 1, y, z));
+    if (blockCoords.x == Chunk::CHUNK_SIZE - 1) chunksToRebuild.push_back(WorldToChunkCoordinates(x + 1, y, z));
+    if (blockCoords.y == 0) chunksToRebuild.push_back(WorldToChunkCoordinates(x, y - 1, z));
+    if (blockCoords.y == Chunk::CHUNK_SIZE - 1) chunksToRebuild.push_back(WorldToChunkCoordinates(x, y + 1, z));
+    if (blockCoords.z == 0) chunksToRebuild.push_back(WorldToChunkCoordinates(x, y, z - 1));
+    if (blockCoords.z == Chunk::CHUNK_SIZE - 1) chunksToRebuild.push_back(WorldToChunkCoordinates(x, y, z + 1));
 
-    // Check -Z boundary
-    if (blockCoords.z == 0) {
-        chunkCoords = WorldToChunkCoordinates(x, y, z - 1);
-        if (GetChunk(chunk, chunkCoords.x, chunkCoords.y, chunkCoords.z)) {
-            //chunk->GenerateMesh(*this);
-            chunk->SetIsGenerated(false);
-        }
-    }
-    // Check +Z boundary
-    if (blockCoords.z == Chunk::CHUNK_SIZE - 1) {
-        chunkCoords = WorldToChunkCoordinates(x, y, z + 1);
-        if (GetChunk(chunk, chunkCoords.x, chunkCoords.y, chunkCoords.z)) {
-            //chunk->GenerateMesh(*this);
-            chunk->SetIsGenerated(false);
+    for each (auto chunkCoords in chunksToRebuild)
+    {
+        auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
+        if (pChunk != NULL) {
+            m_vpChunkRebuildList.push_back(pChunk);
         }
     }
 }
 
-void World::MarkAdjacentChunks(glm::ivec3 chunkCoords) {
-    Chunk* chunk = nullptr;
+void World::UpdateAdjacentChunks(std::shared_ptr<Chunk> chunk) {
+    auto coords = chunk->GetCoords();
 
-    const int offsets[6][3] = {
-        { 1, 0, 0 },
-        { -1, 0, 0 },
-        { 0, 1, 0 },
-        { 0, -1, 0 },
-        { 0, 0, 1 },
-        { 0, 0, -1 },
-    };
+    std::vector<glm::ivec3> chunksToRebuild;
 
-    for (size_t i = 0; i < 6; i++)
+    chunksToRebuild.push_back(glm::ivec3(coords.x - 1, coords.y, coords.z));
+    chunksToRebuild.push_back(glm::ivec3(coords.x + 1, coords.y, coords.z));
+    chunksToRebuild.push_back(glm::ivec3(coords.x, coords.y - 1, coords.z));
+    chunksToRebuild.push_back(glm::ivec3(coords.x, coords.y + 1, coords.z));
+    chunksToRebuild.push_back(glm::ivec3(coords.x, coords.y, coords.z - 1));
+    chunksToRebuild.push_back(glm::ivec3(coords.x, coords.y, coords.z + 1));
+
+    for each (auto chunkCoords in chunksToRebuild)
     {
-        int x = chunkCoords.x + offsets[i][0];
-        int y = chunkCoords.y + offsets[i][1];
-        int z = chunkCoords.z + offsets[i][2];
-
-        if (GetChunk(chunk, x, y, z)) {
-            chunk->SetIsGenerated(false);
+        auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
+        if (pChunk) {
+            m_vpChunkRebuildList.push_back(pChunk);
         }
     }
 }
@@ -214,12 +175,44 @@ void World::UpdateAsyncChunker(glm::vec3 position) {
         int distZ = abs((coords.z - chunkCoords.z));
 
 
-        if (distX > UNLOAD_DISTANCE || distY > UNLOAD_DISTANCE || distZ > UNLOAD_DISTANCE) {
+        if (distX > RENDER_DISTANCE + 1 || distY > RENDER_DISTANCE + 1 || distZ > RENDER_DISTANCE + 1) {
             m_vpChunkUnloadList.push_back(pChunk);
         }
     }
 
-    for (int x = -RENDER_DISTANCE; x < RENDER_DISTANCE; ++x) {
+    int x, z, dx, dy;
+    x = z = dx = 0;
+    dy = -1;
+    int width = RENDER_DISTANCE * 2;
+    int t = width;
+    int maxI = t * t;
+    for (int i = 0; i < maxI; i++) {
+        if ((-width / 2 <= x) && (x <= width / 2) && (-width / 2 <= z) && (z <= width / 2)) {
+            for (int y = -RENDER_DISTANCE; y < RENDER_DISTANCE; ++y) {
+                int chunkX = x + chunkCoords.x;
+                int chunkY = y + chunkCoords.y;
+                int chunkZ = z + chunkCoords.z;
+                auto key = std::make_tuple(chunkX, chunkY, chunkZ);
+                auto search = chunks.find(key);
+                if (search == chunks.end()) {
+                    chunks[key] = std::make_shared<Chunk>(this, chunkX, chunkY, chunkZ);
+                    m_vpChunkLoadList.push_back(chunks[key]);
+                }
+                else if (!search->second->IsLoaded()) {
+                    m_vpChunkLoadList.push_back(chunks[key]);
+                }
+            }
+        }
+        if ((x == z) || ((x < 0) && (x == -z)) || ((x > 0) && (x == 1 - z))) {
+            t = dx;
+            dx = -dy;
+            dy = t;
+        }
+        x += dx;
+        z += dy;
+    }
+
+    /*for (int x = -RENDER_DISTANCE; x < RENDER_DISTANCE; ++x) {
         for (int y = -RENDER_DISTANCE; y < RENDER_DISTANCE; ++y) {
             for (int z = -RENDER_DISTANCE; z < RENDER_DISTANCE; ++z) {
                 int chunkX = x + chunkCoords.x;
@@ -236,7 +229,7 @@ void World::UpdateAsyncChunker(glm::vec3 position) {
                 }
             }
         }
-    }
+    }*/
 }
 
 void World::UpdateLoadList() {
@@ -260,6 +253,7 @@ void World::UpdateSetupList() {
         if (!pChunk->IsSetup()) {
             pChunk->SetupChunk();
             m_vpChunkRebuildList.push_back(pChunk);
+            UpdateAdjacentChunks(pChunk);
             m_forceVisibilityUpdate = true;
         }
     }
@@ -269,34 +263,32 @@ void World::UpdateSetupList() {
 void World::UpdateRebuildList() {
     // Rebuild any chunks that are in the rebuild chunk list     
     int lNumRebuiltChunkThisFrame = 0;
-    for (auto iterator = m_vpChunkRebuildList.begin(); iterator != m_vpChunkRebuildList.end() && (lNumRebuiltChunkThisFrame != ASYNC_NUM_CHUNKS_PER_FRAME); ++iterator) {
+    for (auto iterator = m_vpChunkRebuildList.begin(); iterator != m_vpChunkRebuildList.end() && (lNumRebuiltChunkThisFrame < ASYNC_NUM_CHUNKS_PER_FRAME); ++iterator) {
         std::shared_ptr<Chunk> pChunk = *iterator;
         if (pChunk->IsLoaded() && pChunk->IsSetup()) {
-            if (lNumRebuiltChunkThisFrame != ASYNC_NUM_CHUNKS_PER_FRAME) {
-                pChunk->GenerateMesh(); 
-                // If we rebuild a chunk, add it to the list of chunks that need their render flags updated                 
-                // since we might now be empty or surrounded
-                m_vpChunkUpdateFlagsList.push_back(pChunk);
-                
-                // Also add our neighbours since they might now be surrounded too (If we have neighbours)         
-                auto coords = pChunk->GetCoords();
-                auto pChunkXMinus = GetChunk(coords.x - 1, coords.y, coords.z);
-                auto pChunkXPlus = GetChunk(coords.x + 1, coords.y, coords.z);
-                auto pChunkYMinus = GetChunk(coords.x, coords.y - 1, coords.z);
-                auto pChunkYPlus = GetChunk(coords.x, coords.y + 1, coords.z);
-                auto pChunkZMinus = GetChunk(coords.x, coords.y, coords.z - 1);
-                auto pChunkZPlus = GetChunk(coords.x, coords.y, coords.z + 1);
-                if (pChunkXMinus != NULL) m_vpChunkUpdateFlagsList.push_back(pChunkXMinus);
-                if (pChunkXPlus != NULL) m_vpChunkUpdateFlagsList.push_back(pChunkXPlus);
-                if (pChunkYMinus != NULL) m_vpChunkUpdateFlagsList.push_back(pChunkYMinus);
-                if (pChunkYPlus != NULL) m_vpChunkUpdateFlagsList.push_back(pChunkYPlus);
-                if (pChunkZMinus != NULL) m_vpChunkUpdateFlagsList.push_back(pChunkZMinus);
-                if (pChunkZPlus != NULL) m_vpChunkUpdateFlagsList.push_back(pChunkZPlus);
-                
-                // Only rebuild a certain number of chunks per frame
-                lNumRebuiltChunkThisFrame++;
-                m_forceVisibilityUpdate = true;
-            }
+            pChunk->GenerateMesh();
+            // If we rebuild a chunk, add it to the list of chunks that need their render flags updated                 
+            // since we might now be empty or surrounded
+            m_vpChunkUpdateFlagsList.push_back(pChunk);
+
+            // Also add our neighbours since they might now be surrounded too (If we have neighbours)         
+            auto coords = pChunk->GetCoords();
+            auto pChunkXMinus = GetChunk(coords.x - 1, coords.y, coords.z);
+            auto pChunkXPlus = GetChunk(coords.x + 1, coords.y, coords.z);
+            auto pChunkYMinus = GetChunk(coords.x, coords.y - 1, coords.z);
+            auto pChunkYPlus = GetChunk(coords.x, coords.y + 1, coords.z);
+            auto pChunkZMinus = GetChunk(coords.x, coords.y, coords.z - 1);
+            auto pChunkZPlus = GetChunk(coords.x, coords.y, coords.z + 1);
+            if (pChunkXMinus != NULL) m_vpChunkUpdateFlagsList.push_back(pChunkXMinus);
+            if (pChunkXPlus != NULL) m_vpChunkUpdateFlagsList.push_back(pChunkXPlus);
+            if (pChunkYMinus != NULL) m_vpChunkUpdateFlagsList.push_back(pChunkYMinus);
+            if (pChunkYPlus != NULL) m_vpChunkUpdateFlagsList.push_back(pChunkYPlus);
+            if (pChunkZMinus != NULL) m_vpChunkUpdateFlagsList.push_back(pChunkZMinus);
+            if (pChunkZPlus != NULL) m_vpChunkUpdateFlagsList.push_back(pChunkZPlus);
+
+            // Only rebuild a certain number of chunks per frame
+            lNumRebuiltChunkThisFrame++;
+            m_forceVisibilityUpdate = true;
         }
     }
     // Clear the rebuild list     
@@ -306,7 +298,35 @@ void World::UpdateRebuildList() {
 void World::UpdateFlagsList() {
     for (auto iterator = m_vpChunkUpdateFlagsList.begin(); iterator != m_vpChunkUpdateFlagsList.end(); ++iterator) {
         std::shared_ptr<Chunk> pChunk = *iterator;
-        // TODO: implement this
+        if (pChunk->IsLoaded() && pChunk->IsSetup()) {
+            pChunk->UpdateEmptyFullFlags();
+        }
+    }
+    for (auto iterator = m_vpChunkUpdateFlagsList.begin(); iterator != m_vpChunkUpdateFlagsList.end(); ++iterator) {
+        std::shared_ptr<Chunk> pChunk = *iterator;
+        if (pChunk->IsLoaded() && pChunk->IsSetup()) {
+            int offsets[][3] = {
+                { 1, 0, 0 },
+                { -1, 0, 0 },
+                { 0, 1, 0 },
+                { 0, -1, 0 },
+                { 0, 0, 1 },
+                { 0, 0, -1 },
+            };
+
+            bool surrounded = true;
+
+            for (int i = 0; i < 6; i++)
+            {
+                auto neighbour = GetChunk(offsets[i][0], offsets[i][1], offsets[i][2]);
+                if (neighbour == NULL || !neighbour->IsFull()) {
+                    surrounded = false;
+                    break; 
+                }
+            }
+
+            pChunk->SetIsSurrounded(surrounded);
+        }
     }
     m_vpChunkUpdateFlagsList.clear();
 }
@@ -333,8 +353,9 @@ void World::UpdateVisibilityList(glm::vec3 cameraPosition) {
         std::shared_ptr<Chunk> pChunk = (*iterator).second;
         if (pChunk->IsLoaded()) {
             if (pChunk->IsSetup()) {
-                // TODO: Check if is surrounded/empty
-                m_vpChunkVisibilityList.push_back(pChunk);
+                if (!pChunk->IsEmpty() && !pChunk->IsSurrounded() || !pChunk->IsFull()) {
+                    m_vpChunkVisibilityList.push_back(pChunk);
+                }
             }
         }
     }
@@ -347,20 +368,18 @@ void World::UpdateRenderList() {
     m_vpChunkRenderList.clear();
     for (auto iterator = m_vpChunkVisibilityList.begin(); iterator != m_vpChunkVisibilityList.end(); ++iterator) {
         std::shared_ptr<Chunk> pChunk = *iterator;
-        if (pChunk != NULL) {
-            if (pChunk->IsLoaded() && pChunk->IsSetup()) {
-                if (pChunk->ShouldRender()) // Early flags check so we don't always have to do the frustum check... 
-                {           
-                    /*float c_offset = (Chunk::CHUNK_SIZE - 1) * 0.5f;
-                    glm::vec3 chunkCenter = glm::vec3(pChunk->GetCoords()) + glm::vec3(c_offset, c_offset, c_offset);
-                    float c_size = Chunk::CHUNK_SIZE * 0.5f;
-                    
-                    if (m_pRenderer->CubeInFrustum(m_pRenderer->GetActiveViewPort(), chunkCenter, c_size, c_size, c_size)) {
-                        m_vpChunkRenderList.push_back(pChunk);
-                    }*/
+        if (pChunk->IsLoaded() && pChunk->IsSetup()) {
+            if (pChunk->ShouldRender()) // Early flags check so we don't always have to do the frustum check... 
+            {
+                /*float c_offset = (Chunk::CHUNK_SIZE - 1) * 0.5f;
+                glm::vec3 chunkCenter = glm::vec3(pChunk->GetCoords()) + glm::vec3(c_offset, c_offset, c_offset);
+                float c_size = Chunk::CHUNK_SIZE * 0.5f;
 
+                if (m_pRenderer->CubeInFrustum(m_pRenderer->GetActiveViewPort(), chunkCenter, c_size, c_size, c_size)) {
                     m_vpChunkRenderList.push_back(pChunk);
-                }
+                }*/
+
+                m_vpChunkRenderList.push_back(pChunk);
             }
         }
     }

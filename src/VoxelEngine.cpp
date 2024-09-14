@@ -177,19 +177,20 @@ glm::vec3 ScreenToWorldRay(const Camera& camera, float screenX, float screenY, i
 // Perform raycasting to find the target block
 bool GetTargetBlock(World& world, const glm::vec3& rayOrigin, const glm::vec3& rayDirection, int maxDistance, glm::ivec3& hitBlockPos, Block& hitBlock) {
     float t = 0.0f;
-    for (int i = 0; i < maxDistance * 10; ++i) {
+    const float step = 0.02f;
+    for (int i = 0; i < maxDistance * (1 / step); ++i) {
         glm::vec3 point = rayOrigin + (t * rayDirection);
         int x = static_cast<int>(std::floor(point.x));
         int y = static_cast<int>(std::floor(point.y));
         int z = static_cast<int>(std::floor(point.z));
 
-        hitBlock = world.GetBlock(x, y, z);
-        if (hitBlock.type != BlockType::AIR) {
-            hitBlockPos = glm::ivec3(x, y, z);
-            return true;
+        if (world.GetBlock(x, y, z, hitBlock)) {
+            if (hitBlock.type != BlockType::AIR) {
+                hitBlockPos = glm::ivec3(x, y, z);
+                return true;
+            }
         }
 
-        const float step = 0.1f;
         t += step;
     }
     return false;
@@ -351,8 +352,8 @@ int main()
             camera.UpdateMove(window, deltaTime);
 
             if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS && !mousePressed) {
-                //ChangeTargetBlock(world, camera, BlockType::AIR, frameWidth, frameHeight, 10);
-                ShrinkTargetBlock(world, camera, frameWidth, frameHeight, 10);
+                ChangeTargetBlock(world, camera, BlockType::AIR, frameWidth, frameHeight, 50);
+                //ShrinkTargetBlock(world, camera, frameWidth, frameHeight, 10);
                 mousePressed = true;
             }
             else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_RELEASE) {

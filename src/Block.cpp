@@ -207,6 +207,7 @@ void Block::Shrink() {
     edgeData.Shrink();
     if (!edgeData.IsValid()) {
         type = BlockType::AIR;
+        edgeData.MakeFull();
     }
 }
 
@@ -214,6 +215,7 @@ void Block::SetEdgeData(EdgeData edgeData)
 {
     if (!edgeData.IsValid()) {
         type = BlockType::AIR;
+        edgeData.MakeFull();
     }
     else {
         this->edgeData = edgeData;
@@ -222,6 +224,8 @@ void Block::SetEdgeData(EdgeData edgeData)
 
 bool Block::IsFullBlock() const
 {
+    if (type == BlockType::AIR) return false;
+
     for (size_t i = 0; i < 4; i++)
     {
         if (edgeData.edges[i] != 0x80)
