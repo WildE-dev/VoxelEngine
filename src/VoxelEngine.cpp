@@ -173,52 +173,126 @@ glm::vec3 ScreenToWorldRay(const Camera& camera, float screenX, float screenY, i
     return rayWorld;
 }
 
+static bool TraceRay(World& world, glm::vec3 p, glm::vec3 dir, float max_d, glm::ivec3& hit_pos, glm::vec3& hit_norm) {
 
-// Perform raycasting to find the target block
-bool GetTargetBlock(World& world, const glm::vec3& rayOrigin, const glm::vec3& rayDirection, int maxDistance, glm::ivec3& hitBlockPos, Block& hitBlock) {
-    float t = 0.0f;
-    const float step = 0.02f;
-    for (int i = 0; i < maxDistance * (1 / step); ++i) {
-        glm::vec3 point = rayOrigin + (t * rayDirection);
-        int x = static_cast<int>(std::floor(point.x));
-        int y = static_cast<int>(std::floor(point.y));
-        int z = static_cast<int>(std::floor(point.z));
+    // consider raycast vector to be parametrized by t
+    //   vec = [px,py,pz] + t * [dx,dy,dz]
 
-        if (world.GetBlock(x, y, z, hitBlock)) {
+    // algo below is as described by this paper:
+    // http://www.cse.chalmers.se/edu/year/2010/course/TDA361/grid.pdf
+
+    float t = 0.0;
+    int ix = std::floor(p.x);
+    int iy = std::floor(p.y);
+    int iz = std::floor(p.z);
+    
+    int stepx = (dir.x > 0) ? 1 : -1;
+    int stepy = (dir.y > 0) ? 1 : -1;
+    int stepz = (dir.z > 0) ? 1 : -1;
+    
+    // dir is already normalized
+    float txDelta = std::abs(1.0f / dir.x);
+    float tyDelta = std::abs(1.0f / dir.y);
+    float tzDelta = std::abs(1.0f / dir.z);
+
+    float xdist = (stepx > 0) ? (ix + 1 - p.x) : (p.x - ix);
+    float ydist = (stepy > 0) ? (iy + 1 - p.y) : (p.y - iy);
+    float zdist = (stepz > 0) ? (iz + 1 - p.z) : (p.z - iz);
+
+    // location of nearest voxel boundary, in units of t 
+    float txMax = (txDelta < FLT_MAX) ? txDelta * xdist : FLT_MAX;
+    float tyMax = (tyDelta < FLT_MAX) ? tyDelta * ydist : FLT_MAX;
+    float tzMax = (tzDelta < FLT_MAX) ? tzDelta * zdist : FLT_MAX;
+
+    int steppedIndex = -1;
+
+    // main loop along raycast vector
+    while (t <= max_d) {
+
+        bool b = false;
+        Block hitBlock;
+        if (world.GetBlock(ix, iy, iz, hitBlock)) {
             if (hitBlock.type != BlockType::AIR) {
-                hitBlockPos = glm::ivec3(x, y, z);
-                return true;
+                b = true;
             }
         }
 
-        t += step;
+        // exit check
+        if (b) {
+            hit_pos = p + t * dir - glm::vec3{ 0, 1, 0 };
+            hit_norm = { 0, 0, 0 };
+            if (steppedIndex == 0) hit_norm.x = -stepx;
+            if (steppedIndex == 1) hit_norm.y = -stepy;
+            if (steppedIndex == 2) hit_norm.z = -stepz;
+            return b;
+        }
+
+        // advance t to next nearest voxel boundary
+        if (txMax < tyMax) {
+            if (txMax < tzMax) {
+                ix += stepx;
+                t = txMax;
+                txMax += txDelta;
+                steppedIndex = 0;
+            }
+            else {
+                iz += stepz;
+                t = tzMax;
+                tzMax += tzDelta;
+                steppedIndex = 2;
+            }
+        }
+        else {
+            if (tyMax < tzMax) {
+                iy += stepy;
+                t = tyMax;
+                tyMax += tyDelta;
+                steppedIndex = 1;
+            }
+            else {
+                iz += stepz;
+                t = tzMax;
+                tzMax += tzDelta;
+                steppedIndex = 2;
+            }
+        }
+
     }
+
+    // no voxel hit found
+    hit_pos = p + t * dir;
+    hit_norm = { 0, 0, 0 };
+
     return false;
+
 }
 
 // Change the target block
-void ChangeTargetBlock(World& world, const Camera& camera, BlockType type, int screenWidth, int screenHeight, int maxDistance) {
-    glm::vec3 rayDirection = camera.GetDirection();// ScreenToWorldRay(camera, screenWidth / 2.0f, screenHeight / 2.0f, screenWidth, screenHeight);
+void ChangeTargetBlock(World& world, const Camera& camera, BlockType type, int screenWidth, int screenHeight, float maxDistance) {
+    glm::vec3 rayDirection = camera.GetDirection();
     glm::vec3 rayOrigin = camera.GetPosition();
 
     glm::ivec3 pos;
-    Block block;
-    if (GetTargetBlock(world, rayOrigin, rayDirection, maxDistance, pos, block)) {
+    glm::vec3 norm;
+    if (TraceRay(world, rayOrigin, rayDirection, maxDistance, pos, norm)) {
+        Block block;
+        world.GetBlock(pos.x, pos.y, pos.z, block);
+        //std::cout << (int)block.type << ", (" << norm.x << ", " << norm.y << ", " << norm.z << ")" << std::endl;
         world.SetBlock(pos.x, pos.y, pos.z, type);
     }
 }
 
-void ShrinkTargetBlock(World& world, const Camera& camera, int screenWidth, int screenHeight, int maxDistance) {
-    glm::vec3 rayDirection = camera.GetDirection();// ScreenToWorldRay(camera, screenWidth / 2.0f, screenHeight / 2.0f, screenWidth, screenHeight);
-    glm::vec3 rayOrigin = camera.GetPosition();
-
-    glm::ivec3 pos;
-    Block block;
-    if (GetTargetBlock(world, rayOrigin, rayDirection, maxDistance, pos, block)) {
-        block.Shrink();
-        world.SetBlock(pos.x, pos.y, pos.z, block);
-    }
-}
+//void ShrinkTargetBlock(World& world, const Camera& camera, int screenWidth, int screenHeight, int maxDistance) {
+//    glm::vec3 rayDirection = camera.GetDirection();// ScreenToWorldRay(camera, screenWidth / 2.0f, screenHeight / 2.0f, screenWidth, screenHeight);
+//    glm::vec3 rayOrigin = camera.GetPosition();
+//
+//    glm::ivec3 pos;
+//    Block block;
+//    if (GetTargetBlock(world, rayOrigin, rayDirection, maxDistance, pos, block)) {
+//        block.Shrink();
+//        world.SetBlock(pos.x, pos.y, pos.z, block);
+//    }
+//}
 
 bool closeWindow = false;
 
@@ -359,6 +433,10 @@ int main()
             else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_RELEASE) {
                 mousePressed = false;
             }
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
+            world.RebuildAllChunks();
         }
 
         world.Update(camera.GetPosition(), camera.GetDirection());

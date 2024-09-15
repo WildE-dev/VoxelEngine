@@ -29,12 +29,15 @@ public:
 	
 	bool IsLoaded() const;
 	bool IsSetup() const;
+	bool NeedsRebuilding() const;
+	
 	bool IsEmpty() const;
 	bool IsFull() const;
 	bool IsSurrounded() const;
 
 	void UpdateEmptyFullFlags();
 	void SetIsSurrounded(bool value);
+	void SetNeedsRebuilding(bool value);
 
 	bool ShouldRender();
 
@@ -64,6 +67,8 @@ private:
 	int chunkX, chunkY, chunkZ;
 	bool isLoaded;
 	bool isSetup;
+	bool needsRebuilding;
+
 	bool isEmpty;
 	bool isFull;
 	bool isSurrounded;

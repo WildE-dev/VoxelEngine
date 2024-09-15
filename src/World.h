@@ -41,6 +41,8 @@ public:
 
     void Update(glm::vec3 cameraPosition, glm::vec3 cameraView);
 
+    void RebuildAllChunks();
+
     void Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight);
 
     TerrainGenerator* terrainGenerator;

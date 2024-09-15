@@ -6,7 +6,8 @@
 //Chunk::Chunk() : world(0), chunkX(0), chunkY(0), chunkZ(0), isGenerated(false) {}
 
 Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ) : world(world), 
-chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ), isSetup(false), isLoaded(false), VAO(0), VBO(0), isEmpty(false), isFull(false), isSurrounded(false) {
+chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ), isSetup(false), isLoaded(false), 
+VAO(0), VBO(0), isEmpty(false), isFull(false), isSurrounded(false), needsRebuilding(false) {
     Initialize();
     chunkCount++;
 }
@@ -17,7 +18,8 @@ Chunk::~Chunk() {
 }
 
 Chunk::Chunk(const Chunk& other) : blocks(), world(other.world), isSetup(other.isSetup), isLoaded(other.isLoaded),
-chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), VAO(other.VAO), VBO(other.VBO), isEmpty(other.isEmpty), isFull(other.isFull), isSurrounded(other.isSurrounded) {}
+chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), VAO(other.VAO), VBO(other.VBO), isEmpty(other.isEmpty), 
+isFull(other.isFull), isSurrounded(other.isSurrounded), needsRebuilding(other.needsRebuilding) {}
 
 Chunk& Chunk::operator=(const Chunk& other) {
     if (this != &other) {
@@ -33,7 +35,8 @@ Chunk& Chunk::operator=(const Chunk& other) {
 }
 
 Chunk::Chunk(Chunk&& other) noexcept : blocks(std::move(other.blocks)), isSetup(other.isSetup), isLoaded(other.isLoaded),
-world(other.world), chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), VAO(other.VAO), VBO(other.VBO), isEmpty(other.isEmpty), isFull(other.isFull), isSurrounded(other.isSurrounded) {}
+world(other.world), chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), VAO(other.VAO), VBO(other.VBO), 
+isEmpty(other.isEmpty), isFull(other.isFull), isSurrounded(other.isSurrounded), needsRebuilding(other.needsRebuilding) {}
 
 Chunk& Chunk::operator=(Chunk&& other) noexcept {
     if (this != &other) {
@@ -101,6 +104,7 @@ void Chunk::LoadChunk() {
 
 void Chunk::SetupChunk()
 {
+    needsRebuilding = true;
     isSetup = true;
 }
 
@@ -132,6 +136,11 @@ bool Chunk::IsSetup() const
     return isSetup;
 }
 
+bool Chunk::NeedsRebuilding() const
+{
+    return needsRebuilding;
+}
+
 bool Chunk::IsEmpty() const
 {
     return isEmpty;
@@ -150,6 +159,11 @@ bool Chunk::IsSurrounded() const
 void Chunk::SetIsSurrounded(bool value)
 {
     isSurrounded = value;
+}
+
+void Chunk::SetNeedsRebuilding(bool value)
+{
+    needsRebuilding = value;
 }
 
 void Chunk::UpdateEmptyFullFlags()
@@ -261,6 +275,8 @@ void Chunk::GenerateMesh() {
             }
         }
     }
+
+    needsRebuilding = false;
 
     SendVertexData();
 }

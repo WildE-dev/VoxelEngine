@@ -69,7 +69,7 @@ bool World::GetBlockCulls(int x, int y, int z) {
     if (pChunk) {
         return pChunk->GetBlockCulls(blockCoords.x, blockCoords.y, blockCoords.z);
     }
-    return true;
+    return false;
 }
 
 void World::SetBlock(int x, int y, int z, Block block)
@@ -79,8 +79,8 @@ void World::SetBlock(int x, int y, int z, Block block)
     auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
     if (pChunk) {
         pChunk->SetBlock(blockCoords.x, blockCoords.y, blockCoords.z, block);
+        pChunk->SetNeedsRebuilding(true);
         UpdateAdjacentChunks(x, y, z);
-        m_vpChunkRebuildList.push_back(pChunk);
     }
 }
 
@@ -90,8 +90,8 @@ void World::SetBlock(int x, int y, int z, BlockType type) {
     auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
     if (pChunk) {
         pChunk->SetBlock(blockCoords.x, blockCoords.y, blockCoords.z, type);
+        pChunk->SetNeedsRebuilding(true);
         UpdateAdjacentChunks(x, y, z);
-        m_vpChunkRebuildList.push_back(pChunk);
     }
 }
 
@@ -101,8 +101,8 @@ void World::SetBlock(int x, int y, int z, EdgeData edges) {
     auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
     if (pChunk) {
         pChunk->SetBlock(blockCoords.x, blockCoords.y, blockCoords.z, edges);
+        pChunk->SetNeedsRebuilding(true);
         UpdateAdjacentChunks(x, y, z);
-        m_vpChunkRebuildList.push_back(pChunk);
     }
 }
 
@@ -122,7 +122,7 @@ void World::UpdateAdjacentChunks(int x, int y, int z) {
     {
         auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
         if (pChunk != NULL) {
-            m_vpChunkRebuildList.push_back(pChunk);
+            pChunk->SetNeedsRebuilding(true);
         }
     }
 }
@@ -143,7 +143,7 @@ void World::UpdateAdjacentChunks(std::shared_ptr<Chunk> chunk) {
     {
         auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
         if (pChunk) {
-            m_vpChunkRebuildList.push_back(pChunk);
+            pChunk->SetNeedsRebuilding(true);
         }
     }
 }
@@ -198,8 +198,15 @@ void World::UpdateAsyncChunker(glm::vec3 position) {
                     chunks[key] = std::make_shared<Chunk>(this, chunkX, chunkY, chunkZ);
                     m_vpChunkLoadList.push_back(chunks[key]);
                 }
-                else if (!search->second->IsLoaded()) {
-                    m_vpChunkLoadList.push_back(chunks[key]);
+                else {
+                    if (!search->second->IsLoaded()) {
+                        m_vpChunkLoadList.push_back(chunks[key]);
+                    }
+                    else {
+                        if (search->second->NeedsRebuilding()) {
+                            m_vpChunkRebuildList.push_back(chunks[key]);
+                        }
+                    }
                 }
             }
         }
@@ -419,5 +426,13 @@ void World::Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionM
         shader.SetUniform("view", newViewMatrix);
 
         pChunk->Render(shader);
+    }
+}
+
+void World::RebuildAllChunks()
+{
+    for (auto iterator = chunks.begin(); iterator != chunks.end(); ++iterator) {
+        std::shared_ptr<Chunk> pChunk = (*iterator).second;
+        pChunk->SetNeedsRebuilding(true);
     }
 }
