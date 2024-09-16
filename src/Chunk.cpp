@@ -5,17 +5,21 @@
 
 //Chunk::Chunk() : world(0), chunkX(0), chunkY(0), chunkZ(0), isGenerated(false) {}
 
-Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ) : world(world), chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ),
-isGenerated(false), isSetup(false), isLoaded(false), VAO(0), VBO(0) {
+Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ) : world(world), 
+chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ), isSetup(false), isLoaded(false), 
+VAO(0), VBO(0), isEmpty(false), isFull(false), isSurrounded(false), needsRebuilding(false) {
     Initialize();
+    chunkCount++;
 }
 
 Chunk::~Chunk() {
     Clear();
+    chunkCount--;
 }
 
 Chunk::Chunk(const Chunk& other) : blocks(), world(other.world), isSetup(other.isSetup), isLoaded(other.isLoaded),
-chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), isGenerated(other.isGenerated), VAO(other.VAO), VBO(other.VBO) {}
+chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), VAO(other.VAO), VBO(other.VBO), isEmpty(other.isEmpty), 
+isFull(other.isFull), isSurrounded(other.isSurrounded), needsRebuilding(other.needsRebuilding) {}
 
 Chunk& Chunk::operator=(const Chunk& other) {
     if (this != &other) {
@@ -24,7 +28,6 @@ Chunk& Chunk::operator=(const Chunk& other) {
         chunkX = other.chunkX;
         chunkY = other.chunkY;
         chunkZ = other.chunkZ;
-        isGenerated = other.isGenerated;
         VAO = other.VAO;
         VBO = other.VBO;
     }
@@ -32,7 +35,8 @@ Chunk& Chunk::operator=(const Chunk& other) {
 }
 
 Chunk::Chunk(Chunk&& other) noexcept : blocks(std::move(other.blocks)), isSetup(other.isSetup), isLoaded(other.isLoaded),
-world(other.world), chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), isGenerated(other.isGenerated), VAO(other.VAO), VBO(other.VBO) {}
+world(other.world), chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), VAO(other.VAO), VBO(other.VBO), 
+isEmpty(other.isEmpty), isFull(other.isFull), isSurrounded(other.isSurrounded), needsRebuilding(other.needsRebuilding) {}
 
 Chunk& Chunk::operator=(Chunk&& other) noexcept {
     if (this != &other) {
@@ -41,7 +45,6 @@ Chunk& Chunk::operator=(Chunk&& other) noexcept {
         chunkX = std::move(other.chunkX);
         chunkY = std::move(other.chunkY);
         chunkZ = std::move(other.chunkZ);
-        isGenerated = std::move(other.isGenerated);
         VAO = std::move(other.VAO);
         VBO = std::move(other.VBO);
     }
@@ -101,6 +104,7 @@ void Chunk::LoadChunk() {
 
 void Chunk::SetupChunk()
 {
+    needsRebuilding = true;
     isSetup = true;
 }
 
@@ -117,34 +121,74 @@ const Block& Chunk::GetBlock(int x, int y, int z) {
     return blocks[Index(x, y, z)];
 }
 
-bool Chunk::ShouldGenerateMesh()
-{
-    return !isGenerated && isLoaded;
-}
-
 bool Chunk::ShouldRender()
 {
     return true;
 }
 
-bool Chunk::GetIsGenerated()
-{
-    return isGenerated;
-}
-
-bool Chunk::IsLoaded()
+bool Chunk::IsLoaded() const
 {
     return isLoaded;
 }
 
-bool Chunk::IsSetup()
+bool Chunk::IsSetup() const
 {
     return isSetup;
 }
 
-void Chunk::SetIsGenerated(bool value)
+bool Chunk::NeedsRebuilding() const
 {
-    isGenerated = value;
+    return needsRebuilding;
+}
+
+bool Chunk::IsEmpty() const
+{
+    return isEmpty;
+}
+
+bool Chunk::IsFull() const
+{
+    return isFull;
+}
+
+bool Chunk::IsSurrounded() const
+{
+    return isSurrounded;
+}
+
+void Chunk::SetIsSurrounded(bool value)
+{
+    isSurrounded = value;
+}
+
+void Chunk::SetNeedsRebuilding(bool value)
+{
+    needsRebuilding = value;
+}
+
+void Chunk::UpdateEmptyFullFlags()
+{
+    isEmpty = true;
+    isFull = true;
+
+    for (int x = 0; x < CHUNK_SIZE; x++)
+    {
+        for (int y = 0; y < CHUNK_SIZE; y++)
+        {
+            for (int z = 0; z < CHUNK_SIZE; z++)
+            {
+                auto& block = GetBlock(x, y, z);
+                if (block.IsFullBlock()) {
+                    isEmpty = false;
+                }
+                else {
+                    isFull = false;
+                }
+
+                if (!isEmpty && !isFull) return; // Since we know it's not full and not empty we don't need to check the rest of the blocks
+            }
+        }
+    }
 }
 
 glm::ivec3 Chunk::GetCoords()
@@ -156,32 +200,25 @@ bool Chunk::GetBlockCulls(int x, int y, int z)
 {
     Block b = blocks[Index(x, y, z)];
 
-    if (b.type == BlockType::AIR)
-        return false;
-
     return b.IsFullBlock();
 }
 
 void Chunk::SetBlock(int x, int y, int z, Block block)
 {
     blocks[Index(x, y, z)] = block;
-    isGenerated = false;
 }
 
 void Chunk::SetBlock(int x, int y, int z, BlockType type) {
     blocks[Index(x, y, z)].type = type;
-    isGenerated = false;
 }
 
 void Chunk::SetBlock(int x, int y, int z, EdgeData edges) {
     blocks[Index(x, y, z)].SetEdgeData(edges);
-    isGenerated = false;
 }
 
 void Chunk::SetBlock(int x, int y, int z, BlockType type, EdgeData edges) {
     blocks[Index(x, y, z)].type = type;
     blocks[Index(x, y, z)].SetEdgeData(edges);
-    isGenerated = false;
 }
 
 void Chunk::Initialize() {
@@ -239,7 +276,8 @@ void Chunk::GenerateMesh() {
         }
     }
 
-    isGenerated = true;
+    needsRebuilding = false;
+
     SendVertexData();
 }
 
@@ -270,7 +308,7 @@ void Chunk::SendVertexData() {
 }
 
 void Chunk::Render(Shader& shader) {
-    if (!isGenerated || !isLoaded)
+    if (!isLoaded)
         return;
 
     /*if (!meshSentToGPU) {

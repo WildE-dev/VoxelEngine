@@ -17,6 +17,8 @@ public:
 	// which is greater than 255, the max 1 byte can store
 	static const int CHUNK_SIZE = 16; 
 
+	static int chunkCount;
+
 	//Chunk();
 	Chunk(World* world, int chunkX, int chunkY, int chunkZ);
 	~Chunk();
@@ -24,13 +26,18 @@ public:
 	Chunk& operator=(const Chunk& other);
 	Chunk(Chunk&& other) noexcept;
 	Chunk& operator=(Chunk&& other) noexcept;
-
-	bool ShouldGenerateMesh();
-	bool GetIsGenerated();
-	void SetIsGenerated(bool value);
 	
-	bool IsLoaded();
-	bool IsSetup();
+	bool IsLoaded() const;
+	bool IsSetup() const;
+	bool NeedsRebuilding() const;
+	
+	bool IsEmpty() const;
+	bool IsFull() const;
+	bool IsSurrounded() const;
+
+	void UpdateEmptyFullFlags();
+	void SetIsSurrounded(bool value);
+	void SetNeedsRebuilding(bool value);
 
 	bool ShouldRender();
 
@@ -60,7 +67,11 @@ private:
 	int chunkX, chunkY, chunkZ;
 	bool isLoaded;
 	bool isSetup;
-	bool isGenerated;
+	bool needsRebuilding;
+
+	bool isEmpty;
+	bool isFull;
+	bool isSurrounded;
 
 	void Initialize();
 	void Clear();
