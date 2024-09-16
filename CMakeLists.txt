@@ -4,10 +4,10 @@ set(CMAKE_SYSTEM_VERSION 10.0 CACHE STRING "" FORCE)
 
 project(VoxelEngine C CXX)
 
-find_package(glfw3 REQUIRED)
-find_package(glad REQUIRED)
-find_package(glm REQUIRED)
-find_package(imgui REQUIRED)
+find_package(glfw3 CONFIG REQUIRED)
+find_package(glad CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
+find_package(imgui CONFIG REQUIRED)
 
 find_path(STB_INCLUDE_DIRS "stb_image.h") 
 

@@ -54,14 +54,14 @@ GLuint CreateDefaultShader() {
         "void main()"
         "{"
         "   gl_Position = projection * view * model * vec4(aPos, 1.0f);"
-        "};";
+        "}";
     const char* fragmentSource =
         "#version 330 core\n"
         "out vec4 FragColor;"
         "void main()"
         "{"
         "   FragColor = vec4(1.0, 0.0, 1.0, 1.0);"
-        "};";
+        "}";
 
     return CreateShaderFromStrings(vertexSource, fragmentSource);
 }
