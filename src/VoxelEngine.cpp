@@ -108,12 +108,12 @@ int init_glfw() {
         return -1;
     }
 
-    const char* glsl_version = "#version 330";
+    const char* glsl_version = "#version 330 core";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #ifdef __APPLE__
- glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
@@ -141,7 +141,7 @@ int init_glfw() {
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); //(void)io;
+    ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NoKeyboard;
 
@@ -222,7 +222,7 @@ static bool TraceRay(World& world, glm::vec3 p, glm::vec3 dir, float max_d, glm:
 
         // exit check
         if (b) {
-            hit_pos = p + t * dir - glm::vec3{ 0, 1, 0 };
+            hit_pos = { ix, iy, iz };
             hit_norm = { 0, 0, 0 };
             if (steppedIndex == 0) hit_norm.x = -stepx;
             if (steppedIndex == 1) hit_norm.y = -stepy;
@@ -370,7 +370,8 @@ int main()
     bool vsync = true;
     ImVec4 clear_color = ImVec4(0.26f, 0.47f, 0.71f, 1.0f);
 
-    bool mousePressed = false;
+    //bool mousePressed = false;
+    std::map<int, bool> buttonsPressed;
     double lastFrame = 0.0f;
     float frameTimes[100]{};
     int i = 0;
@@ -428,13 +429,32 @@ int main()
         if (!debug) {
             camera.UpdateMove(window, deltaTime);
 
-            if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS && !mousePressed) {
-                ChangeTargetBlock(world, camera, BlockType::AIR, frameWidth, frameHeight, 50);
-                //ShrinkTargetBlock(world, camera, frameWidth, frameHeight, 10);
-                mousePressed = true;
+            if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS && !buttonsPressed[GLFW_MOUSE_BUTTON_1]) {
+                glm::ivec3 pos;
+                glm::vec3 norm;
+                if (TraceRay(world, camera.GetPosition(), camera.GetDirection(), 50, pos, norm)) {
+                    world.SetBlock(pos.x, pos.y, pos.z, BlockType::AIR);
+                }
+
+                buttonsPressed[GLFW_MOUSE_BUTTON_1] = true;
             }
             else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_RELEASE) {
-                mousePressed = false;
+                buttonsPressed[GLFW_MOUSE_BUTTON_1] = false;
+            }
+
+            if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS && !buttonsPressed[GLFW_MOUSE_BUTTON_2]) {
+                glm::ivec3 pos;
+                glm::vec3 norm;
+                if (TraceRay(world, camera.GetPosition(), camera.GetDirection(), 50, pos, norm)) {
+                    Block block;
+                    pos += norm;
+                    world.SetBlock(pos.x, pos.y, pos.z, BlockType::DIRT);
+                }
+
+                buttonsPressed[GLFW_MOUSE_BUTTON_2] = true;
+            }
+            else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2) == GLFW_RELEASE) {
+                buttonsPressed[GLFW_MOUSE_BUTTON_2] = false;
             }
         }
 

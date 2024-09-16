@@ -127,9 +127,9 @@ static std::unordered_map<BlockType, TextureData> blockTextureMap = {
 
 class Block
 {
-    EdgeData edgeData;
 public:
     BlockType type;
+    EdgeData edgeData;
 
     Block();
     Block(BlockType t);

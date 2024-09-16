@@ -210,6 +210,7 @@ void Chunk::SetBlock(int x, int y, int z, Block block)
 
 void Chunk::SetBlock(int x, int y, int z, BlockType type) {
     blocks[Index(x, y, z)].type = type;
+    blocks[Index(x, y, z)].edgeData.MakeFull();
 }
 
 void Chunk::SetBlock(int x, int y, int z, EdgeData edges) {

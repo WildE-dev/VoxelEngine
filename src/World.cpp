@@ -118,8 +118,9 @@ void World::UpdateAdjacentChunks(int x, int y, int z) {
     if (blockCoords.z == 0) chunksToRebuild.push_back(WorldToChunkCoordinates(x, y, z - 1));
     if (blockCoords.z == Chunk::CHUNK_SIZE - 1) chunksToRebuild.push_back(WorldToChunkCoordinates(x, y, z + 1));
 
-    for each (auto chunkCoords in chunksToRebuild)
+    for (int i = 0; i < chunksToRebuild.size(); i++)
     {
+        auto chunkCoords = chunksToRebuild[i];
         auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
         if (pChunk != NULL) {
             pChunk->SetNeedsRebuilding(true);
@@ -139,8 +140,9 @@ void World::UpdateAdjacentChunks(std::shared_ptr<Chunk> chunk) {
     chunksToRebuild.push_back(glm::ivec3(coords.x, coords.y, coords.z - 1));
     chunksToRebuild.push_back(glm::ivec3(coords.x, coords.y, coords.z + 1));
 
-    for each (auto chunkCoords in chunksToRebuild)
+    for (int i = 0; i < chunksToRebuild.size(); i++)
     {
+        auto chunkCoords = chunksToRebuild[i];
         auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
         if (pChunk) {
             pChunk->SetNeedsRebuilding(true);

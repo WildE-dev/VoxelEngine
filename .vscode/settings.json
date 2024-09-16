@@ -1,3 +1,7 @@
 {
-    "makefile.makefilePath": "build/Makefile"
+    "makefile.makefilePath": "build/Makefile",
+    "files.associations": {
+        "__locale": "cpp",
+        "ios": "cpp"
+    }
 }
