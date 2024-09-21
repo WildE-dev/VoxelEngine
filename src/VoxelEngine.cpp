@@ -24,6 +24,7 @@
 #include "Shader.h"
 #include "World.h"
 #include "Block.h"
+#include "ThreadPool.h"
 
 bool captureCursor = true;
 bool wireframe = false;
@@ -67,7 +68,7 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 {
-    if (captureCursor && !debug)
+    if (captureCursor)
         camera.UpdateLook(xpos, ypos);
     else
         camera.firstMouse = true;
@@ -176,7 +177,7 @@ glm::vec3 ScreenToWorldRay(const Camera& camera, float screenX, float screenY, i
     return rayWorld;
 }
 
-static bool TraceRay(World& world, glm::vec3 p, glm::vec3 dir, float max_d, glm::ivec3& hit_pos, glm::vec3& hit_norm) {
+static bool TraceRay(World& world, glm::vec3 p, glm::vec3 dir, float max_d, glm::ivec3& hit_pos, glm::vec3& hit_norm, std::vector<glm::ivec3>* rayBlocks = nullptr) {
 
     // consider raycast vector to be parametrized by t
     //   vec = [px,py,pz] + t * [dx,dy,dz]
@@ -209,19 +210,25 @@ static bool TraceRay(World& world, glm::vec3 p, glm::vec3 dir, float max_d, glm:
 
     int steppedIndex = -1;
 
+    if (rayBlocks)
+        rayBlocks->clear();
+
+    bool b = false;
+
     // main loop along raycast vector
     while (t <= max_d) {
-
-        bool b = false;
         Block hitBlock;
         if (world.GetBlock(ix, iy, iz, hitBlock)) {
             if (hitBlock.type != BlockType::AIR) {
                 b = true;
             }
+
+            if (rayBlocks)
+                rayBlocks->push_back(glm::ivec3(ix, iy, iz));
         }
 
         // exit check
-        if (b) {
+        if (b && !rayBlocks) {
             hit_pos = { ix, iy, iz };
             hit_norm = { 0, 0, 0 };
             if (steppedIndex == 0) hit_norm.x = -stepx;
@@ -266,8 +273,7 @@ static bool TraceRay(World& world, glm::vec3 p, glm::vec3 dir, float max_d, glm:
     hit_pos = p + t * dir;
     hit_norm = { 0, 0, 0 };
 
-    return false;
-
+    return b;
 }
 
 // Change the target block
@@ -278,8 +284,8 @@ void ChangeTargetBlock(World& world, const Camera& camera, BlockType type, int s
     glm::ivec3 pos;
     glm::vec3 norm;
     if (TraceRay(world, rayOrigin, rayDirection, maxDistance, pos, norm)) {
-        Block block;
-        world.GetBlock(pos.x, pos.y, pos.z, block);
+        //Block block;
+        //world.GetBlock(pos.x, pos.y, pos.z, block);
         //std::cout << (int)block.type << ", (" << norm.x << ", " << norm.y << ", " << norm.z << ")" << std::endl;
         world.SetBlock(pos.x, pos.y, pos.z, type);
     }
@@ -344,7 +350,10 @@ int main()
     glCullFace(GL_BACK);
     glFrontFace(GL_CW);
 
-    TerrainGenerator generator = TerrainGenerator();
+    ThreadPool threadPool;
+    threadPool.Start();
+
+    TerrainGenerator generator;
 
     World world = World(&generator);
 
@@ -398,7 +407,7 @@ int main()
         
         glfwPollEvents();
         
-        glfwSetInputMode(window, GLFW_CURSOR, captureCursor && !debug ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+        glfwSetInputMode(window, GLFW_CURSOR, captureCursor ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -426,43 +435,65 @@ int main()
         glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        if (!debug) {
-            camera.UpdateMove(window, deltaTime);
+        camera.UpdateMove(window, deltaTime);
 
-            if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS && !buttonsPressed[GLFW_MOUSE_BUTTON_1]) {
-                glm::ivec3 pos;
-                glm::vec3 norm;
-                if (TraceRay(world, camera.GetPosition(), camera.GetDirection(), 50, pos, norm)) {
-                    world.SetBlock(pos.x, pos.y, pos.z, BlockType::AIR);
+        // Laser
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_4) == GLFW_PRESS) {
+            glm::ivec3 pos;
+            glm::vec3 norm;
+            std::vector<glm::ivec3> rayBlocks;
+            if (TraceRay(world, camera.GetPosition(), camera.GetDirection(), 100, pos, norm, &rayBlocks)) {
+                const int radius = 4;
+                for each (auto rayPos in rayBlocks)
+                {
+                    for (int x = -radius; x <= radius; x++)
+                    {
+                        for (int y = -radius; y <= radius; y++)
+                        {
+                            for (int z = -radius; z <= radius; z++)
+                            {
+                                if (square(x) + square(y) + square(z) <= square(radius))
+                                    world.SetBlock(rayPos.x + x, rayPos.y + y, rayPos.z + z, BlockType::AIR);
+                            }
+                        }
+                    }
                 }
+            }
+        }
 
-                buttonsPressed[GLFW_MOUSE_BUTTON_1] = true;
-            }
-            else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_RELEASE) {
-                buttonsPressed[GLFW_MOUSE_BUTTON_1] = false;
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS && !buttonsPressed[GLFW_MOUSE_BUTTON_1]) {
+            glm::ivec3 pos;
+            glm::vec3 norm;
+            if (TraceRay(world, camera.GetPosition(), camera.GetDirection(), 50, pos, norm)) {
+                world.SetBlock(pos.x, pos.y, pos.z, BlockType::AIR);
             }
 
-            if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS && !buttonsPressed[GLFW_MOUSE_BUTTON_2]) {
-                glm::ivec3 pos;
-                glm::vec3 norm;
-                if (TraceRay(world, camera.GetPosition(), camera.GetDirection(), 50, pos, norm)) {
-                    Block block;
-                    pos += norm;
-                    world.SetBlock(pos.x, pos.y, pos.z, BlockType::DIRT);
-                }
+            buttonsPressed[GLFW_MOUSE_BUTTON_1] = true;
+        }
+        else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_RELEASE) {
+            buttonsPressed[GLFW_MOUSE_BUTTON_1] = false;
+        }
 
-                buttonsPressed[GLFW_MOUSE_BUTTON_2] = true;
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS && !buttonsPressed[GLFW_MOUSE_BUTTON_2]) {
+            glm::ivec3 pos;
+            glm::vec3 norm;
+            if (TraceRay(world, camera.GetPosition(), camera.GetDirection(), 50, pos, norm)) {
+                Block block;
+                pos += norm;
+                world.SetBlock(pos.x, pos.y, pos.z, BlockType::DIRT);
             }
-            else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2) == GLFW_RELEASE) {
-                buttonsPressed[GLFW_MOUSE_BUTTON_2] = false;
-            }
+
+            buttonsPressed[GLFW_MOUSE_BUTTON_2] = true;
+        }
+        else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2) == GLFW_RELEASE) {
+            buttonsPressed[GLFW_MOUSE_BUTTON_2] = false;
         }
 
         if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
             world.RebuildAllChunks();
         }
 
-        world.Update(camera.GetPosition(), camera.GetDirection());
+        world.Update(camera.GetPosition(), camera.GetDirection(), threadPool);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
@@ -478,6 +509,8 @@ int main()
 
         glfwSwapBuffers(window);
     }
+
+    threadPool.Stop();
 
     closeWindow = true;
     //chunkLoading.join();

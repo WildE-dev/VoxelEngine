@@ -17,7 +17,7 @@ Chunk::~Chunk() {
     chunkCount--;
 }
 
-Chunk::Chunk(const Chunk& other) : blocks(), world(other.world), isSetup(other.isSetup), isLoaded(other.isLoaded),
+Chunk::Chunk(const Chunk& other) : blocks(), world(other.world), isSetup(other.isSetup),
 chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), VAO(other.VAO), VBO(other.VBO), isEmpty(other.isEmpty), 
 isFull(other.isFull), isSurrounded(other.isSurrounded), needsRebuilding(other.needsRebuilding) {}
 
@@ -34,7 +34,7 @@ Chunk& Chunk::operator=(const Chunk& other) {
     return *this;
 }
 
-Chunk::Chunk(Chunk&& other) noexcept : blocks(std::move(other.blocks)), isSetup(other.isSetup), isLoaded(other.isLoaded),
+Chunk::Chunk(Chunk&& other) noexcept : blocks(std::move(other.blocks)), isSetup(other.isSetup),
 world(other.world), chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), VAO(other.VAO), VBO(other.VBO), 
 isEmpty(other.isEmpty), isFull(other.isFull), isSurrounded(other.isSurrounded), needsRebuilding(other.needsRebuilding) {}
 
@@ -51,7 +51,8 @@ Chunk& Chunk::operator=(Chunk&& other) noexcept {
     return *this;
 }
 
-void Chunk::LoadChunk() {
+void Chunk::LoadChunk(TerrainGenerator* terrainGenerator) {
+    std::lock_guard<std::mutex> lock(block_mutex);
     blocks.fill(Block(BlockType::AIR));
 
     for (int x = 0; x < CHUNK_SIZE; x++)
@@ -66,10 +67,10 @@ void Chunk::LoadChunk() {
 
                 const float smoothness = 8.0f;
 
-                float worldHeight1 = round(world->terrainGenerator->GetHeight(blockX, blockZ + 1) * smoothness) / smoothness;
-                float worldHeight2 = round(world->terrainGenerator->GetHeight(blockX + 1, blockZ) * smoothness) / smoothness;
-                float worldHeight3 = round(world->terrainGenerator->GetHeight(blockX, blockZ) * smoothness) / smoothness;
-                float worldHeight4 = round(world->terrainGenerator->GetHeight(blockX + 1, blockZ + 1) * smoothness) / smoothness;
+                float worldHeight1 = round(terrainGenerator->GetHeight(blockX, blockZ + 1) * smoothness) / smoothness;
+                float worldHeight2 = round(terrainGenerator->GetHeight(blockX + 1, blockZ) * smoothness) / smoothness;
+                float worldHeight3 = round(terrainGenerator->GetHeight(blockX, blockZ) * smoothness) / smoothness;
+                float worldHeight4 = round(terrainGenerator->GetHeight(blockX + 1, blockZ + 1) * smoothness) / smoothness;
                 float fWorldHeight1 = worldHeight1 - blockY;
                 float fWorldHeight2 = worldHeight2 - blockY;
                 float fWorldHeight3 = worldHeight3 - blockY;
@@ -118,6 +119,7 @@ int Chunk::Index(int x, int y, int z) const {
 }
 
 const Block& Chunk::GetBlock(int x, int y, int z) {
+    std::lock_guard<std::mutex> lock(block_mutex);
     return blocks[Index(x, y, z)];
 }
 
@@ -198,6 +200,7 @@ glm::ivec3 Chunk::GetCoords()
 
 bool Chunk::GetBlockCulls(int x, int y, int z)
 {
+    std::lock_guard<std::mutex> lock(block_mutex);
     Block b = blocks[Index(x, y, z)];
 
     return b.IsFullBlock();
@@ -205,19 +208,23 @@ bool Chunk::GetBlockCulls(int x, int y, int z)
 
 void Chunk::SetBlock(int x, int y, int z, Block block)
 {
+    //std::lock_guard<std::mutex> lock(block_mutex);
     blocks[Index(x, y, z)] = block;
 }
 
 void Chunk::SetBlock(int x, int y, int z, BlockType type) {
+    //std::lock_guard<std::mutex> lock(block_mutex);
     blocks[Index(x, y, z)].type = type;
     blocks[Index(x, y, z)].edgeData.MakeFull();
 }
 
 void Chunk::SetBlock(int x, int y, int z, EdgeData edges) {
+    //std::lock_guard<std::mutex> lock(block_mutex);
     blocks[Index(x, y, z)].SetEdgeData(edges);
 }
 
 void Chunk::SetBlock(int x, int y, int z, BlockType type, EdgeData edges) {
+    //std::lock_guard<std::mutex> lock(block_mutex);
     blocks[Index(x, y, z)].type = type;
     blocks[Index(x, y, z)].SetEdgeData(edges);
 }

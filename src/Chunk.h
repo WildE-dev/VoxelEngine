@@ -4,7 +4,9 @@
 #include <map>
 #include <memory>
 #include <atomic>
+#include <mutex>
 
+#include "TerrainGenerator.h"
 #include "Block.h"
 
 class World;
@@ -50,7 +52,7 @@ public:
 	void SetBlock(int x, int y, int z, EdgeData edges);
 	void SetBlock(int x, int y, int z, BlockType type, EdgeData edges);
 
-	void LoadChunk();
+	void LoadChunk(TerrainGenerator* terrainGenerator);
 	void SetupChunk();
 	void UnloadChunk();
 	void GenerateMesh();
@@ -61,11 +63,13 @@ private:
 	std::array<Block, CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE> blocks;
 	std::vector<uint32_t> vertices;
 
+	std::mutex block_mutex;
+
 	World* world;
 
 	GLuint VAO, VBO;
 	int chunkX, chunkY, chunkZ;
-	bool isLoaded;
+	std::atomic_bool isLoaded;
 	bool isSetup;
 	bool needsRebuilding;
 
