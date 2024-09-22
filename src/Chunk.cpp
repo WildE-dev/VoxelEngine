@@ -125,7 +125,7 @@ const Block& Chunk::GetBlock(int x, int y, int z) {
 
 bool Chunk::ShouldRender()
 {
-    return true;
+    return vertices.size() > 0;
 }
 
 bool Chunk::IsLoaded() const
@@ -324,6 +324,6 @@ void Chunk::Render(Shader& shader) {
     }*/
 
     glBindVertexArray(VAO);
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 2));
     glBindVertexArray(0);
 }
