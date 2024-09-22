@@ -39,13 +39,13 @@ bool World::GetChunk(Chunk*& chunk, int chunkX, int chunkY, int chunkZ)
     return true;
 }
 
-std::shared_ptr<Chunk> World::GetChunk(int chunkX, int chunkY, int chunkZ)
+Chunk* World::GetChunk(int chunkX, int chunkY, int chunkZ)
 {
-    std::shared_ptr<Chunk> ptr;
+    Chunk* ptr = nullptr;
 
     auto key = std::make_tuple(chunkX, chunkY, chunkZ);
     if (chunks.find(key) != chunks.end()) {
-        ptr = chunks[key];
+        ptr = chunks[key].get();
     }
 
     return ptr;
@@ -128,7 +128,7 @@ void World::UpdateAdjacentChunks(int x, int y, int z) {
     }
 }
 
-void World::UpdateAdjacentChunks(std::shared_ptr<Chunk> chunk) {
+void World::UpdateAdjacentChunks(Chunk* chunk) {
     auto coords = chunk->GetCoords();
 
     std::vector<glm::ivec3> chunksToRebuild;
@@ -150,9 +150,9 @@ void World::UpdateAdjacentChunks(std::shared_ptr<Chunk> chunk) {
     }
 }
 
-void World::Update(glm::vec3 cameraPosition, glm::vec3 cameraView) {
+void World::Update(glm::vec3 cameraPosition, glm::vec3 cameraView, ThreadPool& threadPool) {
     UpdateAsyncChunker(cameraPosition);
-    UpdateLoadList();
+    UpdateLoadList(threadPool);
     UpdateSetupList();
     UpdateRebuildList();
     UpdateFlagsList();
@@ -169,7 +169,7 @@ void World::UpdateAsyncChunker(glm::vec3 position) {
     auto chunkCoords = WorldToChunkCoordinates(position);
 
     for (auto iterator = chunks.begin(); iterator != chunks.end(); ++iterator) {
-        std::shared_ptr<Chunk> pChunk = (*iterator).second;
+        Chunk* pChunk = (*iterator).second.get();
         auto coords = pChunk->GetCoords();
 
         int distX = abs((coords.x - chunkCoords.x));
@@ -197,16 +197,16 @@ void World::UpdateAsyncChunker(glm::vec3 position) {
                 auto key = std::make_tuple(chunkX, chunkY, chunkZ);
                 auto search = chunks.find(key);
                 if (search == chunks.end()) {
-                    chunks[key] = std::make_shared<Chunk>(this, chunkX, chunkY, chunkZ);
-                    m_vpChunkLoadList.push_back(chunks[key]);
+                    chunks[key] = std::make_unique<Chunk>(this, chunkX, chunkY, chunkZ);
+                    m_vpChunkLoadList.push_back(chunks[key].get());
                 }
                 else {
                     if (!search->second->IsLoaded()) {
-                        m_vpChunkLoadList.push_back(chunks[key]);
+                        m_vpChunkLoadList.push_back(chunks[key].get());
                     }
                     else {
                         if (search->second->NeedsRebuilding()) {
-                            m_vpChunkRebuildList.push_back(chunks[key]);
+                            m_vpChunkRebuildList.push_back(chunks[key].get());
                         }
                     }
                 }
@@ -241,12 +241,12 @@ void World::UpdateAsyncChunker(glm::vec3 position) {
     }*/
 }
 
-void World::UpdateLoadList() {
+void World::UpdateLoadList(ThreadPool& threadPool) {
     int lNumOfChunksLoaded = 0;
     for (auto iterator = m_vpChunkLoadList.begin(); iterator != m_vpChunkLoadList.end() && (lNumOfChunksLoaded < ASYNC_NUM_CHUNKS_PER_FRAME); ++iterator) {
-        std::shared_ptr<Chunk> pChunk = *iterator;
+        Chunk* pChunk = *iterator;
         if (!pChunk->IsLoaded()) {
-            pChunk->LoadChunk();
+            threadPool.QueueJob([this, pChunk] { pChunk->LoadChunk(terrainGenerator); });
             lNumOfChunksLoaded++;
             m_forceVisibilityUpdate = true;
 
@@ -258,7 +258,7 @@ void World::UpdateLoadList() {
 
 void World::UpdateSetupList() {
     for (auto iterator = m_vpChunkSetupList.begin(); iterator != m_vpChunkSetupList.end(); ++iterator) {
-        std::shared_ptr<Chunk> pChunk = *iterator;
+        Chunk* pChunk = *iterator;
         if (!pChunk->IsSetup()) {
             pChunk->SetupChunk();
             m_vpChunkRebuildList.push_back(pChunk);
@@ -273,7 +273,7 @@ void World::UpdateRebuildList() {
     // Rebuild any chunks that are in the rebuild chunk list     
     int lNumRebuiltChunkThisFrame = 0;
     for (auto iterator = m_vpChunkRebuildList.begin(); iterator != m_vpChunkRebuildList.end() && (lNumRebuiltChunkThisFrame < ASYNC_NUM_CHUNKS_PER_FRAME); ++iterator) {
-        std::shared_ptr<Chunk> pChunk = *iterator;
+        Chunk* pChunk = *iterator;
         if (pChunk->IsLoaded() && pChunk->IsSetup()) {
             pChunk->GenerateMesh();
             // If we rebuild a chunk, add it to the list of chunks that need their render flags updated                 
@@ -306,13 +306,13 @@ void World::UpdateRebuildList() {
 
 void World::UpdateFlagsList() {
     for (auto iterator = m_vpChunkUpdateFlagsList.begin(); iterator != m_vpChunkUpdateFlagsList.end(); ++iterator) {
-        std::shared_ptr<Chunk> pChunk = *iterator;
+        Chunk* pChunk = *iterator;
         if (pChunk->IsLoaded() && pChunk->IsSetup()) {
             pChunk->UpdateEmptyFullFlags();
         }
     }
     for (auto iterator = m_vpChunkUpdateFlagsList.begin(); iterator != m_vpChunkUpdateFlagsList.end(); ++iterator) {
-        std::shared_ptr<Chunk> pChunk = *iterator;
+        Chunk* pChunk = *iterator;
         if (pChunk->IsLoaded() && pChunk->IsSetup()) {
             int offsets[][3] = {
                 { 1, 0, 0 },
@@ -344,7 +344,7 @@ void World::UpdateUnloadList() {
     //std::cout << "Unload list size: " << m_vpChunkUnloadList.size() << std::endl;
     int lNumUnloadedChunkThisFrame = 0;
     for (auto iterator = m_vpChunkUnloadList.begin(); iterator != m_vpChunkUnloadList.end() && (lNumUnloadedChunkThisFrame < ASYNC_NUM_CHUNKS_PER_FRAME); ++iterator) {
-        std::shared_ptr<Chunk> pChunk = *iterator;
+        Chunk* pChunk = *iterator;
         if (pChunk->IsLoaded()) {
             pChunk->UnloadChunk();
             auto coords = pChunk->GetCoords();
@@ -359,7 +359,7 @@ void World::UpdateUnloadList() {
 void World::UpdateVisibilityList(glm::vec3 cameraPosition) {
     m_vpChunkVisibilityList.clear();
     for (auto iterator = chunks.begin(); iterator != chunks.end(); ++iterator) {
-        std::shared_ptr<Chunk> pChunk = (*iterator).second;
+        Chunk* pChunk = (*iterator).second.get();
         if (pChunk->IsLoaded()) {
             if (pChunk->IsSetup()) {
                 if (!pChunk->IsEmpty() && !pChunk->IsSurrounded() || !pChunk->IsFull()) {
@@ -376,7 +376,7 @@ void World::UpdateRenderList() {
     // Clear the render list each frame BEFORE we do our tests to see what chunks should be rendered     
     m_vpChunkRenderList.clear();
     for (auto iterator = m_vpChunkVisibilityList.begin(); iterator != m_vpChunkVisibilityList.end(); ++iterator) {
-        std::shared_ptr<Chunk> pChunk = *iterator;
+        Chunk* pChunk = *iterator;
         if (pChunk->IsLoaded() && pChunk->IsSetup()) {
             if (pChunk->ShouldRender()) // Early flags check so we don't always have to do the frustum check... 
             {
@@ -420,7 +420,7 @@ void World::Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionM
     }*/
 
     for (auto iterator = m_vpChunkRenderList.begin(); iterator != m_vpChunkRenderList.end(); ++iterator) {
-        std::shared_ptr<Chunk> pChunk = *iterator;
+        Chunk* pChunk = *iterator;
         
         auto coords = pChunk->GetCoords();
 
@@ -434,7 +434,7 @@ void World::Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionM
 void World::RebuildAllChunks()
 {
     for (auto iterator = chunks.begin(); iterator != chunks.end(); ++iterator) {
-        std::shared_ptr<Chunk> pChunk = (*iterator).second;
+        Chunk* pChunk = (*iterator).second.get();
         pChunk->SetNeedsRebuilding(true);
     }
 }

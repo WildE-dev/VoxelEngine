@@ -102,5 +102,7 @@ float TerrainGenerator::GetHeight(int x, int z) {
 
     val /= ampAcc;
 
-	return val * AMPLITUDE;
+    float height = val * AMPLITUDE;
+
+	return height;
 }

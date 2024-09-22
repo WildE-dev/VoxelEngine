@@ -19,13 +19,15 @@ add_executable(${PROJECT_NAME} src/VoxelEngine.cpp
                    src/TerrainGenerator.cpp
                    src/AsyncCircularQueue.cpp
                    src/World.cpp
+                   src/ThreadPool.cpp
                    src/Block.h
                    src/Camera.h
                    src/Chunk.h
                    src/Shader.h
                    src/TerrainGenerator.h
                    src/World.h
-                   src/AsyncCircularQueue.h)
+                   src/AsyncCircularQueue.h
+                   src/ThreadPool.h)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${STB_INCLUDE_DIRS} src)
 
