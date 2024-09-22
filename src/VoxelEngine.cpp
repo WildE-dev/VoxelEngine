@@ -438,7 +438,7 @@ int main()
         camera.UpdateMove(window, deltaTime);
 
         // Laser
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_4) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
             glm::ivec3 pos;
             glm::vec3 norm;
             std::vector<glm::ivec3> rayBlocks;
