@@ -1,8 +1,6 @@
-#include <stdlib.h>
-#include <cmath>
-
 #include "TerrainGenerator.h"
-#include <iostream>
+
+#include <math.h>
 
 typedef struct {
     float x, y;

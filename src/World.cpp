@@ -197,7 +197,7 @@ void World::UpdateAsyncChunker(glm::vec3 position) {
                 auto key = std::make_tuple(chunkX, chunkY, chunkZ);
                 auto search = chunks.find(key);
                 if (search == chunks.end()) {
-                    chunks[key] = std::make_unique<Chunk>(this, chunkX, chunkY, chunkZ);
+                    chunks[key] = std::unique_ptr<Chunk>(new Chunk(this, chunkX, chunkY, chunkZ));
                     m_vpChunkLoadList.push_back(chunks[key].get());
                 }
                 else {

@@ -444,8 +444,9 @@ int main()
             std::vector<glm::ivec3> rayBlocks;
             if (TraceRay(world, camera.GetPosition(), camera.GetDirection(), 100, pos, norm, &rayBlocks)) {
                 const int radius = 4;
-                for each (auto rayPos in rayBlocks)
+                for (int i = 0; i < rayBlocks.size(); i++)
                 {
+                    auto rayPos = rayBlocks[i];
                     for (int x = -radius; x <= radius; x++)
                     {
                         for (int y = -radius; y <= radius; y++)
