@@ -15,10 +15,10 @@ vector2 randomGradient(int ix, int iy) {
     unsigned a = ix, b = iy;
     a *= 3284157443;
 
-    b ^= a << s | a >> w - s;
+    b ^= (a << s) | a >> (w - s);
     b *= 1911520717;
 
-    a ^= b << s | b >> w - s;
+    a ^= (b << s) | b >> (w - s);
     a *= 2048419325;
     float random = a * (3.14159265 / ~(~0u >> 1)); // in [0, 2*Pi]
 
@@ -79,6 +79,7 @@ float perlin(float x, float y) {
 }
 
 float TerrainGenerator::GetHeight(int x, int z) {
+    //return 0;
     float val = 0;
 
     float freq = 1;
