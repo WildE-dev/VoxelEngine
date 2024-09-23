@@ -55,22 +55,31 @@ void Chunk::LoadChunk(TerrainGenerator* terrainGenerator) {
     std::lock_guard<std::mutex> lock(block_mutex);
     blocks.fill(Block(BlockType::AIR));
 
+    float heights[CHUNK_SIZE + 1][CHUNK_SIZE + 1];
+
+    for (int x = 0; x < CHUNK_SIZE + 1; x++) {
+        for (int z = 0; z < CHUNK_SIZE + 1; z++) {
+            int blockX = chunkX * CHUNK_SIZE + x;
+            int blockZ = chunkZ * CHUNK_SIZE + z;
+            heights[x][z] = terrainGenerator->GetHeight(blockX, blockZ);
+        }
+    }
+
     for (int x = 0; x < CHUNK_SIZE; x++)
     {
         for (int y = 0; y < CHUNK_SIZE; y++)
         {
             for (int z = 0; z < CHUNK_SIZE; z++)
             {
-                int blockX = chunkX * CHUNK_SIZE + x;
                 int blockY = chunkY * CHUNK_SIZE + y;
-                int blockZ = chunkZ * CHUNK_SIZE + z;
 
                 const float smoothness = 8.0f;
 
-                float worldHeight1 = round(terrainGenerator->GetHeight(blockX, blockZ + 1) * smoothness) / smoothness;
-                float worldHeight2 = round(terrainGenerator->GetHeight(blockX + 1, blockZ) * smoothness) / smoothness;
-                float worldHeight3 = round(terrainGenerator->GetHeight(blockX, blockZ) * smoothness) / smoothness;
-                float worldHeight4 = round(terrainGenerator->GetHeight(blockX + 1, blockZ + 1) * smoothness) / smoothness;
+                float worldHeight1 = round(heights[x][z + 1] * smoothness) / smoothness;
+                float worldHeight2 = round(heights[x + 1][z] * smoothness) / smoothness;
+                float worldHeight3 = round(heights[x][z] * smoothness) / smoothness;
+                float worldHeight4 = round(heights[x + 1][z + 1] * smoothness) / smoothness;
+                
                 float fWorldHeight1 = worldHeight1 - blockY;
                 float fWorldHeight2 = worldHeight2 - blockY;
                 float fWorldHeight3 = worldHeight3 - blockY;

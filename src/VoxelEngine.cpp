@@ -3,7 +3,6 @@
 #include <glad/glad.h>
 
 #include <glm/glm.hpp>
-//#include <glm/gtx/component_wise.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -12,7 +11,6 @@
 
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
-//#include "misc/cpp/imgui_stdlib.h"
 
 #include <iostream>
 #include <string>
