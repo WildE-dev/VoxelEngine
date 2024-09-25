@@ -120,9 +120,9 @@ struct TextureData {
 };
 
 static std::unordered_map<BlockType, TextureData> blockTextureMap = {
-    {BlockType::GRASS, TextureData(0, 2, 1, 1, 1, 1)},
-    {BlockType::DIRT, TextureData(2)},
-    {BlockType::STONE, TextureData(3)},
+    { BlockType::GRASS, TextureData(0, 2, 1, 1, 1, 1) },
+    { BlockType::DIRT, TextureData(2) },
+    { BlockType::STONE, TextureData(3) }
 };
 
 class Block

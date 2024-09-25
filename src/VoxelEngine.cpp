@@ -500,7 +500,7 @@ int main()
         glm::mat4 view = camera.GetViewMatrix();
         glm::mat4 projection = camera.GetProjectionMatrix(frameWidth, frameHeight);
 
-        world.Render(*shader, view, projection, frameWidth, frameHeight);
+        world.Render(*shader, view, projection, frameWidth, frameHeight, currentFrame);
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 

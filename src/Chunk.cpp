@@ -100,7 +100,10 @@ void Chunk::LoadChunk(TerrainGenerator* terrainGenerator) {
                     edges.SetTopY(1, blockHeight2);
                     edges.SetTopY(2, blockHeight3);
                     edges.SetTopY(3, blockHeight4);
-                    SetBlock(x, y, z, BlockType::STONE, edges);
+                    SetBlock(x, y, z, BlockType::GRASS, edges);
+                }
+                else if (blockY < minHeight && blockY > minHeight - 5) {
+                    SetBlock(x, y, z, BlockType::DIRT);
                 }
                 else if (blockY < minHeight) {
                     SetBlock(x, y, z, BlockType::STONE);

@@ -396,10 +396,12 @@ void World::UpdateRenderList() {
     //std::cout << "Render list size: " << m_vpChunkRenderList.size() << std::endl;
 }
 
-void World::Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight) {
+void World::Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight, float time) {
     shader.Use();
 
     glm::mat4 model = glm::mat4(1.0f);
+
+    shader.SetUniform("time", time);
 
     shader.SetUniform("model", model);
     shader.SetUniform("projection", projectionMatrix);

@@ -26,7 +26,7 @@ class Shader;
 class World
 {
 public:
-    static const int RENDER_DISTANCE = 4;
+    static const int RENDER_DISTANCE = 12;
 
     World(TerrainGenerator* terrainGenerator);
     World(const World& other);
@@ -43,7 +43,7 @@ public:
 
     void RebuildAllChunks();
 
-    void Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight);
+    void Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight, float time);
 
     TerrainGenerator* terrainGenerator;
 

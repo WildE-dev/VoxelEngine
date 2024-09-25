@@ -33,6 +33,11 @@ void Shader::SetUniform(const char* name, glm::mat4 matrix) {
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(matrix));
 }
 
+void Shader::SetUniform(const char* name, float value) {
+    unsigned int modelLoc = glGetUniformLocation(Shader::shaderProgram, name);
+    glUniform1f(modelLoc, value);
+}
+
 void Shader::ReloadShader() {
     GLuint newShader = CreateShaderFromFiles(Shader::vertexPath, Shader::fragmentPath);
     glDeleteProgram(Shader::shaderProgram);

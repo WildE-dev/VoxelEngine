@@ -8,6 +8,7 @@ public:
 	~Shader();
 	void Use();
 	void SetUniform(const char* name, glm::mat4 matrix);
+	void SetUniform(const char* name, float value);
 	void ReloadShader();
 private:
 	GLuint shaderProgram;
