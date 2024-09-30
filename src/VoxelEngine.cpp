@@ -222,7 +222,7 @@ static bool TraceRay(World& world, glm::vec3 p, glm::vec3 dir, float max_d, glm:
             }
 
             if (rayBlocks)
-                rayBlocks->push_back(glm::ivec3(ix, iy, iz));
+                rayBlocks->emplace_back(ix, iy, iz);
         }
 
         // exit check
