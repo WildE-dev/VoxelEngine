@@ -23,6 +23,7 @@
 #include "World.h"
 #include "Block.h"
 #include "ThreadPool.h"
+#include "Debugging.h"
 
 bool captureCursor = true;
 bool wireframe = false;
@@ -317,6 +318,7 @@ int main()
     }
 
     Shader s = Shader("Resources/Shaders/main.vert", "Resources/Shaders/main.frag");
+    Shader debugShader = Shader("Resources/Shaders/debug.vert", "Resources/Shaders/debug.frag");
     shader = &s;
 
     int width, height, nrChannels;
@@ -354,6 +356,8 @@ int main()
     TerrainGenerator generator;
 
     World world = World(&generator);
+
+    Debugging debugging = Debugging();
 
     //std::thread chunkLoading(LoadChunks, std::ref(world));
 
@@ -501,6 +505,12 @@ int main()
         glm::mat4 projection = camera.GetProjectionMatrix(frameWidth, frameHeight);
 
         world.Render(*shader, view, projection, frameWidth, frameHeight, currentFrame);
+
+        glm::ivec3 pos;
+        glm::vec3 norm;
+        TraceRay(world, camera.GetPosition(), camera.GetDirection(), 50, pos, norm);
+
+        debugging.DrawCube(debugShader, view, projection, pos);
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 

@@ -335,6 +335,8 @@ void Chunk::Render(Shader& shader) {
         SendVertexData();
     }*/
 
+    shader.Use();
+
     glBindVertexArray(VAO);
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 2));
     glBindVertexArray(0);
