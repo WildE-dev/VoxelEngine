@@ -109,18 +109,21 @@ void World::SetBlock(int x, int y, int z, EdgeData edges) {
 void World::UpdateAdjacentChunks(int x, int y, int z) {
     glm::ivec3 blockCoords = WorldToBlockCoordinates(x, y, z);
 
-    std::vector<glm::ivec3> chunksToRebuild;
+    std::array<glm::ivec3, 3> chunksToRebuild{};
+    int s = 0;
 
-    if (blockCoords.x == 0) chunksToRebuild.push_back(WorldToChunkCoordinates(x - 1, y, z));
-    if (blockCoords.x == Chunk::CHUNK_SIZE - 1) chunksToRebuild.push_back(WorldToChunkCoordinates(x + 1, y, z));
-    if (blockCoords.y == 0) chunksToRebuild.push_back(WorldToChunkCoordinates(x, y - 1, z));
-    if (blockCoords.y == Chunk::CHUNK_SIZE - 1) chunksToRebuild.push_back(WorldToChunkCoordinates(x, y + 1, z));
-    if (blockCoords.z == 0) chunksToRebuild.push_back(WorldToChunkCoordinates(x, y, z - 1));
-    if (blockCoords.z == Chunk::CHUNK_SIZE - 1) chunksToRebuild.push_back(WorldToChunkCoordinates(x, y, z + 1));
+    if (blockCoords.x == 0) { chunksToRebuild[s] = WorldToChunkCoordinates(x - 1, y, z); s++; }
+    if (blockCoords.x == Chunk::CHUNK_SIZE - 1) { chunksToRebuild[s] = WorldToChunkCoordinates(x + 1, y, z); s++; }
+    
+    if (blockCoords.y == 0) { chunksToRebuild[s] = WorldToChunkCoordinates(x, y - 1, z); s++; }
+    if (blockCoords.y == Chunk::CHUNK_SIZE - 1) { chunksToRebuild[s] = WorldToChunkCoordinates(x, y + 1, z); s++; }
+    
+    if (blockCoords.z == 0) { chunksToRebuild[s] = WorldToChunkCoordinates(x, y, z - 1); s++; }
+    if (blockCoords.z == Chunk::CHUNK_SIZE - 1) { chunksToRebuild[s] = WorldToChunkCoordinates(x, y, z + 1); s++; }
 
-    for (int i = 0; i < chunksToRebuild.size(); i++)
+    for (int i = 0; i < s; i++)
     {
-        auto chunkCoords = chunksToRebuild[i];
+        auto& chunkCoords = chunksToRebuild[i];
         auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
         if (pChunk != NULL) {
             pChunk->SetNeedsRebuilding(true);
@@ -131,18 +134,18 @@ void World::UpdateAdjacentChunks(int x, int y, int z) {
 void World::UpdateAdjacentChunks(Chunk* chunk) {
     auto coords = chunk->GetCoords();
 
-    std::vector<glm::ivec3> chunksToRebuild;
-
-    chunksToRebuild.push_back(glm::ivec3(coords.x - 1, coords.y, coords.z));
-    chunksToRebuild.push_back(glm::ivec3(coords.x + 1, coords.y, coords.z));
-    chunksToRebuild.push_back(glm::ivec3(coords.x, coords.y - 1, coords.z));
-    chunksToRebuild.push_back(glm::ivec3(coords.x, coords.y + 1, coords.z));
-    chunksToRebuild.push_back(glm::ivec3(coords.x, coords.y, coords.z - 1));
-    chunksToRebuild.push_back(glm::ivec3(coords.x, coords.y, coords.z + 1));
+    std::array<glm::ivec3, 6> chunksToRebuild{ 
+        glm::ivec3(coords.x - 1, coords.y, coords.z),
+        glm::ivec3(coords.x + 1, coords.y, coords.z),
+        glm::ivec3(coords.x, coords.y - 1, coords.z),
+        glm::ivec3(coords.x, coords.y + 1, coords.z),
+        glm::ivec3(coords.x, coords.y, coords.z - 1),
+        glm::ivec3(coords.x, coords.y, coords.z + 1),
+    };
 
     for (int i = 0; i < chunksToRebuild.size(); i++)
     {
-        auto chunkCoords = chunksToRebuild[i];
+        auto& chunkCoords = chunksToRebuild[i];
         auto pChunk = GetChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
         if (pChunk) {
             pChunk->SetNeedsRebuilding(true);
