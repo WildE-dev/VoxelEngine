@@ -80,6 +80,37 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     frameHeight = (float)height;
 }
 
+GLuint loadCubemap(std::array<std::string, 6> faces)
+{
+    GLuint textureID;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+    int width, height, nrChannels;
+    for (unsigned int i = 0; i < faces.size(); i++)
+    {
+        unsigned char *data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
+        if (data)
+        {
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
+                         0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data
+            );
+        }
+        else
+        {
+            std::cout << "Cubemap tex failed to load at path: " << faces[i] << std::endl;
+        }
+        stbi_image_free(data);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    return textureID;
+}  
+
 double _update_fps_counter(GLFWwindow* window) {
     static double previous_seconds = glfwGetTime();
     static int frame_count;
@@ -319,6 +350,7 @@ int main()
 
     Shader s = Shader("Resources/Shaders/main.vert", "Resources/Shaders/main.frag");
     Shader debugShader = Shader("Resources/Shaders/debug.vert", "Resources/Shaders/debug.frag");
+    Shader skyboxShader = Shader("Resources/Shaders/skybox.vert", "Resources/Shaders/skybox.frag");
     shader = &s;
 
     int width, height, nrChannels;
@@ -344,6 +376,17 @@ int main()
 
     stbi_image_free(data);
 
+    std::array<std::string, 6> faces
+    {
+        "Resources/Textures/cubemap/sh_rt.png",
+        "Resources/Textures/cubemap/sh_lf.png",
+        "Resources/Textures/cubemap/sh_up.png",
+        "Resources/Textures/cubemap/sh_dn.png",
+        "Resources/Textures/cubemap/sh_ft.png",
+        "Resources/Textures/cubemap/sh_bk.png"
+    };
+    GLuint cubemapTexture = loadCubemap(faces);
+
     glEnable(GL_DEPTH_TEST);
 
     glEnable(GL_CULL_FACE);
@@ -358,6 +401,71 @@ int main()
     World world = World(&generator);
 
     Debugging debugging = Debugging();
+
+    GLuint skyboxVAO, skyboxVBO;
+
+    glGenVertexArrays(1, &skyboxVAO);
+    glGenBuffers(1, &skyboxVBO);
+
+    glBindVertexArray(skyboxVAO);
+
+    float triVerts[] = {
+        0,0,0,
+        1,0,0,
+        1,1,0,
+
+        0,0,0,
+        1,1,0,
+        0,1,0,
+
+        0,1,0,
+        1,1,0,
+        1,1,1,
+
+        0,1,0,
+        1,1,1,
+        0,1,1,
+
+        0,0,0,
+        0,1,1,
+        0,0,1,
+
+        0,0,0,
+        0,1,0,
+        0,1,1,
+
+        0,0,0,
+        1,0,1,
+        1,0,0,
+
+        0,0,0,
+        0,0,1,
+        1,0,1,
+
+        0,0,1,
+        1,1,1,
+        1,0,1,
+
+        0,0,1,
+        0,1,1,
+        1,1,1,
+
+        1,0,0,
+        1,0,1,
+        1,1,1,
+
+        1,0,0,
+        1,1,1,
+        1,1,0,
+    };
+    
+    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(triVerts), triVerts, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glBindVertexArray(0);
 
     //std::thread chunkLoading(LoadChunks, std::ref(world));
 
@@ -503,6 +611,15 @@ int main()
         
         glm::mat4 view = camera.GetViewMatrix();
         glm::mat4 projection = camera.GetProjectionMatrix(frameWidth, frameHeight);
+
+        glDepthMask(GL_FALSE);
+        skyboxShader.Use();
+        skyboxShader.SetUniform("view", view);
+        skyboxShader.SetUniform("projection", projection);
+        glBindVertexArray(skyboxVAO);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glDepthMask(GL_TRUE);
 
         world.Render(*shader, view, projection, frameWidth, frameHeight, currentFrame);
 
