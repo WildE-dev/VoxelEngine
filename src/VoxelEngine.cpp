@@ -378,12 +378,12 @@ int main()
 
     std::array<std::string, 6> faces
     {
-        "Resources/Textures/cubemap/sh_rt.png",
-        "Resources/Textures/cubemap/sh_lf.png",
+        "Resources/Textures/cubemap/sh_ft.png",
+        "Resources/Textures/cubemap/sh_bk.png",
         "Resources/Textures/cubemap/sh_up.png",
         "Resources/Textures/cubemap/sh_dn.png",
-        "Resources/Textures/cubemap/sh_ft.png",
-        "Resources/Textures/cubemap/sh_bk.png"
+        "Resources/Textures/cubemap/sh_rt.png",
+        "Resources/Textures/cubemap/sh_lf.png",
     };
     GLuint cubemapTexture = loadCubemap(faces);
 
@@ -409,58 +409,58 @@ int main()
 
     glBindVertexArray(skyboxVAO);
 
-    float triVerts[] = {
-        0,0,0,
-        1,0,0,
-        1,1,0,
+    float skyboxVerts[] = {
+        -0.5,-0.5,-0.5,
+        0.5,0.5,-0.5,
+        0.5,-0.5,-0.5,
 
-        0,0,0,
-        1,1,0,
-        0,1,0,
+        -0.5,-0.5,-0.5,
+        -0.5,0.5,-0.5,
+        0.5,0.5,-0.5,
 
-        0,1,0,
-        1,1,0,
-        1,1,1,
+        -0.5,0.5,-0.5,
+        0.5,0.5,0.5,
+        0.5,0.5,-0.5,
 
-        0,1,0,
-        1,1,1,
-        0,1,1,
+        -0.5,0.5,-0.5,
+        -0.5,0.5,0.5,
+        0.5,0.5,0.5,
 
-        0,0,0,
-        0,1,1,
-        0,0,1,
+        -0.5,-0.5,-0.5,
+        -0.5,-0.5,0.5,
+        -0.5,0.5,0.5,
 
-        0,0,0,
-        0,1,0,
-        0,1,1,
+        -0.5,-0.5,-0.5,
+        -0.5,0.5,0.5,
+        -0.5,0.5,-0.5,
 
-        0,0,0,
-        1,0,1,
-        1,0,0,
+        -0.5,-0.5,-0.5,
+        0.5,-0.5,-0.5,
+        0.5,-0.5,0.5,
 
-        0,0,0,
-        0,0,1,
-        1,0,1,
+        -0.5,-0.5,-0.5,
+        0.5,-0.5,0.5,
+        -0.5,-0.5,0.5,
 
-        0,0,1,
-        1,1,1,
-        1,0,1,
+        -0.5,-0.5,0.5,
+        0.5,-0.5,0.5,
+        0.5,0.5,0.5,
 
-        0,0,1,
-        0,1,1,
-        1,1,1,
+        -0.5,-0.5,0.5,
+        0.5,0.5,0.5,
+        -0.5,0.5,0.5,
 
-        1,0,0,
-        1,0,1,
-        1,1,1,
+        0.5,-0.5,-0.5,
+        0.5,0.5,0.5,
+        0.5,-0.5,0.5,
 
-        1,0,0,
-        1,1,1,
-        1,1,0,
+        0.5,-0.5,-0.5,
+        0.5,0.5,-0.5,
+        0.5,0.5,0.5,
     };
     
     glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(triVerts), triVerts, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVerts), skyboxVerts, GL_STATIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
@@ -487,7 +487,6 @@ int main()
     }*/
 
     bool vsync = true;
-    ImVec4 clear_color = ImVec4(0.26f, 0.47f, 0.71f, 1.0f);
 
     //bool mousePressed = false;
     std::map<int, bool> buttonsPressed;
@@ -526,7 +525,6 @@ int main()
         if (debug) {
             if (ImGui::Begin("Debug", &debug)) {
                 ImGui::Checkbox("VSync", &vsync);
-                ImGui::ColorEdit3("Clear Color", (float*)&clear_color);
                 auto pos = camera.GetPosition();
                 auto angles = camera.GetDirectionAngles();
                 ImGui::Text("Position %.3f, %.3f, %.3f", pos.x, pos.y, pos.z);
@@ -542,8 +540,7 @@ int main()
 
         ImGui::Render();
 
-        glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClear(GL_DEPTH_BUFFER_BIT);
 
         camera.UpdateMove(window, deltaTime);
 
@@ -612,9 +609,11 @@ int main()
         glm::mat4 view = camera.GetViewMatrix();
         glm::mat4 projection = camera.GetProjectionMatrix(frameWidth, frameHeight);
 
+        glm::mat4 skyboxView = glm::mat4(glm::mat3(view));
+
         glDepthMask(GL_FALSE);
         skyboxShader.Use();
-        skyboxShader.SetUniform("view", view);
+        skyboxShader.SetUniform("view", skyboxView);
         skyboxShader.SetUniform("projection", projection);
         glBindVertexArray(skyboxVAO);
         glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
