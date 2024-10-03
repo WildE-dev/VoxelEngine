@@ -29,10 +29,10 @@ bool captureCursor = true;
 bool wireframe = false;
 bool debug = false;
 
-float frameWidth = 800.0f, frameHeight = 600.0f;
+float frameWidth = 1600.0f, frameHeight = 1200.0f;
 
 Camera camera = Camera();
-Shader *shader;
+Shader *shaders[4];
 GLFWwindow* window;
 
 int Chunk::chunkCount = 0;
@@ -51,7 +51,10 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
     if (key == GLFW_KEY_R && action == GLFW_PRESS)
-        shader->ReloadShader();
+        for (size_t i = 0; i < 4; i++)
+        {
+            shaders[i]->ReloadShader();
+        }
     if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
         captureCursor = !captureCursor;
     }
@@ -149,7 +152,7 @@ int init_glfw() {
 
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-    window = glfwCreateWindow(640, 480, "VoxelEngine", NULL, NULL);
+    window = glfwCreateWindow(frameWidth / 2, frameHeight / 2, "VoxelEngine", NULL, NULL);
     if (!window)
     {
         std::cerr << "ERROR: Failed to create window" << std::endl;
@@ -185,26 +188,6 @@ int init_glfw() {
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     return 0;
-}
-
-glm::vec3 ScreenToWorldRay(const Camera& camera, float screenX, float screenY, int screenWidth, int screenHeight) {
-    // Convert screen coordinates to normalized device coordinates (NDC)
-    float x = (2.0f * screenX) / screenWidth - 1.0f;
-    float y = 1.0f - (2.0f * screenY) / screenHeight;
-    glm::vec4 rayNDC(x, y, -1.0f, 1.0f); // NDC space is [-1, 1]
-
-    // Clip space coordinates
-    glm::vec4 rayClip = rayNDC;
-
-    // Eye coordinates (inverse projection transform)
-    glm::vec4 rayEye = glm::inverse(camera.GetProjectionMatrix(screenWidth, screenHeight)) * rayClip;
-    rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);
-
-    // World coordinates (inverse view transform)
-    glm::vec3 rayWorld = glm::vec3(glm::inverse(camera.GetViewMatrix()) * rayEye);
-    rayWorld = glm::normalize(rayWorld);
-
-    return rayWorld;
 }
 
 static bool TraceRay(World& world, glm::vec3 p, glm::vec3 dir, float max_d, glm::ivec3& hit_pos, glm::vec3& hit_norm, std::vector<glm::ivec3>* rayBlocks = nullptr) {
@@ -306,41 +289,7 @@ static bool TraceRay(World& world, glm::vec3 p, glm::vec3 dir, float max_d, glm:
     return b;
 }
 
-// Change the target block
-void ChangeTargetBlock(World& world, const Camera& camera, BlockType type, int screenWidth, int screenHeight, float maxDistance) {
-    glm::vec3 rayDirection = camera.GetDirection();
-    glm::vec3 rayOrigin = camera.GetPosition();
-
-    glm::ivec3 pos;
-    glm::vec3 norm;
-    if (TraceRay(world, rayOrigin, rayDirection, maxDistance, pos, norm)) {
-        //Block block;
-        //world.GetBlock(pos.x, pos.y, pos.z, block);
-        //std::cout << (int)block.type << ", (" << norm.x << ", " << norm.y << ", " << norm.z << ")" << std::endl;
-        world.SetBlock(pos.x, pos.y, pos.z, type);
-    }
-}
-
-//void ShrinkTargetBlock(World& world, const Camera& camera, int screenWidth, int screenHeight, int maxDistance) {
-//    glm::vec3 rayDirection = camera.GetDirection();// ScreenToWorldRay(camera, screenWidth / 2.0f, screenHeight / 2.0f, screenWidth, screenHeight);
-//    glm::vec3 rayOrigin = camera.GetPosition();
-//
-//    glm::ivec3 pos;
-//    Block block;
-//    if (GetTargetBlock(world, rayOrigin, rayDirection, maxDistance, pos, block)) {
-//        block.Shrink();
-//        world.SetBlock(pos.x, pos.y, pos.z, block);
-//    }
-//}
-
 bool closeWindow = false;
-
-void LoadChunks(World& world) {
-    while (!closeWindow) {
-        //world.LoadChunks();
-        //std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    }
-}
 
 int main()
 {
@@ -351,7 +300,11 @@ int main()
     Shader s = Shader("Resources/Shaders/main.vert", "Resources/Shaders/main.frag");
     Shader debugShader = Shader("Resources/Shaders/debug.vert", "Resources/Shaders/debug.frag");
     Shader skyboxShader = Shader("Resources/Shaders/skybox.vert", "Resources/Shaders/skybox.frag");
-    shader = &s;
+    Shader screenShader = Shader("Resources/Shaders/screen.vert", "Resources/Shaders/screen.frag");
+    shaders[0] = &s;
+    shaders[1] = &debugShader;
+    shaders[2] = &skyboxShader;
+    shaders[3] = &screenShader;
 
     int width, height, nrChannels;
     unsigned char* data = stbi_load("Resources/Textures/atlas.png", &width, &height, &nrChannels, 0);
@@ -387,8 +340,6 @@ int main()
     };
     GLuint cubemapTexture = loadCubemap(faces);
 
-    glEnable(GL_DEPTH_TEST);
-
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CW);
@@ -401,6 +352,8 @@ int main()
     World world = World(&generator);
 
     Debugging debugging = Debugging();
+
+    #pragma region SKYBOX SETUP
 
     GLuint skyboxVAO, skyboxVBO;
 
@@ -467,24 +420,64 @@ int main()
 
     glBindVertexArray(0);
 
-    //std::thread chunkLoading(LoadChunks, std::ref(world));
+    #pragma endregion
 
-    /*Chunk* chunk = nullptr;
-    if (world.GetChunk(chunk, 0, 0, 0)) {
-        for (size_t x = 0; x < Chunk::CHUNK_SIZE; x++)
-        {
-            for (size_t y = 0; y < Chunk::CHUNK_SIZE; y++)
-            {
-                for (size_t z = 0; z < Chunk::CHUNK_SIZE; z++)
-                {
-                    if (square(x - 7) + square(y - 7) + square(z - 7) < 16)
-                        chunk->SetBlock(x, y, z, BlockType::AIR, false);
-                }
-            }
-        }
+    #pragma region FRAMEBUFFER
 
-        chunk->GenerateMesh(world);
-    }*/
+    GLuint screenVAO, screenVBO;
+
+    glGenVertexArrays(1, &screenVAO);
+    glGenBuffers(1, &screenVBO);
+
+    glBindVertexArray(screenVAO);
+
+    float screenVerts[] = {
+        -1.0f,  1.0f,  0.0f, 1.0f,
+         1.0f, -1.0f,  1.0f, 0.0f,
+        -1.0f, -1.0f,  0.0f, 0.0f,
+
+        -1.0f,  1.0f,  0.0f, 1.0f,
+         1.0f,  1.0f,  1.0f, 1.0f,
+         1.0f, -1.0f,  1.0f, 0.0f,
+    };
+    
+    glBindBuffer(GL_ARRAY_BUFFER, screenVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(screenVerts), screenVerts, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
+    glBindVertexArray(0);
+
+    GLuint framebuffer;
+    glGenFramebuffers(1, &framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    // create a color attachment texture
+
+    GLuint textureColorbuffer;
+    glGenTextures(1, &textureColorbuffer);
+    glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frameWidth, frameHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureColorbuffer, 0);
+    // create a renderbuffer object for depth and stencil attachment (we won't be sampling these)
+    GLuint rbo;
+    glGenRenderbuffers(1, &rbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, frameWidth, frameHeight); // use a single renderbuffer object for both a depth AND stencil buffer.
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo); // now actually attach it
+    // now that we actually created the framebuffer and added all attachments we want to check if it is actually complete now
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+        return -1;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    #pragma endregion
 
     bool vsync = true;
 
@@ -517,30 +510,6 @@ int main()
         glfwPollEvents();
         
         glfwSetInputMode(window, GLFW_CURSOR, captureCursor ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
-
-        if (debug) {
-            if (ImGui::Begin("Debug", &debug)) {
-                ImGui::Checkbox("VSync", &vsync);
-                auto pos = camera.GetPosition();
-                auto angles = camera.GetDirectionAngles();
-                ImGui::Text("Position %.3f, %.3f, %.3f", pos.x, pos.y, pos.z);
-                ImGui::Text("Angles %.3f, %.3f", angles.x, angles.y);
-                ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", frameTime, fps);
-                ImGui::PlotLines("Frame Time (ms)", frameTimes, 100, i);
-                ImGui::Text("Chunk count: %d", Chunk::chunkCount);
-            }
-
-            ImGui::End();
-        }
-        
-
-        ImGui::Render();
-
-        glClear(GL_DEPTH_BUFFER_BIT);
 
         camera.UpdateMove(window, deltaTime);
 
@@ -602,31 +571,76 @@ int main()
         }
 
         world.Update(camera.GetPosition(), camera.GetDirection(), threadPool);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture);
         
         glm::mat4 view = camera.GetViewMatrix();
         glm::mat4 projection = camera.GetProjectionMatrix(frameWidth, frameHeight);
 
+        glBindFramebuffer(GL_FRAMEBUFFER, rbo);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glEnable(GL_DEPTH_TEST);
+
+        glViewport(0, 0, frameWidth, frameHeight);
+
+        glBindTexture(GL_TEXTURE_2D, texture);
+        world.Render(s, view, projection, frameWidth, frameHeight, currentFrame);
+
         glm::mat4 skyboxView = glm::mat4(glm::mat3(view));
 
+        glDepthFunc(GL_LEQUAL);
         glDepthMask(GL_FALSE);
+
         skyboxShader.Use();
         skyboxShader.SetUniform("view", skyboxView);
         skyboxShader.SetUniform("projection", projection);
+
         glBindVertexArray(skyboxVAO);
         glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
         glDrawArrays(GL_TRIANGLES, 0, 36);
-        glDepthMask(GL_TRUE);
 
-        world.Render(*shader, view, projection, frameWidth, frameHeight, currentFrame);
+        glBindVertexArray(0);
 
         glm::ivec3 pos;
         glm::vec3 norm;
-        TraceRay(world, camera.GetPosition(), camera.GetDirection(), 50, pos, norm);
+        if (TraceRay(world, camera.GetPosition(), camera.GetDirection(), 50, pos, norm)) {
+            debugging.DrawCube(debugShader, view, projection, pos);
+        }
 
-        debugging.DrawCube(debugShader, view, projection, pos);
+        glDepthMask(GL_TRUE);
+        glDepthFunc(GL_LESS);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDisable(GL_DEPTH_TEST);
+
+        screenShader.Use();
+        glBindVertexArray(screenVAO);
+        glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glBindVertexArray(0);
+
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        if (debug) {
+            if (ImGui::Begin("Debug", &debug)) {
+                ImGui::Checkbox("VSync", &vsync);
+                auto pos = camera.GetPosition();
+                auto angles = camera.GetDirectionAngles();
+                ImGui::Text("Position %.3f, %.3f, %.3f", pos.x, pos.y, pos.z);
+                ImGui::Text("Angles %.3f, %.3f", angles.x, angles.y);
+                ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", frameTime, fps);
+                ImGui::PlotLines("Frame Time (ms)", frameTimes, 100, i);
+                ImGui::Text("Chunk count: %d", Chunk::chunkCount);
+                ImGui::Image((void*)(intptr_t)textureColorbuffer, ImVec2(frameWidth, frameHeight));
+            }
+
+            ImGui::End();
+        }
+        
+        ImGui::Render();
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -638,7 +652,8 @@ int main()
     threadPool.Stop();
 
     closeWindow = true;
-    //chunkLoading.join();
+    
+    glDeleteFramebuffers(1, &rbo);
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

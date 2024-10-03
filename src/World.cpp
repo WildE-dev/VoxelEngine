@@ -409,21 +409,6 @@ void World::Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionM
     shader.SetUniform("model", model);
     shader.SetUniform("projection", projectionMatrix);
 
-    /*for (auto& pair : chunks) {
-        if (!pair.second.get()->GetIsGenerated()) {
-            continue;
-        }
-
-        int chunkX = std::get<0>(pair.first);
-        int chunkY = std::get<1>(pair.first);
-        int chunkZ = std::get<2>(pair.first);
-
-        glm::mat4 newViewMatrix = glm::translate(viewMatrix, glm::vec3(chunkX * Chunk::CHUNK_SIZE, chunkY * Chunk::CHUNK_SIZE, chunkZ * Chunk::CHUNK_SIZE));
-        shader.SetUniform("view", newViewMatrix);
-
-        pair.second.get()->Render(shader);
-    }*/
-
     for (auto iterator = m_vpChunkRenderList.begin(); iterator != m_vpChunkRenderList.end(); ++iterator) {
         Chunk* pChunk = *iterator;
         
