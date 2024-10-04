@@ -32,7 +32,7 @@ bool debug = false;
 float frameWidth = 1600.0f, frameHeight = 1200.0f;
 
 Camera camera = Camera();
-Shader *shaders[4];
+Shader *shaders[5];
 GLFWwindow* window;
 
 int Chunk::chunkCount = 0;
@@ -51,7 +51,7 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
     if (key == GLFW_KEY_R && action == GLFW_PRESS)
-        for (size_t i = 0; i < 4; i++)
+        for (size_t i = 0; i < sizeof(shaders) / sizeof(Shader*); i++)
         {
             shaders[i]->ReloadShader();
         }
@@ -60,8 +60,6 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
     }
     if (key == GLFW_KEY_F1 && action == GLFW_PRESS) {
         wireframe = !wireframe;
-        glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
-        if (wireframe) glDisable(GL_CULL_FACE); else glEnable(GL_CULL_FACE);
     }
     if (key == GLFW_KEY_F2 && action == GLFW_PRESS) {
         debug = !debug;
@@ -301,10 +299,12 @@ int main()
     Shader debugShader = Shader("Resources/Shaders/debug.vert", "Resources/Shaders/debug.frag");
     Shader skyboxShader = Shader("Resources/Shaders/skybox.vert", "Resources/Shaders/skybox.frag");
     Shader screenShader = Shader("Resources/Shaders/screen.vert", "Resources/Shaders/screen.frag");
+    Shader holeShader = Shader("Resources/Shaders/hole.vert", "Resources/Shaders/hole.frag");
     shaders[0] = &s;
     shaders[1] = &debugShader;
     shaders[2] = &skyboxShader;
     shaders[3] = &screenShader;
+    shaders[4] = &holeShader;
 
     int width, height, nrChannels;
     unsigned char* data = stbi_load("Resources/Textures/atlas.png", &width, &height, &nrChannels, 0);
@@ -464,12 +464,22 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureColorbuffer, 0);
+
+    GLuint textureDepthbuffer;
+    glGenTextures(1, &textureDepthbuffer);
+    glBindTexture(GL_TEXTURE_2D, textureDepthbuffer);
+    
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, frameWidth, frameHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, textureDepthbuffer, 0);
+
     // create a renderbuffer object for depth and stencil attachment (we won't be sampling these)
-    GLuint rbo;
-    glGenRenderbuffers(1, &rbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, frameWidth, frameHeight); // use a single renderbuffer object for both a depth AND stencil buffer.
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo); // now actually attach it
+    //GLuint rbo;
+    //glGenRenderbuffers(1, &rbo);
+    //glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+    //glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, frameWidth, frameHeight); // use a single renderbuffer object for both a depth AND stencil buffer.
+    //glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo); // now actually attach it
     // now that we actually created the framebuffer and added all attachments we want to check if it is actually complete now
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
@@ -478,6 +488,34 @@ int main()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     #pragma endregion
+
+    GLuint holeVAO, holeVBO;
+
+    glGenVertexArrays(1, &holeVAO);
+    glGenBuffers(1, &holeVBO);
+
+    glBindVertexArray(holeVAO);
+
+    float holeVerts[] = {
+        -1.0f,  1.0f, 0.0f,  0.0f, 1.0f,
+         1.0f, -1.0f, 0.0f,  1.0f, 0.0f,
+        -1.0f, -1.0f, 0.0f,  0.0f, 0.0f,
+
+        -1.0f,  1.0f, 0.0f,  0.0f, 1.0f,
+         1.0f,  1.0f, 0.0f,  1.0f, 1.0f,
+         1.0f, -1.0f, 0.0f,  1.0f, 0.0f,
+    };
+    
+    glBindBuffer(GL_ARRAY_BUFFER, holeVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(holeVerts), holeVerts, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
+    glBindVertexArray(0);
 
     bool vsync = true;
 
@@ -575,15 +613,22 @@ int main()
         glm::mat4 view = camera.GetViewMatrix();
         glm::mat4 projection = camera.GetProjectionMatrix(frameWidth, frameHeight);
 
-        glBindFramebuffer(GL_FRAMEBUFFER, rbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glEnable(GL_DEPTH_TEST);
 
+        glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
+        if (wireframe) glDisable(GL_CULL_FACE); else glEnable(GL_CULL_FACE);
+
         glViewport(0, 0, frameWidth, frameHeight);
 
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
         world.Render(s, view, projection, frameWidth, frameHeight, currentFrame);
+
+        glEnable(GL_CULL_FACE);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
         glm::mat4 skyboxView = glm::mat4(glm::mat3(view));
 
@@ -595,8 +640,23 @@ int main()
         skyboxShader.SetUniform("projection", projection);
 
         glBindVertexArray(skyboxVAO);
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
         glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        holeShader.Use();
+        glm::mat4 model = glm::mat4(1);
+        model = glm::translate(model, glm::vec3(0, 2, 0));
+        holeShader.SetUniform("model", model);
+        holeShader.SetUniform("view", view);
+        holeShader.SetUniform("projection", projection);
+        holeShader.SetUniform("time", currentFrame);
+        holeShader.SetUniform("uResolution", glm::vec2(frameWidth, frameHeight));
+
+        glBindVertexArray(holeVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
         glBindVertexArray(0);
 
@@ -615,6 +675,7 @@ int main()
 
         screenShader.Use();
         glBindVertexArray(screenVAO);
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -634,7 +695,7 @@ int main()
                 ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", frameTime, fps);
                 ImGui::PlotLines("Frame Time (ms)", frameTimes, 100, i);
                 ImGui::Text("Chunk count: %d", Chunk::chunkCount);
-                ImGui::Image((void*)(intptr_t)textureColorbuffer, ImVec2(frameWidth, frameHeight));
+                ImGui::Image((void*)(intptr_t)textureDepthbuffer, ImVec2(frameWidth, frameHeight));
             }
 
             ImGui::End();
@@ -653,7 +714,7 @@ int main()
 
     closeWindow = true;
     
-    glDeleteFramebuffers(1, &rbo);
+    glDeleteFramebuffers(1, &framebuffer);
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
