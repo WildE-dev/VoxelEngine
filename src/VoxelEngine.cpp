@@ -465,15 +465,6 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureColorbuffer, 0);
 
-    GLuint textureDepthbuffer;
-    glGenTextures(1, &textureDepthbuffer);
-    glBindTexture(GL_TEXTURE_2D, textureDepthbuffer);
-    
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, frameWidth, frameHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, textureDepthbuffer, 0);
-
     // create a renderbuffer object for depth and stencil attachment (we won't be sampling these)
     //GLuint rbo;
     //glGenRenderbuffers(1, &rbo);
@@ -695,7 +686,7 @@ int main()
                 ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", frameTime, fps);
                 ImGui::PlotLines("Frame Time (ms)", frameTimes, 100, i);
                 ImGui::Text("Chunk count: %d", Chunk::chunkCount);
-                ImGui::Image((void*)(intptr_t)textureDepthbuffer, ImVec2(frameWidth, frameHeight));
+                ImGui::Image((void*)(intptr_t)textureColorbuffer, ImVec2(frameWidth, frameHeight));
             }
 
             ImGui::End();
