@@ -5,6 +5,7 @@ class Shader
 {
 public:
 	Shader(const char* vertexPath, const char* fragmentPath);
+	Shader(const unsigned char* vertexSource, int vertexSize, const unsigned char* fragmentSource, int fragmentSize);
 	~Shader();
 	void Use();
 	void SetUniform(const char* name, glm::mat4 matrix);

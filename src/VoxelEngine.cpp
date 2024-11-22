@@ -32,8 +32,11 @@ bool captureCursor = true;
 bool wireframe = false;
 bool debug = false;
 
-float frameWidth = 800.0f, frameHeight = 600.0f;
-
+#ifdef __APPLE__
+const float frameWidth = 1600.0f, frameHeight = 1200.0f;
+#else
+const float frameWidth = 800.0f, frameHeight = 600.0f;
+#endif
 Camera camera = Camera();
 Shader *shaders[5];
 GLFWwindow* window;
@@ -77,13 +80,6 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
         camera.firstMouse = true;
 }
 
-void framebuffer_size_callback(GLFWwindow* window, int width, int height)
-{
-    glViewport(0, 0, width, height);
-    frameWidth = (float)width;
-    frameHeight = (float)height;
-}
-
 GLuint loadCubemap(std::array<const unsigned char*, 6> faces, std::array<const unsigned int, 6> sizes)
 {
     GLuint textureID;
@@ -102,7 +98,7 @@ GLuint loadCubemap(std::array<const unsigned char*, 6> faces, std::array<const u
         }
         else
         {
-            std::cout << "Cubemap tex failed to load at path: " << faces[i] << std::endl;
+            std::cout << "Cubemap tex failed to load" << std::endl;
         }
         stbi_image_free(data);
     }
@@ -176,7 +172,6 @@ int init_glfw() {
 
     glfwSetKeyCallback(window, key_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -302,11 +297,11 @@ int main()
         return -1;
     }
 
-    Shader s = Shader("Resources/Shaders/main.vert", "Resources/Shaders/main.frag");
-    Shader debugShader = Shader("Resources/Shaders/debug.vert", "Resources/Shaders/debug.frag");
-    Shader skyboxShader = Shader("Resources/Shaders/skybox.vert", "Resources/Shaders/skybox.frag");
-    Shader screenShader = Shader("Resources/Shaders/screen.vert", "Resources/Shaders/screen.frag");
-    Shader holeShader = Shader("Resources/Shaders/hole.vert", "Resources/Shaders/hole.frag");
+    Shader s = Shader(main_vert, main_vert_size, main_frag, main_frag_size);
+    Shader debugShader = Shader(debug_vert, debug_vert_size, debug_frag, debug_frag_size);
+    Shader skyboxShader = Shader(skybox_vert, skybox_vert_size, skybox_frag, skybox_frag_size);
+    Shader screenShader = Shader(screen_vert, screen_vert_size, screen_frag, screen_frag_size);
+    Shader holeShader = Shader(hole_vert, hole_vert_size, hole_frag, hole_frag_size);
 
     shaders[0] = &s;
     shaders[1] = &debugShader;
@@ -315,7 +310,6 @@ int main()
     shaders[4] = &holeShader;
 
     int width, height, nrChannels;
-    //unsigned char* data = stbi_load("Resources/Textures/atlas.png", &width, &height, &nrChannels, 0);
     unsigned char* data = stbi_load_from_memory(atlas_png, atlas_png_size, &width, &height, &nrChannels, 0);
 
     GLuint texture;
@@ -337,16 +331,6 @@ int main()
     }
 
     stbi_image_free(data);
-
-    /*std::array<std::string, 6> faces
-    {
-        "Resources/Textures/cubemap/Daylight Box_Right.bmp",
-        "Resources/Textures/cubemap/Daylight Box_Left.bmp",
-        "Resources/Textures/cubemap/Daylight Box_Top.bmp",
-        "Resources/Textures/cubemap/Daylight Box_Bottom.bmp",
-        "Resources/Textures/cubemap/Daylight Box_Front.bmp",
-        "Resources/Textures/cubemap/Daylight Box_Back.bmp",
-    };*/
 
     std::array<const unsigned char*, 6> faces
     {
