@@ -31,7 +31,7 @@ bool captureCursor = true;
 bool wireframe = false;
 bool debug = false;
 
-float frameWidth = 1600.0f, frameHeight = 1200.0f;
+float frameWidth = 800.0f, frameHeight = 600.0f;
 
 Camera camera = Camera();
 Shader *shaders[5];
@@ -151,8 +151,12 @@ int init_glfw() {
 #endif
 
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
+#ifdef __APPLE__
     window = glfwCreateWindow(frameWidth / 2, frameHeight / 2, "VoxelEngine", NULL, NULL);
+#else
+    window = glfwCreateWindow(frameWidth, frameHeight, "VoxelEngine", NULL, NULL);
+#endif
+    
     if (!window)
     {
         std::cerr << "ERROR: Failed to create window" << std::endl;
@@ -336,12 +340,12 @@ int main()
 
     std::array<std::string, 6> faces
     {
-        "Resources/Textures/cubemap/sh_ft.png",
-        "Resources/Textures/cubemap/sh_bk.png",
-        "Resources/Textures/cubemap/sh_up.png",
-        "Resources/Textures/cubemap/sh_dn.png",
-        "Resources/Textures/cubemap/sh_rt.png",
-        "Resources/Textures/cubemap/sh_lf.png",
+        "Resources/Textures/cubemap/Daylight Box_Right.bmp",
+        "Resources/Textures/cubemap/Daylight Box_Left.bmp",
+        "Resources/Textures/cubemap/Daylight Box_Top.bmp",
+        "Resources/Textures/cubemap/Daylight Box_Bottom.bmp",
+        "Resources/Textures/cubemap/Daylight Box_Front.bmp",
+        "Resources/Textures/cubemap/Daylight Box_Back.bmp",
     };
     GLuint cubemapTexture = loadCubemap(faces);
 
@@ -642,20 +646,6 @@ int main()
         glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
-        holeShader.Use();
-        glm::mat4 model = glm::mat4(1);
-        model = glm::translate(model, glm::vec3(0, 2, 0));
-        holeShader.SetUniform("model", model);
-        holeShader.SetUniform("view", view);
-        holeShader.SetUniform("projection", projection);
-        holeShader.SetUniform("time", currentFrame);
-        holeShader.SetUniform("uResolution", glm::vec2(frameWidth, frameHeight));
-
-        glBindVertexArray(holeVAO);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-
         glBindVertexArray(0);
 
         glm::ivec3 pos;
@@ -677,6 +667,20 @@ int main()
         glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
+        holeShader.Use();
+        glm::mat4 model = glm::mat4(1);
+        model = glm::translate(model, glm::vec3(0, 2, 0));
+        holeShader.SetUniform("model", model);
+        holeShader.SetUniform("view", view);
+        holeShader.SetUniform("projection", projection);
+        holeShader.SetUniform("time", currentFrame);
+        holeShader.SetUniform("uResolution", glm::vec2(frameWidth, frameHeight));
+
+        glBindVertexArray(holeVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
         glBindVertexArray(0);
 
         ImGui_ImplOpenGL3_NewFrame();
@@ -693,7 +697,7 @@ int main()
                 ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", frameTime, fps);
                 ImGui::PlotLines("Frame Time (ms)", frameTimes, 100, i);
                 ImGui::Text("Chunk count: %d", Chunk::chunkCount);
-                ImGui::Image((void*)(intptr_t)textureColorbuffer, ImVec2(frameWidth, frameHeight));
+                ImGui::Image((void*)(intptr_t)textureColorbuffer, ImVec2(frameWidth / 4, frameHeight / 4), ImVec2(0, 1), ImVec2(1, 0));
             }
 
             ImGui::End();
