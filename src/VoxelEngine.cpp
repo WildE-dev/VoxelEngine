@@ -25,7 +25,8 @@
 #include "ThreadPool.h"
 #include "Debugging.h"
 
-#include "Test.h"
+#include "ShaderResources.h"
+#include "TextureResources.h"
 
 bool captureCursor = true;
 bool wireframe = false;
@@ -83,7 +84,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     frameHeight = (float)height;
 }
 
-GLuint loadCubemap(std::array<std::string, 6> faces)
+GLuint loadCubemap(std::array<const unsigned char*, 6> faces, std::array<const unsigned int, 6> sizes)
 {
     GLuint textureID;
     glGenTextures(1, &textureID);
@@ -92,7 +93,7 @@ GLuint loadCubemap(std::array<std::string, 6> faces)
     int width, height, nrChannels;
     for (unsigned int i = 0; i < faces.size(); i++)
     {
-        unsigned char *data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
+        unsigned char *data = stbi_load_from_memory(faces[i], sizes[i], &width, &height, &nrChannels, 0);
         if (data)
         {
             glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
@@ -297,8 +298,6 @@ bool closeWindow = false;
 
 int main()
 {
-    std::cout << test << std::endl;
-
     if (init_glfw()) {
         return -1;
     }
@@ -308,6 +307,7 @@ int main()
     Shader skyboxShader = Shader("Resources/Shaders/skybox.vert", "Resources/Shaders/skybox.frag");
     Shader screenShader = Shader("Resources/Shaders/screen.vert", "Resources/Shaders/screen.frag");
     Shader holeShader = Shader("Resources/Shaders/hole.vert", "Resources/Shaders/hole.frag");
+
     shaders[0] = &s;
     shaders[1] = &debugShader;
     shaders[2] = &skyboxShader;
@@ -316,7 +316,7 @@ int main()
 
     int width, height, nrChannels;
     //unsigned char* data = stbi_load("Resources/Textures/atlas.png", &width, &height, &nrChannels, 0);
-    unsigned char* data = stbi_load_from_memory(atlas, sizeof(atlas), &width, &height, &nrChannels, 0);
+    unsigned char* data = stbi_load_from_memory(atlas_png, atlas_png_size, &width, &height, &nrChannels, 0);
 
     GLuint texture;
     glGenTextures(1, &texture);
@@ -338,7 +338,7 @@ int main()
 
     stbi_image_free(data);
 
-    std::array<std::string, 6> faces
+    /*std::array<std::string, 6> faces
     {
         "Resources/Textures/cubemap/Daylight Box_Right.bmp",
         "Resources/Textures/cubemap/Daylight Box_Left.bmp",
@@ -346,8 +346,28 @@ int main()
         "Resources/Textures/cubemap/Daylight Box_Bottom.bmp",
         "Resources/Textures/cubemap/Daylight Box_Front.bmp",
         "Resources/Textures/cubemap/Daylight Box_Back.bmp",
+    };*/
+
+    std::array<const unsigned char*, 6> faces
+    {
+        Daylight_Box_Right_bmp,
+        Daylight_Box_Left_bmp,
+        Daylight_Box_Top_bmp,
+        Daylight_Box_Bottom_bmp,
+        Daylight_Box_Front_bmp,
+        Daylight_Box_Back_bmp,
     };
-    GLuint cubemapTexture = loadCubemap(faces);
+
+    std::array<const unsigned int, 6> sizes
+    {
+        Daylight_Box_Right_bmp_size,
+        Daylight_Box_Left_bmp_size,
+        Daylight_Box_Top_bmp_size,
+        Daylight_Box_Bottom_bmp_size,
+        Daylight_Box_Front_bmp_size,
+        Daylight_Box_Back_bmp_size,
+    };
+    GLuint cubemapTexture = loadCubemap(faces, sizes);
 
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
