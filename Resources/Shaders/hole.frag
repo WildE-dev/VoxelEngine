@@ -1,37 +1,53 @@
 #version 330 core
 
-const float PI = 3.1415926535f;
-
 out vec4 fragColor;
 
-in vec2 texCoords;
-
-uniform sampler2D colorTexture;
-
-uniform float time;
-uniform vec2 uResolution;
+in vec2 texCoords;          // Interpolated texture coordinates from the vertex shader
+uniform sampler2D screenTexture; // Screen content texture
+uniform vec2 uResolution;       // Screen resolution
+uniform vec2 blackHoleCenter;   // Center of the black hole in quad UV space
+uniform float eventHorizon;     // Radius of the event horizon
+uniform float lensingRadius;    // Radius of the lensing effect
+uniform float maxDistortion;    // Maximum distortion
+uniform mat4 model;             // Model matrix for the quad
+uniform mat4 view;              // View matrix for the camera
+uniform mat4 projection;        // Projection matrix
 
 void main()
 {
-    vec2 screenSpaceUV = gl_FragCoord.xy / uResolution;
-    vec3 colorUV = texture2D(colorTexture, screenSpaceUV).rgb;
+    // Calculate the fragment's position in local quad space (UV space)
+    vec2 screenCoords = texCoords;
 
-	vec3 color = colorUV;
+    // Calculate distance from the black hole center (in UV space)
+    float dist = length(screenCoords - blackHoleCenter);
 
-	// --------
+    // Discard fragments outside the lensing radius
+    if (dist > lensingRadius) {
+        discard;
+    }
 
-	float size = 0.45f;
-	vec2 center = vec2(0.5f) + vec2(0.02f * cos(time), 0.02f * sin(time));
-	float dist = length(center - texCoords);
+    // Inside the event horizon, render pure black
+    if (dist < eventHorizon) {
+        fragColor = vec4(0.0); // Black
+        return;
+    }
 
-	if (dist > size){
-		discard;
-	}
+    // Compute lensing distortion
+    vec2 direction = normalize(screenCoords - blackHoleCenter);
+    float distortion = maxDistortion * (1.0 - smoothstep(eventHorizon, lensingRadius, dist));
 
-	float ex = (1.0f / size * dist);
-	color = texture2D(colorTexture, screenSpaceUV + ex + (0.02f * sin(time))).rgb;
+    // Apply distortion to the UV coordinates
+    vec2 distortedCoords = gl_FragCoord.xy / uResolution - direction * distortion;
 
-	color *= smoothstep(colorUV * vec3(0.0f), vec3(1.0f), vec3(dist * 4.0f));
+    // Clamp the distorted coordinates to avoid sampling outside the texture
+    distortedCoords = clamp(distortedCoords, vec2(0.0), vec2(1.0));
 
-	fragColor = vec4(color, 1.0f);
+    // Sample the texture with the distorted coordinates
+    vec3 color = texture(screenTexture, distortedCoords).rgb;
+
+    // Smooth fade-out effect toward the edge of the lensing radius
+    //color *= smoothstep(lensingRadius, eventHorizon, dist);
+
+    fragColor = vec4(color, 1.0);
+    //fragColor = vec4(texture(screenTexture, gl_FragCoord.xy / uResolution).rgb, 1);
 }

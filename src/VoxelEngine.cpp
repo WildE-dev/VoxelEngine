@@ -680,6 +680,11 @@ int main()
         holeShader.SetUniform("time", currentFrame);
         holeShader.SetUniform("uResolution", glm::vec2(frameWidth, frameHeight));
 
+        holeShader.SetUniform("blackHoleCenter", glm::vec2(0.5f, 0.5f));
+        holeShader.SetUniform("eventHorizon", 0.25f);
+        holeShader.SetUniform("lensingRadius", 0.4f);
+        holeShader.SetUniform("maxDistortion", 0.3f);
+
         glBindVertexArray(holeVAO);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
