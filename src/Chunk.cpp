@@ -67,19 +67,23 @@ void Chunk::LoadChunk(TerrainGenerator* terrainGenerator) {
 
     for (int x = 0; x < CHUNK_SIZE; x++)
     {
-        for (int y = 0; y < CHUNK_SIZE; y++)
+        for (int z = 0; z < CHUNK_SIZE; z++)
         {
-            for (int z = 0; z < CHUNK_SIZE; z++)
+            const float smoothness = 8.0f;
+
+            float worldHeight1 = round(heights[x][z + 1] * smoothness) / smoothness;
+            float worldHeight2 = round(heights[x + 1][z] * smoothness) / smoothness;
+            float worldHeight3 = round(heights[x][z] * smoothness) / smoothness;
+            float worldHeight4 = round(heights[x + 1][z + 1] * smoothness) / smoothness;
+
+            float minHeight1 = worldHeight1 < worldHeight2 ? worldHeight1 : worldHeight2;
+            float minHeight2 = worldHeight3 < worldHeight4 ? worldHeight3 : worldHeight4;
+            int minHeight = static_cast<int>(floor(minHeight1 < minHeight2 ? minHeight1 : minHeight2));
+
+            for (int y = 0; y < CHUNK_SIZE; y++)
             {
                 int blockY = chunkY * CHUNK_SIZE + y;
 
-                const float smoothness = 8.0f;
-
-                float worldHeight1 = round(heights[x][z + 1] * smoothness) / smoothness;
-                float worldHeight2 = round(heights[x + 1][z] * smoothness) / smoothness;
-                float worldHeight3 = round(heights[x][z] * smoothness) / smoothness;
-                float worldHeight4 = round(heights[x + 1][z + 1] * smoothness) / smoothness;
-                
                 float fWorldHeight1 = worldHeight1 - blockY;
                 float fWorldHeight2 = worldHeight2 - blockY;
                 float fWorldHeight3 = worldHeight3 - blockY;
@@ -90,17 +94,14 @@ void Chunk::LoadChunk(TerrainGenerator* terrainGenerator) {
                 int blockHeight3 = static_cast<int>(fWorldHeight3 * 8);
                 int blockHeight4 = static_cast<int>(fWorldHeight4 * 8);
 
-                float minHeight1 = worldHeight1 < worldHeight2 ? worldHeight1 : worldHeight2;
-                float minHeight2 = worldHeight3 < worldHeight4 ? worldHeight3 : worldHeight4;
-                int minHeight = static_cast<int>(floor(minHeight1 < minHeight2 ? minHeight1 : minHeight2));
-
                 if (blockY == minHeight) {
-                    EdgeData edges = EdgeData();
-                    edges.SetTopY(0, blockHeight1);
-                    edges.SetTopY(1, blockHeight2);
-                    edges.SetTopY(2, blockHeight3);
-                    edges.SetTopY(3, blockHeight4);
-                    SetBlock(x, y, z, BlockType::GRASS, edges);
+                    //EdgeData edges = EdgeData();
+                    //edges.SetTopY(0, blockHeight1 == 0 ? 1 : blockHeight1);
+                    //edges.SetTopY(1, blockHeight2 == 0 ? 1 : blockHeight2);
+                    //edges.SetTopY(2, blockHeight3 == 0 ? 1 : blockHeight3);
+                    //edges.SetTopY(3, blockHeight4 == 0 ? 1 : blockHeight4);
+                    //SetBlock(x, y, z, BlockType::GRASS, edges);
+                    SetBlock(x, y, z, BlockType::GRASS);
                 }
                 else if (blockY < minHeight && blockY > minHeight - 5) {
                     SetBlock(x, y, z, BlockType::DIRT);

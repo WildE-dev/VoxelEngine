@@ -25,6 +25,8 @@
 #include "ThreadPool.h"
 #include "Debugging.h"
 
+#include "Test.h"
+
 bool captureCursor = true;
 bool wireframe = false;
 bool debug = false;
@@ -291,6 +293,8 @@ bool closeWindow = false;
 
 int main()
 {
+    std::cout << test << std::endl;
+
     if (init_glfw()) {
         return -1;
     }
@@ -307,7 +311,8 @@ int main()
     shaders[4] = &holeShader;
 
     int width, height, nrChannels;
-    unsigned char* data = stbi_load("Resources/Textures/atlas.png", &width, &height, &nrChannels, 0);
+    //unsigned char* data = stbi_load("Resources/Textures/atlas.png", &width, &height, &nrChannels, 0);
+    unsigned char* data = stbi_load_from_memory(atlas, sizeof(atlas), &width, &height, &nrChannels, 0);
 
     GLuint texture;
     glGenTextures(1, &texture);
@@ -605,14 +610,16 @@ int main()
         glm::mat4 projection = camera.GetProjectionMatrix(frameWidth, frameHeight);
 
         glBindFramebuffer(GL_FRAMEBUFFER, rbo);
+        glViewport(0, 0, frameWidth, frameHeight);
+
+        glDepthMask(GL_TRUE);
+        glDepthFunc(GL_LESS);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glEnable(GL_DEPTH_TEST);
 
         glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
         if (wireframe) glDisable(GL_CULL_FACE); else glEnable(GL_CULL_FACE);
-
-        glViewport(0, 0, frameWidth, frameHeight);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);

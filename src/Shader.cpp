@@ -83,7 +83,7 @@ GLuint CreateShaderFromFiles(const char* vertexPath, const char* fragmentPath) {
     file.open(vertexPath);
 
     if (!file.is_open()) {
-        std::cerr << "Error opening the file!" << std::endl;
+        std::cerr << "Error opening the file: " << vertexPath << std::endl;
         return 0;
     }
 
@@ -98,7 +98,7 @@ GLuint CreateShaderFromFiles(const char* vertexPath, const char* fragmentPath) {
     file.open(fragmentPath);
 
     if (!file.is_open()) {
-        std::cerr << "Error opening the file!" << std::endl;
+        std::cerr << "Error opening the file: " << fragmentPath << std::endl;
         return 0;
     }
 
