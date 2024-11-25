@@ -35,6 +35,12 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${STB_INCLUDE_DIRS} src)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE glfw glad::glad glm::glm imgui::imgui)
 
+if (CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    set(CMAKE_EXECUTABLE_SUFFIX ".html")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s USE_WEBGL2=1 -s WASM=1")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s USE_WEBGL2=1 -s WASM=1")
+endif()
+
 # Creates C resources file from files in given directory
 function(create_resources dir output)
     # Create empty output file

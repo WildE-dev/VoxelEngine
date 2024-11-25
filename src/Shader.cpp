@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <vector>
 #include <glm/gtc/type_ptr.hpp>
 
 GLuint CreateShaderFromFiles(const char* vertexPath, const char* fragmentPath);
@@ -87,16 +88,16 @@ GLuint CreateDefaultShader() {
     return CreateShaderFromStrings(vertexSource, fragmentSource);
 }
 
-GLuint CreateShaderFromResources(const unsigned char* vertexSource, int vertexSize, const unsigned char* fragmentSource, int fragmentSize) {
-    char vertex[vertexSize + 1];
-    memcpy(vertex, vertexSource, vertexSize);
-    vertex[vertexSize] = 0;
+GLuint CreateShaderFromResources(const unsigned char* vertexSource, const int vertexSize, const unsigned char* fragmentSource, const int fragmentSize) {
+    std::vector<char> vertex(vertexSize + 1);
+    std::memcpy(vertex.data(), vertexSource, vertexSize);
+    vertex[vertexSize] = '\0';
 
-    char fragment[fragmentSize + 1];
-    memcpy(fragment, fragmentSource, fragmentSize);
-    fragment[fragmentSize] = 0;
+    std::vector<char> fragment(fragmentSize + 1);
+    std::memcpy(fragment.data(), fragmentSource, fragmentSize);
+    fragment[fragmentSize] = '\0';
     
-    return CreateShaderFromStrings(vertex, fragment);
+    return CreateShaderFromStrings(vertex.data(), fragment.data());
 }
 
 GLuint CreateShaderFromFiles(const char* vertexPath, const char* fragmentPath) {
