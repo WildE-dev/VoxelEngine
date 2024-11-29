@@ -14,7 +14,7 @@
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        "CMAKE_TOOLCHAIN_FILE": "/Users/wileyswikit/development/vcpkg/scripts/buildsystems/vcpkg.cmake"
       }
     },
     {
@@ -26,6 +26,18 @@
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
       }
-    }
+    },
+    {
+      "name": "emscripten-mac-make",
+      "displayName": "Emscripten (macOS with Make)",
+      "description": "Build for WebAssembly using Emscripten and vcpkg on macOS with Make",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build_wasm",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "/Users/wileyswikit/development/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "/Users/wileyswikit/development/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+      }
+    }    
   ]
 }
