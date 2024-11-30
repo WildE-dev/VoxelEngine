@@ -21,6 +21,9 @@ add_executable(${PROJECT_NAME} src/VoxelEngine.cpp
                    src/World.cpp
                    src/ThreadPool.cpp
                    src/Debugging.cpp
+                   src/AssetLoader.cpp
+                   src/Renderer.cpp
+                   
                    src/Block.h
                    src/Camera.h
                    src/Chunk.h
@@ -29,7 +32,9 @@ add_executable(${PROJECT_NAME} src/VoxelEngine.cpp
                    src/World.h
                    src/AsyncCircularQueue.h
                    src/ThreadPool.h
-                   src/Debugging.h)
+                   src/Debugging.h
+                   src/AssetLoader.h
+                   src/Renderer.h)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${STB_INCLUDE_DIRS} src)
 

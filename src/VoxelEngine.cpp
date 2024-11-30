@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
 
+
 #include <glm/glm.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -27,6 +28,7 @@
 
 #include "ShaderResources.h"
 #include "TextureResources.h"
+#include "AssetLoader.h"
 
 bool captureCursor = true;
 bool wireframe = false;
@@ -309,28 +311,7 @@ int main()
     shaders[3] = &screenShader;
     shaders[4] = &holeShader;
 
-    int width, height, nrChannels;
-    unsigned char* data = stbi_load_from_memory(atlas_png, atlas_png_size, &width, &height, &nrChannels, 0);
-
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-    if (data)
-    {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    }
-    else
-    {
-        std::cerr << "Failed to load texture" << std::endl;
-        return -1;
-    }
-
-    stbi_image_free(data);
+    GLuint texture = AssetLoader::loadTexture(atlas_png, atlas_png_size);
 
     std::array<const unsigned char*, 6> faces
     {
@@ -351,7 +332,7 @@ int main()
         Daylight_Box_Front_bmp_size,
         Daylight_Box_Back_bmp_size,
     };
-    GLuint cubemapTexture = loadCubemap(faces, sizes);
+    GLuint cubemapTexture = AssetLoader::loadCubemap(faces, sizes);
 
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
