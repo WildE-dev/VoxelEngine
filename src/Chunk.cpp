@@ -95,13 +95,19 @@ void Chunk::LoadChunk(TerrainGenerator* terrainGenerator) {
                 int blockHeight4 = static_cast<int>(fWorldHeight4 * 8);
 
                 if (blockY == minHeight) {
-                    //EdgeData edges = EdgeData();
-                    //edges.SetTopY(0, blockHeight1 == 0 ? 1 : blockHeight1);
-                    //edges.SetTopY(1, blockHeight2 == 0 ? 1 : blockHeight2);
-                    //edges.SetTopY(2, blockHeight3 == 0 ? 1 : blockHeight3);
-                    //edges.SetTopY(3, blockHeight4 == 0 ? 1 : blockHeight4);
-                    //SetBlock(x, y, z, BlockType::GRASS, edges);
-                    SetBlock(x, y, z, BlockType::GRASS);
+                    EdgeData edges = EdgeData();
+                    edges.SetTopY(0, blockHeight1);
+                    edges.SetTopY(1, blockHeight2);
+                    edges.SetTopY(2, blockHeight3);
+                    edges.SetTopY(3, blockHeight4);
+
+                    if (edges.IsValid()) {
+                        SetBlock(x, y, z, BlockType::GRASS, edges);
+                    }
+                    else {
+                        if (y > 0) // Workaround so it doesn't set a block at a negative y
+                            SetBlock(x, y - 1, z, BlockType::GRASS);
+                    }
                 }
                 else if (blockY < minHeight && blockY > minHeight - 5) {
                     SetBlock(x, y, z, BlockType::DIRT);
@@ -308,33 +314,18 @@ void Chunk::SendVertexData() {
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(uint32_t), vertices.data(), GL_STATIC_DRAW);
 
-    //if (vertices.size() > 0)
-        //std::cout << vertices.size() << ", " << sizeof(uint32_t) << ", " << vertices.data()[4] << std::endl;
-
-    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    //glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
-
-    //glVertexAttribPointer(0, 1, GL_UNSIGNED_INT, GL_FALSE, 0, (void*)0);
     glVertexAttribIPointer(0, 1, GL_UNSIGNED_INT, 2 * sizeof(uint32_t), (void*)0);
     glVertexAttribIPointer(1, 1, GL_UNSIGNED_INT, 2 * sizeof(uint32_t), (void*)sizeof(uint32_t));
-    //glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-    //glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(5 * sizeof(float)));
+
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
-    //glEnableVertexAttribArray(2);
 
     glBindVertexArray(0);
-
-    //meshSentToGPU = true;
 }
 
 void Chunk::Render(Shader& shader) {
     if (!isLoaded)
         return;
-
-    /*if (!meshSentToGPU) {
-        SendVertexData();
-    }*/
 
     shader.Use();
 

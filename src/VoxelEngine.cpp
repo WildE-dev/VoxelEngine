@@ -1,11 +1,11 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
-#ifndef __EMSCRIPTEN__
-#include <glad/glad.h>
-#else
+#ifdef __EMSCRIPTEN__
 #include <GL/gl.h>
 #include <GLES3/gl3.h>
+#else
+#include <glad/glad.h>
 #endif
 
 #include <glm/glm.hpp>
@@ -33,6 +33,7 @@
 
 #include "ShaderResources.h"
 #include "TextureResources.h"
+#include "AssetLoader.h"
 
 bool captureCursor = true;
 bool wireframe = false;
@@ -286,7 +287,7 @@ int main()
     shaders[3] = &screenShader;
     shaders[4] = &holeShader;
 
-    GLuint texture = AssetLoader.loadTexture();
+    GLuint texture = AssetLoader::loadTexture(atlas_png, atlas_png_size);
 
     std::array<const unsigned char*, 6> faces
     {
@@ -307,7 +308,7 @@ int main()
         Daylight_Box_Front_bmp_size,
         Daylight_Box_Back_bmp_size,
     };
-    GLuint cubemapTexture = loadCubemap(faces, sizes);
+    GLuint cubemapTexture = AssetLoader::loadCubemap(faces, sizes);
 
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);

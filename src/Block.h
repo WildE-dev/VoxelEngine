@@ -31,7 +31,7 @@ struct EdgeData {
                 sameCount++;
         }
 
-        if (sameCount == 4)
+        if (sameCount > 2)
             return false;
 
         return true;

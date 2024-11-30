@@ -1,4 +1,8 @@
-GLuint loadCubemap(std::array<const unsigned char*, 6> faces, std::array<const unsigned int, 6> sizes)
+#include "AssetLoader.h"
+#include <stb_image.h>
+#include <iostream>
+
+GLuint AssetLoader::loadCubemap(std::array<const unsigned char*, 6> faces, std::array<const unsigned int, 6> sizes)
 {
     GLuint textureID;
     glGenTextures(1, &textureID);
@@ -29,9 +33,9 @@ GLuint loadCubemap(std::array<const unsigned char*, 6> faces, std::array<const u
     return textureID;
 }
 
-GLuint loadTexture() {
+GLuint AssetLoader::loadTexture(const unsigned char* bytes, int size) {
     int width, height, nrChannels;
-    unsigned char* data = stbi_load_from_memory(atlas_png, atlas_png_size, &width, &height, &nrChannels, 0);
+    unsigned char* data = stbi_load_from_memory(bytes, size, &width, &height, &nrChannels, 0);
 
     GLuint texture;
     glGenTextures(1, &texture);
