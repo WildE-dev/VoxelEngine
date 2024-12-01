@@ -1,5 +1,6 @@
 #include "AssetLoader.h"
-#include <stb_image.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 #include <iostream>
 
 GLuint AssetLoader::loadCubemap(std::array<const unsigned char*, 6> faces, std::array<const unsigned int, 6> sizes)

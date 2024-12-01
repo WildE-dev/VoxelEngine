@@ -23,6 +23,8 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath) {
 }
 
 Shader::Shader(const unsigned char* vertexSource, int vertexSize, const unsigned char* fragmentSource, int fragmentSize) {
+    Shader::vertexPath = "";
+    Shader::fragmentPath = "";
     GLuint shader = CreateShaderFromResources(vertexSource, vertexSize, fragmentSource, fragmentSize);
     if (shader) {
         Shader::shaderProgram = shader;

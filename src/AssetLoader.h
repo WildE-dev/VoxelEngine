@@ -1,5 +1,6 @@
-#include <glad/glad.h>
+#pragma once
 #include <array>
+#include <glad/glad.h>
 
 namespace AssetLoader
 {

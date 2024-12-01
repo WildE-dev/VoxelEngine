@@ -399,12 +399,10 @@ void World::UpdateRenderList() {
     //std::cout << "Render list size: " << m_vpChunkRenderList.size() << std::endl;
 }
 
-void World::Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight, float time) {
+void World::Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight) {
     shader.Use();
 
     glm::mat4 model = glm::mat4(1.0f);
-
-    shader.SetUniform("time", time);
 
     shader.SetUniform("model", model);
     shader.SetUniform("projection", projectionMatrix);
@@ -427,4 +425,103 @@ void World::RebuildAllChunks()
         Chunk* pChunk = (*iterator).second.get();
         pChunk->SetNeedsRebuilding(true);
     }
+}
+
+bool World::TraceRay(glm::vec3 p, glm::vec3 dir, float max_d, glm::ivec3& hit_pos, glm::vec3& hit_norm, std::vector<glm::ivec3>* rayBlocks) {
+
+    // consider raycast vector to be parametrized by t
+    //   vec = [px,py,pz] + t * [dx,dy,dz]
+
+    // algo below is as described by this paper:
+    // http://www.cse.chalmers.se/edu/year/2010/course/TDA361/grid.pdf
+
+    float t = 0.0;
+    int ix = std::floor(p.x);
+    int iy = std::floor(p.y);
+    int iz = std::floor(p.z);
+
+    int stepx = (dir.x > 0) ? 1 : -1;
+    int stepy = (dir.y > 0) ? 1 : -1;
+    int stepz = (dir.z > 0) ? 1 : -1;
+
+    // dir is already normalized
+    float txDelta = std::abs(1.0f / dir.x);
+    float tyDelta = std::abs(1.0f / dir.y);
+    float tzDelta = std::abs(1.0f / dir.z);
+
+    float xdist = (stepx > 0) ? (ix + 1 - p.x) : (p.x - ix);
+    float ydist = (stepy > 0) ? (iy + 1 - p.y) : (p.y - iy);
+    float zdist = (stepz > 0) ? (iz + 1 - p.z) : (p.z - iz);
+
+    // location of nearest voxel boundary, in units of t 
+    float txMax = (txDelta < FLT_MAX) ? txDelta * xdist : FLT_MAX;
+    float tyMax = (tyDelta < FLT_MAX) ? tyDelta * ydist : FLT_MAX;
+    float tzMax = (tzDelta < FLT_MAX) ? tzDelta * zdist : FLT_MAX;
+
+    int steppedIndex = -1;
+
+    if (rayBlocks)
+        rayBlocks->clear();
+
+    bool b = false;
+
+    // main loop along raycast vector
+    while (t <= max_d) {
+        Block hitBlock;
+        if (GetBlock(ix, iy, iz, hitBlock)) {
+            if (hitBlock.type != BlockType::AIR) {
+                b = true;
+            }
+
+            if (rayBlocks)
+                rayBlocks->emplace_back(ix, iy, iz);
+        }
+
+        // exit check
+        if (b && !rayBlocks) {
+            hit_pos = { ix, iy, iz };
+            hit_norm = { 0, 0, 0 };
+            if (steppedIndex == 0) hit_norm.x = -stepx;
+            if (steppedIndex == 1) hit_norm.y = -stepy;
+            if (steppedIndex == 2) hit_norm.z = -stepz;
+            return b;
+        }
+
+        // advance t to next nearest voxel boundary
+        if (txMax < tyMax) {
+            if (txMax < tzMax) {
+                ix += stepx;
+                t = txMax;
+                txMax += txDelta;
+                steppedIndex = 0;
+            }
+            else {
+                iz += stepz;
+                t = tzMax;
+                tzMax += tzDelta;
+                steppedIndex = 2;
+            }
+        }
+        else {
+            if (tyMax < tzMax) {
+                iy += stepy;
+                t = tyMax;
+                tyMax += tyDelta;
+                steppedIndex = 1;
+            }
+            else {
+                iz += stepz;
+                t = tzMax;
+                tzMax += tzDelta;
+                steppedIndex = 2;
+            }
+        }
+
+    }
+
+    // no voxel hit found
+    hit_pos = p + t * dir;
+    hit_norm = { 0, 0, 0 };
+
+    return b;
 }

@@ -5,13 +5,14 @@ out vec4 fragColor;
 in vec2 texCoords;          // Interpolated texture coordinates from the vertex shader
 uniform sampler2D screenTexture; // Screen content texture
 uniform vec2 uResolution;       // Screen resolution
-uniform vec2 blackHoleCenter;   // Center of the black hole in quad UV space
 uniform float eventHorizon;     // Radius of the event horizon
 uniform float lensingRadius;    // Radius of the lensing effect
 uniform float maxDistortion;    // Maximum distortion
 uniform mat4 model;             // Model matrix for the quad
 uniform mat4 view;              // View matrix for the camera
 uniform mat4 projection;        // Projection matrix
+
+vec2 blackHoleCenter = vec2(0.5f, 0.5f);   // Center of the black hole in quad UV space
 
 void main()
 {

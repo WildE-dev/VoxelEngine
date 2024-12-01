@@ -1,10 +1,10 @@
 #pragma once
 #include <array>
-#include <glad/glad.h>
 #include <map>
 #include <memory>
 #include <atomic>
 #include <mutex>
+#include <glad/glad.h>
 
 #include "TerrainGenerator.h"
 #include "Block.h"

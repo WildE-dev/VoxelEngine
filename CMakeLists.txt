@@ -20,7 +20,8 @@ find_package(imgui CONFIG REQUIRED)
 
 find_path(STB_INCLUDE_DIRS "stb_image.h") 
 
-add_executable(${PROJECT_NAME} src/VoxelEngine.cpp
+add_executable(${PROJECT_NAME} src/main.cpp
+                   src/VoxelEngine.cpp
                    src/Block.cpp
                    src/Camera.cpp
                    src/Chunk.cpp
@@ -32,7 +33,9 @@ add_executable(${PROJECT_NAME} src/VoxelEngine.cpp
                    src/Debugging.cpp
                    src/AssetLoader.cpp
                    src/Renderer.cpp
+                   src/DebugMenu.cpp
                    
+                   src/VoxelEngine.h
                    src/Block.h
                    src/Camera.h
                    src/Chunk.h
@@ -43,7 +46,8 @@ add_executable(${PROJECT_NAME} src/VoxelEngine.cpp
                    src/ThreadPool.h
                    src/Debugging.h
                    src/AssetLoader.h
-                   src/Renderer.h)
+                   src/Renderer.h
+                   src/DebugMenu.h)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${STB_INCLUDE_DIRS} src)
 

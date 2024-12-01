@@ -39,11 +39,13 @@ public:
     void SetBlock(int x, int y, int z, BlockType type);
     void SetBlock(int x, int y, int z, EdgeData edges);
 
+    bool TraceRay(glm::vec3 p, glm::vec3 dir, float max_d, glm::ivec3& hit_pos, glm::vec3& hit_norm, std::vector<glm::ivec3>* rayBlocks = nullptr);
+
     void Update(glm::vec3 cameraPosition, glm::vec3 cameraView, ThreadPool& threadPool);
 
     void RebuildAllChunks();
 
-    void Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight, float time);
+    void Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight);
 
     TerrainGenerator* terrainGenerator;
 
