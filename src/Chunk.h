@@ -4,7 +4,8 @@
 #include <memory>
 #include <atomic>
 #include <mutex>
-#include <glad/glad.h>
+
+#include "Common.h"
 
 #include "TerrainGenerator.h"
 #include "Block.h"

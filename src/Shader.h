@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
-#include <glad/glad.h>
+
+#include "Common.h"
 
 class Shader
 {

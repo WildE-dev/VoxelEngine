@@ -1,10 +1,6 @@
 #include "DebugMenu.h"
 #include "Chunk.h"
 
-#include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_opengl3.h>
-
 DebugMenu::DebugMenu() {
     for (int i = 0; i < 100; ++i) {
         frameTimes[i] = 0;
