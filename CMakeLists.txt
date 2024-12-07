@@ -79,5 +79,5 @@ function(create_resources dir output)
     endforeach()
 endfunction()
 
-create_resources("Resources/Shaders" "src/ShaderResources.h")
-create_resources("Resources/Textures" "src/TextureResources.h")
+# create_resources("Resources/Shaders" "src/ShaderResources.h")
+# create_resources("Resources/Textures" "src/TextureResources.h")

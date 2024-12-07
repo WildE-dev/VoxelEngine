@@ -36,7 +36,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "/Users/wileyswikit/development/vcpkg/scripts/buildsystems/vcpkg.cmake",
-        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "/Users/wileyswikit/development/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+        "VCPKG_TARGET_TRIPLET": "wasm32-emscripten"
       }
     }    
   ]
