@@ -1,8 +1,8 @@
 #pragma once
 
-#include <glm/glm.hpp>
+#include <glm.hpp>
 
-#include "Common.h"
+#include <glad/glad.h>
 
 #include "World.h"
 #include "Camera.h"

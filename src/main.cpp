@@ -1,6 +1,6 @@
 #include "VoxelEngine.h"
 
-int main() {
+int main(int argc, char* argv[]) {
 	VoxelEngine engine = VoxelEngine();
 	engine.Initialize();
 	engine.Start();

@@ -1,16 +1,13 @@
 #pragma once
-#include <glm/glm.hpp>
-#include <GLFW/glfw3.h>
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm.hpp>
+#include <gtc/matrix_transform.hpp>
 
 class Camera
 {
 public:
-	bool firstMouse = true;
-
 	//Camera();
-	void UpdateLook(double xPos, double yPos);
-	void UpdateMove(GLFWwindow* window, double deltaTime);
+	void UpdateLook(float xMotion, float yMotion);
+	void UpdateMove(const bool* keys, double deltaTime);
 	glm::mat4 GetViewMatrix() const;
 	glm::mat4 GetProjectionMatrix(float frameWidth, float frameHeight) const;
 	glm::vec3 GetPosition() const;

@@ -3,7 +3,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
-#include <glm/gtc/type_ptr.hpp>
+#include <gtc/type_ptr.hpp>
 
 GLuint CreateShaderFromFiles(const char* vertexPath, const char* fragmentPath);
 GLuint CreateShaderFromStrings(const char* vertexShaderSource, const char* fragmentShaderSource);

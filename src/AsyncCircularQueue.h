@@ -1,6 +1,5 @@
 #pragma once
 #include <mutex>
-#include <Chunk.h>
 
 template <typename T>
 class AsyncCircularQueue {

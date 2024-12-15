@@ -3,7 +3,7 @@
 #include <unordered_map>
 #include <tuple>
 #include <mutex>
-#include <glm/glm.hpp>
+#include <glm.hpp>
 #include <atomic>
 
 #include "Block.h"

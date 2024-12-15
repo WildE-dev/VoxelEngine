@@ -1,18 +1,20 @@
-cmake_minimum_required(VERSION 3.16.0 FATAL_ERROR)
-
-set(CMAKE_SYSTEM_VERSION 10.0 CACHE STRING "" FORCE)
-
+cmake_minimum_required(VERSION 3.20)
 project(VoxelEngine C CXX)
 
-if(EMSCRIPTEN)
-else()
-    find_package(glfw3 CONFIG REQUIRED)
-    find_package(glad CONFIG REQUIRED)
-endif()
-find_package(glm CONFIG REQUIRED)
-find_package(imgui CONFIG REQUIRED)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_path(STB_INCLUDE_DIRS "stb_image.h") 
+# Find SDL3
+if(WIN32)
+    # On Windows, point CMake to the SDL3 CMake files if they are not installed globally
+    set(CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/libs/SDL3/windows/cmake)
+elseif(APPLE)
+    # On macOS, SDL3 might already be installed via Homebrew or manually
+    # If not installed globally, use the local path
+    set(CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/libs/SDL3/macos/cmake)
+endif()
+
+find_package(SDL3 REQUIRED CONFIG)
 
 add_executable(${PROJECT_NAME} src/main.cpp
                    src/VoxelEngine.cpp
@@ -42,21 +44,23 @@ add_executable(${PROJECT_NAME} src/main.cpp
                    src/Debugging.h
                    src/AssetLoader.h
                    src/Renderer.h
-                   src/DebugMenu.h)
+                   src/DebugMenu.h
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${STB_INCLUDE_DIRS} src)
+                   libs/glad/src/glad.c)
 
+set(IMGUI_SRC
+    libs/imgui/imgui.cpp
+    libs/imgui/imgui_draw.cpp
+    libs/imgui/imgui_tables.cpp
+    libs/imgui/imgui_widgets.cpp
+    libs/imgui/backends/imgui_impl_sdl3.cpp
+    libs/imgui/backends/imgui_impl_opengl3.cpp
+)
 
+target_sources(${PROJECT_NAME} PRIVATE ${IMGUI_SRC})
 
-if (EMSCRIPTEN)
-    set(CMAKE_EXECUTABLE_SUFFIX ".html")
-    set(VCPKG_HOST_TRIPLET wasm32-emscripten)
-    set(VCPKG_TARGET_TRIPLET wasm32-emscripten)
-    target_link_options(${PROJECT_NAME} PRIVATE -sUSE_GLFW=3 -sMAX_WEBGL_VERSION=2 -sWASM=1)
-    target_link_libraries(${PROJECT_NAME} PRIVATE glm::glm imgui::imgui)
-else()
-    target_link_libraries(${PROJECT_NAME} PRIVATE glfw glad::glad glm::glm imgui::imgui)
-endif (EMSCRIPTEN)
+target_include_directories(${PROJECT_NAME} PRIVATE libs/glm libs/imgui libs/imgui/backends libs/stb_image libs/glad/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3)
 
 # Creates C resources file from files in given directory
 function(create_resources dir output)

@@ -2,15 +2,17 @@
 #include "Camera.h"
 
 #include <imgui.h>
-#include <imgui_impl_glfw.h>
+#include <imgui_impl_sdl3.h>
 #include <imgui_impl_opengl3.h>
+
+#include <SDL3/SDL.h>
 
 class DebugMenu {
 public:
 	DebugMenu();
 	~DebugMenu();
 
-	void Initialize(GLFWwindow* window, const char* glsl_version);
+	void Initialize(SDL_Window* window, SDL_GLContext context, const char* glsl_version);
 	void Render(Camera& camera, float deltaTime);
 	void Cleanup();
 

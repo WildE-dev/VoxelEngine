@@ -5,11 +5,11 @@
 #include <atomic>
 #include <mutex>
 
-#include "Common.h"
+#include <glad/glad.h>
 
-#include "TerrainGenerator.h"
 #include "Block.h"
 
+class TerrainGenerator;
 class World;
 class Shader;
 

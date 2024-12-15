@@ -1,14 +1,14 @@
-#include "Common.h"
+#include "VoxelEngine.h"
 
-#include <glm/glm.hpp>
+#include <glad/glad.h>
+#include <SDL3/SDL.h>
+#include <glm.hpp>
 
 #include <iostream>
 #include <string>
 #include <thread>
 #include <chrono>
 #include <mutex>
-
-#include "VoxelEngine.h"
 
 #include "Camera.h"
 #include "Shader.h"
@@ -28,11 +28,10 @@ const float frameWidth = 800.0f, frameHeight = 600.0f;
 Camera camera;
 DebugMenu debugMenu;
 Renderer renderer;
-GLFWwindow *window;
+SDL_Window* window;
+SDL_GLContext context;
 TerrainGenerator* generator;
 World* world;
-
-std::map<int, bool> buttonsPressed;
 
 int Chunk::chunkCount = 0;
 
@@ -46,65 +45,33 @@ void error_callback(int error, const char *description)
     std::cerr << "Error: " << description << std::endl;
 }
 
-static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
-{
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
-    if (key == GLFW_KEY_R && action == GLFW_PRESS)
-        renderer.ReloadShaders();
-    if (key == GLFW_KEY_TAB && action == GLFW_PRESS)
+int init_gl() {
+    if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0)
     {
-        captureCursor = !captureCursor;
-    }
-    if (key == GLFW_KEY_F1 && action == GLFW_PRESS)
-    {
-        debugMenu.ToggleWireframe();
-    }
-    if (key == GLFW_KEY_F2 && action == GLFW_PRESS)
-    {
-        debugMenu.ToggleDebug();
-    }
-}
-
-void mouse_callback(GLFWwindow *window, double xpos, double ypos)
-{
-    if (captureCursor)
-        camera.UpdateLook(xpos, ypos);
-    else
-        camera.firstMouse = true;
-}
-
-int init_glfw()
-{
-    glfwSetErrorCallback(error_callback);
-
-    if (!glfwInit())
-    {
-        std::cerr << "ERROR: Failed to initialize GLFW" << std::endl;
+        std::cerr << "ERROR: Failed to initialize SDL" << std::endl;
         return -1;
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 #ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
 #endif
 
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-#ifdef __APPLE__
-    window = glfwCreateWindow(frameWidth / 2, frameHeight / 2, "VoxelEngine", NULL, NULL);
-#else
-    window = glfwCreateWindow(frameWidth, frameHeight, "VoxelEngine", NULL, NULL);
-#endif
-
+    window = SDL_CreateWindow("VoxelEngine", frameWidth, frameHeight, SDL_WINDOW_OPENGL);
     if (!window)
     {
         std::cerr << "ERROR: Failed to create window" << std::endl;
         return -1;
     }
 
-    glfwMakeContextCurrent(window);
+    context = SDL_GL_CreateContext(window);
+    if (!context)
+    {
+        std::cerr << "ERROR: Failed to create OpenGL context" << std::endl;
+        return -1;
+    }
 
 #ifndef __EMSCRIPTEN__
     if (!gladLoadGL())
@@ -114,12 +81,9 @@ int init_glfw()
     }
 #endif
 
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    SDL_GL_SetSwapInterval(1); // vsync
 
-    glfwSetKeyCallback(window, key_callback);
-    glfwSetCursorPosCallback(window, mouse_callback);
-
-    return 0;
+	return 0;
 }
 
 bool closeWindow = false;
@@ -133,14 +97,14 @@ void VoxelEngine::Shutdown()
     delete generator;
 
     closeWindow = true;
-    glfwSetErrorCallback(NULL);
-    glfwDestroyWindow(window);
-    glfwTerminate();
+    SDL_GL_DestroyContext(context);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 }
 
 void VoxelEngine::Initialize()
 {
-    if (init_glfw())
+    if (init_gl())
     {
         closeWindow = true;
     }
@@ -150,17 +114,81 @@ float lastFrame = 0;
 
 bool main_loop(double time, void *userData)
 {
-    double deltaTime = glfwGetTime() - lastFrame;
-    lastFrame = glfwGetTime();
+    double currentTime = SDL_GetTicks() / 1000.0f;
+    double deltaTime = currentTime - lastFrame;
+    lastFrame = currentTime;
 
-    glfwPollEvents();
+    SDL_Event windowEvent;
+    while (SDL_PollEvent(&windowEvent))
+    {
+        if (windowEvent.type == SDL_EVENT_QUIT) closeWindow = true;
 
-    glfwSetInputMode(window, GLFW_CURSOR, captureCursor ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+		if (windowEvent.type == SDL_EVENT_KEY_DOWN)
+		{
+			if (windowEvent.key.key == SDLK_ESCAPE)
+			{
+				closeWindow = true;
+			}
+			
+			if (windowEvent.key.key == SDLK_TAB)
+			{
+				captureCursor = !captureCursor;
+			}
+			if (windowEvent.key.key == SDLK_F1)
+			{
+				debugMenu.ToggleWireframe();
+			}
+			if (windowEvent.key.key == SDLK_F2)
+			{
+				debugMenu.ToggleDebug();
+			}
+            if (windowEvent.key.key == SDLK_F3)
+            {
+                renderer.ReloadShaders();
+            }
+			if (windowEvent.key.key == SDLK_F4)
+			{
+				world->RebuildAllChunks();
+			}
+		}
 
-    camera.UpdateMove(window, deltaTime);
+        if (windowEvent.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+        {
+            if (windowEvent.button.button == SDL_BUTTON_LEFT)
+            {
+                glm::ivec3 pos;
+                glm::vec3 norm;
+                if (world->TraceRay(camera.GetPosition(), camera.GetDirection(), 50, pos, norm))
+                {
+                    world->SetBlock(pos.x, pos.y, pos.z, BlockType::AIR);
+                }
+            }
+            if (windowEvent.button.button == SDL_BUTTON_RIGHT)
+            {
+                glm::ivec3 pos;
+                glm::vec3 norm;
+                if (world->TraceRay(camera.GetPosition(), camera.GetDirection(), 50, pos, norm))
+                {
+                    Block block;
+                    pos += norm;
+                    world->SetBlock(pos.x, pos.y, pos.z, BlockType::DIRT);
+                }
+            }
+        }
+
+        if (windowEvent.type == SDL_EVENT_MOUSE_MOTION) {
+            if (captureCursor) camera.UpdateLook(windowEvent.motion.xrel, windowEvent.motion.yrel);
+        }
+    }
+    
+    const bool* keys = SDL_GetKeyboardState(NULL);
+
+    SDL_SetWindowRelativeMouseMode(window, captureCursor);
+
+    camera.UpdateMove(keys, deltaTime);
 
     // Laser
-    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS)
+    if (keys[SDL_SCANCODE_L])
     {
         glm::ivec3 pos;
         glm::vec3 norm;
@@ -186,52 +214,13 @@ bool main_loop(double time, void *userData)
         }
     }
 
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS && !buttonsPressed[GLFW_MOUSE_BUTTON_1])
-    {
-        glm::ivec3 pos;
-        glm::vec3 norm;
-        if (world->TraceRay(camera.GetPosition(), camera.GetDirection(), 50, pos, norm))
-        {
-            world->SetBlock(pos.x, pos.y, pos.z, BlockType::AIR);
-        }
-
-        buttonsPressed[GLFW_MOUSE_BUTTON_1] = true;
-    }
-    else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_RELEASE)
-    {
-        buttonsPressed[GLFW_MOUSE_BUTTON_1] = false;
-    }
-
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS && !buttonsPressed[GLFW_MOUSE_BUTTON_2])
-    {
-        glm::ivec3 pos;
-        glm::vec3 norm;
-        if (world->TraceRay(camera.GetPosition(), camera.GetDirection(), 50, pos, norm))
-        {
-            Block block;
-            pos += norm;
-            world->SetBlock(pos.x, pos.y, pos.z, BlockType::DIRT);
-        }
-
-        buttonsPressed[GLFW_MOUSE_BUTTON_2] = true;
-    }
-    else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2) == GLFW_RELEASE)
-    {
-        buttonsPressed[GLFW_MOUSE_BUTTON_2] = false;
-    }
-
-    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
-    {
-        world->RebuildAllChunks();
-    }
-
     world->Update(camera.GetPosition(), camera.GetDirection(), threadPool);
 
     renderer.Render(*world, camera, debugMenu, deltaTime);
 
-    glfwSwapInterval(debugMenu.GetVSync() ? 1 : 0); // vsync
+	SDL_GL_SetSwapInterval(debugMenu.GetVSync() ? 1 : 0); // vsync
 
-    glfwSwapBuffers(window);
+    SDL_GL_SwapWindow(window);
 
     return true;
 }
@@ -249,13 +238,13 @@ void VoxelEngine::Start()
     world = new World(generator);
 
     const char *glsl_version = "#version 330 core";
-    debugMenu.Initialize(window, glsl_version);
+    debugMenu.Initialize(window, context, glsl_version);
     renderer.Initialize(frameWidth, frameHeight);
 
 #ifdef __EMSCRIPTEN__
     emscripten_request_animation_frame_loop(main_loop, 0);
 #else
-    while (!glfwWindowShouldClose(window))
+    while (!closeWindow)
     {
         main_loop(0, nullptr);
     }

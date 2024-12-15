@@ -1,21 +1,11 @@
 #include "Camera.h"
 
-void Camera::UpdateLook(double xPos, double yPos) {
-    if (firstMouse)
-    {
-        lastX = xPos;
-        lastY = yPos;
-        firstMouse = false;
-    }
+#include <SDL3/SDL.h>
 
-    float xoffset = (float)(xPos - lastX);
-    float yoffset = (float)(lastY - yPos);
-    lastX = xPos;
-    lastY = yPos;
-
+void Camera::UpdateLook(float xMotion, float yMotion) {
     float sensitivity = 0.1f;
-    xoffset *= sensitivity;
-    yoffset *= sensitivity;
+    float xoffset = xMotion * sensitivity;
+    float yoffset = yMotion * -sensitivity;
 
     yaw += xoffset;
     pitch += yoffset;
@@ -32,23 +22,23 @@ void Camera::UpdateLook(double xPos, double yPos) {
     cameraFront = glm::normalize(direction);
 }
 
-void Camera::UpdateMove(GLFWwindow* window, double deltaTime) {
+void Camera::UpdateMove(const bool* keys, double deltaTime) {
     float cameraSpeed = 10.0f * (float)deltaTime;
 
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+    if (keys[SDL_SCANCODE_LSHIFT])
         cameraSpeed *= 2;
 
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    if (keys[SDL_SCANCODE_W])
         Camera::cameraPos += cameraSpeed * Camera::cameraFront;
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    if (keys[SDL_SCANCODE_S])
         Camera::cameraPos -= cameraSpeed * Camera::cameraFront;
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    if (keys[SDL_SCANCODE_A])
         Camera::cameraPos -= glm::normalize(glm::cross(Camera::cameraFront, Camera::cameraUp)) * cameraSpeed;
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    if (keys[SDL_SCANCODE_D])
         Camera::cameraPos += glm::normalize(glm::cross(Camera::cameraFront, Camera::cameraUp)) * cameraSpeed;
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+    if (keys[SDL_SCANCODE_Q])
         Camera::cameraPos -= Camera::cameraUp * cameraSpeed;
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+    if (keys[SDL_SCANCODE_E])
         Camera::cameraPos += Camera::cameraUp * cameraSpeed;
 }
 

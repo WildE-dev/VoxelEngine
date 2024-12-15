@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <tuple>
 #include <array>
-#include <glm/glm.hpp>
+#include <glm.hpp>
 
 struct EdgeData {
     uint8_t edges[4];

@@ -1,7 +1,7 @@
 #pragma once
 #include <array>
 
-#include "Common.h"
+#include <glad/glad.h>
 
 namespace AssetLoader
 {

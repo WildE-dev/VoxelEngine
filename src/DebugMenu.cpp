@@ -11,7 +11,7 @@ DebugMenu::~DebugMenu() {
 	Cleanup();
 }
 
-void DebugMenu::Initialize(GLFWwindow* window, const char* glsl_version) {
+void DebugMenu::Initialize(SDL_Window* window, SDL_GLContext context, const char* glsl_version) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
@@ -22,7 +22,7 @@ void DebugMenu::Initialize(GLFWwindow* window, const char* glsl_version) {
     ImGui::StyleColorsDark();
 
     // Setup Platform/Renderer backends
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplSDL3_InitForOpenGL(window, context);
     ImGui_ImplOpenGL3_Init(glsl_version);
 }
 
@@ -40,7 +40,7 @@ void DebugMenu::Render(Camera& camera, float deltaTime) {
     }
 
     ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 
     if (debug) {
@@ -65,7 +65,7 @@ void DebugMenu::Render(Camera& camera, float deltaTime) {
 
 void DebugMenu::Cleanup() {
     ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
+    ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
 }
 
