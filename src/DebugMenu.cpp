@@ -26,6 +26,10 @@ void DebugMenu::Initialize(SDL_Window* window, SDL_GLContext context, const char
     ImGui_ImplOpenGL3_Init(glsl_version);
 }
 
+void DebugMenu::ProcessEvent(SDL_Event* event) {
+    ImGui_ImplSDL3_ProcessEvent(event);
+}
+
 void DebugMenu::Render(Camera& camera, float deltaTime) {
     float frameTime = 1000.0f * deltaTime;
     float fps = 1.0f / deltaTime;

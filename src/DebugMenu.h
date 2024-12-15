@@ -13,6 +13,7 @@ public:
 	~DebugMenu();
 
 	void Initialize(SDL_Window* window, SDL_GLContext context, const char* glsl_version);
+	void ProcessEvent(SDL_Event* event);
 	void Render(Camera& camera, float deltaTime);
 	void Cleanup();
 

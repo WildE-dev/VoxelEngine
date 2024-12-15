@@ -121,6 +121,8 @@ bool main_loop(double time, void *userData)
     SDL_Event windowEvent;
     while (SDL_PollEvent(&windowEvent))
     {
+		debugMenu.ProcessEvent(&windowEvent);
+
         if (windowEvent.type == SDL_EVENT_QUIT) closeWindow = true;
 
 		if (windowEvent.type == SDL_EVENT_KEY_DOWN)
