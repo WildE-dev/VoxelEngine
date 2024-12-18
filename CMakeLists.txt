@@ -4,17 +4,25 @@ project(VoxelEngine C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Find SDL3
-if(WIN32)
-    # On Windows, point CMake to the SDL3 CMake files if they are not installed globally
-    set(CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/libs/SDL3/windows/cmake)
-elseif(APPLE)
-    # On macOS, SDL3 might already be installed via Homebrew or manually
-    # If not installed globally, use the local path
-    set(CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/libs/SDL3/macos/cmake)
-endif()
+if( ${CMAKE_SYSTEM_NAME} MATCHES "Emscripten")
+    set(USE_FLAGS "-s USE_SDL=2 -s USE_FREETYPE=1")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USE_FLAGS}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USE_FLAGS}")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${USE_FLAGS}")
+    set(CMAKE_EXECUTABLE_SUFFIX .html)
+else()
+    # Find SDL3
+    if(WIN32)
+        # On Windows, point CMake to the SDL3 CMake files if they are not installed globally
+        set(CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/libs/SDL3/windows/cmake)
+    elseif(APPLE)
+        # On macOS, SDL3 might already be installed via Homebrew or manually
+        # If not installed globally, use the local path
+        set(CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/libs/SDL3/macos/cmake)
+    endif()
 
-find_package(SDL3 REQUIRED CONFIG)
+    find_package(SDL3 REQUIRED CONFIG)
+endif()
 
 add_executable(${PROJECT_NAME} src/main.cpp
                    src/VoxelEngine.cpp
@@ -61,6 +69,11 @@ target_sources(${PROJECT_NAME} PRIVATE ${IMGUI_SRC})
 
 target_include_directories(${PROJECT_NAME} PRIVATE libs/glm libs/imgui libs/imgui/backends libs/stb_image libs/glad/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3)
+
+
+
+
+
 
 # Creates C resources file from files in given directory
 function(create_resources dir output)
