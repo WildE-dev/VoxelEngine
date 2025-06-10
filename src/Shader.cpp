@@ -21,15 +21,15 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath) {
     }
 }
 
-Shader::Shader(const unsigned char* vertexSource, int vertexSize, const unsigned char* fragmentSource, int fragmentSize) {
-    GLuint shader = CreateShaderFromResources(vertexSource, vertexSize, fragmentSource, fragmentSize);
-    if (shader) {
-        Shader::shaderProgram = shader;
-    }
-    else {
-        Shader::shaderProgram = CreateDefaultShader();
-    }
-}
+//Shader::Shader(const unsigned char* vertexSource, int vertexSize, const unsigned char* fragmentSource, int fragmentSize) {
+//    GLuint shader = CreateShaderFromResources(vertexSource, vertexSize, fragmentSource, fragmentSize);
+//    if (shader) {
+//        Shader::shaderProgram = shader;
+//    }
+//    else {
+//        Shader::shaderProgram = CreateDefaultShader();
+//    }
+//}
 
 Shader::~Shader() {
     glDeleteProgram(Shader::shaderProgram);
@@ -87,17 +87,17 @@ GLuint CreateDefaultShader() {
     return CreateShaderFromStrings(vertexSource, fragmentSource);
 }
 
-GLuint CreateShaderFromResources(const unsigned char* vertexSource, int vertexSize, const unsigned char* fragmentSource, int fragmentSize) {
-    char vertex[vertexSize + 1];
-    memcpy(vertex, vertexSource, vertexSize);
-    vertex[vertexSize] = 0;
-
-    char fragment[fragmentSize + 1];
-    memcpy(fragment, fragmentSource, fragmentSize);
-    fragment[fragmentSize] = 0;
-    
-    return CreateShaderFromStrings(vertex, fragment);
-}
+//GLuint CreateShaderFromResources(const unsigned char* vertexSource, int vertexSize, const unsigned char* fragmentSource, int fragmentSize) {
+//    char vertex[vertexSize + 1];
+//    memcpy(vertex, vertexSource, vertexSize);
+//    vertex[vertexSize] = 0;
+//
+//    char fragment[fragmentSize + 1];
+//    memcpy(fragment, fragmentSource, fragmentSize);
+//    fragment[fragmentSize] = 0;
+//    
+//    return CreateShaderFromStrings(vertex, fragment);
+//}
 
 GLuint CreateShaderFromFiles(const char* vertexPath, const char* fragmentPath) {
     std::string line;

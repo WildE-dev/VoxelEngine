@@ -26,8 +26,6 @@
 #include "ThreadPool.h"
 #include "Debugging.h"
 
-#include "ShaderResources.h"
-#include "TextureResources.h"
 #include "AssetLoader.h"
 
 bool captureCursor = true;
@@ -299,11 +297,17 @@ int main()
         return -1;
     }
 
-    Shader s = Shader(main_vert, main_vert_size, main_frag, main_frag_size);
-    Shader debugShader = Shader(debug_vert, debug_vert_size, debug_frag, debug_frag_size);
-    Shader skyboxShader = Shader(skybox_vert, skybox_vert_size, skybox_frag, skybox_frag_size);
-    Shader screenShader = Shader(screen_vert, screen_vert_size, screen_frag, screen_frag_size);
-    Shader holeShader = Shader(hole_vert, hole_vert_size, hole_frag, hole_frag_size);
+    //Shader s = Shader(main_vert, main_vert_size, main_frag, main_frag_size);
+    //Shader debugShader = Shader(debug_vert, debug_vert_size, debug_frag, debug_frag_size);
+    //Shader skyboxShader = Shader(skybox_vert, skybox_vert_size, skybox_frag, skybox_frag_size);
+    //Shader screenShader = Shader(screen_vert, screen_vert_size, screen_frag, screen_frag_size);
+    //Shader holeShader = Shader(hole_vert, hole_vert_size, hole_frag, hole_frag_size);
+
+    Shader s = Shader("Resources/Shaders/main.vert", "Resources/Shaders/main.frag");
+    Shader debugShader = Shader("Resources/Shaders/debug.vert", "Resources/Shaders/debug.frag");
+    Shader skyboxShader = Shader("Resources/Shaders/skybox.vert", "Resources/Shaders/skybox.frag");
+    Shader screenShader = Shader("Resources/Shaders/screen.vert", "Resources/Shaders/screen.frag");
+    Shader holeShader = Shader("Resources/Shaders/hole.vert", "Resources/Shaders/hole.frag");
 
     shaders[0] = &s;
     shaders[1] = &debugShader;
@@ -311,28 +315,19 @@ int main()
     shaders[3] = &screenShader;
     shaders[4] = &holeShader;
 
-    GLuint texture = AssetLoader::loadTexture(atlas_png, atlas_png_size);
+    GLuint texture = AssetLoader::loadTexture("Resources/Textures/atlas.png");
 
-    std::array<const unsigned char*, 6> faces
+    std::array<const char*, 6> cubemapPaths
     {
-        Daylight_Box_Right_bmp,
-        Daylight_Box_Left_bmp,
-        Daylight_Box_Top_bmp,
-        Daylight_Box_Bottom_bmp,
-        Daylight_Box_Front_bmp,
-        Daylight_Box_Back_bmp,
+        "Resources/Textures/right.bmp",
+        "Resources/Textures/left.bmp",
+        "Resources/Textures/top.bmp",
+        "Resources/Textures/bottom.bmp",
+        "Resources/Textures/front.bmp",
+        "Resources/Textures/back.bmp"
     };
 
-    std::array<const unsigned int, 6> sizes
-    {
-        Daylight_Box_Right_bmp_size,
-        Daylight_Box_Left_bmp_size,
-        Daylight_Box_Top_bmp_size,
-        Daylight_Box_Bottom_bmp_size,
-        Daylight_Box_Front_bmp_size,
-        Daylight_Box_Back_bmp_size,
-    };
-    GLuint cubemapTexture = AssetLoader::loadCubemap(faces, sizes);
+    GLuint cubemapTexture = AssetLoader::loadCubemap(cubemapPaths);
 
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
@@ -687,7 +682,7 @@ int main()
                 ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", frameTime, fps);
                 ImGui::PlotLines("Frame Time (ms)", frameTimes, 100, i);
                 ImGui::Text("Chunk count: %d", Chunk::chunkCount);
-                ImGui::Image((void*)(intptr_t)textureColorbuffer, ImVec2(frameWidth / 4, frameHeight / 4), ImVec2(0, 1), ImVec2(1, 0));
+                ImGui::Image(textureColorbuffer, ImVec2(frameWidth / 4, frameHeight / 4), ImVec2(0, 1), ImVec2(1, 0));
             }
 
             ImGui::End();

@@ -2,16 +2,16 @@
 #include <stb_image.h>
 #include <iostream>
 
-GLuint AssetLoader::loadCubemap(std::array<const unsigned char*, 6> faces, std::array<const unsigned int, 6> sizes)
+GLuint AssetLoader::loadCubemap(std::array<const char*, 6> paths)
 {
     GLuint textureID;
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
 
     int width, height, nrChannels;
-    for (unsigned int i = 0; i < faces.size(); i++)
+    for (unsigned int i = 0; i < paths.size(); i++)
     {
-        unsigned char *data = stbi_load_from_memory(faces[i], sizes[i], &width, &height, &nrChannels, 0);
+        unsigned char *data = stbi_load(paths[i], &width, &height, &nrChannels, 0);
         if (data)
         {
             glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
@@ -33,9 +33,9 @@ GLuint AssetLoader::loadCubemap(std::array<const unsigned char*, 6> faces, std::
     return textureID;
 }
 
-GLuint AssetLoader::loadTexture(const unsigned char* bytes, int size) {
+GLuint AssetLoader::loadTexture(const char* path) {
     int width, height, nrChannels;
-    unsigned char* data = stbi_load_from_memory(bytes, size, &width, &height, &nrChannels, 0);
+    unsigned char* data = stbi_load(path, &width, &height, &nrChannels, 0);
 
     GLuint texture;
     glGenTextures(1, &texture);
