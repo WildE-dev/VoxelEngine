@@ -60,11 +60,11 @@ glm::mat4 Camera::GetProjectionMatrix(float frameWidth, float frameHeight) const
     return glm::perspective(glm::radians(45.0f), frameWidth / frameHeight, 0.1f, 1000.0f);
 }
 
-glm::vec3 Camera::GetPosition() const {
+glm::vec3 Camera::GetPosition() {
     return cameraPos;
 }
 
-glm::vec3 Camera::GetDirection() const {
+glm::vec3 Camera::GetDirection() {
     return cameraFront;
 }
 

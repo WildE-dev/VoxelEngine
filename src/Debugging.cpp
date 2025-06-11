@@ -99,8 +99,6 @@ Debugging::Debugging() : VAO(0), VBO(0) {
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-
-    glBindVertexArray(0);
 }
 
 Debugging::~Debugging() {
@@ -123,7 +121,6 @@ void Debugging::DrawCube(Shader& shader, glm::mat4 view, glm::mat4 projection, g
 
     glBindVertexArray(VAO);
     glDrawArrays(GL_LINES, 0, 24);
-    glBindVertexArray(0);
 
     glEnable(GL_DEPTH_TEST);
 }

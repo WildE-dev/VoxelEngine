@@ -10,9 +10,9 @@ inline static int rem(int a, int b) {
     return ((a % b) + b) % b;
 }
 
-World::World(TerrainGenerator* terrainGenerator) : terrainGenerator(terrainGenerator) {}
+World::World(TerrainGenerator* terrainGenerator) : terrainGenerator(terrainGenerator), running(true) {}
 
-World::World(const World& other) : terrainGenerator(other.terrainGenerator) {}
+World::World(const World& other) : terrainGenerator(other.terrainGenerator), running(true) {}
 
 glm::ivec3 World::WorldToChunkCoordinates(glm::vec3 position) {
     return World::WorldToChunkCoordinates((int)position.x, (int)position.y, (int)position.z);
@@ -153,23 +153,37 @@ void World::UpdateAdjacentChunks(Chunk* chunk) {
     }
 }
 
-void World::Update(glm::vec3 cameraPosition, glm::vec3 cameraView, ThreadPool& threadPool) {
-    UpdateAsyncChunker(cameraPosition);
-    UpdateLoadList(threadPool);
-    UpdateSetupList();
-    UpdateRebuildList();
-    UpdateFlagsList();
-    UpdateUnloadList();
-    UpdateVisibilityList(cameraPosition);
+void World::WorldThread() {
+    while (running) {
+        UpdateAsyncChunker();
+        UpdateLoadList();
+        UpdateSetupList();
+        UpdateRebuildList();
+        UpdateFlagsList();
+        UpdateUnloadList();
+        UpdateVisibilityList();
+
+        // Sleep for a short duration to avoid busy waiting
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+}
+
+void World::Update(Camera* camera) {
+    glm::vec3 cameraPosition = camera->GetPosition();
+    glm::vec3 cameraView = camera->GetDirection();
+
     if (m_cameraPosition != cameraPosition || m_cameraView != cameraView || m_forceVisibilityUpdate) {
         UpdateRenderList();
     }
+    std::lock_guard<std::mutex> directionLock(cameraMutex);
     m_cameraPosition = cameraPosition;
     m_cameraView = cameraView;
 }
 
-void World::UpdateAsyncChunker(glm::vec3 position) {
-    auto chunkCoords = WorldToChunkCoordinates(position);
+void World::UpdateAsyncChunker() {
+    while (!cameraMutex.try_lock());
+    auto chunkCoords = WorldToChunkCoordinates(m_cameraPosition);
+	cameraMutex.unlock();
 
     for (auto iterator = chunks.begin(); iterator != chunks.end(); ++iterator) {
         Chunk* pChunk = (*iterator).second.get();
@@ -244,12 +258,12 @@ void World::UpdateAsyncChunker(glm::vec3 position) {
     }*/
 }
 
-void World::UpdateLoadList(ThreadPool& threadPool) {
+void World::UpdateLoadList() {
     int lNumOfChunksLoaded = 0;
     for (auto iterator = m_vpChunkLoadList.begin(); iterator != m_vpChunkLoadList.end() && (lNumOfChunksLoaded < ASYNC_NUM_CHUNKS_PER_FRAME); ++iterator) {
         Chunk* pChunk = *iterator;
         if (!pChunk->IsLoaded()) {
-            threadPool.QueueJob([this, pChunk] { pChunk->LoadChunk(terrainGenerator); });
+            pChunk->LoadChunk(terrainGenerator);
             lNumOfChunksLoaded++;
             m_forceVisibilityUpdate = true;
 
@@ -359,7 +373,8 @@ void World::UpdateUnloadList() {
     m_vpChunkUnloadList.clear();
 }
 
-void World::UpdateVisibilityList(glm::vec3 cameraPosition) {
+void World::UpdateVisibilityList() {
+    std::lock_guard<std::mutex> chunkLock(chunksMutex);
     m_vpChunkVisibilityList.clear();
     for (auto iterator = chunks.begin(); iterator != chunks.end(); ++iterator) {
         Chunk* pChunk = (*iterator).second.get();
@@ -378,6 +393,7 @@ void World::UpdateVisibilityList(glm::vec3 cameraPosition) {
 void World::UpdateRenderList() {
     // Clear the render list each frame BEFORE we do our tests to see what chunks should be rendered     
     m_vpChunkRenderList.clear();
+    std::lock_guard<std::mutex> chunkLock(chunksMutex);
     for (auto iterator = m_vpChunkVisibilityList.begin(); iterator != m_vpChunkVisibilityList.end(); ++iterator) {
         Chunk* pChunk = *iterator;
         if (pChunk->IsLoaded() && pChunk->IsSetup()) {
@@ -419,6 +435,10 @@ void World::Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionM
 
         pChunk->Render(shader);
     }
+}
+
+void World::Stop() {
+    running = false;
 }
 
 void World::RebuildAllChunks()

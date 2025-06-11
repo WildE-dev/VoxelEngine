@@ -23,7 +23,6 @@
 #include "Shader.h"
 #include "World.h"
 #include "Block.h"
-#include "ThreadPool.h"
 #include "Debugging.h"
 
 #include "AssetLoader.h"
@@ -297,12 +296,6 @@ int main()
         return -1;
     }
 
-    //Shader s = Shader(main_vert, main_vert_size, main_frag, main_frag_size);
-    //Shader debugShader = Shader(debug_vert, debug_vert_size, debug_frag, debug_frag_size);
-    //Shader skyboxShader = Shader(skybox_vert, skybox_vert_size, skybox_frag, skybox_frag_size);
-    //Shader screenShader = Shader(screen_vert, screen_vert_size, screen_frag, screen_frag_size);
-    //Shader holeShader = Shader(hole_vert, hole_vert_size, hole_frag, hole_frag_size);
-
     Shader s = Shader("Resources/Shaders/main.vert", "Resources/Shaders/main.frag");
     Shader debugShader = Shader("Resources/Shaders/debug.vert", "Resources/Shaders/debug.frag");
     Shader skyboxShader = Shader("Resources/Shaders/skybox.vert", "Resources/Shaders/skybox.frag");
@@ -333,12 +326,11 @@ int main()
     glCullFace(GL_BACK);
     glFrontFace(GL_CW);
 
-    ThreadPool threadPool;
-    threadPool.Start();
-
     TerrainGenerator generator;
 
     World world = World(&generator);
+
+	std::thread worldThread(&World::WorldThread, &world);
 
     Debugging debugging = Debugging();
 
@@ -407,8 +399,6 @@ int main()
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    glBindVertexArray(0);
-
     #pragma endregion
 
     #pragma region FRAMEBUFFER
@@ -438,8 +428,6 @@ int main()
     
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
-
-    glBindVertexArray(0);
 
     GLuint framebuffer;
     glGenFramebuffers(1, &framebuffer);
@@ -477,13 +465,13 @@ int main()
     glBindVertexArray(holeVAO);
 
     float holeVerts[] = {
-        -1.0f,  1.0f, 0.0f,  0.0f, 1.0f,
-         1.0f, -1.0f, 0.0f,  1.0f, 0.0f,
-        -1.0f, -1.0f, 0.0f,  0.0f, 0.0f,
+        -5.0f,  5.0f, 0.0f,  0.0f, 1.0f,
+         5.0f, -5.0f, 0.0f,  1.0f, 0.0f,
+        -5.0f, -5.0f, 0.0f,  0.0f, 0.0f,
 
-        -1.0f,  1.0f, 0.0f,  0.0f, 1.0f,
-         1.0f,  1.0f, 0.0f,  1.0f, 1.0f,
-         1.0f, -1.0f, 0.0f,  1.0f, 0.0f,
+        -5.0f,  5.0f, 0.0f,  0.0f, 1.0f,
+         5.0f,  5.0f, 0.0f,  1.0f, 1.0f,
+         5.0f, -5.0f, 0.0f,  1.0f, 0.0f,
     };
     
     glBindBuffer(GL_ARRAY_BUFFER, holeVBO);
@@ -494,8 +482,6 @@ int main()
     
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
-
-    glBindVertexArray(0);
 
     bool vsync = true;
 
@@ -588,12 +574,12 @@ int main()
             world.RebuildAllChunks();
         }
 
-        world.Update(camera.GetPosition(), camera.GetDirection(), threadPool);
+        world.Update(&camera);
         
         glm::mat4 view = camera.GetViewMatrix();
         glm::mat4 projection = camera.GetProjectionMatrix(frameWidth, frameHeight);
 
-        glBindFramebuffer(GL_FRAMEBUFFER, rbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
         glViewport(0, 0, frameWidth, frameHeight);
 
         glDepthMask(GL_TRUE);
@@ -625,8 +611,6 @@ int main()
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
         glDrawArrays(GL_TRIANGLES, 0, 36);
-
-        glBindVertexArray(0);
 
         glm::ivec3 pos;
         glm::vec3 norm;
@@ -666,8 +650,6 @@ int main()
         glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        glBindVertexArray(0);
-
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
@@ -697,7 +679,8 @@ int main()
         glfwSwapBuffers(window);
     }
 
-    threadPool.Stop();
+	world.Stop();
+	worldThread.join();
 
     closeWindow = true;
     

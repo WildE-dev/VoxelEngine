@@ -9,7 +9,7 @@
 #include "Block.h"
 #include "Chunk.h"
 #include "TerrainGenerator.h"
-#include "ThreadPool.h"
+#include "Camera.h"
 
 inline int cantor(int a, int b) {
     return (a + b + 1) * (a + b) / 2 + b;
@@ -39,11 +39,15 @@ public:
     void SetBlock(int x, int y, int z, BlockType type);
     void SetBlock(int x, int y, int z, EdgeData edges);
 
-    void Update(glm::vec3 cameraPosition, glm::vec3 cameraView, ThreadPool& threadPool);
+    void WorldThread();
+
+    void Update(Camera* camera);
 
     void RebuildAllChunks();
 
     void Render(Shader& shader, glm::mat4& viewMatrix, glm::mat4& projectionMatrix, float frameWidth, float frameHeight, float time);
+
+    void Stop();
 
     TerrainGenerator* terrainGenerator;
 
@@ -66,13 +70,17 @@ private:
 
     bool m_forceVisibilityUpdate;
 
-    void UpdateAsyncChunker(glm::vec3 position);
-    void UpdateLoadList(ThreadPool& threadPool);
+    void UpdateAsyncChunker();
+    void UpdateLoadList();
     void UpdateSetupList();
     void UpdateRebuildList();
     void UpdateFlagsList();
     void UpdateUnloadList();
-    void UpdateVisibilityList(glm::vec3 cameraPosition);
+    void UpdateVisibilityList();
     void UpdateRenderList();
+
+    std::mutex cameraMutex;
+	std::mutex chunksMutex;
+    bool running;
 };
 

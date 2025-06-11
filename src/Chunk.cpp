@@ -8,7 +8,7 @@
 Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ) : world(world), 
 chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ), isSetup(false), isLoaded(false), 
 VAO(0), VBO(0), isEmpty(false), isFull(false), isSurrounded(false), needsRebuilding(false) {
-    Initialize();
+    isInitialized = false;
     chunkCount++;
 }
 
@@ -251,6 +251,7 @@ void Chunk::SetBlock(int x, int y, int z, BlockType type, EdgeData edges) {
 void Chunk::Initialize() {
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
+	isInitialized = true;
 }
 
 void Chunk::Clear() {
@@ -305,7 +306,7 @@ void Chunk::GenerateMesh() {
 
     needsRebuilding = false;
 
-    SendVertexData();
+    isMeshSent = false;
 }
 
 void Chunk::SendVertexData() {
@@ -320,16 +321,23 @@ void Chunk::SendVertexData() {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
 
-    glBindVertexArray(0);
+	isMeshSent = true;
 }
 
 void Chunk::Render(Shader& shader) {
     if (!isLoaded)
         return;
 
+	if (!isInitialized) {
+		Initialize();
+	}
+
+    if (!isMeshSent) {
+		SendVertexData();
+    }
+
     shader.Use();
 
     glBindVertexArray(VAO);
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 2));
-    glBindVertexArray(0);
 }

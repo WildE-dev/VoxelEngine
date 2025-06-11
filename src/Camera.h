@@ -13,8 +13,8 @@ public:
 	void UpdateMove(GLFWwindow* window, double deltaTime);
 	glm::mat4 GetViewMatrix() const;
 	glm::mat4 GetProjectionMatrix(float frameWidth, float frameHeight) const;
-	glm::vec3 GetPosition() const;
-	glm::vec3 GetDirection() const;
+	glm::vec3 GetPosition();
+	glm::vec3 GetDirection();
 	glm::vec2 GetDirectionAngles() const;
 private:
 	glm::vec3 cameraPos = glm::vec3(7.0f, 7.0f, 7.0f);

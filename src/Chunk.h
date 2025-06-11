@@ -70,6 +70,8 @@ private:
 	GLuint VAO, VBO;
 	int chunkX, chunkY, chunkZ;
 	std::atomic_bool isLoaded;
+	std::atomic_bool isMeshSent;
+	std::atomic_bool isInitialized;
 	bool isSetup;
 	bool needsRebuilding;
 
