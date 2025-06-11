@@ -5,6 +5,8 @@
 #include <mutex>
 #include <glm/glm.hpp>
 #include <atomic>
+#include <thread>
+#include <chrono>
 
 #include "Block.h"
 #include "Chunk.h"

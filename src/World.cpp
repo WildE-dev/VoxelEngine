@@ -365,7 +365,9 @@ void World::UpdateUnloadList() {
         if (pChunk->IsLoaded()) {
             pChunk->UnloadChunk();
             auto coords = pChunk->GetCoords();
-            chunks.erase(std::make_tuple(coords.x, coords.y, coords.z));
+            // Segfault on macos
+            // Memory may still be referenced on the render thread
+            //chunks.erase(std::make_tuple(coords.x, coords.y, coords.z));
             lNumUnloadedChunkThisFrame++;
             m_forceVisibilityUpdate = true;
         }
