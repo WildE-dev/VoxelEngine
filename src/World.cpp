@@ -39,11 +39,11 @@ bool World::GetChunk(Chunk*& chunk, int chunkX, int chunkY, int chunkZ)
     return true;
 }
 
-std::unique_ptr<Chunk> World::GetChunk(int chunkX, int chunkY, int chunkZ)
+Chunk* World::GetChunk(int chunkX, int chunkY, int chunkZ)
 {
     auto key = std::make_tuple(chunkX, chunkY, chunkZ);
     if (chunks.find(key) != chunks.end()) {
-        return std::unique_ptr<Chunk>(chunks[key].get());
+        return chunks[key].get();
     }
     return nullptr;
 }
@@ -181,25 +181,24 @@ void World::Update(Camera* camera) {
 void World::UpdateAsyncChunker() {
     auto chunkCoords = WorldToChunkCoordinates(m_cameraPosition);
 
-    for (auto iterator = chunks.begin(); iterator != chunks.end(); ++iterator) {
-        std::unique_ptr<Chunk>& pChunk = (*iterator).second;
+    for (auto iterator = chunks.begin(); iterator != chunks.end(); ) {
+        std::unique_ptr<Chunk>& pChunk = iterator->second;
         auto coords = pChunk->GetCoords();
 
         int distX = abs((coords.x - chunkCoords.x));
         int distY = abs((coords.y - chunkCoords.y));
         int distZ = abs((coords.z - chunkCoords.z));
 
-        
-
         if (distX > RENDER_DISTANCE + 1 || distY > RENDER_DISTANCE + 1 || distZ > RENDER_DISTANCE + 1) {
             const std::lock_guard<std::mutex> chunkUnloadLock(m_chunkUnloadQueueMutex);
-            // If the chunk is outside the render distance, add it to the unload list
             if (pChunk->IsLoaded() && pChunk->IsSetup()) {
                 m_chunkUnloadQueue.push(std::move(pChunk));
-                chunks.erase(iterator);
+                iterator = chunks.erase(iterator); // safe erase + advance
+                continue;
             }
-            //m_vpChunkUnloadList.push_back(pChunk);
         }
+
+        ++iterator; // only advance if not erased
     }
 
     int x, z, dx, dy;

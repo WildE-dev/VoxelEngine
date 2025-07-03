@@ -34,7 +34,7 @@ public:
     World(TerrainGenerator* terrainGenerator);
     World(const World& other);
     bool GetChunk(Chunk*& chunk, int chunkX, int chunkY, int chunkZ);
-    std::unique_ptr<Chunk> GetChunk(int chunkX, int chunkY, int chunkZ);
+    Chunk* GetChunk(int chunkX, int chunkY, int chunkZ);
 
     bool GetBlock(int x, int y, int z, Block& block);
     bool GetBlockCulls(int x, int y, int z);
