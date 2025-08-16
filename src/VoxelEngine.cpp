@@ -518,28 +518,52 @@ int main()
         camera.UpdateMove(window, deltaTime);
 
         // Laser
+        
         if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
             glm::ivec3 pos;
             glm::vec3 norm;
             std::vector<glm::ivec3> rayBlocks;
+
             if (TraceRay(world, camera.GetPosition(), camera.GetDirection(), 100, pos, norm, &rayBlocks)) {
+                std::vector<std::tuple<int, int, int, Block>> blocks;
+
+                // Use a set of tuples instead of glm::ivec3 to avoid comparator issues
+                std::set<std::tuple<int, int, int>> uniquePositions;
+
                 const int radius = 4;
-                for (int i = 0; i < rayBlocks.size(); i++)
-                {
-                    auto rayPos = rayBlocks[i];
-                    for (int x = -radius; x <= radius; x++)
-                    {
-                        for (int y = -radius; y <= radius; y++)
-                        {
-                            for (int z = -radius; z <= radius; z++)
-                            {
-                                if (square(x) + square(y) + square(z) <= square(radius))
-                                    world.SetBlock(rayPos.x + x, rayPos.y + y, rayPos.z + z, BlockType::AIR);
+
+                // Process each block along the ray
+                for (const auto& rayPos : rayBlocks) {
+                    for (int x = -radius; x <= radius; x++) {
+                        for (int y = -radius; y <= radius; y++) {
+                            for (int z = -radius; z <= radius; z++) {
+                                if (square(x) + square(y) + square(z) <= square(radius)) {
+                                    int blockX = rayPos.x + x;
+                                    int blockY = rayPos.y + y;
+                                    int blockZ = rayPos.z + z;
+
+                                    auto blockPos = std::make_tuple(blockX, blockY, blockZ);
+
+                                    // Only add if not already processed
+                                    if (uniquePositions.find(blockPos) == uniquePositions.end()) {
+                                        uniquePositions.insert(blockPos);
+                                        blocks.push_back(std::make_tuple(blockX, blockY, blockZ, Block(BlockType::AIR)));
+                                    }
+                                }
                             }
                         }
                     }
                 }
+
+                if (!blocks.empty()) {
+                    world.SetBlocksBatch(blocks);
+                }
             }
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_F3) == GLFW_PRESS) {
+            // Get chunk at camera position and debug it
+            world.DebugFixChunk(camera.GetPosition());
         }
 
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS && !buttonsPressed[GLFW_MOUSE_BUTTON_1]) {

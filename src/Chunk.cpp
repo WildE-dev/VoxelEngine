@@ -5,10 +5,11 @@
 
 //Chunk::Chunk() : world(0), chunkX(0), chunkY(0), chunkZ(0), isGenerated(false) {}
 
-Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ) : world(world), 
-chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ), isSetup(false), isLoaded(false), 
-VAO(0), VBO(0), isEmpty(false), isFull(false), isSurrounded(false), needsRebuilding(false) {
-    isInitialized = false;
+Chunk::Chunk(World* world, int chunkX, int chunkY, int chunkZ)
+    : world(world), chunkX(chunkX), chunkY(chunkY), chunkZ(chunkZ),
+    isSetup(false), isLoaded(false), isInitialized(false), isMeshSent(false),
+    VAO(0), VBO(0), isEmpty(false), isFull(false), isSurrounded(false),
+    needsRebuilding(false) {
     chunkCount++;
 }
 
@@ -17,9 +18,9 @@ Chunk::~Chunk() {
     chunkCount--;
 }
 
-Chunk::Chunk(const Chunk& other) : blocks(), world(other.world), isSetup(other.isSetup),
+Chunk::Chunk(const Chunk& other) : blocks(), world(other.world),
 chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), VAO(other.VAO), VBO(other.VBO), isEmpty(other.isEmpty), 
-isFull(other.isFull), isSurrounded(other.isSurrounded), needsRebuilding(other.needsRebuilding) {}
+isFull(other.isFull), isSurrounded(other.isSurrounded) {}
 
 Chunk& Chunk::operator=(const Chunk& other) {
     if (this != &other) {
@@ -34,9 +35,9 @@ Chunk& Chunk::operator=(const Chunk& other) {
     return *this;
 }
 
-Chunk::Chunk(Chunk&& other) noexcept : blocks(std::move(other.blocks)), isSetup(other.isSetup),
+Chunk::Chunk(Chunk&& other) noexcept : blocks(std::move(other.blocks)),
 world(other.world), chunkX(other.chunkX), chunkY(other.chunkY), chunkZ(other.chunkZ), VAO(other.VAO), VBO(other.VBO), 
-isEmpty(other.isEmpty), isFull(other.isFull), isSurrounded(other.isSurrounded), needsRebuilding(other.needsRebuilding) {}
+isEmpty(other.isEmpty), isFull(other.isFull), isSurrounded(other.isSurrounded) {}
 
 Chunk& Chunk::operator=(Chunk&& other) noexcept {
     if (this != &other) {
@@ -49,6 +50,34 @@ Chunk& Chunk::operator=(Chunk&& other) noexcept {
         VBO = std::move(other.VBO);
     }
     return *this;
+}
+
+void Chunk::Reset(int chunkX, int chunkY, int chunkZ) {
+    std::lock_guard<std::mutex> lock(block_mutex);
+
+    // Clear all block data
+    blocks.fill(Block(BlockType::AIR));
+
+    // Clear mesh data
+    vertices.clear();
+    vertex_count = 0;
+
+    // Reset all flags
+    isLoaded = false;
+    isMeshSent = false;
+    isSetup = false;
+    needsRebuilding = false;
+    isEmpty = false;
+    isFull = false;
+    isSurrounded = false;
+
+    // Set new coordinates
+    this->chunkX = chunkX;
+    this->chunkY = chunkY;
+    this->chunkZ = chunkZ;
+
+    // Don't reset OpenGL buffers here - they'll be reused
+    // Just mark that mesh needs to be sent again
 }
 
 void Chunk::LoadChunk(TerrainGenerator* terrainGenerator) {
@@ -130,6 +159,7 @@ void Chunk::SetupChunk()
 
 void Chunk::UnloadChunk()
 {
+    std::lock_guard<std::mutex> lock(block_mutex);
     isLoaded = false;
 }
 
@@ -144,7 +174,7 @@ const Block& Chunk::GetBlock(int x, int y, int z) {
 
 bool Chunk::ShouldRender()
 {
-    return vertices.size() > 0;
+    return vertex_count > 0;
 }
 
 bool Chunk::IsLoaded() const
@@ -212,6 +242,25 @@ void Chunk::UpdateEmptyFullFlags()
     }
 }
 
+void Chunk::UpdateChunkSurroundedFlag() {
+    int offsets[][3] = {
+                { 1, 0, 0 }, {-1, 0, 0 },
+                { 0, 1, 0 }, { 0,-1, 0 },
+                { 0, 0, 1 }, { 0, 0,-1 },
+    };
+
+    bool surrounded = true;
+    for (int i = 0; i < 6; i++) {
+        auto coords = GetCoords();
+        auto neighbour = Chunk::world->GetChunk(coords.x + offsets[i][0], coords.y + offsets[i][1], coords.z + offsets[i][2]);
+        if (neighbour == nullptr || !neighbour->IsFull()) {
+            surrounded = false;
+            break;
+        }
+    }
+    SetIsSurrounded(surrounded);
+}
+
 glm::ivec3 Chunk::GetCoords()
 {
     return glm::ivec3(chunkX, chunkY, chunkZ);
@@ -248,15 +297,18 @@ void Chunk::SetBlock(int x, int y, int z, BlockType type, EdgeData edges) {
     blocks[Index(x, y, z)].SetEdgeData(edges);
 }
 
-void Chunk::Initialize() {
+void Chunk::InitializeMeshBuffers() {
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
 	isInitialized = true;
 }
 
 void Chunk::Clear() {
+    vertices.clear();
+
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
+    isInitialized = false;
 }
 
 const int kFaceNeighborOffsets[6][3] = {
@@ -268,50 +320,119 @@ const int kFaceNeighborOffsets[6][3] = {
     { 0,  0, -1},  // Front face
 };
 
+
 void Chunk::GenerateMesh() {
-    vertices.clear();
+    // Early exit if already generating
+    if (isGeneratingMesh.exchange(true)) {
+        return; // Another thread is already generating this mesh
+    }
+
+    // Quick check for empty chunks
+    bool hasBlocks = false;
+    for (int i = 0; i < CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE; ++i) {
+        if (blocks[i].type != BlockType::AIR) {
+            hasBlocks = true;
+            break;
+        }
+    }
+
+    if (!hasBlocks) {
+        vertices.clear();
+        vertex_count = 0;
+        needsRebuilding = false;
+        isMeshSent = false;
+        hasVisibleFaces = false;
+        isGeneratingMesh = false;
+        return;
+    }
+
+    // Cache neighbor chunks if needed
+    if (!neighborCacheValid) {
+        cachedNeighbors[0] = world->GetChunk(chunkX + 1, chunkY, chunkZ);
+        cachedNeighbors[1] = world->GetChunk(chunkX - 1, chunkY, chunkZ);
+        cachedNeighbors[2] = world->GetChunk(chunkX, chunkY + 1, chunkZ);
+        cachedNeighbors[3] = world->GetChunk(chunkX, chunkY - 1, chunkZ);
+        cachedNeighbors[4] = world->GetChunk(chunkX, chunkY, chunkZ + 1);
+        cachedNeighbors[5] = world->GetChunk(chunkX, chunkY, chunkZ - 1);
+        neighborCacheValid = true;
+    }
+
+    std::vector<uint32_t> new_vertices;
+    new_vertices.reserve(vertices.size() > 0 ? vertices.size() : 1024); // Reserve space
+
+    bool foundVisibleFaces = false;
+
+    // Optimized face checking with early exits
     for (int x = 0; x < Chunk::CHUNK_SIZE; ++x) {
         for (int y = 0; y < Chunk::CHUNK_SIZE; ++y) {
             for (int z = 0; z < Chunk::CHUNK_SIZE; ++z) {
-                const Block& block = GetBlock(x, y, z);
-                if (block.type != BlockType::AIR) {
-                    for (int face = 0; face < 6; ++face) {
-                        int neighborX = x + kFaceNeighborOffsets[face][0];
-                        int neighborY = y + kFaceNeighborOffsets[face][1];
-                        int neighborZ = z + kFaceNeighborOffsets[face][2];
+                const Block& block = blocks[Index(x, y, z)];
+                if (block.type == BlockType::AIR) continue;
 
-                        bool neighborBlockCulls;
-                        if (neighborX >= 0 && neighborX < Chunk::CHUNK_SIZE &&
-                            neighborY >= 0 && neighborY < Chunk::CHUNK_SIZE &&
-                            neighborZ >= 0 && neighborZ < Chunk::CHUNK_SIZE) {
-                            // Neighbor is within the same chunk
-                            neighborBlockCulls = GetBlockCulls(neighborX, neighborY, neighborZ);
-                        }
-                        else {
-                            // Neighbor is in an adjacent chunk
-                            auto globalNeighborX = chunkX * Chunk::CHUNK_SIZE + neighborX;
-                            auto globalNeighborY = chunkY * Chunk::CHUNK_SIZE + neighborY;
-                            auto globalNeighborZ = chunkZ * Chunk::CHUNK_SIZE + neighborZ;
-                            neighborBlockCulls = world->GetBlockCulls(globalNeighborX, globalNeighborY, globalNeighborZ);
-                        }
+                // Check each face with optimized neighbor lookup
+                for (int face = 0; face < 6; ++face) {
+                    int neighborX = x + kFaceNeighborOffsets[face][0];
+                    int neighborY = y + kFaceNeighborOffsets[face][1];
+                    int neighborZ = z + kFaceNeighborOffsets[face][2];
 
-                        if (!neighborBlockCulls || !block.IsFullBlock()) {
-                            block.AddFaceVertices(vertices, face, x, y, z);
+                    bool neighborBlockCulls = false;
+
+                    if (neighborX >= 0 && neighborX < Chunk::CHUNK_SIZE &&
+                        neighborY >= 0 && neighborY < Chunk::CHUNK_SIZE &&
+                        neighborZ >= 0 && neighborZ < Chunk::CHUNK_SIZE) {
+                        // Internal neighbor - direct access
+                        neighborBlockCulls = blocks[Index(neighborX, neighborY, neighborZ)].IsFullBlock();
+                    }
+                    else {
+                        // External neighbor - use cached chunks
+                        Chunk* neighborChunk = cachedNeighbors[face];
+                        if (neighborChunk && neighborChunk->IsLoaded()) {
+                            int nx = (neighborX + Chunk::CHUNK_SIZE) % Chunk::CHUNK_SIZE;
+                            int ny = (neighborY + Chunk::CHUNK_SIZE) % Chunk::CHUNK_SIZE;
+                            int nz = (neighborZ + Chunk::CHUNK_SIZE) % Chunk::CHUNK_SIZE;
+                            neighborBlockCulls = neighborChunk->GetBlockCulls(nx, ny, nz);
                         }
+                    }
+
+                    if (!neighborBlockCulls || !block.IsFullBlock()) {
+                        block.AddFaceVertices(new_vertices, face, x, y, z);
+                        foundVisibleFaces = true;
                     }
                 }
             }
         }
     }
 
+    vertices = std::move(new_vertices);
+    vertex_count = vertices.size();
+    hasVisibleFaces = foundVisibleFaces;
     needsRebuilding = false;
-
     isMeshSent = false;
+    isGeneratingMesh = false;
+}
+
+void Chunk::Render(Shader& shader) {
+    if (!isLoaded || vertex_count == 0)
+        return;
+
+    if (!isInitialized) {
+        InitializeMeshBuffers();
+    }
+
+    if (!isMeshSent && vertices.size() > 0) {
+        SendVertexData();
+    }
+
+    shader.Use();
+
+    glBindVertexArray(VAO);
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertex_count / 2));
 }
 
 void Chunk::SendVertexData() {
-    glBindVertexArray(VAO);
+    if (vertices.empty()) return;
 
+    glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(uint32_t), vertices.data(), GL_STATIC_DRAW);
 
@@ -321,23 +442,5 @@ void Chunk::SendVertexData() {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
 
-	isMeshSent = true;
-}
-
-void Chunk::Render(Shader& shader) {
-    if (!isLoaded)
-        return;
-
-	if (!isInitialized) {
-		Initialize();
-	}
-
-    if (!isMeshSent) {
-		SendVertexData();
-    }
-
-    shader.Use();
-
-    glBindVertexArray(VAO);
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 2));
+    isMeshSent = true;
 }
