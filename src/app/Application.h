@@ -27,7 +27,9 @@ public:
 private:
     void Shutdown();
     void LoadBlockTextures();
-    void UpdateWindowTitle();
+    void DrawHotbar();
+    BlockType SelectedBlock() const;
+    void SelectSlot(int slot);
 
     void HandleContinuousInput(float deltaTime);
     void DrawDebugWindow(float deltaTime);
@@ -35,10 +37,12 @@ private:
     void OnKey(int key, int action);
     void OnMouseButton(int button, int action);
     void OnCursorMove(double x, double y);
+    void OnScroll(double yOffset);
 
     static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
     static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
     static void CursorPosCallback(GLFWwindow* window, double x, double y);
+    static void ScrollCallback(GLFWwindow* window, double xOffset, double yOffset);
 
     GLFWwindow* window = nullptr;
     bool imguiInitialized = false;
@@ -54,7 +58,8 @@ private:
     bool wireframe = false;
     bool ambientOcclusion = true;
     float sunBrightness = 1.0f;
-    BlockType placeBlock = BlockType::DIRT;
+    int selectedSlot = 0; // index into the hotbar (kPlaceableBlocks)
+    double scrollAccumulator = 0.0;
     bool showDebug = false;
     bool vsync = true;
 

@@ -40,6 +40,10 @@ public:
     // Sets the uniforms main.vert uses to turn a tile index + local uv into atlas uv.
     void ApplyUniforms(Shader& shader) const;
 
+    // Texture coordinates of a tile's corners (top-left, bottom-right), e.g. for
+    // drawing it as an icon.
+    void GetTileUV(int index, glm::vec2& topLeft, glm::vec2& bottomRight) const;
+
     GLuint GetTexture() const { return texture; }
     int GetTileSize() const { return tileSize; }
     glm::ivec2 GetSize() const { return size; }

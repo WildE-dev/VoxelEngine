@@ -95,6 +95,7 @@ bool Application::Init() {
     glfwSetKeyCallback(window, KeyCallback);
     glfwSetMouseButtonCallback(window, MouseButtonCallback);
     glfwSetCursorPosCallback(window, CursorPosCallback);
+    glfwSetScrollCallback(window, ScrollCallback);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -115,7 +116,6 @@ bool Application::Init() {
     LoadBlockTextures();
     world = std::make_unique<World>(terrain);
     world->StartWaterThread();
-    UpdateWindowTitle();
     return true;
 }
 
@@ -178,9 +178,16 @@ void Application::Run() {
 
         renderer->RenderFrame(*world, params);
 
+        // With the cursor captured it's hidden but still moves; keep it from clicking
+        // on the UI by accident.
+        ImGuiIO& io = ImGui::GetIO();
+        if (captureCursor) io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
+        else io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        DrawHotbar();
         if (showDebug) DrawDebugWindow(deltaTime);
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -222,6 +229,61 @@ void Application::HandleContinuousInput(float deltaTime) {
     }
 }
 
+void Application::DrawHotbar() {
+    constexpr int kSlots = static_cast<int>(std::size(kPlaceableBlocks));
+    constexpr float kIcon = 40.0f, kPad = 6.0f, kGap = 4.0f;
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const float barWidth = kSlots * (kIcon + 2 * kPad) + (kSlots - 1) * kGap;
+
+    // A borderless strip along the bottom centre of the screen.
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y - 12.0f),
+                            ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+    ImGui::SetNextWindowBgAlpha(0.45f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 6.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(kGap, 4.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+                                   ImGuiWindowFlags_NoBringToFrontOnFocus;
+    if (ImGui::Begin("Hotbar", nullptr, flags)) {
+        // Name of the selected block, centred above the slots.
+        const char* name = BlockName(SelectedBlock());
+        const float nameWidth = ImGui::CalcTextSize(name).x;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (barWidth - nameWidth) * 0.5f);
+        ImGui::TextUnformatted(name);
+
+        const TextureAtlas& atlas = renderer->GetAtlas();
+        const ImTextureID atlasTexture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        for (int i = 0; i < kSlots; i++) {
+            if (i > 0) ImGui::SameLine();
+            const bool selected = i == selectedSlot;
+            const ImVec2 slotMin = ImGui::GetCursorScreenPos();
+            const ImVec2 slotMax(slotMin.x + kIcon + 2 * kPad, slotMin.y + kIcon + 2 * kPad);
+
+            // Clicking a slot selects it (when the cursor is released with Tab).
+            ImGui::PushID(i);
+            if (ImGui::InvisibleButton("slot", ImVec2(slotMax.x - slotMin.x, slotMax.y - slotMin.y))) SelectSlot(i);
+            const bool hovered = ImGui::IsItemHovered();
+            ImGui::PopID();
+
+            draw->AddRectFilled(slotMin, slotMax, selected ? IM_COL32(255, 255, 255, 60) : hovered ? IM_COL32(255, 255, 255, 30) : IM_COL32(0, 0, 0, 70), 4.0f);
+            // The block's side texture, straight from the world's atlas.
+            glm::vec2 uv0, uv1;
+            atlas.GetTileUV(GetTextureData(kPlaceableBlocks[i]).front, uv0, uv1);
+            draw->AddImage(atlasTexture, ImVec2(slotMin.x + kPad, slotMin.y + kPad), ImVec2(slotMax.x - kPad, slotMax.y - kPad),
+                           ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
+            draw->AddRect(slotMin, slotMax, selected ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 255, 255, 60), 4.0f, 0, selected ? 3.0f : 1.0f);
+            // Number key in the corner.
+            char key[2] = { static_cast<char>('1' + i), 0 };
+            draw->AddText(ImVec2(slotMin.x + 5.0f, slotMin.y + 3.0f), IM_COL32(0, 0, 0, 200), key); // shadow, readable on light textures
+            draw->AddText(ImVec2(slotMin.x + 4.0f, slotMin.y + 2.0f), IM_COL32(255, 255, 255, selected ? 255 : 190), key);
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleVar(3);
+}
+
 void Application::DrawDebugWindow(float deltaTime) {
     frameSampleTimer += deltaTime;
     if (frameSampleTimer > 0.01f) {
@@ -238,7 +300,7 @@ void Application::DrawDebugWindow(float deltaTime) {
         ImGui::Checkbox("Wireframe", &wireframe);
         ImGui::Checkbox("Ambient occlusion", &ambientOcclusion);
         ImGui::SliderFloat("Sun brightness", &sunBrightness, 0.0f, 1.0f);
-        ImGui::Text("Placing: %s (1-%d to change)", BlockName(placeBlock), static_cast<int>(std::size(kPlaceableBlocks)));
+        ImGui::Text("Placing: %s", BlockName(SelectedBlock()));
         ImGui::Text("Position %.3f, %.3f, %.3f", pos.x, pos.y, pos.z);
         const glm::vec3 velocity = player.GetVelocity();
         ImGui::Text("%s%s, velocity %.2f, %.2f, %.2f", player.IsFlying() ? "Flying" : player.IsSwimming() ? "Swimming" : "Walking",
@@ -301,16 +363,19 @@ void Application::OnKey(int key, int action) {
         break;
     default:
         if (key >= GLFW_KEY_1 && key < GLFW_KEY_1 + static_cast<int>(std::size(kPlaceableBlocks))) {
-            placeBlock = kPlaceableBlocks[key - GLFW_KEY_1];
-            UpdateWindowTitle();
+            SelectSlot(key - GLFW_KEY_1);
         }
         break;
     }
 }
 
-void Application::UpdateWindowTitle() {
-    std::string title = std::string("VoxelEngine - placing ") + BlockName(placeBlock);
-    glfwSetWindowTitle(window, title.c_str());
+BlockType Application::SelectedBlock() const {
+    return kPlaceableBlocks[selectedSlot];
+}
+
+void Application::SelectSlot(int slot) {
+    const int count = static_cast<int>(std::size(kPlaceableBlocks));
+    selectedSlot = ((slot % count) + count) % count;
 }
 
 void Application::OnMouseButton(int button, int action) {
@@ -329,6 +394,7 @@ void Application::OnMouseButton(int button, int action) {
     else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         const glm::ivec3 place = hit->block + hit->normal;
         // Don't build a block inside yourself when walking (water is fine).
+        const BlockType placeBlock = SelectedBlock();
         if (!player.IsFlying() && placeBlock != BlockType::WATER) {
             const Collision::AABB body = player.GetBounds();
             const glm::vec3 lo(place), hi = lo + glm::vec3(1.0f);
@@ -340,6 +406,19 @@ void Application::OnMouseButton(int button, int action) {
 
 void Application::OnCursorMove(double x, double y) {
     if (captureCursor) camera.UpdateLook(x, y);
+}
+
+void Application::OnScroll(double yOffset) {
+    // With the cursor released the wheel belongs to the UI.
+    if (!captureCursor) return;
+    // Trackpads send many small steps; change slot once per whole notch.
+    scrollAccumulator += yOffset;
+    while (scrollAccumulator >= 1.0) { SelectSlot(selectedSlot - 1); scrollAccumulator -= 1.0; }
+    while (scrollAccumulator <= -1.0) { SelectSlot(selectedSlot + 1); scrollAccumulator += 1.0; }
+}
+
+void Application::ScrollCallback(GLFWwindow* window, double, double yOffset) {
+    static_cast<Application*>(glfwGetWindowUserPointer(window))->OnScroll(yOffset);
 }
 
 void Application::KeyCallback(GLFWwindow* window, int key, int, int action, int) {

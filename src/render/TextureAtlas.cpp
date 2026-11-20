@@ -166,6 +166,14 @@ int TextureAtlas::GetIndex(const std::string& name) const {
     return it != indices.end() ? it->second : kMissingIndex;
 }
 
+void TextureAtlas::GetTileUV(int index, glm::vec2& topLeft, glm::vec2& bottomRight) const {
+    const glm::vec2 atlasSize(size);
+    const int cell = tileSize + 2 * padding;
+    const glm::vec2 corner((index % columns) * cell + padding, (index / columns) * cell + padding);
+    topLeft = corner / atlasSize;
+    bottomRight = (corner + glm::vec2(static_cast<float>(tileSize))) / atlasSize;
+}
+
 void TextureAtlas::Bind(GLenum textureUnit) const {
     glActiveTexture(textureUnit);
     glBindTexture(GL_TEXTURE_2D, texture);

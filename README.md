@@ -29,7 +29,7 @@ build copies it next to the binary.
 | Mouse | Look |
 | Left click | Break block |
 | Right click | Place the selected block |
-| 1-8 | Select block: dirt, stone, grass, lamp, log, leaves, sand, water |
+| 1-8 / mouse wheel | Select the block to place (shown in the hotbar at the bottom; with Tab you can also click a slot) |
 | L (hold) | Laser: carve a tunnel along the view ray |
 | R | Reload shaders and block textures, rebuild all chunk meshes |
 | Tab | Toggle mouse capture |
