@@ -23,7 +23,15 @@ void Camera::UpdateLook(double xPos, double yPos) {
 
     yaw += xOffset;
     pitch = glm::clamp(pitch + yOffset, -89.0f, 89.0f);
+    UpdateFront();
+}
 
+void Camera::SetYaw(float degrees) {
+    yaw = degrees;
+    UpdateFront();
+}
+
+void Camera::UpdateFront() {
     glm::vec3 direction;
     direction.x = std::cos(glm::radians(yaw)) * std::cos(glm::radians(pitch));
     direction.y = std::sin(glm::radians(pitch));

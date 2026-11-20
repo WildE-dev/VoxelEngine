@@ -2,9 +2,12 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <iterator>
 #include <string>
+#include <vector>
 
 #include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
@@ -14,10 +17,16 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
+
+#include "client/Client.h"
+#include "client/ClientWorld.h"
+#include "net/Protocol.h"
 #include "render/Renderer.h"
+#include "server/Server.h"
 #include "world/Chunk.h"
 #include "world/Raycast.h"
-#include "world/World.h"
 
 namespace {
 
@@ -48,6 +57,17 @@ const char* BlockName(BlockType type) {
     }
 }
 
+// Saves the default framebuffer's back buffer (the frame about to be shown) as a PNG.
+void SaveScreenshot(const std::string& path, int width, int height) {
+    std::vector<unsigned char> pixels(static_cast<size_t>(width) * height * 3);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadBuffer(GL_BACK);
+    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    stbi_flip_vertically_on_write(1);
+    if (stbi_write_png(path.c_str(), width, height, 3, pixels.data(), width * 3)) std::cout << "Saved " << path << std::endl;
+    else std::cerr << "Could not save " << path << std::endl;
+}
+
 void GlfwErrorCallback(int error, const char* description) {
     std::cerr << "GLFW error " << error << ": " << description << std::endl;
 }
@@ -60,7 +80,7 @@ Application::~Application() {
     Shutdown();
 }
 
-bool Application::Init() {
+bool Application::Init(const ClientOptions& options) {
     glfwSetErrorCallback(GlfwErrorCallback);
     if (!glfwInit()) {
         std::cerr << "ERROR: Failed to initialize GLFW" << std::endl;
@@ -90,6 +110,18 @@ bool Application::Init() {
     glfwSwapInterval(vsync ? 1 : 0);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
+    // For unattended checks: VOXEL_AUTO_SCREENSHOT="seconds:path.png" saves one
+    // screenshot that long after start, and VOXEL_START_YAW sets the initial heading.
+    if (const char* shot = std::getenv("VOXEL_AUTO_SCREENSHOT")) {
+        const std::string spec = shot;
+        const size_t colon = spec.find(':');
+        if (colon != std::string::npos) {
+            autoScreenshotAt = std::atof(spec.substr(0, colon).c_str());
+            autoScreenshotPath = spec.substr(colon + 1);
+        }
+    }
+    if (const char* yaw = std::getenv("VOXEL_START_YAW")) camera.SetYaw(static_cast<float>(std::atof(yaw)));
+
     // Installed before ImGui so its backend chains to ours.
     glfwSetWindowUserPointer(window, this);
     glfwSetKeyCallback(window, KeyCallback);
@@ -114,8 +146,33 @@ bool Application::Init() {
 
     // Block textures must be resolved before the world starts meshing.
     LoadBlockTextures();
-    world = std::make_unique<World>(terrain);
-    world->StartWaterThread();
+    world = std::make_unique<ClientWorld>();
+    client = std::make_unique<Client>(*world);
+
+    // Singleplayer runs a server in this process and connects to it like any other
+    // client, over the loopback interface on a free port.
+    std::string host = options.host;
+    uint16_t port = options.port ? options.port : net::kDefaultPort;
+    if (host.empty()) {
+        localServer = std::make_unique<Server>();
+        Server::Options serverOptions;
+        serverOptions.bindHost = "127.0.0.1";
+        serverOptions.port = options.port; // 0: any free port
+        if (!localServer->Start(serverOptions)) return false;
+        localServer->RunInBackground();
+        host = "127.0.0.1";
+        port = localServer->GetPort();
+        serverLabel = "singleplayer";
+    }
+    else {
+        serverLabel = host + ":" + std::to_string(port);
+    }
+
+    std::string error;
+    if (!client->Connect(host, port, options.name, error)) {
+        std::cerr << "ERROR: Could not connect to " << host << ":" << port << ": " << error << std::endl;
+        return false;
+    }
     return true;
 }
 
@@ -131,8 +188,12 @@ void Application::LoadBlockTextures() {
 
 void Application::Shutdown() {
     // Order matters: everything holding GL objects goes before the context.
+    if (client) client->Disconnect();
+    client.reset();
     world.reset();
     renderer.reset();
+    if (localServer) localServer->Stop();
+    localServer.reset();
 
     if (imguiInitialized) {
         ImGui_ImplOpenGL3_Shutdown();
@@ -159,6 +220,7 @@ void Application::Run() {
 
         glfwPollEvents();
 
+        UpdateNetwork();
         HandleContinuousInput(deltaTime);
         camera.SetPosition(player.GetEyePosition());
         world->Update(camera.GetPosition());
@@ -175,6 +237,9 @@ void Application::Run() {
         if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), kReach)) {
             params.highlightedBlock = hit->block;
         }
+        for (const auto& other : client->GetRemotePlayers()) {
+            params.players.push_back({ other.feet, other.yaw, other.pitch, PlayerModels::ColorFor(other.id) });
+        }
 
         renderer->RenderFrame(*world, params);
 
@@ -188,9 +253,23 @@ void Application::Run() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         DrawHotbar();
+        DrawStatus();
         if (showDebug) DrawDebugWindow(deltaTime);
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        if (screenshotRequested || (!autoScreenshotPath.empty() && now >= autoScreenshotAt)) {
+            std::string path = autoScreenshotPath;
+            if (screenshotRequested) {
+                char name[64];
+                const std::time_t t = std::time(nullptr);
+                std::strftime(name, sizeof(name), "screenshot-%Y%m%d-%H%M%S.png", std::localtime(&t));
+                path = name;
+            }
+            SaveScreenshot(path, renderer->GetWidth(), renderer->GetHeight());
+            if (!screenshotRequested) autoScreenshotPath.clear();
+            screenshotRequested = false;
+        }
 
         if (vsync != appliedVsync) {
             glfwSwapInterval(vsync ? 1 : 0);
@@ -200,8 +279,43 @@ void Application::Run() {
     }
 }
 
+void Application::UpdateNetwork() {
+    client->Poll();
+
+    // Joined: start at the spawn point the server picked, and drop onto the terrain
+    // there once it has arrived.
+    if (!joined && client->IsWelcomed()) {
+        joined = true;
+        player.Teleport(client->GetSpawn());
+        player.ResetSpawn();
+    }
+    if (auto correction = client->TakeCorrection()) {
+        player.Teleport(*correction);
+        // Corrected into terrain (e.g. back to the spawn point): climb out onto it.
+        if (!player.IsFlying() && Collision::BoxBlocked(*world, player.GetBounds())) player.ResetSpawn();
+    }
+}
+
+void Application::DrawStatus() {
+    std::string text;
+    if (!client->IsConnected() && !client->GetDisconnectReason().empty()) text = "Disconnected: " + client->GetDisconnectReason();
+    else if (!client->IsWelcomed()) text = "Connecting to " + serverLabel + "...";
+    else if (!player.IsSpawned() && !player.IsFlying()) text = "Loading terrain...";
+    if (text.empty()) return;
+
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + 40.0f), ImGuiCond_Always,
+                            ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.6f);
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+    if (ImGui::Begin("Status", nullptr, flags)) ImGui::TextUnformatted(text.c_str());
+    ImGui::End();
+}
+
 void Application::HandleContinuousInput(float deltaTime) {
     auto down = [&](int key) { return glfwGetKey(window, key) == GLFW_PRESS; };
+    if (!joined) return;
 
     // The player drops onto the terrain once the chunks under it have loaded.
     if (!player.IsSpawned() && !player.IsFlying()) player.Spawn(*world);
@@ -216,16 +330,19 @@ void Application::HandleContinuousInput(float deltaTime) {
     input.lookDirection = camera.GetDirection();
     player.Update(*world, input, deltaTime);
 
+    // Our position is ours to predict; the server checks it loosely and corrects us if
+    // it disagrees. Nothing is sent until we've landed on the terrain.
+    if (player.IsSpawned() || player.IsFlying()) {
+        uint8_t flags = 0;
+        if (player.IsFlying()) flags |= net::kFlagFlying;
+        if (player.IsOnGround()) flags |= net::kFlagOnGround;
+        if (player.IsSwimming()) flags |= net::kFlagSwimming;
+        client->SendPlayerState(player.GetFeetPosition(), player.GetVelocity(), camera.GetYaw(), camera.GetDirectionAngles().x, flags);
+    }
+
     // Laser: carve a tunnel along the view ray while L is held.
     if (captureCursor && glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-        const int r = kLaserRadius;
-        for (const auto& center : TraceBlocks(*world, camera.GetPosition(), camera.GetDirection(), kLaserRange)) {
-            for (int x = -r; x <= r; x++)
-                for (int y = -r; y <= r; y++)
-                    for (int z = -r; z <= r; z++)
-                        if (x * x + y * y + z * z <= r * r)
-                            world->SetBlock(center.x + x, center.y + y, center.z + z, BlockType::AIR);
-        }
+        client->Carve(TraceBlocks(*world, camera.GetPosition(), camera.GetDirection(), kLaserRange), kLaserRadius);
     }
 }
 
@@ -309,8 +426,12 @@ void Application::DrawDebugWindow(float deltaTime) {
         ImGui::Text("Angles %.3f, %.3f", angles.x, angles.y);
         ImGui::Text("Frame %.3f ms (%.1f FPS)", deltaTime * 1000.0f, deltaTime > 0.0f ? 1.0f / deltaTime : 0.0f);
         ImGui::PlotLines("Frame Time (ms)", frameTimes.data(), kFrameHistory, frameTimeIndex);
-        ImGui::Text("Chunks: %zu in world, %d alive", world->GetLoadedChunkCount(), Chunk::GetLiveCount());
-        ImGui::Text("Active water cells: %zu", world->GetWater().GetActiveCount());
+        ImGui::Text("Chunks: %zu received, %zu tracked, %d alive", world->GetLoadedChunkCount(), world->GetChunkCount(), Chunk::GetLiveCount());
+        const Client::Stats net = client->GetStats();
+        ImGui::Text("Server: %s, player %u, ping %u ms", serverLabel.c_str(), client->GetPlayerId(), net.roundTripMs);
+        ImGui::Text("Received %.1f MB: %u chunks, %u cell updates, %u light updates", net.bytesReceived / (1024.0 * 1024.0),
+                    net.chunksReceived, net.deltasReceived, net.lightUpdates);
+        ImGui::Text("Other players: %zu", client->GetRemotePlayers().size());
 
         const TextureAtlas& atlas = renderer->GetAtlas();
         if (ImGui::CollapsingHeader("Texture atlas")) {
@@ -355,6 +476,9 @@ void Application::OnKey(int key, int action) {
     case GLFW_KEY_F3:
         ambientOcclusion = !ambientOcclusion;
         break;
+    case GLFW_KEY_F12:
+        screenshotRequested = true;
+        break;
     case GLFW_KEY_F:
         player.SetFlying(*world, !player.IsFlying());
         break;
@@ -386,10 +510,7 @@ void Application::OnMouseButton(int button, int action) {
     if (!hit) return;
 
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        // Breaking a waterlogged block leaves its water behind.
-        Block broken;
-        world->GetBlock(hit->block.x, hit->block.y, hit->block.z, broken);
-        world->SetBlock(hit->block.x, hit->block.y, hit->block.z, broken.HasWater() ? Block::Water(broken.WaterVolume()) : Block());
+        client->BreakBlock(hit->block);
     }
     else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         const glm::ivec3 place = hit->block + hit->normal;
@@ -400,7 +521,7 @@ void Application::OnMouseButton(int button, int action) {
             const glm::vec3 lo(place), hi = lo + glm::vec3(1.0f);
             if (glm::all(glm::lessThan(lo, body.max)) && glm::all(glm::greaterThan(hi, body.min))) return;
         }
-        world->SetBlock(place.x, place.y, place.z, placeBlock == BlockType::WATER ? Block::Water(Block::kMaxWaterVolume) : Block(placeBlock));
+        client->PlaceBlock(place, placeBlock);
     }
 }
 

@@ -1,10 +1,10 @@
-#include "world/Water.h"
+#include "server/Water.h"
 
 #include <algorithm>
 #include <cassert>
 #include <chrono>
 
-#include "world/World.h"
+#include "server/ServerWorld.h"
 
 namespace {
 
@@ -20,7 +20,7 @@ constexpr int kMinSpreadVolume = Block::kMaxWaterVolume / 8;
 constexpr int kReach = 6;
 
 // Sets the water in a cell, keeping a partial block (waterlogged) if it is one.
-void SetWater(World& world, const glm::ivec3& p, const Block& cell, int volume) {
+void SetWater(ServerWorld& world, const glm::ivec3& p, const Block& cell, int volume) {
     // Every caller conserves volume; this catches a bug before it can wrap the byte
     // (which would silently create water).
     assert(volume >= 0 && volume <= cell.WaterCapacity());
@@ -28,7 +28,7 @@ void SetWater(World& world, const glm::ivec3& p, const Block& cell, int volume) 
 }
 
 // A cell with nothing left to move is at rest: draw its true volume (see Block::shown).
-void SnapShown(World& world, const glm::ivec3& p, const Block& cell) {
+void SnapShown(ServerWorld& world, const glm::ivec3& p, const Block& cell) {
     if (cell.shown == cell.water) return;
     Block b = cell;
     b.shown = b.water;
@@ -54,7 +54,7 @@ void WaterSimulation::Activate(const glm::ivec3& pos) {
     }
 }
 
-void WaterSimulation::Start(World& world) {
+void WaterSimulation::Start(ServerWorld& world) {
     if (thread.joinable()) return;
     stopping = false;
     thread = std::thread(&WaterSimulation::ThreadLoop, this, std::ref(world));
@@ -69,7 +69,7 @@ void WaterSimulation::Stop() {
     if (thread.joinable()) thread.join();
 }
 
-void WaterSimulation::ThreadLoop(World& world) {
+void WaterSimulation::ThreadLoop(ServerWorld& world) {
     using Clock = std::chrono::steady_clock;
     const auto interval = std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(kTickInterval));
     auto nextTick = Clock::now();
@@ -87,7 +87,7 @@ void WaterSimulation::ThreadLoop(World& world) {
     }
 }
 
-void WaterSimulation::Tick(World& world) {
+void WaterSimulation::Tick(ServerWorld& world) {
     std::recursive_mutex& edit = world.GetEditMutex();
     struct Ticking {
         std::atomic<bool>& flag;
@@ -164,7 +164,7 @@ void WaterSimulation::Tick(World& world) {
     }
 }
 
-void WaterSimulation::UpdateCell(World& world, const glm::ivec3& pos) {
+void WaterSimulation::UpdateCell(ServerWorld& world, const glm::ivec3& pos) {
     Block block;
     if (!world.GetBlock(pos.x, pos.y, pos.z, block) || !block.HasWater()) return;
     int volume = block.WaterVolume();

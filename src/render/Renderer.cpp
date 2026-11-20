@@ -5,7 +5,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "render/Textures.h"
-#include "world/World.h"
+#include "client/ClientWorld.h"
 
 namespace {
 
@@ -73,7 +73,8 @@ Renderer::Renderer()
       skyboxShader("Resources/Shaders/skybox.vert", "Resources/Shaders/skybox.frag"),
       screenShader("Resources/Shaders/screen.vert", "Resources/Shaders/screen.frag"),
       holeShader("Resources/Shaders/hole.vert", "Resources/Shaders/hole.frag"),
-      waterShader("Resources/Shaders/water.vert", "Resources/Shaders/water.frag") {
+      waterShader("Resources/Shaders/water.vert", "Resources/Shaders/water.frag"),
+      playerShader("Resources/Shaders/player.vert", "Resources/Shaders/player.frag") {
 }
 
 Renderer::~Renderer() {
@@ -200,13 +201,14 @@ void Renderer::ReloadShaders() {
     screenShader.Reload();
     holeShader.Reload();
     waterShader.Reload();
+    playerShader.Reload();
 }
 
 void Renderer::ReloadTextures() {
     atlas.Build(kBlockTextureDirectory);
 }
 
-void Renderer::RenderFrame(World& world, const FrameParams& params) {
+void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
     // --- Scene pass into the offscreen framebuffer ---
     glBindFramebuffer(GL_FRAMEBUFFER, sceneFBO);
     glViewport(0, 0, width, height);
@@ -230,6 +232,11 @@ void Renderer::RenderFrame(World& world, const FrameParams& params) {
 
     glEnable(GL_CULL_FACE);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    playerShader.Use();
+    playerShader.SetUniform("sunDirection", glm::normalize(kSunDirection));
+    playerShader.SetUniform("sunBrightness", params.sunBrightness);
+    playerModels.Draw(playerShader, params.view, params.projection, params.players);
 
     DrawSkybox(params);
 
@@ -258,7 +265,7 @@ void Renderer::RenderFrame(World& world, const FrameParams& params) {
     glBindVertexArray(0);
 }
 
-void Renderer::DrawWater(World& world, const FrameParams& params) {
+void Renderer::DrawWater(ClientWorld& world, const FrameParams& params) {
     // Copy what's behind the water (opaque world and sky) for the shader to sample.
     glBindFramebuffer(GL_READ_FRAMEBUFFER, sceneFBO);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, refractFBO);

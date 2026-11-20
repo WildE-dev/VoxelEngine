@@ -4,7 +4,7 @@
 
 #include "world/Collision.h"
 
-class World;
+class BlockAccess;
 
 struct PlayerInput {
     glm::vec2 move{0.0f}; // x = strafe right, y = forward, each -1..1
@@ -29,18 +29,23 @@ public:
     explicit Player(const glm::vec3& feetPosition) : feet(feetPosition) {}
 
     // Advances physics by deltaTime using fixed substeps.
-    void Update(const World& world, const PlayerInput& input, float deltaTime);
+    void Update(const BlockAccess& world, const PlayerInput& input, float deltaTime);
 
     // Places the player on the terrain surface of its current column. Returns false
     // if the column isn't loaded yet; call again next frame.
-    bool Spawn(const World& world);
+    bool Spawn(const BlockAccess& world);
     bool IsSpawned() const { return spawned; }
 
-    void SetFlying(const World& world, bool fly);
+    void SetFlying(const BlockAccess& world, bool fly);
     bool IsFlying() const { return flying; }
     bool IsOnGround() const { return onGround; }
     bool IsSwimming() const { return inWater; }
-    bool IsHeadUnderwater(const World& world) const;
+    bool IsHeadUnderwater(const BlockAccess& world) const;
+
+    // Moves the player (a server correction or the spawn point) and stops it.
+    void Teleport(const glm::vec3& feetPosition) { feet = feetPosition; velocity = glm::vec3(0.0f); accumulator = 0.0f; }
+    // Forget the spawn so Spawn drops the player onto the terrain under it again.
+    void ResetSpawn() { spawned = false; }
 
     glm::vec3 GetFeetPosition() const { return feet; }
     glm::vec3 GetEyePosition() const { return feet + glm::vec3(0.0f, kEyeHeight, 0.0f); }
@@ -50,11 +55,11 @@ public:
     static Collision::AABB BoundsAt(const glm::vec3& feet);
 
 private:
-    void Step(const World& world, const PlayerInput& input, float dt);
+    void Step(const BlockAccess& world, const PlayerInput& input, float dt);
     void StepFlying(const PlayerInput& input, float dt);
-    void MoveHorizontal(const World& world, int axis, float distance);
-    void MoveVertical(const World& world, float distance, bool wasOnGround);
-    bool InWater(const World& world) const;
+    void MoveHorizontal(const BlockAccess& world, int axis, float distance);
+    void MoveVertical(const BlockAccess& world, float distance, bool wasOnGround);
+    bool InWater(const BlockAccess& world) const;
 
     glm::vec3 feet;
     glm::vec3 velocity{0.0f};

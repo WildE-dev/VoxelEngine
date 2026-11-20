@@ -3,7 +3,7 @@
 #include <cfloat>
 #include <cmath>
 
-#include "world/World.h"
+#include "world/BlockAccess.h"
 
 namespace {
 
@@ -47,7 +47,7 @@ void WalkVoxels(const glm::vec3& origin, const glm::vec3& direction, float maxDi
 
 } // namespace
 
-std::optional<RaycastHit> Raycast(const World& world, const glm::vec3& origin, const glm::vec3& direction, float maxDistance) {
+std::optional<RaycastHit> Raycast(const BlockAccess& world, const glm::vec3& origin, const glm::vec3& direction, float maxDistance) {
     std::optional<RaycastHit> hit;
     WalkVoxels(origin, direction, maxDistance, [&](const glm::ivec3& pos, const glm::ivec3& normal) {
         Block block;
@@ -61,7 +61,7 @@ std::optional<RaycastHit> Raycast(const World& world, const glm::vec3& origin, c
     return hit;
 }
 
-std::vector<glm::ivec3> TraceBlocks(const World& world, const glm::vec3& origin, const glm::vec3& direction, float maxDistance) {
+std::vector<glm::ivec3> TraceBlocks(const BlockAccess& world, const glm::vec3& origin, const glm::vec3& direction, float maxDistance) {
     std::vector<glm::ivec3> blocks;
     bool hitSolid = false;
     WalkVoxels(origin, direction, maxDistance, [&](const glm::ivec3& pos, const glm::ivec3&) {

@@ -11,7 +11,7 @@
 
 #include "world/Coords.h"
 
-class World;
+class ServerWorld;
 
 // Finite, volume-conserving water. Each cell holds 0..Block::kMaxWaterVolume units:
 // water blocks, and partial (sloped) blocks whose open space above the slope can be
@@ -43,18 +43,18 @@ public:
     ~WaterSimulation() { Stop(); }
 
     // Marks a changed cell and its neighbours for the next tick. Called by
-    // World::SetBlock with the world's edit mutex held.
+    // ServerWorld::SetBlock with the world's edit mutex held.
     void Activate(const glm::ivec3& pos);
 
     // Runs ticks on a dedicated thread (every kTickInterval while there's work, idle
     // otherwise) until Stop. Without it, call Tick directly.
-    void Start(World& world);
+    void Start(ServerWorld& world);
     void Stop();
 
     // Runs exactly one tick now: every currently active cell (up to kCellsPerTick
     // holding water) gets one update. Any thread; takes the world's edit mutex in
     // slices so other edits can interleave.
-    void Tick(World& world);
+    void Tick(ServerWorld& world);
 
     size_t GetActiveCount() const { return activeCount.load(std::memory_order_relaxed); }
     // Nothing queued and no tick in progress.
@@ -66,8 +66,8 @@ public:
     static constexpr size_t kCellsPerSlice = 128;
 
 private:
-    void UpdateCell(World& world, const glm::ivec3& pos);
-    void ThreadLoop(World& world);
+    void UpdateCell(ServerWorld& world, const glm::ivec3& pos);
+    void ThreadLoop(ServerWorld& world);
 
     // Guarded by the world's edit mutex.
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> active;

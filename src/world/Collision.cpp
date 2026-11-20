@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-#include "world/World.h"
+#include "world/BlockAccess.h"
 
 namespace Collision {
 
@@ -21,7 +21,7 @@ void CellRange(float lo, float hi, int& first, int& last) {
 
 } // namespace
 
-bool BoxBlocked(const World& world, const AABB& box) {
+bool BoxBlocked(const BlockAccess& world, const AABB& box) {
     int x0, x1, y0, y1, z0, z1;
     CellRange(box.min.x, box.max.x, x0, x1);
     CellRange(box.min.y, box.max.y, y0, y1);
@@ -37,7 +37,7 @@ bool BoxBlocked(const World& world, const AABB& box) {
     return false;
 }
 
-std::optional<float> SlopeHeight(const World& world, float x, float z, float yLo, float yHi, bool& unknown) {
+std::optional<float> SlopeHeight(const BlockAccess& world, float x, float z, float yLo, float yHi, bool& unknown) {
     const int bx = Floor(x), bz = Floor(z);
     const float fx = x - bx, fz = z - bz;
     // Start just below yHi: a box whose top exactly touches a ceiling must not count
@@ -57,7 +57,7 @@ std::optional<float> SlopeHeight(const World& world, float x, float z, float yLo
     return std::nullopt;
 }
 
-std::optional<float> GroundHeight(const World& world, const AABB& box, float above, float below, bool& unknown) {
+std::optional<float> GroundHeight(const BlockAccess& world, const AABB& box, float above, float below, bool& unknown) {
     const float feet = box.min.y;
     const float top = feet + above, bottom = feet - below;
     std::optional<float> best;

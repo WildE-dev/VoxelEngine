@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "world/World.h"
+#include "world/BlockAccess.h"
 
 namespace {
 
@@ -45,12 +45,12 @@ glm::vec2 Approach(glm::vec2 current, glm::vec2 target, float maxDelta) {
 
 } // namespace
 
-bool Player::InWater(const World& world) const {
+bool Player::InWater(const BlockAccess& world) const {
     // Feet or waist below the water surface counts as swimming.
     return world.IsUnderwater(feet + glm::vec3(0.0f, 0.1f, 0.0f)) || world.IsUnderwater(feet + glm::vec3(0.0f, 0.9f, 0.0f));
 }
 
-bool Player::IsHeadUnderwater(const World& world) const {
+bool Player::IsHeadUnderwater(const BlockAccess& world) const {
     return world.IsUnderwater(GetEyePosition());
 }
 
@@ -59,7 +59,7 @@ Collision::AABB Player::BoundsAt(const glm::vec3& feet) {
     return { feet - glm::vec3(half, 0.0f, half), feet + glm::vec3(half, kHeight, half) };
 }
 
-void Player::Update(const World& world, const PlayerInput& input, float deltaTime) {
+void Player::Update(const BlockAccess& world, const PlayerInput& input, float deltaTime) {
     accumulator += std::min(deltaTime, kMaxFrameTime);
     while (accumulator >= kFixedStep) {
         Step(world, input, kFixedStep);
@@ -67,7 +67,7 @@ void Player::Update(const World& world, const PlayerInput& input, float deltaTim
     }
 }
 
-bool Player::Spawn(const World& world) {
+bool Player::Spawn(const BlockAccess& world) {
     // Terrain heights stay well within this range (see TerrainGenerator).
     constexpr int kTop = 64, kBottom = -64;
     const int bx = static_cast<int>(std::floor(feet.x));
@@ -88,7 +88,7 @@ bool Player::Spawn(const World& world) {
     return false;
 }
 
-void Player::SetFlying(const World& world, bool fly) {
+void Player::SetFlying(const BlockAccess& world, bool fly) {
     flying = fly;
     velocity = glm::vec3(0.0f);
     onGround = false;
@@ -100,7 +100,7 @@ void Player::SetFlying(const World& world, bool fly) {
     if (Collision::BoxBlocked(world, GetBounds())) spawned = Spawn(world);
 }
 
-void Player::Step(const World& world, const PlayerInput& input, float dt) {
+void Player::Step(const BlockAccess& world, const PlayerInput& input, float dt) {
     if (flying) {
         StepFlying(input, dt);
         return;
@@ -159,7 +159,7 @@ void Player::StepFlying(const PlayerInput& input, float dt) {
     velocity = glm::vec3(0.0f);
 }
 
-void Player::MoveHorizontal(const World& world, int axis, float distance) {
+void Player::MoveHorizontal(const BlockAccess& world, int axis, float distance) {
     const int steps = static_cast<int>(std::ceil(std::abs(distance) / kMaxSubstep));
     const float step = steps ? distance / steps : 0.0f;
     const float half = kWidth * 0.5f;
@@ -204,7 +204,7 @@ void Player::MoveHorizontal(const World& world, int axis, float distance) {
     }
 }
 
-void Player::MoveVertical(const World& world, float distance, bool wasOnGround) {
+void Player::MoveVertical(const BlockAccess& world, float distance, bool wasOnGround) {
     if (distance > 0.0f) {
         // Rising: stop at ceilings.
         const int steps = static_cast<int>(std::ceil(distance / kMaxSubstep));

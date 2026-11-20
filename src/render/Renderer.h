@@ -1,15 +1,18 @@
 #pragma once
 
+#include <memory>
 #include <optional>
+#include <vector>
 
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 
 #include "render/DebugDraw.h"
+#include "render/PlayerModels.h"
 #include "render/Shader.h"
 #include "render/TextureAtlas.h"
 
-class World;
+class ClientWorld;
 
 struct FrameParams {
     glm::mat4 view{1.0f};
@@ -21,6 +24,7 @@ struct FrameParams {
     glm::vec3 cameraPosition{0.0f};
     bool underwater = false;    // camera is inside water: tint the screen
     std::optional<glm::ivec3> highlightedBlock;
+    std::vector<PlayerModel> players; // other players
 };
 
 // Owns all GPU resources outside the world: shaders, textures, the skybox,
@@ -43,7 +47,7 @@ public:
     // block textures must be re-resolved and chunk meshes rebuilt afterwards.
     void ReloadTextures();
     const TextureAtlas& GetAtlas() const { return atlas; }
-    void RenderFrame(World& world, const FrameParams& params);
+    void RenderFrame(ClientWorld& world, const FrameParams& params);
 
     GLuint GetSceneTexture() const { return sceneColor; }
     int GetWidth() const { return width; }
@@ -56,7 +60,7 @@ private:
 
     void DrawSkybox(const FrameParams& params);
     void DrawBlackHole(const FrameParams& params);
-    void DrawWater(World& world, const FrameParams& params);
+    void DrawWater(ClientWorld& world, const FrameParams& params);
 
     Shader worldShader;
     Shader debugShader;
@@ -64,8 +68,10 @@ private:
     Shader screenShader;
     Shader holeShader;
     Shader waterShader;
+    Shader playerShader;
 
     DebugDraw debugDraw;
+    PlayerModels playerModels;
     TextureAtlas atlas;
 
     int width = 0, height = 0;

@@ -19,8 +19,11 @@ public:
     glm::vec3 GetDirection() const { return front; }
     glm::vec2 GetDirectionAngles() const { return { pitch, yaw }; }
     float GetYaw() const { return yaw; }
+    void SetYaw(float degrees);
 
 private:
+    void UpdateFront();
+
     glm::vec3 position{7.0f, 7.0f, 7.0f};
     glm::vec3 front{0.0f, 0.0f, -1.0f};
     glm::vec3 up{0.0f, 1.0f, 0.0f};

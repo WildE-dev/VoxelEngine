@@ -30,10 +30,10 @@ ENetPacket* MakePacket(uint8_t channel, const std::vector<uint8_t>& data) {
 
 size_t QueuedReliableBytes(const ENetPeer* peer) {
     size_t bytes = peer->reliableDataInTransit;
-    for (ENetListIterator it = enet_list_begin(&peer->outgoingCommands); it != enet_list_end(&peer->outgoingCommands);
-         it = enet_list_next(it)) {
-        const auto* command = reinterpret_cast<const ENetOutgoingCommand*>(it);
-        bytes += command->fragmentLength;
+    for (const ENetList* list : { &peer->outgoingCommands, &peer->outgoingSendReliableCommands }) {
+        for (ENetListIterator it = enet_list_begin(list); it != enet_list_end(list); it = enet_list_next(it)) {
+            bytes += reinterpret_cast<const ENetOutgoingCommand*>(it)->fragmentLength;
+        }
     }
     return bytes;
 }
