@@ -85,6 +85,7 @@ private:
     bool vsync = true;
     // VOXEL_BENCH: per-section frame timing, printed once a second.
     bool bench = false;
+    bool ignoreMouse = false; // VOXEL_NO_MOUSE
     double benchSections[7] = {};
     double benchLast = 0.0;
     int benchFrames = 0;

@@ -123,6 +123,9 @@ bool Application::Init(const ClientOptions& options) {
             autoScreenshotPath = spec.substr(colon + 1);
         }
     }
+    // VOXEL_NO_MOUSE=1 ignores mouse look, so automated screenshots from a saved
+    // position always face the same way.
+    ignoreMouse = std::getenv("VOXEL_NO_MOUSE") != nullptr;
     // VOXEL_BENCH=1 turns vsync off and prints where frame time goes, once a second.
     if (std::getenv("VOXEL_BENCH")) {
         bench = true;
@@ -576,7 +579,7 @@ void Application::OnMouseButton(int button, int action) {
 }
 
 void Application::OnCursorMove(double x, double y) {
-    if (captureCursor) camera.UpdateLook(x, y);
+    if (captureCursor && !ignoreMouse) camera.UpdateLook(x, y);
 }
 
 void Application::OnScroll(double yOffset) {
