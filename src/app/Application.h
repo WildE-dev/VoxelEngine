@@ -24,6 +24,7 @@ struct ClientOptions {
     // Singleplayer: where the local server saves the world (empty: don't save).
     std::string worldDirectory = "saves/singleplayer";
     int waterSimulationDistance = 6; // singleplayer's local server
+    bool emptyWorld = false;         // singleplayer: a new world is a flat, empty plain
 };
 
 class Application

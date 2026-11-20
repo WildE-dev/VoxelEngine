@@ -1,5 +1,5 @@
 // Dedicated server without any GL or windowing dependency:
-//   VoxelServer [port] [--world DIR] [--no-save] [--water-distance N]
+//   VoxelServer [port] [--world DIR] [--no-save] [--water-distance N] [--empty-world]
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
@@ -18,10 +18,17 @@ void StopServer(int) {
 int main(int argc, char** argv) {
     Server::Options options;
     options.worldDirectory = "world";
+    bool worldGiven = false;
     for (int i = 1; i < argc; i++) {
         const std::string arg = argv[i];
         if (arg == "--world" && i + 1 < argc) {
             options.worldDirectory = argv[++i];
+            worldGiven = true;
+            continue;
+        }
+        if (arg == "--empty-world") {
+            options.worldType = TerrainGenerator::Type::Empty;
+            if (!worldGiven && !options.worldDirectory.empty()) options.worldDirectory = "world-empty";
             continue;
         }
         if (arg == "--no-save") {
@@ -38,7 +45,8 @@ int main(int argc, char** argv) {
                       << "  port      default " << net::kDefaultPort << "\n"
                       << "  --world   where the world is saved (default: world)\n"
                       << "  --no-save don't load or save the world\n"
-                      << "  --water-distance N  chunks around players where water flows (default 6)" << std::endl;
+                      << "  --water-distance N  chunks around players where water flows (default 6)\n"
+                      << "  --empty-world  a new world that's a flat, empty plain (default save: world-empty)" << std::endl;
             return EXIT_FAILURE;
         }
         options.port = static_cast<uint16_t>(port);

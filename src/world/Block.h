@@ -82,6 +82,10 @@ enum class BlockType : uint8_t {
     SAND,
     // Liquid: no collision, translucent, finite volume that flows (see Water.cpp).
     WATER,
+    // Machines: a pump moves water from the cells around it through the pipes
+    // connected to it, out of the pipes' open ends (see Water.cpp).
+    PUMP,
+    PIPE,
     COUNT
 };
 

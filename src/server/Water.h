@@ -4,11 +4,13 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#include <random>
 #include <unordered_set>
 #include <vector>
 
 #include <glm/glm.hpp>
 
+#include "world/Block.h"
 #include "world/Coords.h"
 
 class ServerWorld;
@@ -36,6 +38,21 @@ class ServerWorld;
 //
 // Event driven: only cells next to something that changed are simulated, so streamed
 // in seas and lakes cost nothing until disturbed. Unloaded space acts as a wall.
+//
+// Evaporation, the one exception to water only ever moving, runs on random ticks:
+// every tick, kRandomTicksPerChunk random cells of each chunk in the simulation area
+// are looked at, and a shallow puddle at rest among them dries up. A puddle is a cell
+// with at most kPuddleVolume units that isn't full, has no water above it and isn't
+// waiting for an update (so it's not flowing). Each cell is picked about every
+// 4096 / kRandomTicksPerChunk ticks, so a spill fades away cell by cell over a few
+// minutes. Lakes are deep, so only thin water left by spills and drained pools goes.
+//
+// Pumps: each tick, a pump takes up to kPumpRate units from the water in the cells
+// around it and sends them through the pipes connected to it (pipes join face to
+// face), out of the network's open ends: the open cells beside a pipe that joins only
+// one other pipe or pump. Ends get equal shares. A pump only takes what the ends have
+// room for, so water is still only ever moved; it can lift water any height. Pumps
+// run within the simulation area like flowing water.
 //
 // The server limits simulation to an area around the players (SetSimulationArea),
 // smaller than the area it loads: active cells outside it are parked, untouched, and
@@ -68,7 +85,15 @@ public:
     // mutex (ServerWorld::Update).
     void SetSimulationArea(const std::vector<glm::ivec3>& centers, int distance, int keepDistance);
 
+    // A pump was placed / removed at this position. Called by ServerWorld::SetBlock
+    // (and when a saved chunk with pumps loads) with the world's edit mutex held.
+    void AddPump(const glm::ivec3& pos);
+    void RemovePump(const glm::ivec3& pos);
+    size_t GetPumpCount() const { return pumpCount.load(std::memory_order_relaxed); }
+
     size_t GetActiveCount() const { return activeCount.load(std::memory_order_relaxed); }
+    // Puddles dried up so far (for tests and stats).
+    size_t GetEvaporatedCount() const { return evaporatedCount.load(std::memory_order_relaxed); }
     size_t GetParkedCount() const { return parkedCount.load(std::memory_order_relaxed); }
     // Nothing queued and no tick in progress.
     bool IsIdle() const { return GetActiveCount() == 0 && !ticking.load(std::memory_order_acquire); }
@@ -77,9 +102,24 @@ public:
     static constexpr size_t kCellsPerTick = 32768;
     // Cells updated per hold of the edit mutex; bounds how long a player edit waits.
     static constexpr size_t kCellsPerSlice = 128;
+    // Units a pump moves per tick: a quarter of a block, 2.5 blocks a second.
+    static constexpr int kPumpRate = Block::kMaxWaterVolume / 4;
+    // Puddles: up to a quarter of a block deep. With 3 random cells per chunk per tick
+    // a puddle cell lasts about 1365 ticks (2.3 minutes) on average.
+    static constexpr int kPuddleVolume = Block::kMaxWaterVolume / 4;
+    static constexpr int kRandomTicksPerChunk = 3;
+    // Pipes searched per pump per tick; larger networks only reach this many.
+    static constexpr size_t kMaxPipes = 4096;
 
 private:
     void UpdateCell(ServerWorld& world, const glm::ivec3& pos);
+    // Runs every pump in the simulation area once. Edit mutex held.
+    void RunPumps(ServerWorld& world);
+    // Random ticks over the simulation area: dries up the resting puddles they find.
+    // Takes the edit mutex itself.
+    void RandomTicks(ServerWorld& world);
+    static bool IsPuddle(const ServerWorld& world, const glm::ivec3& pos, const Block& block);
+    void RunPump(ServerWorld& world, const glm::ivec3& pump);
     // Whether a cell is within `range` chunks of a simulation centre. Edit mutex held.
     bool NearCenter(const glm::ivec3& pos, int range) const;
     void Wake();
@@ -90,10 +130,17 @@ private:
     std::atomic<size_t> activeCount{0};
     // Simulation area, guarded by the world's edit mutex like `active`.
     bool limited = false;
+    std::atomic<bool> hasArea{false}; // limited, with at least one centre
     std::vector<glm::ivec3> centers;
     int distance = 0;
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> parked;
     std::atomic<size_t> parkedCount{0};
+    std::unordered_set<glm::ivec3, Coords::IVec3Hash> pumps; // guarded by the edit mutex
+    std::atomic<size_t> pumpCount{0};
+
+    std::mt19937 random{0x5EED}; // ticking thread only (fixed seed: tests repeat)
+    std::vector<glm::ivec3> randomChunks, puddles; // tick scratch
+    std::atomic<size_t> evaporatedCount{0};
     std::atomic<bool> ticking{false};
     struct Pending {
         glm::ivec3 pos;

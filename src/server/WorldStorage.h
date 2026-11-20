@@ -21,7 +21,8 @@
 // stored either: it's recomputed when a chunk loads.
 //
 // Layout of the world directory:
-//   world.dat            format version and the players (position and look, by name)
+//   world.dat            format version, world type and the players (position and
+//                        look, by name)
 //   regions/r.X.Y.Z.vxr  the stored chunks of one region (kRegionSize^3 chunks), each
 //                        as RLE block planes (see net::EncodeBlockPlanes)
 //
@@ -34,7 +35,7 @@ class WorldStorage
 {
 public:
     static constexpr int kRegionSize = 8;      // chunks per region along each axis
-    static constexpr uint32_t kFormatVersion = 1;
+    static constexpr uint32_t kFormatVersion = 2; // 2: world type in world.dat
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
@@ -51,6 +52,12 @@ public:
     // (with a message on stderr) if the save can't be read.
     bool Open();
     const std::filesystem::path& GetDirectory() const { return directory; }
+    // Whether Open found no saved world (world.dat) to read.
+    bool IsNew() const { return isNew; }
+    // Which generator the world uses (TerrainGenerator::Type); 0 for worlds saved
+    // before it was recorded. Set it once for a new world.
+    uint8_t GetWorldType() const;
+    void SetWorldType(uint8_t worldType);
 
     // The saved blocks of a chunk, if it was ever stored.
     bool LoadChunk(const glm::ivec3& coords, Chunk::Blocks& out) const;
@@ -104,4 +111,6 @@ private:
     std::unordered_map<std::string, PlayerRecord> players;
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> dirtyRegions;
     bool playersDirty = false;
+    bool isNew = true;
+    uint8_t worldType = 0;
 };

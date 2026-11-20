@@ -18,6 +18,17 @@
 // the ground, and leaves and plants let light through.
 class TerrainGenerator {
 public:
+    // Normal: the generated landscape. Empty: a flat plain for testing, grass at row -1
+    // (standing height 0) over dirt over stone, with nothing else: no hills, caves,
+    // water, trees or plants.
+    enum class Type : uint8_t { Normal = 0, Empty = 1 };
+    static constexpr Type kLastType = Type::Empty;
+
+    explicit TerrainGenerator(Type type = Type::Normal) : type(type) {}
+    Type GetType() const { return type; }
+    // Before the generator is first used (the server sets it from the save).
+    void SetType(Type t) { type = t; }
+
     static constexpr int S = Chunk::CHUNK_SIZE;
     // Air below this row (above the ground) is filled with water.
     static constexpr int kSeaLevel = -3;
@@ -69,4 +80,6 @@ private:
     static constexpr float AMPLITUDE = 20.0f;
 
     void PlacePlants(const glm::ivec3& chunkCoords, const ColumnHeights& heights, Blocks& out) const;
+
+    Type type;
 };

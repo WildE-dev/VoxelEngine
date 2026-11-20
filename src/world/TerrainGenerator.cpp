@@ -62,6 +62,7 @@ uint8_t TerrainGenerator::Column::SkyLightAbove(int row) const {
 }
 
 float TerrainGenerator::GetHeight(int x, int z) const {
+    if (type == Type::Empty) return 0.0f;
     float value = 0.0f;
     float freq = 1.0f;
     float amp = 1.0f;
@@ -132,6 +133,8 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
             }
         }
     }
+
+    if (type == Type::Empty) return; // just the ground
 
     Caves::Carve(coords, rows, out);
 

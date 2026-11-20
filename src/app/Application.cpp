@@ -38,7 +38,8 @@ constexpr float kReach = 50.0f;
 constexpr float kLaserRange = 100.0f;
 constexpr int kLaserRadius = 4;
 // Blocks selectable with the number keys, in order.
-constexpr BlockType kPlaceableBlocks[] = { BlockType::DIRT, BlockType::STONE, BlockType::GRASS, BlockType::LAMP, BlockType::LOG, BlockType::LEAVES, BlockType::SAND, BlockType::WATER };
+constexpr BlockType kPlaceableBlocks[] = { BlockType::DIRT, BlockType::STONE, BlockType::GRASS, BlockType::LAMP, BlockType::LOG, BlockType::LEAVES, BlockType::SAND, BlockType::WATER,
+                                            BlockType::PUMP, BlockType::PIPE };
 
 const char* BlockName(BlockType type) {
     switch (type) {
@@ -53,6 +54,8 @@ const char* BlockName(BlockType type) {
     case BlockType::FLOWER_YELLOW: return "Yellow flower";
     case BlockType::SAND:  return "Sand";
     case BlockType::WATER: return "Water";
+    case BlockType::PUMP:  return "Pump";
+    case BlockType::PIPE:  return "Pipe";
     default:               return "Air";
     }
 }
@@ -166,6 +169,7 @@ bool Application::Init(const ClientOptions& options) {
         serverOptions.port = options.port; // 0: any free port
         serverOptions.worldDirectory = options.worldDirectory;
         serverOptions.waterSimulationDistance = options.waterSimulationDistance;
+        if (options.emptyWorld) serverOptions.worldType = TerrainGenerator::Type::Empty;
         if (!localServer->Start(serverOptions)) return false;
         localServer->RunInBackground();
         host = "127.0.0.1";
@@ -435,7 +439,7 @@ void Application::DrawHotbar() {
                            ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
             draw->AddRect(slotMin, slotMax, selected ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 255, 255, 60), 4.0f, 0, selected ? 3.0f : 1.0f);
             // Number key in the corner.
-            char key[2] = { static_cast<char>('1' + i), 0 };
+            char key[2] = { static_cast<char>(i < 9 ? '1' + i : '0'), 0 };
             draw->AddText(ImVec2(slotMin.x + 5.0f, slotMin.y + 3.0f), IM_COL32(0, 0, 0, 200), key); // shadow, readable on light textures
             draw->AddText(ImVec2(slotMin.x + 4.0f, slotMin.y + 2.0f), IM_COL32(255, 255, 255, selected ? 255 : 190), key);
         }
@@ -529,8 +533,11 @@ void Application::OnKey(int key, int action) {
         sunBrightness = sunBrightness > 0.5f ? 0.0f : 1.0f;
         break;
     default:
-        if (key >= GLFW_KEY_1 && key < GLFW_KEY_1 + static_cast<int>(std::size(kPlaceableBlocks))) {
+        if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9 && key - GLFW_KEY_1 < static_cast<int>(std::size(kPlaceableBlocks))) {
             SelectSlot(key - GLFW_KEY_1);
+        }
+        else if (key == GLFW_KEY_0 && std::size(kPlaceableBlocks) >= 10) {
+            SelectSlot(9);
         }
         break;
     }

@@ -105,7 +105,25 @@ bool Server::Start(const Options& opts) {
             storage.reset();
             return false;
         }
-        Log("world: " + storage->GetDirectory().string() + " (" + std::to_string(storage->GetStoredChunkCount()) + " saved chunks)");
+        if (storage->IsNew()) {
+            storage->SetWorldType(static_cast<uint8_t>(options.worldType));
+        }
+        else if (storage->GetWorldType() > static_cast<uint8_t>(TerrainGenerator::kLastType)) {
+            std::cerr << "[server] " << options.worldDirectory << " uses a world type this version doesn't know" << std::endl;
+            storage.reset();
+            return false;
+        }
+        else if (storage->GetWorldType() != static_cast<uint8_t>(options.worldType)) {
+            Log("note: the existing world in " + options.worldDirectory + " keeps its own world type; use another --world for a new one");
+        }
+    }
+    terrain.SetType(storage ? static_cast<TerrainGenerator::Type>(storage->GetWorldType()) : options.worldType);
+    if (storage) {
+        Log("world: " + storage->GetDirectory().string() + " (" + std::string(terrain.GetType() == TerrainGenerator::Type::Empty ? "empty, " : "") +
+            std::to_string(storage->GetStoredChunkCount()) + " saved chunks)");
+    }
+    else if (terrain.GetType() == TerrainGenerator::Type::Empty) {
+        Log("world: empty, not saved");
     }
     world = std::make_unique<ServerWorld>(terrain, storage.get());
     world->SetWaterSimulationDistance(options.waterSimulationDistance);
@@ -127,8 +145,10 @@ void Server::Log(const std::string& message) const {
 }
 
 void Server::RunInBackground() {
+    // Set here, not on the thread: a Stop() right after this must not be undone by the
+    // thread starting late.
     running = true;
-    thread = std::thread(&Server::Run, this);
+    thread = std::thread(&Server::Loop, this);
 }
 
 void Server::Stop() {
@@ -138,6 +158,10 @@ void Server::Stop() {
 
 void Server::Run() {
     running = true;
+    Loop();
+}
+
+void Server::Loop() {
     const double interval = 1.0 / kTickRate;
     double nextTick = Now();
     net::NetEvent event;

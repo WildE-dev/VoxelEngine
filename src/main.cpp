@@ -27,6 +27,8 @@ void PrintUsage(const char* program) {
               << "  --world DIR   where the world is saved (default: saves/singleplayer, or world\n"
               << "                with --server)\n"
               << "  --no-save     don't load or save the world\n"
+              << "  --empty-world a new world that's a flat, empty plain, for testing (default\n"
+              << "                save: saves/empty, or world-empty with --server)\n"
               << "  --water-distance N  chunks around players where water flows (default 6, below\n"
               << "                the view distance of 12)\n";
 }
@@ -39,9 +41,10 @@ bool ParsePort(const std::string& text, uint16_t& port) {
     return true;
 }
 
-int RunServer(uint16_t port, const std::string& worldDirectory, int waterDistance) {
+int RunServer(uint16_t port, const std::string& worldDirectory, int waterDistance, bool emptyWorld) {
     Server server;
     Server::Options options;
+    if (emptyWorld) options.worldType = TerrainGenerator::Type::Empty;
     options.waterSimulationDistance = waterDistance;
     options.port = port;
     options.worldDirectory = worldDirectory;
@@ -60,7 +63,7 @@ int RunServer(uint16_t port, const std::string& worldDirectory, int waterDistanc
 int main(int argc, char** argv)
 {
     ClientOptions client;
-    bool dedicated = false, noSave = false;
+    bool dedicated = false, noSave = false, emptyWorld = false;
     int waterDistance = Server::Options{}.waterSimulationDistance;
     std::string worldDirectory;
     uint16_t serverPort = net::kDefaultPort;
@@ -80,6 +83,9 @@ int main(int argc, char** argv)
         }
         else if (arg == "--no-save") {
             noSave = true;
+        }
+        else if (arg == "--empty-world") {
+            emptyWorld = true;
         }
         else if (arg == "--water-distance" && i + 1 < argc) {
             waterDistance = std::atoi(argv[++i]);
@@ -104,7 +110,10 @@ int main(int argc, char** argv)
             return arg == "--help" || arg == "-h" ? EXIT_SUCCESS : EXIT_FAILURE;
         }
     }
-    if (dedicated) return RunServer(serverPort, noSave ? "" : worldDirectory.empty() ? "world" : worldDirectory, waterDistance);
+    // An empty world gets its own default save, so it never opens the normal one.
+    if (worldDirectory.empty()) worldDirectory = emptyWorld ? (dedicated ? "world-empty" : "saves/empty") : (dedicated ? "world" : "");
+    if (dedicated) return RunServer(serverPort, noSave ? "" : worldDirectory, waterDistance, emptyWorld);
+    client.emptyWorld = emptyWorld;
     client.waterSimulationDistance = waterDistance;
     if (!worldDirectory.empty()) client.worldDirectory = worldDirectory;
     if (noSave) client.worldDirectory.clear();

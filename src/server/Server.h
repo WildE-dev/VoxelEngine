@@ -53,6 +53,8 @@ public:
         // Chunks around each player in which water flows (less than the view distance,
         // to save CPU); further out it pauses until a player comes back.
         int waterSimulationDistance = 6;
+        // Generator for a new world (a saved world keeps the one it was created with).
+        TerrainGenerator::Type worldType = TerrainGenerator::Type::Normal;
     };
 
     Server();
@@ -101,6 +103,7 @@ private:
         std::unordered_set<glm::ivec3, Coords::IVec3Hash> pendingLight;
     };
 
+    void Loop(); // Run's body: ticks until `running` is cleared, then saves
     void HandleEvent(const net::NetEvent& event);
     void HandleMessage(ClientState& client, const std::vector<uint8_t>& data);
     void HandleHello(ClientState& client, const net::Hello& hello);

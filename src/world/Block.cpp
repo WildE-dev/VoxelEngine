@@ -237,6 +237,8 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* FLOWER_YELLOW */ {{ "flower_yellow", nullptr, nullptr, nullptr, nullptr, nullptr }},
     /* SAND  */ {{ "sand", "sand", "sand", "sand", "sand", "sand" }},
     /* WATER */ {{ "water", "water", "water", "water", "water", "water" }},
+    /* PUMP  */ {{ "pump_top", "pump_top", "pump_side", "pump_side", "pump_side", "pump_side" }},
+    /* PIPE  */ {{ "pipe_end", "pipe_end", "pipe_end", "pipe_end", "pipe_end", "pipe_end" }},
 };
 
 // Resolved atlas indices. Written on the main thread on (re)load, read by the

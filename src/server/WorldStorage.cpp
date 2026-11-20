@@ -74,7 +74,8 @@ bool WorldStorage::Open() {
         std::cerr << "[storage] can't create " << (directory / "regions").string() << ": " << ec.message() << std::endl;
         return false;
     }
-    if (fs::exists(directory / "world.dat") && !ReadWorldFile()) return false;
+    isNew = !fs::exists(directory / "world.dat");
+    if (!isNew && !ReadWorldFile()) return false;
 
     for (const auto& entry : fs::directory_iterator(directory / "regions", ec)) {
         if (entry.path().extension() != ".vxr") continue;
@@ -102,6 +103,10 @@ bool WorldStorage::ReadWorldFile() {
     }
     if (version > kFormatVersion) {
         std::cerr << "[storage] " << path.string() << " was saved by a newer version (format " << version << ")" << std::endl;
+        return false;
+    }
+    if (version >= 2 && !r.U8(worldType)) {
+        std::cerr << "[storage] " << path.string() << " is truncated" << std::endl;
         return false;
     }
     if (!r.VarU32(count)) count = 0;
@@ -207,6 +212,17 @@ void WorldStorage::StorePlayer(const std::string& name, const PlayerRecord& reco
     playersDirty = true;
 }
 
+uint8_t WorldStorage::GetWorldType() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return worldType;
+}
+
+void WorldStorage::SetWorldType(uint8_t type) {
+    std::lock_guard<std::mutex> lock(mutex);
+    worldType = type;
+    playersDirty = true; // world.dat needs writing
+}
+
 size_t WorldStorage::GetStoredChunkCount() const {
     std::lock_guard<std::mutex> lock(mutex);
     return chunks.size();
@@ -242,6 +258,7 @@ bool WorldStorage::Flush() {
             net::ByteWriter w;
             WriteMagic(w, kWorldMagic);
             w.U32(kFormatVersion);
+            w.U8(worldType);
             w.VarU32(static_cast<uint32_t>(players.size()));
             for (const auto& [name, p] : players) {
                 w.Str(name);

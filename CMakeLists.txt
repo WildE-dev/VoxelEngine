@@ -127,7 +127,15 @@ target_link_libraries(SaveTest PRIVATE voxel_server voxel_client)
 add_executable(WaterAreaTest tests/WaterAreaTest.cpp)
 target_link_libraries(WaterAreaTest PRIVATE voxel_server)
 
-foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest)
+# Pumps move water through pipes, conserving it.
+add_executable(PumpTest tests/PumpTest.cpp)
+target_link_libraries(PumpTest PRIVATE voxel_server)
+
+# Empty worlds, and puddles drying up.
+add_executable(EvaporationTest tests/EvaporationTest.cpp)
+target_link_libraries(EvaporationTest PRIVATE voxel_server)
+
+foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W3)
     else()

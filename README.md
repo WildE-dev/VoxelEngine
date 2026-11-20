@@ -19,7 +19,7 @@ build copies it next to the binary.
 
 The build also produces `VoxelServer` (a dedicated server that doesn't link GL or
 GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
-[Saving](#saving)) and `WaterAreaTest` (see [Water](#water)).
+[Saving](#saving)), and `WaterAreaTest`, `PumpTest` and `EvaporationTest` (see [Water](#water)).
 
 ## Multiplayer
 
@@ -95,6 +95,16 @@ Works the same with `VoxelEngine` and `VoxelServer`:
 cd build && ./VoxelServer --world worlds/survival
 ```
 
+For testing, `--empty-world` makes a new world that's a flat, empty plain: grass over
+dirt over stone, with no hills, caves, water, trees or plants. It gets its own default
+save (`saves/empty/`, or `world-empty/` with `--server`), and the save remembers its
+type, so it reopens empty even without the flag. An existing world always keeps the
+type it was created with.
+
+```bash
+cd build && ./VoxelEngine --empty-world
+```
+
 It autosaves every minute and saves when it stops (Ctrl+C, or quitting
 singleplayer). Players are remembered by name, so rejoining with the same
 `--name` puts you back where you left, facing the same way (and still flying if you
@@ -109,8 +119,8 @@ were). If that spot has been built over since, you land on the surface instead.
   block. A roof you built stays dark underneath even before its chunk loads.
 - **Water** that was still moving when it was saved carries on once its chunk
   loads.
-- **Format** (`src/server/WorldStorage.h`): `world.dat` holds the format version
-  and the players; `regions/r.X.Y.Z.vxr` holds the stored chunks of an 8x8x8-chunk
+- **Format** (`src/server/WorldStorage.h`): `world.dat` holds the format version,
+  the world type and the players; `regions/r.X.Y.Z.vxr` holds the stored chunks of an 8x8x8-chunk
   region, as the same run-length encoded block planes the network uses (an edited
   surface chunk is a few KB). Each file is written to a temporary file and renamed,
   so a crash mid-save leaves the previous save intact. A damaged file, or one from
@@ -133,7 +143,7 @@ that damaged files are refused, and that a rejoining player is put back in place
 | Mouse | Look |
 | Left click | Break block |
 | Right click | Place the selected block |
-| 1-8 / mouse wheel | Select the block to place (shown in the hotbar at the bottom; with Tab you can also click a slot) |
+| 1-9, 0 / mouse wheel | Select the block to place (shown in the hotbar at the bottom; with Tab you can also click a slot) |
 | L (hold) | Laser: carve a tunnel along the view ray |
 | R | Reload shaders and block textures, rebuild all chunk meshes |
 | Tab | Toggle mouse capture |
@@ -175,7 +185,8 @@ a ledge with Space held climbs out.
 
 Water is finite and flows (`Water.cpp`). Each cell holds up to 128 units of
 water: water blocks, and sloped blocks whose open space above the slope can be
-waterlogged. Water is only ever moved, never created or destroyed. It falls into
+waterlogged. Water is only ever moved, never created or destroyed (apart from
+resting puddles evaporating; see below). It falls into
 any room below it, otherwise it levels out by height with nearby water. A cell
 over a drop counts as lower, so water pours over edges in big shares and falls
 as a continuous stream. A bucket poured on flat ground spreads into a shallow
@@ -194,6 +205,27 @@ The simulation runs on the server, on its own thread, up to 32,768 water cells p
 ticks a second, and only near something that changed. It holds a world-wide edit
 lock in short slices and steps aside for waiting edits, so player edits never
 wait more than a couple of milliseconds. Place a full block of water with 8.
+
+**Pumps and pipes** (hotbar 9 and 0) move water anywhere, including uphill. Each
+tick a pump takes a quarter of a block of water (2.5 blocks a second) from the cells
+touching it and sends it through the pipes joined to it, face to face, out of the
+network's open ends: the open cells beside any pipe that joins only one other pipe
+or the pump. The ends share the water equally, and the pump only takes what they
+have room for, so water is still never created or lost. A pump draws only from the
+cells it touches, so put it at the bottom of a pool to empty it. Pumps run within
+the water simulation distance, like flowing water, and keep running after a save
+and reload. `PumpTest` checks the rate, that water is conserved, that pumps stop
+when the pipe is cut or the outlet is full, and that saved pumps carry on.
+
+**Evaporation**: shallow puddles that have stopped flowing dry up. Every water tick,
+3 random cells of each chunk near a player are looked at (random ticks), and a resting
+puddle among them disappears: a cell with at most a quarter of a block of water that
+isn't full, has no water above it and isn't flowing. Each cell comes up about every
+2.3 minutes on average, so a spill fades away cell by cell. This is the only way
+water is ever destroyed; lakes and pools are deeper than that and stay. Random ticks
+cost about 1 ms per tick for the whole simulation area. `EvaporationTest` checks that a
+spill settles into a puddle that dries up gradually, that a deep pool keeps its water,
+and that nothing evaporates with no player nearby.
 
 Water only flows within 6 chunks of a player (per axis), half the view distance of
 12, so a large world doesn't spend CPU on floods nobody is watching. Further out,
@@ -266,5 +298,5 @@ src/
             Textures, DebugDraw
   world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
             Features, Noise, Lighting, Collision, Raycast
-tests/      NetSmokeTest, SaveTest, WaterAreaTest
+tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest
 ```

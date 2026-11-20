@@ -89,6 +89,8 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
 
     chunk->SetBlock(local.x, local.y, local.z, block);
     chunk->MarkUnsaved();
+    if (previous.type == BlockType::PUMP && block.type != BlockType::PUMP) water.RemovePump({ x, y, z });
+    if (block.type == BlockType::PUMP) water.AddPump({ x, y, z });
 
     // Water around the change may need to flow (or settle).
     water.Activate({ x, y, z });
@@ -259,7 +261,7 @@ void ServerWorld::PropagateLight(const std::vector<ChunkPtr>& loadedChunks, cons
 void ServerWorld::WorkerLoop() {
     std::vector<ChunkPtr> batch, generated;
     auto generatedBlocks = std::make_unique<TerrainGenerator::Blocks>(); // reused generation buffer
-    std::vector<glm::ivec3> edits, savedWater;
+    std::vector<glm::ivec3> edits, savedWater, savedPumps;
     batch.reserve(kGenerateBatchSize);
 
     while (true) {
@@ -279,17 +281,20 @@ void ServerWorld::WorkerLoop() {
 
         generated.clear();
         savedWater.clear();
+        savedPumps.clear();
         for (auto& chunk : batch) {
             if (chunk->IsRemoved() || !chunk->TryBeginGenerate()) continue;
 
             const glm::ivec3 c = chunk->GetCoords();
             if (storage && storage->LoadChunk(c, *generatedBlocks)) {
                 // Water in a saved chunk may have been moving when it was saved.
-                for (int i = 0; i < Chunk::VOLUME; i++)
-                    if ((*generatedBlocks)[i].HasWater()) {
-                        constexpr int S = Chunk::CHUNK_SIZE;
-                        savedWater.push_back(c * S + glm::ivec3(i % S, (i / S) % S, i / (S * S)));
-                    }
+                constexpr int S = Chunk::CHUNK_SIZE;
+                for (int i = 0; i < Chunk::VOLUME; i++) {
+                    const Block& b = (*generatedBlocks)[i];
+                    if (!b.HasWater() && b.type != BlockType::PUMP) continue;
+                    const glm::ivec3 pos = c * S + glm::ivec3(i % S, (i / S) % S, i / (S * S));
+                    (b.type == BlockType::PUMP ? savedPumps : savedWater).push_back(pos);
+                }
             }
             else {
                 terrain.GenerateChunk(c, GetColumnHeights(c.x, c.z), *generatedBlocks);
@@ -301,9 +306,10 @@ void ServerWorld::WorkerLoop() {
         if (!generated.empty() || !edits.empty()) PropagateLight(generated, edits);
 
         // Let it carry on flowing (settled water just stays put after one look).
-        if (!savedWater.empty()) {
+        if (!savedWater.empty() || !savedPumps.empty()) {
             std::lock_guard<std::recursive_mutex> edit(editMutex);
             for (const auto& pos : savedWater) water.Activate(pos);
+            for (const auto& pos : savedPumps) water.AddPump(pos);
         }
     }
 }
