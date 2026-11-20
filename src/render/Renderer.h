@@ -28,7 +28,8 @@ struct FrameParams {
 };
 
 // Owns all GPU resources outside the world: shaders, textures, the skybox,
-// the offscreen scene framebuffer and the black hole post effect.
+// the offscreen scene framebuffer and the black hole post effect (off by default,
+// see kDrawBlackHole).
 // Must be created and destroyed while the GL context is current.
 class Renderer
 {

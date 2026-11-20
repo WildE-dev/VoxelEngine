@@ -52,6 +52,8 @@ const float kHoleVerts[] = {
 };
 
 const glm::vec3 kBlackHolePosition(0.0f, 2.0f, 0.0f);
+// The lensing black hole at spawn: off. Set to true to bring it back.
+constexpr bool kDrawBlackHole = false;
 const char* kBlockTextureDirectory = "Resources/Textures/Blocks";
 const glm::vec3 kBlockLightColor(1.0f, 0.85f, 0.6f); // warm lamp light
 // Where the sun glints off water from (it isn't tied to the skybox texture).
@@ -260,7 +262,7 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
     glBindTexture(GL_TEXTURE_2D, sceneColor);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    DrawBlackHole(params);
+    if (kDrawBlackHole) DrawBlackHole(params);
 
     glBindVertexArray(0);
 }

@@ -1,8 +1,10 @@
 # VoxelEngine
 
 A small OpenGL voxel engine with sloped terrain, caves, trees, chunk streaming on a
-background thread, block lighting, ambient occlusion, finite flowing water, a skybox
-and a black hole lensing effect. Several players can share a world over the network.
+background thread, block lighting, ambient occlusion, finite flowing water and a
+skybox. Several players can share a world over the network. (A black hole lensing
+effect at spawn is turned off; `kDrawBlackHole` in `src/render/Renderer.cpp` brings it
+back.)
 
 ## Building
 
@@ -258,8 +260,10 @@ cross chunk borders:
 
 Leaves and plants let light through, so the ground under trees stays lit.
 
-Faces combine both with a directional sun term and per-vertex ambient occlusion,
-all smoothed across vertices.
+Faces combine both with per-vertex ambient occlusion, all smoothed across vertices.
+Sky light depends on which way a face points: full on faces turned up, half on walls,
+and 40% on faces turned down, so the underside of an overhang or a tree canopy is
+lit by the sky around it instead of going black.
 
 ## Block textures
 

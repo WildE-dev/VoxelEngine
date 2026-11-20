@@ -68,11 +68,15 @@ void main()
     float sky = data.skyLight > 0.0f ? pow(0.85f, 15.0f - data.skyLight) : 0.0f;
     float block = data.blockLight > 0.0f ? pow(0.85f, 15.0f - data.blockLight) : 0.0f;
 
-    // Sun: simple directional term from straight above, only where the sky reaches.
+    // Sky: brightest on faces turned up toward it, half on walls. Faces turned down
+    // still see the bright sky and ground around them (skylight bounces), so the
+    // underside of an overhang gets 40% instead of going black. Only where the sky
+    // light reaches (the sky level is sampled in the cell the face looks into).
     // Directions must ignore the model translation (w = 0).
     vec3 normal = normalize(mat3(model) * data.norm);
-    float sun = dot(normal, vec3(0.0f, 1.0f, 0.0f));
-    sun = clamp((sun + 1.0f) / 2.0f, 0.0f, 1.0f) * sky * sunBrightness;
+    float up = normal.y;
+    float facing = up >= 0.0f ? 0.5f + 0.5f * up : 0.5f + 0.1f * up;
+    float sun = facing * sky * sunBrightness;
 
     // A little ambient so unlit areas at night aren't pure black.
     vec3 light = vec3(0.04f) + vec3(sun) + block * blockLightColor;

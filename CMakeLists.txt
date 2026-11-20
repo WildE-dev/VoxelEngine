@@ -143,9 +143,11 @@ foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServe
     endif()
 endforeach()
 
-# Copy shaders/textures next to the executable on every build so edits are picked up.
-# The app loads them relative to the working directory.
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+# Copy shaders/textures next to the executable on every build so edits are picked up,
+# even when only a resource changed (a post-build step would only run when the game
+# relinks). It's part of ALL and runs after the game is built (the generator expression
+# makes it depend on the game). The app loads them relative to the working directory.
+add_custom_target(copy_resources ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_SOURCE_DIR}/Resources $<TARGET_FILE_DIR:${PROJECT_NAME}>/Resources
     COMMENT "Copying resources")
