@@ -158,6 +158,8 @@ bool Application::Init(const ClientOptions& options) {
         Server::Options serverOptions;
         serverOptions.bindHost = "127.0.0.1";
         serverOptions.port = options.port; // 0: any free port
+        serverOptions.worldDirectory = options.worldDirectory;
+        serverOptions.waterSimulationDistance = options.waterSimulationDistance;
         if (!localServer->Start(serverOptions)) return false;
         localServer->RunInBackground();
         host = "127.0.0.1";
@@ -288,6 +290,12 @@ void Application::UpdateNetwork() {
         joined = true;
         player.Teleport(client->GetSpawn());
         player.ResetSpawn();
+        // Rejoining a saved world: back where we left, facing the same way.
+        if (client->GetSpawnFlags() & net::kWelcomeResume) {
+            player.ResumeAt(client->GetSpawn());
+            camera.SetLook(client->GetSpawnYaw(), client->GetSpawnPitch());
+            if (client->GetSpawnFlags() & net::kFlagFlying) player.SetFlying(*world, true);
+        }
     }
     if (auto correction = client->TakeCorrection()) {
         player.Teleport(*correction);

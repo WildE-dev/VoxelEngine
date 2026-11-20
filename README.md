@@ -18,7 +18,8 @@ The executable loads `Resources/` relative to the working directory, and the
 build copies it next to the binary.
 
 The build also produces `VoxelServer` (a dedicated server that doesn't link GL or
-GLFW) and `NetSmokeTest` (see [Multiplayer](#multiplayer)).
+GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
+[Saving](#saving)) and `WaterAreaTest` (see [Water](#water)).
 
 ## Multiplayer
 
@@ -43,8 +44,7 @@ cd build && ./VoxelEngine --connect 192.168.1.20 --name Alice
 `--connect host:port` sets the port. To play on the same machine as the server,
 connect to `127.0.0.1`. Over the internet, forward UDP port 27450 to the server.
 Other players appear as box figures in their own colour, with a dark visor on the
-side they're facing. The world is not saved: it's regenerated when the server
-restarts, and edits to chunks that no player is near are dropped.
+side they're facing. The server saves the world (see [Saving](#saving)).
 
 `NetSmokeTest` starts a server and two clients in one process (real sockets on
 localhost, no windows) and checks that chunks stream, edits and flowing water
@@ -83,6 +83,43 @@ server.
 - **Edits** are applied on the client at once and sent to the server, which checks
   reach and that solid blocks don't go inside a player. It answers with the real
   block either way, so a refused edit is undone.
+
+## Saving
+
+The server saves the world to a directory: `world/` for a dedicated server,
+`saves/singleplayer/` for singleplayer (both relative to the working directory).
+`--world DIR` picks another one, and `--no-save` neither loads nor saves anything.
+Works the same with `VoxelEngine` and `VoxelServer`:
+
+```bash
+cd build && ./VoxelServer --world worlds/survival
+```
+
+It autosaves every minute and saves when it stops (Ctrl+C, or quitting
+singleplayer). Players are remembered by name, so rejoining with the same
+`--name` puts you back where you left, facing the same way (and still flying if you
+were). If that spot has been built over since, you land on the surface instead.
+
+- **Only edited chunks are stored.** Generation is deterministic, so untouched
+  terrain is simply generated again. An edited chunk is saved when it leaves every
+  player's range and on each save. Saved chunks load in place of generation.
+- **Light isn't stored**; it's recomputed as chunks load. While the chunk above
+  a column isn't loaded, its sky light is estimated from the generator, which
+  only knows untouched terrain, so saved chunks also record which columns they
+  block. A roof you built stays dark underneath even before its chunk loads.
+- **Water** that was still moving when it was saved carries on once its chunk
+  loads.
+- **Format** (`src/server/WorldStorage.h`): `world.dat` holds the format version
+  and the players; `regions/r.X.Y.Z.vxr` holds the stored chunks of an 8x8x8-chunk
+  region, as the same run-length encoded block planes the network uses (an edited
+  surface chunk is a few KB). Each file is written to a temporary file and renamed,
+  so a crash mid-save leaves the previous save intact. A damaged file, or one from
+  a newer format, stops the server from starting rather than being skipped and
+  then overwritten.
+
+`SaveTest` saves and reloads a world in a temporary directory. It checks that
+edits come back, that chunks are saved when they unload, light under a saved roof,
+that damaged files are refused, and that a rejoining player is put back in place.
 
 ## Controls
 
@@ -158,6 +195,14 @@ ticks a second, and only near something that changed. It holds a world-wide edit
 lock in short slices and steps aside for waiting edits, so player edits never
 wait more than a couple of milliseconds. Place a full block of water with 8.
 
+Water only flows within 6 chunks of a player (per axis), half the view distance of
+12, so a large world doesn't spend CPU on floods nobody is watching. Further out,
+moving water pauses where it is and carries on when a player comes back within
+range. `--water-distance N` changes it on `VoxelEngine` (singleplayer or
+`--server`) and `VoxelServer`; it's kept below the view distance, because water
+needs loaded chunks around it to flow into. `WaterAreaTest` checks that water
+pauses out of range, keeps its volume, and resumes.
+
 ## Player
 
 You walk on the terrain with gravity and collision. The body is a 0.6 x 1.8
@@ -197,16 +242,17 @@ as a magenta checkerboard.
 
 ```
 src/
-  main.cpp  command line: singleplayer, --server, --connect
+  main.cpp  command line: singleplayer, --server, --connect, --world
   app/      Application (window, input, main loop), Camera, Player (movement and physics)
   client/   Client (connection), ClientWorld (received chunks, mesh worker),
             ClientChunk (meshes and GL buffers), ChunkMesher
   server/   Server (clients, streaming, validation), ServerWorld (chunk loading,
-            generation and light worker), Water, main.cpp (VoxelServer)
+            generation and light worker), Water, WorldStorage (saving),
+            main.cpp (VoxelServer)
   net/      Protocol (messages, RLE chunk planes), Transport (ENet wrapper)
   render/   Renderer (frame passes, skybox, post effect), PlayerModels, Shader,
             Textures, DebugDraw
   world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
             Features, Noise, Lighting, Collision, Raycast
-tests/      NetSmokeTest
+tests/      NetSmokeTest, SaveTest, WaterAreaTest
 ```

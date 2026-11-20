@@ -36,6 +36,10 @@ class ServerWorld;
 //
 // Event driven: only cells next to something that changed are simulated, so streamed
 // in seas and lakes cost nothing until disturbed. Unloaded space acts as a wall.
+//
+// The server limits simulation to an area around the players (SetSimulationArea),
+// smaller than the area it loads: active cells outside it are parked, untouched, and
+// carry on from where they were once a player comes close enough again.
 // In the game it runs on its own thread (Start); tests step it with Tick.
 class WaterSimulation
 {
@@ -56,7 +60,16 @@ public:
     // slices so other edits can interleave.
     void Tick(ServerWorld& world);
 
+    // Only cells within `distance` chunks (per axis) of one of these chunk coordinates
+    // are simulated from now on; the rest are parked until they're in range again.
+    // Parked cells further than `keepDistance` from every centre are forgotten (their
+    // chunks are about to unload; saved water is woken again when it loads). Until
+    // this is first called, everything is simulated. Caller holds the world's edit
+    // mutex (ServerWorld::Update).
+    void SetSimulationArea(const std::vector<glm::ivec3>& centers, int distance, int keepDistance);
+
     size_t GetActiveCount() const { return activeCount.load(std::memory_order_relaxed); }
+    size_t GetParkedCount() const { return parkedCount.load(std::memory_order_relaxed); }
     // Nothing queued and no tick in progress.
     bool IsIdle() const { return GetActiveCount() == 0 && !ticking.load(std::memory_order_acquire); }
 
@@ -67,11 +80,20 @@ public:
 
 private:
     void UpdateCell(ServerWorld& world, const glm::ivec3& pos);
+    // Whether a cell is within `range` chunks of a simulation centre. Edit mutex held.
+    bool NearCenter(const glm::ivec3& pos, int range) const;
+    void Wake();
     void ThreadLoop(ServerWorld& world);
 
     // Guarded by the world's edit mutex.
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> active;
     std::atomic<size_t> activeCount{0};
+    // Simulation area, guarded by the world's edit mutex like `active`.
+    bool limited = false;
+    std::vector<glm::ivec3> centers;
+    int distance = 0;
+    std::unordered_set<glm::ivec3, Coords::IVec3Hash> parked;
+    std::atomic<size_t> parkedCount{0};
     std::atomic<bool> ticking{false};
     struct Pending {
         glm::ivec3 pos;

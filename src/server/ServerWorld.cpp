@@ -1,5 +1,7 @@
 #include "server/ServerWorld.h"
 
+#include "server/WorldStorage.h"
+
 #include <algorithm>
 #include <cmath>
 #include <unordered_set>
@@ -13,8 +15,9 @@ constexpr size_t kGenerateBatchSize = 32;
 
 } // namespace
 
-ServerWorld::ServerWorld(const TerrainGenerator& terrain)
+ServerWorld::ServerWorld(const TerrainGenerator& terrain, WorldStorage* storage)
     : terrain(terrain),
+      storage(storage),
       light([this](const glm::ivec3& coords) -> Chunk* {
           // Called with chunksMutex held shared (see PropagateLight).
           auto it = chunks.find(coords);
@@ -85,6 +88,7 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
     if (previous == block) return;
 
     chunk->SetBlock(local.x, local.y, local.z, block);
+    chunk->MarkUnsaved();
 
     // Water around the change may need to flow (or settle).
     water.Activate({ x, y, z });
@@ -122,6 +126,10 @@ void ServerWorld::TakeChanges(std::vector<glm::ivec3>& blocks, std::vector<glm::
     lightChunks.swap(changedLight);
 }
 
+void ServerWorld::SetWaterSimulationDistance(int chunks) {
+    waterDistance = std::clamp(chunks, 1, std::min(RENDER_DISTANCE, VERTICAL_RENDER_DISTANCE) - 1);
+}
+
 void ServerWorld::Update(const std::vector<glm::ivec3>& centers) {
     if (centers == lastCenters) return;
     lastCenters = centers;
@@ -138,6 +146,12 @@ void ServerWorld::Update(const std::vector<glm::ivec3>& centers) {
     };
 
     {
+        // The edit mutex makes sure no edit lands in a chunk after it was saved here
+        // and before it's marked removed (SetBlock checks IsRemoved under it).
+        std::unique_ptr<Chunk::Blocks> saveBuffer;
+        std::lock_guard<std::recursive_mutex> edit(editMutex);
+        // Parked water further out than this sits in chunks that are being unloaded.
+        water.SetSimulationArea(centers, waterDistance, std::max(RENDER_DISTANCE, VERTICAL_RENDER_DISTANCE) + 1);
         std::unique_lock<std::shared_mutex> lock(chunksMutex);
         for (auto it = chunks.begin(); it != chunks.end();) {
             // Unload chunks that have left every player's range (with one chunk of
@@ -146,6 +160,11 @@ void ServerWorld::Update(const std::vector<glm::ivec3>& centers) {
             const bool farAway = !inRange(it->first, 1);
             const bool stalePlaceholder = it->second->GetState() == Chunk::State::Pending && !inRange(it->first, 0);
             if (farAway || stalePlaceholder) {
+                if (storage && it->second->IsLoaded() && it->second->TakeUnsaved()) {
+                    if (!saveBuffer) saveBuffer = std::make_unique<Chunk::Blocks>();
+                    it->second->CopyBlocks(*saveBuffer);
+                    storage->StoreChunk(it->first, *saveBuffer);
+                }
                 it->second->MarkRemoved();
                 it = chunks.erase(it);
             }
@@ -200,9 +219,15 @@ void ServerWorld::PropagateLight(const std::vector<ChunkPtr>& loadedChunks, cons
         const glm::ivec3 c = loadedChunks[i]->GetCoords();
         const auto& heights = GetColumnHeights(c.x, c.z);
         const int chunkTop = c.y * S + S - 1;
+        // Saved chunks above may have been built on: no sky light where one of them
+        // has something in the way (too dark is fine, it's corrected once they load).
+        WorldStorage::ColumnMask blocked{};
+        if (storage) storage->SkyBlockedAbove(c, blocked);
         for (int x = 0; x < S; x++)
             for (int z = 0; z < S; z++)
-                skyFromAbove[i][x * S + z] = TerrainGenerator::ColumnFrom(heights, x, z).SkyLightAbove(chunkTop);
+                skyFromAbove[i][x * S + z] = WorldStorage::IsColumnSet(blocked, x, z)
+                                                 ? 0
+                                                 : TerrainGenerator::ColumnFrom(heights, x, z).SkyLightAbove(chunkTop);
     }
 
     LightPropagator::ChunkSet dirty;
@@ -234,7 +259,7 @@ void ServerWorld::PropagateLight(const std::vector<ChunkPtr>& loadedChunks, cons
 void ServerWorld::WorkerLoop() {
     std::vector<ChunkPtr> batch, generated;
     auto generatedBlocks = std::make_unique<TerrainGenerator::Blocks>(); // reused generation buffer
-    std::vector<glm::ivec3> edits;
+    std::vector<glm::ivec3> edits, savedWater;
     batch.reserve(kGenerateBatchSize);
 
     while (true) {
@@ -253,15 +278,49 @@ void ServerWorld::WorkerLoop() {
         }
 
         generated.clear();
+        savedWater.clear();
         for (auto& chunk : batch) {
             if (chunk->IsRemoved() || !chunk->TryBeginGenerate()) continue;
 
             const glm::ivec3 c = chunk->GetCoords();
-            terrain.GenerateChunk(c, GetColumnHeights(c.x, c.z), *generatedBlocks);
+            if (storage && storage->LoadChunk(c, *generatedBlocks)) {
+                // Water in a saved chunk may have been moving when it was saved.
+                for (int i = 0; i < Chunk::VOLUME; i++)
+                    if ((*generatedBlocks)[i].HasWater()) {
+                        constexpr int S = Chunk::CHUNK_SIZE;
+                        savedWater.push_back(c * S + glm::ivec3(i % S, (i / S) % S, i / (S * S)));
+                    }
+            }
+            else {
+                terrain.GenerateChunk(c, GetColumnHeights(c.x, c.z), *generatedBlocks);
+            }
             chunk->SetGenerated(*generatedBlocks);
             generated.push_back(chunk);
         }
 
         if (!generated.empty() || !edits.empty()) PropagateLight(generated, edits);
+
+        // Let it carry on flowing (settled water just stays put after one look).
+        if (!savedWater.empty()) {
+            std::lock_guard<std::recursive_mutex> edit(editMutex);
+            for (const auto& pos : savedWater) water.Activate(pos);
+        }
     }
+}
+
+size_t ServerWorld::SaveAll() {
+    if (!storage) return 0;
+    std::vector<std::pair<glm::ivec3, std::unique_ptr<Chunk::Blocks>>> snapshot;
+    {
+        std::lock_guard<std::recursive_mutex> edit(editMutex);
+        for (const auto& [coords, chunk] : chunks) {
+            if (!chunk->IsLoaded() || chunk->IsRemoved() || !chunk->TakeUnsaved()) continue;
+            auto blocks = std::make_unique<Chunk::Blocks>();
+            chunk->CopyBlocks(*blocks);
+            snapshot.emplace_back(coords, std::move(blocks));
+        }
+    }
+    // Encoding happens outside the edit mutex, so water keeps flowing meanwhile.
+    for (const auto& [coords, blocks] : snapshot) storage->StoreChunk(coords, *blocks);
+    return snapshot.size();
 }

@@ -61,6 +61,13 @@ public:
     void MarkRemoved() { removed = true; }
     bool IsRemoved() const { return removed.load(); }
 
+    // Server: blocks changed since the chunk was last saved. Set by every edit;
+    // TakeUnsaved clears it, so take it before copying the blocks out to save them
+    // (an edit in between just marks the chunk again).
+    void MarkUnsaved() { unsaved.store(true, std::memory_order_release); }
+    bool IsUnsaved() const { return unsaved.load(std::memory_order_acquire); }
+    bool TakeUnsaved() { return unsaved.exchange(false, std::memory_order_acq_rel); }
+
     // Block access, in chunk-local coordinates.
     Block GetBlock(int x, int y, int z) const;
     bool IsOpaque(int x, int y, int z) const;
@@ -117,5 +124,6 @@ private:
 
     std::atomic<State> state{State::Pending};
     std::atomic_bool removed{false};
+    std::atomic_bool unsaved{false};
     std::atomic<uint32_t> lightVersion{0};
 };

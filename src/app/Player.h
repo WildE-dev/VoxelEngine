@@ -45,7 +45,10 @@ public:
     // Moves the player (a server correction or the spawn point) and stops it.
     void Teleport(const glm::vec3& feetPosition) { feet = feetPosition; velocity = glm::vec3(0.0f); accumulator = 0.0f; }
     // Forget the spawn so Spawn drops the player onto the terrain under it again.
-    void ResetSpawn() { spawned = false; }
+    void ResetSpawn() { spawned = false; resumeHere = false; }
+    // Spawn exactly here instead (rejoining a saved world): Spawn waits for the terrain
+    // around this point, and only drops onto the surface if it's inside blocks now.
+    void ResumeAt(const glm::vec3& feetPosition) { Teleport(feetPosition); spawned = false; resumeHere = true; }
 
     glm::vec3 GetFeetPosition() const { return feet; }
     glm::vec3 GetEyePosition() const { return feet + glm::vec3(0.0f, kEyeHeight, 0.0f); }
@@ -66,6 +69,7 @@ private:
     bool onGround = false;
     bool flying = false;
     bool spawned = false;
+    bool resumeHere = false;
     bool inWater = false;
     bool blockedHorizontally = false; // set by MoveHorizontal during a step
     float accumulator = 0.0f;

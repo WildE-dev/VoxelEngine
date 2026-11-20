@@ -84,15 +84,23 @@ bool ReadBlock(ByteReader& in, Block& b) {
     return b.water <= Block::kMaxWaterVolume && b.shown <= Block::kMaxWaterVolume;
 }
 
-void EncodeChunkPlanes(ByteWriter& out, const ChunkBlocks& blocks, const ChunkLight& light) {
+void EncodeBlockPlanes(ByteWriter& out, const ChunkBlocks& blocks) {
     EncodePlane(out, [&](int i) { return static_cast<uint8_t>(blocks[i].type); });
     for (int e = 0; e < 4; e++) EncodePlane(out, [&](int i) { return blocks[i].edgeData.edges[e]; });
     EncodePlane(out, [&](int i) { return blocks[i].water; });
     EncodePlane(out, [&](int i) { return blocks[i].shown; });
+}
+
+void EncodeChunkPlanes(ByteWriter& out, const ChunkBlocks& blocks, const ChunkLight& light) {
+    EncodeBlockPlanes(out, blocks);
     EncodeLightPlane(out, light);
 }
 
 bool DecodeChunkPlanes(ByteReader& in, ChunkBlocks& blocks, ChunkLight& light) {
+    return DecodeBlockPlanes(in, blocks) && DecodeLightPlane(in, light);
+}
+
+bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks) {
     bool valid = true;
     if (!DecodePlane(in, [&](int i, uint8_t v) {
             if (v >= static_cast<uint8_t>(BlockType::COUNT)) valid = false;
@@ -111,7 +119,7 @@ bool DecodeChunkPlanes(ByteReader& in, ChunkBlocks& blocks, ChunkLight& light) {
             blocks[i].shown = v;
         }))
         return false;
-    return valid && DecodeLightPlane(in, light);
+    return valid;
 }
 
 void EncodeLightPlane(ByteWriter& out, const ChunkLight& light) {
@@ -139,6 +147,9 @@ std::vector<uint8_t> Encode(const Welcome& m) {
     w.Vec3(m.spawn);
     w.I32(m.renderDistance);
     w.I32(m.verticalRenderDistance);
+    w.U8(m.flags);
+    w.F32(m.yaw);
+    w.F32(m.pitch);
     return std::move(w.data);
 }
 
@@ -259,6 +270,7 @@ bool Decode(ByteReader& in, Hello& m) {
 
 bool Decode(ByteReader& in, Welcome& m) {
     return in.U16(m.playerId) && in.Vec3(m.spawn) && in.I32(m.renderDistance) && in.I32(m.verticalRenderDistance) &&
+           in.U8(m.flags) && in.F32(m.yaw) && in.F32(m.pitch) && Finite(m.spawn) && std::isfinite(m.yaw) && std::isfinite(m.pitch) &&
            m.renderDistance > 0 && m.renderDistance <= 64 && m.verticalRenderDistance > 0 && m.verticalRenderDistance <= 64;
 }
 

@@ -46,12 +46,45 @@ void WaterSimulation::Activate(const glm::ivec3& pos) {
     for (const auto& d : kHorizontal)
         for (int step = 1; step <= kReach; step++) active.insert(pos + d * step);
     activeCount.store(active.size(), std::memory_order_relaxed);
+    Wake();
+}
 
+void WaterSimulation::Wake() {
     // Wake the thread if it's idle; cheap when it's already awake.
     if (thread.joinable() && !pending.exchange(true)) {
         std::lock_guard<std::mutex> lock(wakeMutex);
         wake.notify_one();
     }
+}
+
+bool WaterSimulation::NearCenter(const glm::ivec3& pos, int range) const {
+    const glm::ivec3 chunk = Coords::ChunkOf(pos);
+    for (const auto& center : centers) {
+        const glm::ivec3 d = glm::abs(chunk - center);
+        if (d.x <= range && d.y <= range && d.z <= range) return true;
+    }
+    return false;
+}
+
+void WaterSimulation::SetSimulationArea(const std::vector<glm::ivec3>& newCenters, int newDistance, int keepDistance) {
+    limited = true;
+    centers = newCenters;
+    distance = newDistance;
+    bool woke = false;
+    for (auto it = parked.begin(); it != parked.end();) {
+        if (NearCenter(*it, distance)) {
+            active.insert(*it);
+            woke = true;
+        }
+        else if (NearCenter(*it, keepDistance)) {
+            ++it;
+            continue;
+        }
+        it = parked.erase(it);
+    }
+    parkedCount.store(parked.size(), std::memory_order_relaxed);
+    activeCount.store(active.size(), std::memory_order_relaxed);
+    if (woke) Wake();
 }
 
 void WaterSimulation::Start(ServerWorld& world) {
@@ -109,16 +142,24 @@ void WaterSimulation::Tick(ServerWorld& world) {
         // Take a small chunk under the edit mutex (so it's held only briefly), then
         // filter it outside: block lookups are safe without the edit mutex.
         taken.clear();
+        bool exhausted = false;
         {
             yieldToEdits();
             std::lock_guard<std::recursive_mutex> lock(edit);
             for (auto it = active.begin(); it != active.end() && taken.size() < kCellsPerSlice * 8;) {
-                taken.push_back(*it);
+                // Out of the simulation area: wait there until a player comes near.
+                if (limited && !NearCenter(*it, distance)) parked.insert(*it);
+                else taken.push_back(*it);
                 it = active.erase(it);
             }
             activeCount.store(active.size(), std::memory_order_relaxed);
+            parkedCount.store(parked.size(), std::memory_order_relaxed);
+            exhausted = active.empty();
         }
-        if (taken.empty()) break;
+        if (taken.empty()) {
+            if (exhausted) break;
+            continue; // everything taken was parked; look further
+        }
         looked += taken.size();
         for (const auto& pos : taken) {
             Block block;

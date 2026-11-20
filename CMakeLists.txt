@@ -64,6 +64,8 @@ add_library(voxel_server STATIC
     src/server/ServerWorld.h
     src/server/Water.cpp
     src/server/Water.h
+    src/server/WorldStorage.cpp
+    src/server/WorldStorage.h
 )
 target_link_libraries(voxel_server PUBLIC voxel_common)
 
@@ -117,7 +119,15 @@ target_link_libraries(VoxelServer PRIVATE voxel_server)
 add_executable(NetSmokeTest tests/NetSmokeTest.cpp src/app/Player.cpp)
 target_link_libraries(NetSmokeTest PRIVATE voxel_server voxel_client)
 
-foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest)
+# Saves a world, restarts, and checks edits, light and players come back.
+add_executable(SaveTest tests/SaveTest.cpp src/app/Player.cpp)
+target_link_libraries(SaveTest PRIVATE voxel_server voxel_client)
+
+# Water only flows within the simulation distance of players.
+add_executable(WaterAreaTest tests/WaterAreaTest.cpp)
+target_link_libraries(WaterAreaTest PRIVATE voxel_server)
+
+foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W3)
     else()

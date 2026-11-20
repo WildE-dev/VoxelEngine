@@ -21,6 +21,8 @@
 #include "world/TerrainGenerator.h"
 #include "server/Water.h"
 
+class WorldStorage;
+
 // The authoritative world: owns all chunks around the connected players, a background
 // worker that generates terrain and propagates light, and the water simulation. No GL.
 //
@@ -41,13 +43,19 @@
 //    queueMutex, then logMutex.
 //  - Every edit that changes what a client sees is logged (TakeChanges), so the server
 //    can stream it to the clients that have the chunk.
+//  - With a WorldStorage, edited chunks are saved when they unload and by SaveAll, and
+//    chunks that were saved load from it instead of being generated.
 class ServerWorld : public BlockAccess
 {
 public:
     static constexpr int RENDER_DISTANCE = 12;          // horizontal, in chunks
     static constexpr int VERTICAL_RENDER_DISTANCE = 12; // vertical, in chunks
+    // Flowing water is only simulated this many chunks (per axis) around a player;
+    // further out it pauses until someone comes back (see WaterSimulation).
+    static constexpr int DEFAULT_WATER_SIMULATION_DISTANCE = 6;
 
-    explicit ServerWorld(const TerrainGenerator& terrain);
+    // `storage` may be null (nothing is saved); otherwise it must outlive the world.
+    explicit ServerWorld(const TerrainGenerator& terrain, WorldStorage* storage = nullptr);
     ~ServerWorld() override;
 
     ServerWorld(const ServerWorld&) = delete;
@@ -73,6 +81,10 @@ public:
     // Starts simulating flowing water on its own thread. Without it, water only moves
     // when WaterSimulation::Tick is called (tests step it deterministically).
     void StartWaterThread() { water.Start(*this); }
+    // Server thread, before the first Update. Clamped to 1..RENDER_DISTANCE - 1:
+    // water needs loaded chunks around it to flow into.
+    void SetWaterSimulationDistance(int chunks);
+    int GetWaterSimulationDistance() const { return waterDistance; }
     WaterSimulation& GetWater() { return water; }
     // Held for every block edit; the water thread holds it around each update slice.
     std::recursive_mutex& GetEditMutex() { return editMutex; }
@@ -82,6 +94,12 @@ public:
     bool HasPendingEdits() const { return pendingEdits.load(std::memory_order_acquire) > 0; }
 
     size_t GetLoadedChunkCount() const { return chunks.size(); }
+
+    // Server thread: hands every loaded chunk edited since it was last saved to the
+    // storage (call WorldStorage::Flush afterwards to write it out). Takes the edit
+    // mutex while copying, so the snapshot never catches flowing water halfway between
+    // two chunks. Returns the number of chunks saved.
+    size_t SaveAll();
 
 private:
     using ChunkPtr = std::shared_ptr<Chunk>;
@@ -99,6 +117,7 @@ private:
     void PropagateLight(const std::vector<ChunkPtr>& loadedChunks, const std::vector<glm::ivec3>& changedBlocks);
 
     const TerrainGenerator& terrain;
+    WorldStorage* const storage;
 
     std::unordered_map<glm::ivec3, ChunkPtr, Coords::IVec3Hash> chunks;
     mutable std::shared_mutex chunksMutex;
@@ -108,6 +127,7 @@ private:
     // Offsets within render distance, nearest first, so close chunks load first.
     std::vector<glm::ivec3> loadOffsets;
     std::vector<glm::ivec3> lastCenters;
+    int waterDistance = DEFAULT_WATER_SIMULATION_DISTANCE;
 
     std::mutex queueMutex;
     std::condition_variable queueCv;

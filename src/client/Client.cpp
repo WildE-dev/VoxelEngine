@@ -75,6 +75,9 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         welcomed = true;
         playerId = m.playerId;
         spawn = m.spawn;
+        spawnFlags = m.flags;
+        spawnYaw = m.yaw;
+        spawnPitch = m.pitch;
         world.SetViewDistance(m.renderDistance, m.verticalRenderDistance);
         break;
     }

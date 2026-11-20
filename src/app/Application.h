@@ -21,6 +21,9 @@ struct ClientOptions {
     std::string host;  // empty: start a local server and connect to it
     uint16_t port = 0; // 0: the default port
     std::string name = "Player";
+    // Singleplayer: where the local server saves the world (empty: don't save).
+    std::string worldDirectory = "saves/singleplayer";
+    int waterSimulationDistance = 6; // singleplayer's local server
 };
 
 class Application

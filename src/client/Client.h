@@ -51,6 +51,10 @@ public:
     const std::string& GetDisconnectReason() const { return disconnectReason; }
     uint16_t GetPlayerId() const { return playerId; }
     glm::vec3 GetSpawn() const { return spawn; }
+    // The Welcome's flags (net::kWelcomeResume, net::kFlagFlying) and look direction.
+    uint8_t GetSpawnFlags() const { return spawnFlags; }
+    float GetSpawnYaw() const { return spawnYaw; }
+    float GetSpawnPitch() const { return spawnPitch; }
 
     // A position correction from the server, once.
     std::optional<glm::vec3> TakeCorrection();
@@ -89,6 +93,8 @@ private:
     std::string disconnectReason;
     uint16_t playerId = 0;
     glm::vec3 spawn{0.0f};
+    uint8_t spawnFlags = 0;
+    float spawnYaw = -90.0f, spawnPitch = 0.0f;
 
     uint32_t stateSequence = 0;
     uint16_t correctionId = 0;

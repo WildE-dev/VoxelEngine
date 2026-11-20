@@ -1,5 +1,7 @@
 #include "app/Camera.h"
 
+#include <algorithm>
+
 #include <cmath>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -28,6 +30,12 @@ void Camera::UpdateLook(double xPos, double yPos) {
 
 void Camera::SetYaw(float degrees) {
     yaw = degrees;
+    UpdateFront();
+}
+
+void Camera::SetLook(float yawDegrees, float pitchDegrees) {
+    yaw = yawDegrees;
+    pitch = std::clamp(pitchDegrees, -89.0f, 89.0f);
     UpdateFront();
 }
 

@@ -20,6 +20,7 @@ public:
     glm::vec2 GetDirectionAngles() const { return { pitch, yaw }; }
     float GetYaw() const { return yaw; }
     void SetYaw(float degrees);
+    void SetLook(float yawDegrees, float pitchDegrees);
 
 private:
     void UpdateFront();

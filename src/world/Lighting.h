@@ -20,11 +20,12 @@ class Chunk;
 //  - Both lose two levels instead of one entering water, so deep water gets dark.
 //
 // While the chunk above isn't loaded, the sky light entering each column comes from
-// the generator: unloaded chunks are always freshly generated terrain (edits don't
-// survive unloading), which above the ground is only water up to sea level (see
-// TerrainGenerator). That estimate is exact for light coming straight down and never
-// too bright; any extra light (cave openings, sideways through water) is added once
-// the chunks above load.
+// the caller (ServerWorld): the generator's estimate for untouched terrain, which
+// above the ground is only water up to sea level (see TerrainGenerator), zeroed in
+// columns where a saved, edited chunk above has something in the way (see
+// WorldStorage::SkyBlockedAbove). That estimate is never too bright; any extra light
+// (cave openings, sideways through water, dug-out ground) is added once the chunks
+// above load.
 //
 // Runs entirely on the world worker thread. The chunk lookup must only return
 // loaded chunks, and the pointers it returns must stay valid for the duration of

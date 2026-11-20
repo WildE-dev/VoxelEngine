@@ -17,6 +17,7 @@
 #include "world/TerrainGenerator.h"
 
 class ServerWorld;
+class WorldStorage;
 
 // The authoritative game server: owns the world (generation, edits, water, light) and
 // streams it to connected clients over ENet. Runs headless; nothing here touches GL.
@@ -32,6 +33,10 @@ class ServerWorld;
 //    pending cells is re-sent whole instead.
 //  - Chunks whose light changed get their new light, coalesced the same way.
 //  - Chunks that leave a client's view distance are unloaded on that client.
+//
+// With a world directory, the world is saved there (see WorldStorage): edited chunks,
+// and each player's position by name, so rejoining puts them back where they left.
+// It autosaves every `autosaveSeconds` and saves when the server stops.
 class Server
 {
 public:
@@ -42,6 +47,12 @@ public:
         std::string bindHost = "0.0.0.0";
         uint16_t port = net::kDefaultPort;
         bool log = true;
+        // Where the world is saved; empty: nothing is saved (tests).
+        std::string worldDirectory;
+        float autosaveSeconds = 60.0f;
+        // Chunks around each player in which water flows (less than the view distance,
+        // to save CPU); further out it pauses until a player comes back.
+        int waterSimulationDistance = 6;
     };
 
     Server();
@@ -53,7 +64,7 @@ public:
     bool Start(const Options& options);
     uint16_t GetPort() const;
 
-    // Runs until Stop() is called (from any thread, or a signal handler).
+    // Runs until Stop() is called (from any thread, or a signal handler), then saves.
     void Run();
     // Runs on a thread of its own (singleplayer's in-process server).
     void RunInBackground();
@@ -109,11 +120,16 @@ private:
     // Sends a whole chunk; returns its encoded size.
     size_t SendChunk(ClientState& client, const glm::ivec3& coords);
     void Log(const std::string& message) const;
+    // Saves edited chunks and connected players' positions, and writes them out.
+    void Save(bool shuttingDown);
+    void StorePlayer(const ClientState& client);
 
     Options options;
     net::NetServer net;
     TerrainGenerator terrain;
+    std::unique_ptr<WorldStorage> storage; // declared before `world`, which uses it
     std::unique_ptr<ServerWorld> world;
+    double lastSaveTime = 0.0;
     std::unordered_map<net::PeerId, ClientState> clients;
     uint16_t nextPlayerId = 1;
     uint32_t tickCount = 0;

@@ -6,6 +6,7 @@
 #include <iostream>
 
 #include "server/ServerWorld.h"
+#include "server/WorldStorage.h"
 #include "world/Collision.h"
 
 namespace {
@@ -97,9 +98,22 @@ bool Server::Start(const Options& opts) {
         std::cerr << "[server] could not listen on " << options.bindHost << ":" << options.port << std::endl;
         return false;
     }
-    world = std::make_unique<ServerWorld>(terrain);
+    if (!options.worldDirectory.empty()) {
+        storage = std::make_unique<WorldStorage>(options.worldDirectory);
+        if (!storage->Open()) {
+            std::cerr << "[server] could not open the world in " << options.worldDirectory << std::endl;
+            storage.reset();
+            return false;
+        }
+        Log("world: " + storage->GetDirectory().string() + " (" + std::to_string(storage->GetStoredChunkCount()) + " saved chunks)");
+    }
+    world = std::make_unique<ServerWorld>(terrain, storage.get());
+    world->SetWaterSimulationDistance(options.waterSimulationDistance);
     world->StartWaterThread();
     startTime = Now();
+    lastSaveTime = startTime;
+    Log("water simulated within " + std::to_string(world->GetWaterSimulationDistance()) + " chunks of players (view distance " +
+        std::to_string(ServerWorld::RENDER_DISTANCE) + ")");
     Log("listening on " + (options.bindHost.empty() ? std::string("0.0.0.0") : options.bindHost) + ":" + std::to_string(GetPort()));
     return true;
 }
@@ -138,6 +152,34 @@ void Server::Run() {
         const auto waitMs = static_cast<uint32_t>(std::clamp((nextTick - now) * 1000.0, 0.0, 50.0));
         if (net.Poll(event, waitMs)) HandleEvent(event);
     }
+    Save(true);
+}
+
+void Server::StorePlayer(const ClientState& client) {
+    if (!storage || !client.welcomed || !client.hasState) return;
+    WorldStorage::PlayerRecord record;
+    record.feet = client.feet;
+    record.yaw = client.yaw;
+    record.pitch = client.pitch;
+    record.flags = client.flags;
+    storage->StorePlayer(client.name, record);
+}
+
+void Server::Save(bool shuttingDown) {
+    if (!storage || !world) return;
+    // Nothing may move once the final save is taken.
+    if (shuttingDown) world->GetWater().Stop();
+    const double start = Now();
+    for (const auto& [peer, client] : clients) StorePlayer(client);
+    const size_t saved = world->SaveAll();
+    const bool ok = storage->Flush();
+    lastSaveTime = Now();
+    if (shuttingDown || saved > 0) {
+        char ms[32];
+        std::snprintf(ms, sizeof ms, "%.0f ms", (lastSaveTime - start) * 1000.0);
+        Log(std::string(ok ? "saved " : "save FAILED after ") + std::to_string(saved) + " chunks (" +
+            std::to_string(storage->GetStoredChunkCount()) + " stored) in " + ms);
+    }
 }
 
 // --- Events -----------------------------------------------------------------------
@@ -151,6 +193,7 @@ void Server::HandleEvent(const net::NetEvent& event) {
         auto it = clients.find(event.peer);
         if (it == clients.end()) break;
         if (it->second.welcomed) Log(it->second.name + " (player " + std::to_string(it->second.id) + ") left");
+        StorePlayer(it->second);
         clients.erase(it);
         break;
     }
@@ -232,6 +275,21 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
     welcome.spawn = client.feet;
     welcome.renderDistance = ServerWorld::RENDER_DISTANCE;
     welcome.verticalRenderDistance = ServerWorld::VERTICAL_RENDER_DISTANCE;
+
+    // Rejoining a saved world: back to where they left. (Two players with the same name
+    // share the record and simply both start there.)
+    if (storage) {
+        if (auto saved = storage->FindPlayer(client.name)) {
+            client.feet = client.lastValid = saved->feet;
+            client.yaw = saved->yaw;
+            client.pitch = saved->pitch;
+            client.flags = saved->flags;
+            welcome.spawn = saved->feet;
+            welcome.yaw = saved->yaw;
+            welcome.pitch = saved->pitch;
+            welcome.flags = static_cast<uint8_t>(net::kWelcomeResume | (saved->flags & net::kFlagFlying));
+        }
+    }
     net.Send(client.peer, net::kChannelReliable, net::Encode(welcome));
     Log(client.name + " joined as player " + std::to_string(client.id));
 }
@@ -332,6 +390,7 @@ void Server::HandleCarve(ClientState& client, const net::EditCarve& carve) {
 
 void Server::Tick() {
     tickCount++;
+    if (storage && options.autosaveSeconds > 0.0f && Now() - lastSaveTime >= options.autosaveSeconds) Save(false);
 
     std::vector<glm::ivec3> centers;
     for (auto& [peer, client] : clients)

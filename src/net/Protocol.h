@@ -26,7 +26,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 1;
+constexpr uint32_t kProtocolVersion = 2;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -122,6 +122,9 @@ using ChunkLight = std::array<uint8_t, Chunk::VOLUME>;
 // chunk is about 30 bytes, a surface chunk typically one to three kilobytes.
 void EncodeChunkPlanes(ByteWriter& out, const ChunkBlocks& blocks, const ChunkLight& light);
 bool DecodeChunkPlanes(ByteReader& in, ChunkBlocks& blocks, ChunkLight& light);
+// Just the block planes (saved chunks store no light; it's recomputed on load).
+void EncodeBlockPlanes(ByteWriter& out, const ChunkBlocks& blocks);
+bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks);
 void EncodeLightPlane(ByteWriter& out, const ChunkLight& light);
 bool DecodeLightPlane(ByteReader& in, ChunkLight& light);
 
@@ -142,7 +145,13 @@ struct Welcome {
     glm::vec3 spawn{0.0f}; // feet position; the client drops onto the terrain below it
     int32_t renderDistance = 0;
     int32_t verticalRenderDistance = 0;
+    // kWelcomeResume: `spawn` is where this player was when they last left (from the
+    // saved world): start exactly there, facing yaw/pitch, instead of dropping onto
+    // the terrain. kFlagFlying: they were flying.
+    uint8_t flags = 0;
+    float yaw = -90.0f, pitch = 0.0f;
 };
+constexpr uint8_t kWelcomeResume = 0x80;
 
 struct Kick {
     std::string reason;

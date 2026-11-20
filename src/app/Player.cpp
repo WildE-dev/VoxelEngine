@@ -70,6 +70,22 @@ void Player::Update(const BlockAccess& world, const PlayerInput& input, float de
 bool Player::Spawn(const BlockAccess& world) {
     // Terrain heights stay well within this range (see TerrainGenerator).
     constexpr int kTop = 64, kBottom = -64;
+    if (resumeHere) {
+        // Wait until every cell the body touches has loaded, then stay put if it fits.
+        const auto box = BoundsAt(feet);
+        for (int x = static_cast<int>(std::floor(box.min.x)); x <= static_cast<int>(std::floor(box.max.x)); x++)
+            for (int y = static_cast<int>(std::floor(box.min.y)) - 1; y <= static_cast<int>(std::floor(box.max.y)); y++)
+                for (int z = static_cast<int>(std::floor(box.min.z)); z <= static_cast<int>(std::floor(box.max.z)); z++) {
+                    Block block;
+                    if (!world.GetBlock(x, y, z, block)) return false;
+                }
+        resumeHere = false;
+        if (!Collision::BoxBlocked(world, box)) {
+            velocity = glm::vec3(0.0f);
+            spawned = true;
+            return true;
+        }
+    }
     const int bx = static_cast<int>(std::floor(feet.x));
     const int bz = static_cast<int>(std::floor(feet.z));
     for (int y = kTop; y >= kBottom; y--) {
