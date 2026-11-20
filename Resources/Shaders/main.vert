@@ -2,7 +2,6 @@
 
 layout (location = 0) in uint aData1;
 layout (location = 1) in uint aData2;
-//layout (location = 2) in vec3 aNorm;
 
 uniform mat4 model;
 uniform mat4 view;
@@ -58,7 +57,8 @@ void main()
     gl_Position = projection * view * model * vec4(data.pos, 1.0f);
     TexCoord = data.tex;
 
-    float l = dot((model * vec4(data.norm, 1.0f)).xyz, vec3(0.0f, 1.0f, 0.0f));
+    // Directions must ignore the model translation (w = 0).
+    float l = dot(normalize(mat3(model) * data.norm), vec3(0.0f, 1.0f, 0.0f));
 
     l = (l + 1.0f) / 2.0f;
     l = clamp(l, 0.0f, 1.0f);

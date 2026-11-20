@@ -1,26 +1,37 @@
-#include "Block.h"
+#include "world/Block.h"
 
-Block::Block() : type(BlockType::AIR), edgeData() {}
-Block::Block(BlockType t) : type(t), edgeData() {}
+#include <array>
 
-Block::Block(const Block& other) : type(other.type), edgeData(other.edgeData) {}
+namespace {
 
-Block& Block::operator=(const Block& other) {
-    if (this != &other) {
-        type = other.type;
-        edgeData = other.edgeData;
-        // Copy other properties as needed
+// Unpacked vertex, packed into two uint32s for upload. See main.vert for the decode side.
+struct VertexData {
+    glm::vec3 pos{0.0f};
+    glm::vec2 tex{0.0f};
+    int textureIndex = 0;
+    glm::vec3 norm{0.0f};
+
+    VertexData() = default;
+    VertexData(glm::vec3 pos, glm::vec2 tex, int textureIndex, glm::vec3 norm)
+        : pos(pos), tex(tex), textureIndex(textureIndex), norm(norm) {}
+
+    // xyz in 1/8 block units (8 bits each), uv in 1/8 units (4 bits each).
+    uint32_t PackPosition() const {
+        uint32_t x = static_cast<uint32_t>(pos.x * 8);
+        uint32_t y = static_cast<uint32_t>(pos.y * 8);
+        uint32_t z = static_cast<uint32_t>(pos.z * 8);
+        uint32_t u = static_cast<uint32_t>(tex.x * 8);
+        uint32_t v = static_cast<uint32_t>(tex.y * 8);
+        return ((x & 0xFFu) << 24) | ((y & 0xFFu) << 16) | ((z & 0xFFu) << 8) | ((u & 0xFu) << 4) | (v & 0xFu);
     }
-    return *this;
-}
 
-enum class Face {
-    Right = 0,
-    Left = 1,
-    Top = 2,
-    Bottom = 3,
-    Back = 4,
-    Front = 5
+    // Normal quantised to 4 bits per axis, plus a 20-bit texture index.
+    uint32_t PackNormalAndTexture() const {
+        uint32_t nx = static_cast<uint32_t>((norm.x + 1.0f) * 7.5f);
+        uint32_t ny = static_cast<uint32_t>((norm.y + 1.0f) * 7.5f);
+        uint32_t nz = static_cast<uint32_t>((norm.z + 1.0f) * 7.5f);
+        return ((nx & 0xFu) << 28) | ((ny & 0xFu) << 24) | ((nz & 0xFu) << 20) | (static_cast<uint32_t>(textureIndex) & 0xFFFFFu);
+    }
 };
 
 glm::vec3 GetNormal(glm::vec3 p1, glm::vec3 p2, glm::vec3 p3) {
@@ -30,7 +41,7 @@ glm::vec3 GetNormal(glm::vec3 p1, glm::vec3 p2, glm::vec3 p3) {
     return cross;
 }
 
-std::array<VertexData, 6> GetFaceVertices(Face face, const EdgeData& edgeData, int x, int y, int z, TextureData textureData) {
+std::array<VertexData, 6> GetFaceVertices(Face face, const EdgeData& edgeData, int x, int y, int z, const TextureData& textureData) {
     std::array<VertexData, 6> vertices;
 
     float bottomY0 = static_cast<float>(edgeData.GetBottomY(0)) / 8.0f;
@@ -193,13 +204,27 @@ std::array<VertexData, 6> GetFaceVertices(Face face, const EdgeData& edgeData, i
     return vertices;
 }
 
-void Block::AddFaceVertices(std::vector<uint32_t>& vertices, int face, int x, int y, int z) const {
-    auto faceVertices = GetFaceVertices(static_cast<Face>(face), edgeData, x, y, z, blockTextureMap[type]);
+} // namespace
 
-    for (size_t i = 0; i < 6; i++)
-    {
-        vertices.push_back(faceVertices[i].GetVertexInt());
-        vertices.push_back(faceVertices[i].GetVertexNormInt());
+const TextureData& GetTextureData(BlockType type) {
+    static constexpr TextureData kNone{};
+    static constexpr TextureData kGrass{0, 2, 1, 1, 1, 1};
+    static constexpr TextureData kDirt{2};
+    static constexpr TextureData kStone{3};
+
+    switch (type) {
+    case BlockType::GRASS: return kGrass;
+    case BlockType::DIRT:  return kDirt;
+    case BlockType::STONE: return kStone;
+    default:               return kNone;
+    }
+}
+
+void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z) const {
+    auto faceVertices = GetFaceVertices(face, edgeData, x, y, z, GetTextureData(type));
+    for (const auto& v : faceVertices) {
+        vertices.push_back(v.PackPosition());
+        vertices.push_back(v.PackNormalAndTexture());
     }
 }
 
@@ -211,26 +236,12 @@ void Block::Shrink() {
     }
 }
 
-void Block::SetEdgeData(EdgeData edgeData)
-{
-    if (!edgeData.IsValid()) {
+void Block::SetEdgeData(EdgeData edges) {
+    if (edges.IsValid()) {
+        edgeData = edges;
+    }
+    else {
         type = BlockType::AIR;
         edgeData.MakeFull();
     }
-    else {
-        this->edgeData = edgeData;
-    }
-}
-
-bool Block::IsFullBlock() const
-{
-    if (type == BlockType::AIR) return false;
-
-    for (size_t i = 0; i < 4; i++)
-    {
-        if (edgeData.edges[i] != 0x80)
-            return false;
-    }
-
-    return true;
 }

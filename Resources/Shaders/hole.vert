@@ -18,7 +18,8 @@ void main()
 	vec3 cam_up = view_inv[1].xyz;
 
 	vec3 pos = center + (cam_right * aPos.x) + (cam_up * aPos.y);
-    gl_Position = projection * view * model * vec4(pos, 1.0f);
+    // pos is already in world space (it includes the model translation via center).
+    gl_Position = projection * view * vec4(pos, 1.0f);
 
     texCoords = aTexCoords;
 }

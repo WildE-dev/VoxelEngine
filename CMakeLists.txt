@@ -1,41 +1,71 @@
 cmake_minimum_required(VERSION 3.16.0 FATAL_ERROR)
 
-set(CMAKE_SYSTEM_VERSION 10.0 CACHE STRING "" FORCE)
+if(CMAKE_HOST_WIN32)
+    set(CMAKE_SYSTEM_VERSION 10.0 CACHE STRING "")
+endif()
 
-project(VoxelEngine)
+project(VoxelEngine LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+find_package(Threads REQUIRED)
 
-find_path(STB_INCLUDE_DIRS "stb_image.h") 
+find_path(STB_INCLUDE_DIRS "stb_image.h")
+if(NOT STB_INCLUDE_DIRS)
+    message(FATAL_ERROR "stb_image.h not found (install the 'stb' vcpkg port)")
+endif()
 
-add_executable(${PROJECT_NAME} src/VoxelEngine.cpp
-                   src/Block.cpp
-                   src/Camera.cpp
-                   src/Chunk.cpp
-                   src/Shader.cpp
-                   src/TerrainGenerator.cpp
-                   src/AsyncCircularQueue.cpp
-                   src/World.cpp
-                   src/ThreadPool.cpp
-                   src/Debugging.cpp
-                   src/AssetLoader.cpp
-                   
-                   src/Block.h
-                   src/Camera.h
-                   src/Chunk.h
-                   src/Shader.h
-                   src/TerrainGenerator.h
-                   src/World.h
-                   src/AsyncCircularQueue.h
-                   src/ThreadPool.h
-                   src/Debugging.h
-                   src/AssetLoader.h)
+add_executable(${PROJECT_NAME}
+    src/main.cpp
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${STB_INCLUDE_DIRS} src)
+    src/app/Application.cpp
+    src/app/Application.h
+    src/app/Camera.cpp
+    src/app/Camera.h
 
-target_link_libraries(${PROJECT_NAME} PRIVATE glfw glad::glad glm::glm imgui::imgui)
+    src/render/DebugDraw.cpp
+    src/render/DebugDraw.h
+    src/render/Renderer.cpp
+    src/render/Renderer.h
+    src/render/Shader.cpp
+    src/render/Shader.h
+    src/render/Textures.cpp
+    src/render/Textures.h
 
-file(COPY ${CMAKE_SOURCE_DIR}/Resources DESTINATION ${CMAKE_BINARY_DIR})
+    src/world/Block.cpp
+    src/world/Block.h
+    src/world/Chunk.cpp
+    src/world/Chunk.h
+    src/world/Raycast.cpp
+    src/world/Raycast.h
+    src/world/TerrainGenerator.cpp
+    src/world/TerrainGenerator.h
+    src/world/World.cpp
+    src/world/World.h
+)
+
+target_include_directories(${PROJECT_NAME} PRIVATE src ${STB_INCLUDE_DIRS})
+target_link_libraries(${PROJECT_NAME} PRIVATE glfw glad::glad glm::glm imgui::imgui Threads::Threads)
+
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /W3)
+else()
+    target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra)
+endif()
+
+# Copy shaders/textures next to the executable on every build so edits are picked up.
+# The app loads them relative to the working directory.
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/Resources $<TARGET_FILE_DIR:${PROJECT_NAME}>/Resources
+    COMMENT "Copying resources")
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    VS_DEBUGGER_WORKING_DIRECTORY $<TARGET_FILE_DIR:${PROJECT_NAME}>)
