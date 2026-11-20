@@ -167,8 +167,11 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
     // --- Water surfaces ---
     // Each surface corner is the average level of the water cells sharing it (full if
     // any of them has water above), so neighbouring cells meet exactly: the surface is
-    // continuous and no faces are drawn between water cells. Heights are in eighths.
-    constexpr int kUnitsPerEighth = Block::kMaxWaterVolume / 8;
+    // continuous and no faces are drawn between water cells. Heights are in 32nds of
+    // a block: the mesh geometry has eighths, and the remaining 0..3 32nds go in the
+    // vertex bits water doesn't use for AO (main.vert adds them in the water pass), so
+    // slowly changing levels move smoothly instead of popping an eighth at a time.
+    constexpr int kUnitsPer32nd = Block::kMaxWaterVolume / 32;
     constexpr int kCornerOfEdge[4][2] = { { 0, 1 }, { 1, 0 }, { 0, 0 }, { 1, 1 } }; // EdgeData order
     auto cornerHeight = [&](const glm::ivec3& p, int cx, int cz) {
         int sum = 0, n = 0;
@@ -176,12 +179,13 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
             for (int dz = cz - 1; dz <= cz; dz++) {
                 const glm::ivec3 q = p + glm::ivec3(dx, 0, dz);
                 if (!hasWater(q)) continue;
-                if (hasWater(q + glm::ivec3(0, 1, 0))) return 8;
-                sum += cellAt(q).WaterLevel();
+                if (hasWater(q + glm::ivec3(0, 1, 0))) return 32;
+                sum += cellAt(q).WaterShownLevel();
                 n++;
             }
         }
-        return std::clamp((sum + n * kUnitsPerEighth / 2) / (n * kUnitsPerEighth), 1, 8);
+        // At least an eighth, so thin water stays visible.
+        return std::clamp((sum + n * kUnitsPer32nd / 2) / (n * kUnitsPer32nd), 4, 32);
     };
     // Side faces: our two edges on that side, and the neighbour's edges they touch.
     struct SideEdges { int ours[2], theirs[2]; };
@@ -196,13 +200,16 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
 
     std::vector<uint32_t> waterVertices;
     auto emitWater = [&](const glm::ivec3& here, const Block& self) {
-        uint8_t top[4], bottom[4];
+        uint8_t top[4], fine[4], bottom[4]; // top in eighths + fine (0..3 32nds); bottom in eighths
+        int top32[4];
         bool visible = false;
         for (int e = 0; e < 4; e++) {
-            top[e] = static_cast<uint8_t>(cornerHeight(here, kCornerOfEdge[e][0], kCornerOfEdge[e][1]));
+            top32[e] = cornerHeight(here, kCornerOfEdge[e][0], kCornerOfEdge[e][1]);
+            top[e] = static_cast<uint8_t>(top32[e] / 4);
+            fine[e] = static_cast<uint8_t>(top32[e] % 4);
             // In a waterlogged block the water sits on the slope.
             bottom[e] = self.IsPartial() ? std::min(self.edgeData.GetTopY(e), top[e]) : 0;
-            visible |= top[e] > bottom[e];
+            visible |= top32[e] > bottom[e] * 4;
         }
         if (!visible) return; // entirely below the slope
 
@@ -211,7 +218,7 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
             // A solid block hides the face it touches. The top only touches the block
             // above when the water reaches the top of the cell; a lower surface shows.
             if (isOpaque(n)) {
-                const bool touchesAbove = top[0] == 8 && top[1] == 8 && top[2] == 8 && top[3] == 8;
+                const bool touchesAbove = top32[0] == 32 && top32[1] == 32 && top32[2] == 32 && top32[3] == 32;
                 if (face != static_cast<int>(Face::Top) || touchesAbove) continue;
             }
             const Block& neighbour = cellAt(n);
@@ -234,11 +241,24 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
                     uint8_t from = bottom[e];
                     if (neighbour.IsPartial()) from = std::max(from, std::min(neighbour.edgeData.GetTopY(edges.theirs[k]), top[e]));
                     shape.edgeData.SetBottomY(e, from);
-                    exposed |= top[e] > from;
+                    exposed |= top32[e] > from * 4;
                 }
                 if (!exposed) continue;
             }
+            const size_t first = waterVertices.size();
             shape.AddFaceVertices(waterVertices, static_cast<Face>(face), here.x, here.y, here.z, shadeFace(here, face, false));
+
+            // Fine height: vertices on a corner's top edge get that corner's extra 32nds
+            // (in the AO bits, 18-19); all other water vertices get none.
+            for (size_t i = first; i < waterVertices.size(); i += 2) {
+                const uint32_t position = waterVertices[i];
+                const int cx = static_cast<int>((position >> 24) & 0xFF) - here.x * 8; // 0 or 8
+                const int cz = static_cast<int>((position >> 8) & 0xFF) - here.z * 8;
+                const int y = static_cast<int>((position >> 16) & 0xFF) - 8 - here.y * 8; // eighths within the cell
+                const int e = cx == 0 ? (cz == 0 ? 2 : 0) : (cz == 0 ? 1 : 3);
+                const uint32_t extra = y == top[e] ? fine[e] : 0u;
+                waterVertices[i + 1] = (waterVertices[i + 1] & ~(0x3u << 18)) | (extra << 18);
+            }
         }
     };
 

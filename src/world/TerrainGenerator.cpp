@@ -146,7 +146,7 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                 const int blockY = coords.y * S + y;
                 Block& cell = out[Index(x, y, z)];
                 if (blockY >= firstOpen && blockY < kSeaLevel) cell = Block::Water(Block::kMaxWaterVolume);
-                else if (blockY == column.surfaceRow && blockY < kSeaLevel && cell.IsPartial()) cell.water = cell.WaterCapacity();
+                else if (blockY == column.surfaceRow && blockY < kSeaLevel && cell.IsPartial()) cell.water = cell.shown = cell.WaterCapacity();
             }
         }
     }

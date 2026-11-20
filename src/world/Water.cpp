@@ -1,6 +1,7 @@
 #include "world/Water.h"
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 
 #include "world/World.h"
@@ -20,7 +21,18 @@ constexpr int kReach = 6;
 
 // Sets the water in a cell, keeping a partial block (waterlogged) if it is one.
 void SetWater(World& world, const glm::ivec3& p, const Block& cell, int volume) {
-    world.SetBlock(p.x, p.y, p.z, cell.WithWater(static_cast<uint8_t>(volume)));
+    // Every caller conserves volume; this catches a bug before it can wrap the byte
+    // (which would silently create water).
+    assert(volume >= 0 && volume <= cell.WaterCapacity());
+    world.SetBlock(p.x, p.y, p.z, cell.WithWater(static_cast<uint8_t>(std::clamp(volume, 0, static_cast<int>(cell.WaterCapacity())))));
+}
+
+// A cell with nothing left to move is at rest: draw its true volume (see Block::shown).
+void SnapShown(World& world, const glm::ivec3& p, const Block& cell) {
+    if (cell.shown == cell.water) return;
+    Block b = cell;
+    b.shown = b.water;
+    world.SetBlock(p.x, p.y, p.z, b);
 }
 
 } // namespace
@@ -92,7 +104,8 @@ void WaterSimulation::Tick(World& world) {
     batch.clear();
     std::vector<glm::ivec3> taken;
     size_t looked = 0;
-    while (batch.size() < kCellsPerTick && looked < 8 * kCellsPerTick) {
+    size_t wetInBatch = 0, dryInBatch = 0;
+    while (wetInBatch < kCellsPerTick && looked < 8 * kCellsPerTick) {
         // Take a small chunk under the edit mutex (so it's held only briefly), then
         // filter it outside: block lookups are safe without the edit mutex.
         taken.clear();
@@ -109,20 +122,36 @@ void WaterSimulation::Tick(World& world) {
         looked += taken.size();
         for (const auto& pos : taken) {
             Block block;
-            if (!world.GetBlock(pos.x, pos.y, pos.z, block) || !block.HasWater()) continue;
+            if (!world.GetBlock(pos.x, pos.y, pos.z, block) || !block.CanHoldWater()) continue;
+            // Cells that are empty now stay in the batch too: water can reach them earlier
+            // in the same tick (an edge cell that just poured gets refilled from behind,
+            // and can pour again this tick instead of every other one). They're cheap, so
+            // only cells holding water count against the budget.
+            if (!block.HasWater()) {
+                if (dryInBatch++ < 8 * kCellsPerTick) batch.push_back({ pos, false, block.WaterFloor() });
+                continue;
+            }
             // Falling cells (room below) sort ahead of others at the same height.
             Block below;
             const bool falling = !block.IsPartial() && world.GetBlock(pos.x, pos.y - 1, pos.z, below) &&
                                  below.CanHoldWater() && below.WaterVolume() < below.WaterCapacity();
-            batch.push_back({ pos, falling });
+            batch.push_back({ pos, falling, block.WaterLevel() });
+            wetInBatch++;
         }
     }
     // Bottom up, falling cells first at each height: lower water moves out of the way
     // before the water above it moves, so a falling stream stays continuous and an
     // edge cell empties before the water behind it refills it.
+    // Within a height, higher water goes first: water then passes through a cell in
+    // the same tick it arrives (upstream gives before downstream takes), so a draining
+    // surface goes steadily down instead of jittering up and down.
     std::sort(batch.begin(), batch.end(), [](const Pending& a, const Pending& b) {
         if (a.pos.y != b.pos.y) return a.pos.y < b.pos.y;
-        return a.falling > b.falling;
+        if (a.falling != b.falling) return a.falling > b.falling;
+        if (a.level != b.level) return a.level > b.level;
+        // Ties in a fixed order rather than hash order, so it's stable tick to tick.
+        if (a.pos.x != b.pos.x) return a.pos.x < b.pos.x;
+        return a.pos.z < b.pos.z;
     });
 
     // Update in slices, releasing the edit mutex in between so player edits (and the
@@ -205,7 +234,10 @@ void WaterSimulation::UpdateCell(World& world, const glm::ivec3& pos) {
             if (head >= 2) group[count++] = m;
         }
     }
-    if (count == 1) return;
+    if (count == 1) {
+        SnapShown(world, pos, block);
+        return;
+    }
 
     // Find the common level T where the group's water fits: sum over members of
     // clamp(T - floor, 0, capacity) == total. Then hand out the remainder one unit at
@@ -224,10 +256,18 @@ void WaterSimulation::UpdateCell(World& world, const glm::ivec3& pos) {
         if (filled(mid) <= total) lo = mid; else hi = mid - 1;
     }
     int remainder = total - filled(lo);
+    int target[1 + 4 * kReach];
     for (int i = 0; i < count; i++) {
         const Member& m = group[i];
-        int v = share(m, lo);
-        if (remainder > 0 && v < m.cell.WaterCapacity() && lo >= m.floor) { v++; remainder--; }
-        if (v != m.cell.WaterVolume()) SetWater(world, m.pos, m.cell, v);
+        target[i] = share(m, lo);
+        if (remainder > 0 && target[i] < m.cell.WaterCapacity() && lo >= m.floor) { target[i]++; remainder--; }
     }
+
+    bool moved = false;
+    for (int i = 0; i < count; i++) {
+        if (target[i] == group[i].cell.WaterVolume()) continue;
+        SetWater(world, group[i].pos, group[i].cell, target[i]);
+        moved = true;
+    }
+    if (!moved) SnapShown(world, pos, block);
 }

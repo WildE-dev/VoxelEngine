@@ -156,9 +156,14 @@ struct Block {
     // Water in this cell, 0..kMaxWaterVolume units: a water block's volume, or water
     // filling the space above a partial block's slope ("waterlogged").
     uint8_t water = 0;
+    // The volume as drawn. While water is moving it only follows `water` once that has
+    // drifted kShownDeadband away, which hides the small back-and-forth of flowing water
+    // (otherwise visible as jitter while a lake drains); once the cell is at rest the
+    // water simulation snaps it to the true volume. Rendering only.
+    uint8_t shown = 0;
 
     Block() = default;
-    explicit Block(BlockType t) : type(t), water(t == BlockType::WATER ? kMaxWaterVolume : 0) {}
+    explicit Block(BlockType t) : type(t), water(t == BlockType::WATER ? kMaxWaterVolume : 0), shown(water) {}
     // Partial block. Falls back to air if the edge data is degenerate.
     Block(BlockType t, EdgeData edges) : type(t) { SetEdgeData(edges); }
 
@@ -177,9 +182,11 @@ struct Block {
     static constexpr uint8_t kMaxWaterVolume = 128;
     static Block Water(uint8_t volume) {
         Block b(BlockType::WATER);
-        b.water = volume;
+        b.water = b.shown = volume;
         return b;
     }
+    // An eighth of a block: smaller back-and-forth is hidden while water moves.
+    static constexpr uint8_t kShownDeadband = kMaxWaterVolume / 8;
     // A cell of only water (as opposed to a waterlogged partial block).
     bool IsLiquid() const { return type == BlockType::WATER; }
     bool HasWater() const { return water > 0; }
@@ -194,18 +201,26 @@ struct Block {
     uint8_t WaterCapacity() const { return static_cast<uint8_t>(kMaxWaterVolume - WaterFloor()); }
     // Height of the water surface within the cell, in units (floor + volume).
     int WaterLevel() const { return WaterFloor() + water; }
-    // Drawn height of the water surface in eighths of a block (when nothing is above
-    // it): the level rounded, at least one eighth so thin water stays visible.
-    uint8_t WaterSurfaceEighths() const {
-        constexpr int unitsPerEighth = kMaxWaterVolume / 8;
-        const int eighths = (WaterLevel() + unitsPerEighth / 2) / unitsPerEighth;
-        return static_cast<uint8_t>(eighths < 1 ? 1 : eighths);
+    // Level of the water as drawn, in units (floor + shown volume).
+    int WaterShownLevel() const { return WaterFloor() + shown; }
+    // Height of the water surface as drawn, in 32nds of a block (when nothing is above
+    // it): the shown level rounded, at least an eighth so thin water stays visible.
+    uint8_t WaterSurface32nds() const {
+        constexpr int unitsPer32nd = kMaxWaterVolume / 32;
+        const int h = (WaterShownLevel() + unitsPer32nd / 2) / unitsPer32nd;
+        return static_cast<uint8_t>(h < 4 ? 4 : h);
     }
     // This cell holding `volume` units: the same partial block waterlogged, or a water
     // block (air if the volume is 0). Water washes plants away.
     Block WithWater(uint8_t volume) const {
-        if (IsPartial()) { Block b = *this; b.water = volume; return b; }
-        return volume > 0 ? Water(volume) : Block();
+        if (!IsPartial() && volume == 0) return Block();
+        Block b = IsPartial() || IsLiquid() ? *this : Water(volume);
+        b.water = volume;
+        // Newly wet or dried cells show their volume at once; otherwise the drawn
+        // volume only moves once the real one is a whole drawn step away.
+        const int drift = static_cast<int>(volume) - static_cast<int>(shown);
+        if (volume == 0 || !HasWater() || drift >= kShownDeadband || drift <= -kShownDeadband) b.shown = volume;
+        return b;
     }
     // Same block apart from how much water it holds (whether it holds any counts).
     bool DiffersOnlyInWaterVolume(const Block& o) const {
@@ -239,6 +254,6 @@ struct Block {
     // Appends 6 vertices (2 packed uint32 each) for the given face.
     void AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading) const;
 
-    bool operator==(const Block& o) const { return type == o.type && edgeData == o.edgeData && water == o.water; }
+    bool operator==(const Block& o) const { return type == o.type && edgeData == o.edgeData && water == o.water && shown == o.shown; }
     bool operator!=(const Block& o) const { return !(*this == o); }
 };

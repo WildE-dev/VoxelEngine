@@ -76,6 +76,7 @@ private:
     struct Pending {
         glm::ivec3 pos;
         bool falling;
+        int level;
     };
     std::vector<Pending> batch; // tick-local (one ticking thread at a time)
 

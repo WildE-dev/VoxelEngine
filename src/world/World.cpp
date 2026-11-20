@@ -111,7 +111,7 @@ void World::SetBlock(int x, int y, int z, const Block& block) {
     // Water only changing volume (most of what flowing water does) can't affect light,
     // and only needs new meshes if its drawn surface height changes.
     const bool waterVolumeOnly = previous.DiffersOnlyInWaterVolume(block);
-    if (waterVolumeOnly && previous.WaterSurfaceEighths() == block.WaterSurfaceEighths()) return;
+    if (waterVolumeOnly && previous.WaterSurface32nds() == block.WaterSurface32nds()) return;
 
     // Plants need the block under them: any change there uproots them.
     Block above;

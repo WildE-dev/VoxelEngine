@@ -48,7 +48,12 @@ Data getData()
     int textureIndex = int(aData2 & 0x3FFu);
     float blockLight = float((aData2 >> 14) & 0xFu);
     float skyLight = float((aData2 >> 10) & 0xFu);
+    // Water has no AO; its two AO bits are extra surface height in 32nds of a block.
     float ao = float((aData2 >> 18) & 0x3u) / 3.0f;
+    if (waterPass > 0.5f) {
+        y += float((aData2 >> 18) & 0x3u) / 32.0f;
+        ao = 1.0f;
+    }
     
     vec2 coords = getTextureCoords(textureIndex, u, v);
 

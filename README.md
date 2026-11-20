@@ -73,6 +73,11 @@ as a continuous stream. A bucket poured on flat ground spreads into a shallow
 puddle and stops, and digging next to a lake lowers it slightly as the hole
 fills.
 
+While water moves, the drawn surface hides small back-and-forth changes (it
+follows the real level once that has moved an eighth of a block, and snaps to it
+once the water settles), and surfaces are drawn in 32nds of a block, so a
+draining lake goes smoothly down instead of jittering.
+
 The simulation runs on its own thread, up to 32,768 water cells per tick, ten
 ticks a second, and only near something that changed. It holds a world-wide edit
 lock in short slices and steps aside for waiting edits, so player edits never
