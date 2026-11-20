@@ -12,7 +12,7 @@ struct RaycastHit {
     glm::ivec3 normal; // face normal of the side that was entered (zero if the ray started inside it)
 };
 
-// First non-air block along the ray, or nullopt if none within maxDistance.
+// First block along the ray that isn't air or water, or nullopt if none within maxDistance.
 std::optional<RaycastHit> Raycast(const World& world, const glm::vec3& origin, const glm::vec3& direction, float maxDistance);
 
 // Every block position in a loaded chunk along the ray, up to maxDistance.

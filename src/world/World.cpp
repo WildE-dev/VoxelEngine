@@ -39,6 +39,7 @@ World::World(const TerrainGenerator& terrain)
 }
 
 World::~World() {
+    water.Stop(); // uses the chunks, so it goes first
     {
         std::lock_guard<std::mutex> lock(queueMutex);
         stopping = true;
@@ -71,8 +72,13 @@ World::ChunkPtr World::FindChunk(const glm::ivec3& chunkCoords) const {
     return it != chunks.end() ? it->second : nullptr;
 }
 
+World::ChunkPtr World::FindChunkShared(const glm::ivec3& chunkCoords) const {
+    std::shared_lock<std::shared_mutex> lock(chunksMutex);
+    return FindChunk(chunkCoords);
+}
+
 bool World::GetBlock(int x, int y, int z, Block& block) const {
-    auto chunk = FindChunk(WorldToChunkCoordinates(x, y, z));
+    auto chunk = FindChunkShared(WorldToChunkCoordinates(x, y, z));
     if (!chunk || !chunk->IsLoaded()) return false;
 
     auto local = WorldToLocalCoordinates(x, y, z);
@@ -81,15 +87,31 @@ bool World::GetBlock(int x, int y, int z, Block& block) const {
 }
 
 void World::SetBlock(int x, int y, int z, const Block& block) {
+    struct PendingEdit {
+        std::atomic<int>& count;
+        explicit PendingEdit(std::atomic<int>& c) : count(c) { count.fetch_add(1, std::memory_order_acq_rel); }
+        ~PendingEdit() { count.fetch_sub(1, std::memory_order_acq_rel); }
+    } pending(pendingEdits);
+    std::lock_guard<std::recursive_mutex> edit(editMutex);
     const glm::ivec3 chunkCoords = WorldToChunkCoordinates(x, y, z);
-    auto chunk = FindChunk(chunkCoords);
-    // Edits to chunks that haven't generated yet would be overwritten by generation.
-    if (!chunk || !chunk->IsLoaded()) return;
+    auto chunk = FindChunkShared(chunkCoords);
+    // Edits to chunks that haven't generated yet would be overwritten by generation,
+    // and unloaded ones are gone.
+    if (!chunk || !chunk->IsLoaded() || chunk->IsRemoved()) return;
 
     const glm::ivec3 local = WorldToLocalCoordinates(x, y, z);
-    if (chunk->GetBlock(local.x, local.y, local.z) == block) return;
+    const Block previous = chunk->GetBlock(local.x, local.y, local.z);
+    if (previous == block) return;
 
     chunk->SetBlock(local.x, local.y, local.z, block);
+
+    // Water around the change may need to flow (or settle).
+    water.Activate({ x, y, z });
+
+    // Water only changing volume (most of what flowing water does) can't affect light,
+    // and only needs new meshes if its drawn surface height changes.
+    const bool waterVolumeOnly = previous.DiffersOnlyInWaterVolume(block);
+    if (waterVolumeOnly && previous.WaterSurfaceEighths() == block.WaterSurfaceEighths()) return;
 
     // Plants need the block under them: any change there uproots them.
     Block above;
@@ -98,16 +120,25 @@ void World::SetBlock(int x, int y, int z, const Block& block) {
     // Light depends on the new block, so let the worker update it; it requests the
     // mesh rebuilds once light is settled. Light-neutral edits (no light at or
     // around the block) still need rebuilding, so request those directly too.
-    {
+    if (!waterVolumeOnly) {
         std::lock_guard<std::mutex> lock(queueMutex);
         lightQueue.emplace_back(x, y, z);
     }
     queueCv.notify_one();
 
     Coords::ForEachChunkTouching({ x, y, z }, [&](const glm::ivec3& coords) {
-        auto touched = coords == chunkCoords ? chunk : FindChunk(coords);
+        auto touched = coords == chunkCoords ? chunk : FindChunkShared(coords);
         if (touched && touched->IsLoaded()) RequestRebuild(touched);
     });
+}
+
+bool World::IsUnderwater(const glm::vec3& point) const {
+    const glm::ivec3 cell = glm::ivec3(glm::floor(point));
+    Block block;
+    if (!GetBlock(cell.x, cell.y, cell.z, block) || !block.HasWater()) return false;
+    Block above;
+    if (GetBlock(cell.x, cell.y + 1, cell.z, above) && above.HasWater()) return true; // full under more water
+    return point.y - cell.y < block.WaterLevel() / static_cast<float>(Block::kMaxWaterVolume);
 }
 
 void World::RebuildAllChunks() {
@@ -251,12 +282,17 @@ bool World::BuildChunkMesh(Chunk& chunk) {
 }
 
 void World::PropagateLight(const std::vector<ChunkPtr>& loadedChunks, const std::vector<glm::ivec3>& changedBlocks) {
-    // Each new chunk's surface rows let sky light tell which columns are open to the
-    // sky while the chunk above hasn't loaded yet.
-    std::vector<TerrainGenerator::SurfaceRows> surfaceRows(loadedChunks.size());
+    // Sky light coming down into each new chunk's columns, from the generator, for
+    // columns whose chunk above hasn't loaded yet.
+    constexpr int S = Chunk::CHUNK_SIZE;
+    std::vector<std::array<uint8_t, S * S>> skyFromAbove(loadedChunks.size());
     for (size_t i = 0; i < loadedChunks.size(); i++) {
         const glm::ivec3 c = loadedChunks[i]->GetCoords();
-        TerrainGenerator::ComputeSurfaceRows(GetColumnHeights(c.x, c.z), surfaceRows[i]);
+        const auto& heights = GetColumnHeights(c.x, c.z);
+        const int chunkTop = c.y * S + S - 1;
+        for (int x = 0; x < S; x++)
+            for (int z = 0; z < S; z++)
+                skyFromAbove[i][x * S + z] = TerrainGenerator::ColumnFrom(heights, x, z).SkyLightAbove(chunkTop);
     }
 
     LightPropagator::ChunkSet dirty;
@@ -265,7 +301,7 @@ void World::PropagateLight(const std::vector<ChunkPtr>& loadedChunks, const std:
         // and this stops the main thread unloading chunks underneath it.
         std::shared_lock<std::shared_mutex> lock(chunksMutex);
         for (size_t i = 0; i < loadedChunks.size(); i++)
-            if (!loadedChunks[i]->IsRemoved()) light.OnChunkLoaded(*loadedChunks[i], &surfaceRows[i]);
+            if (!loadedChunks[i]->IsRemoved()) light.OnChunkLoaded(*loadedChunks[i], &skyFromAbove[i]);
         for (const auto& pos : changedBlocks)
             light.OnBlockChanged(pos);
         light.Propagate(dirty);
@@ -355,5 +391,27 @@ void World::Render(Shader& shader, const glm::mat4& view, const glm::mat4& proje
         glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(coords * Chunk::CHUNK_SIZE));
         shader.SetUniform("model", model);
         chunk->Draw();
+    }
+}
+
+void World::RenderWater(Shader& shader, const glm::mat4& view, const glm::mat4& projection, float time, const glm::vec3& cameraPosition) {
+    // Back to front so overlapping translucent surfaces blend correctly (per chunk;
+    // within a chunk water is mostly a single surface).
+    std::vector<std::pair<float, Chunk*>> order;
+    for (auto& [coords, chunk] : chunks) {
+        if (!chunk->IsLoaded() || !chunk->HasWater()) continue;
+        const glm::vec3 centre = glm::vec3(coords * Chunk::CHUNK_SIZE) + glm::vec3(Chunk::CHUNK_SIZE * 0.5f);
+        const glm::vec3 d = centre - cameraPosition;
+        order.emplace_back(glm::dot(d, d), chunk.get());
+    }
+    std::sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+
+    shader.Use();
+    shader.SetUniform("time", time);
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    for (const auto& [distance, chunk] : order) {
+        shader.SetUniform("model", glm::translate(glm::mat4(1.0f), glm::vec3(chunk->GetCoords() * Chunk::CHUNK_SIZE)));
+        chunk->DrawWater();
     }
 }

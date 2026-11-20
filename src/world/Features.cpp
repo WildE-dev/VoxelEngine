@@ -88,8 +88,10 @@ struct Writer {
     }
 };
 
-// Root must be on intact ground: no cave entrance under or at the surface.
+// Root must be on intact, dry ground: not a beach or sea floor, and no cave
+// entrance under or at the surface.
 bool OnSolidGround(int wx, int wz, int surfaceRow) {
+    if (TerrainGenerator::IsSandyRow(surfaceRow)) return false;
     return !Caves::IsCave(wx, surfaceRow, wz, surfaceRow) && !Caves::IsCave(wx, surfaceRow - 1, wz, surfaceRow);
 }
 

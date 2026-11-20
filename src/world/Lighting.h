@@ -17,13 +17,14 @@ class Chunk;
 //  - Block light spreads from emitters, losing one level per block.
 //  - Sky light enters from above. Full strength sky light travels straight down
 //    without loss; in every other direction it loses one level per block.
+//  - Both lose two levels instead of one entering water, so deep water gets dark.
 //
-// While the chunk above a column isn't loaded, the column counts as open to the sky
-// only if the new chunk reaches its terrain surface row. Unloaded chunks are always
-// freshly generated terrain (edits don't survive unloading), and generated terrain
-// never hangs opaque blocks over air above the surface row (see TerrainGenerator).
-// Below the surface the column starts dark; caves only remove blocks, so any opening
-// found there is lit additively once the chunks above load.
+// While the chunk above isn't loaded, the sky light entering each column comes from
+// the generator: unloaded chunks are always freshly generated terrain (edits don't
+// survive unloading), which above the ground is only water up to sea level (see
+// TerrainGenerator). That estimate is exact for light coming straight down and never
+// too bright; any extra light (cave openings, sideways through water) is added once
+// the chunks above load.
 //
 // Runs entirely on the world worker thread. The chunk lookup must only return
 // loaded chunks, and the pointers it returns must stay valid for the duration of
@@ -38,10 +39,10 @@ public:
 
     // Queue work. Nothing propagates until Propagate() is called.
     void OnBlockChanged(const glm::ivec3& worldPos);
-    // Seeds the chunk's light and links it with its loaded neighbours. surfaceRows
-    // (indexed [x * CHUNK_SIZE + z]) gives each column's terrain surface row; null
-    // means nothing above the chunk blocks the sky.
-    void OnChunkLoaded(Chunk& chunk, const std::array<int, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE>* surfaceRows = nullptr);
+    // Seeds the chunk's light and links it with its loaded neighbours. skyFromAbove
+    // (indexed [x * CHUNK_SIZE + z]) is the sky light in the cell just above each
+    // column, used while the chunk above isn't loaded; null means full sky light.
+    void OnChunkLoaded(Chunk& chunk, const std::array<uint8_t, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE>* skyFromAbove = nullptr);
 
     // Runs all queued work. Adds every chunk whose mesh is affected to `dirty`.
     void Propagate(ChunkSet& dirty);
@@ -61,6 +62,9 @@ private:
     };
 
     bool Resolve(const glm::ivec3& worldPos, Cell& cell);
+    // Sky light a cell gets straight from unloaded space above it (top layer of a
+    // chunk whose upper neighbour isn't loaded), else 0.
+    uint8_t SkyFromUnloadedAbove(const glm::ivec3& worldPos, const Cell& cell, const Block& block);
     uint8_t GetLight(LightChannel channel, const Cell& cell) const;
     void SetLight(LightChannel channel, const glm::ivec3& worldPos, const Cell& cell, uint8_t level, ChunkSet& dirty);
     void PropagateChannel(LightChannel channel, ChunkSet& dirty);
@@ -76,5 +80,6 @@ private:
     bool cacheValid = false;
 
     std::vector<glm::ivec3> changedBlocks;
+    std::vector<glm::ivec3> clearedSkySources; // re-seeded after each removal pass
     std::array<ChannelQueues, 2> queues;
 };

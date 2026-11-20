@@ -76,6 +76,11 @@ public:
                                            : static_cast<uint8_t>((v & 0x0F) | (value << 4));
     }
 
+    // Sky light in the cell just above each column while the chunk above isn't loaded
+    // (from the generator; see LightPropagator). Worker thread only.
+    uint8_t GetSkyFromAbove(int x, int z) const { return skyFromAbove[x * CHUNK_SIZE + z]; }
+    void SetSkyFromAbove(const std::array<uint8_t, CHUNK_SIZE * CHUNK_SIZE>& values) { skyFromAbove = values; }
+
     // Copies all blocks out under a single lock.
     void CopyBlocks(std::array<Block, VOLUME>& out) const;
 
@@ -85,11 +90,14 @@ public:
     void SetGenerated(const std::array<Block, VOLUME>& generated);
     void BuildMesh(const Neighbours& neighbours);
 
-    // GL thread. Upload the latest mesh from the worker (if any), then draw it.
+    // GL thread. Upload the latest meshes from the worker (if any), then draw them.
+    // Water is a separate translucent mesh, drawn after all opaque geometry.
     void UploadPendingMesh();
     void Draw() const;
+    void DrawWater() const;
     void ReleaseGpu();
     bool HasGeometry() const { return vertexCount > 0; }
+    bool HasWater() const { return waterVertexCount > 0; }
 
 private:
     static std::atomic<int> liveCount;
@@ -101,15 +109,17 @@ private:
     mutable std::mutex blockMutex;
     std::array<Block, VOLUME> blocks{};
     std::array<uint8_t, VOLUME> light{}; // block light (low nibble), sky light (high nibble); worker thread only
+    std::array<uint8_t, CHUNK_SIZE * CHUNK_SIZE> skyFromAbove = MakeFullSky(); // worker thread only
+    static std::array<uint8_t, CHUNK_SIZE * CHUNK_SIZE> MakeFullSky() { std::array<uint8_t, CHUNK_SIZE * CHUNK_SIZE> a; a.fill(kMaxLight); return a; }
 
     // Mesh hand-off from the worker to the GL thread.
     std::mutex meshMutex;
-    std::vector<uint32_t> pendingMesh;
+    std::vector<uint32_t> pendingMesh, pendingWaterMesh;
     bool hasPendingMesh = false;
 
     // GL thread only.
-    GLuint vao = 0, vbo = 0;
-    GLsizei vertexCount = 0;
+    GLuint vao = 0, vbo = 0, waterVao = 0, waterVbo = 0;
+    GLsizei vertexCount = 0, waterVertexCount = 0;
 
     std::atomic<State> state{State::Pending};
     std::atomic_bool dirty{false};

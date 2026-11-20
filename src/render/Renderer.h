@@ -18,6 +18,8 @@ struct FrameParams {
     bool wireframe = false;
     bool ambientOcclusion = true;
     float sunBrightness = 1.0f; // 0 = night, 1 = day
+    glm::vec3 cameraPosition{0.0f};
+    bool underwater = false;    // camera is inside water: tint the screen
     std::optional<glm::ivec3> highlightedBlock;
 };
 

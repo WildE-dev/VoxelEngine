@@ -51,7 +51,8 @@ std::optional<RaycastHit> Raycast(const World& world, const glm::vec3& origin, c
     std::optional<RaycastHit> hit;
     WalkVoxels(origin, direction, maxDistance, [&](const glm::ivec3& pos, const glm::ivec3& normal) {
         Block block;
-        if (world.GetBlock(pos.x, pos.y, pos.z, block) && !block.IsAir()) {
+        // Rays pass through water (you click the sea floor, not the surface).
+        if (world.GetBlock(pos.x, pos.y, pos.z, block) && !block.IsAir() && !block.IsLiquid()) {
             hit = RaycastHit{ pos, normal };
             return false;
         }
@@ -66,7 +67,7 @@ std::vector<glm::ivec3> TraceBlocks(const World& world, const glm::vec3& origin,
     WalkVoxels(origin, direction, maxDistance, [&](const glm::ivec3& pos, const glm::ivec3&) {
         Block block;
         if (world.GetBlock(pos.x, pos.y, pos.z, block)) {
-            hitSolid |= !block.IsAir();
+            hitSolid |= !block.IsAir() && !block.IsLiquid();
             blocks.push_back(pos);
         }
         return true;

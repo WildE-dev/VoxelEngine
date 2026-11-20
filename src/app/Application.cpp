@@ -29,7 +29,7 @@ constexpr float kReach = 50.0f;
 constexpr float kLaserRange = 100.0f;
 constexpr int kLaserRadius = 4;
 // Blocks selectable with the number keys, in order.
-constexpr BlockType kPlaceableBlocks[] = { BlockType::DIRT, BlockType::STONE, BlockType::GRASS, BlockType::LAMP, BlockType::LOG, BlockType::LEAVES };
+constexpr BlockType kPlaceableBlocks[] = { BlockType::DIRT, BlockType::STONE, BlockType::GRASS, BlockType::LAMP, BlockType::LOG, BlockType::LEAVES, BlockType::SAND, BlockType::WATER };
 
 const char* BlockName(BlockType type) {
     switch (type) {
@@ -42,6 +42,8 @@ const char* BlockName(BlockType type) {
     case BlockType::TALL_GRASS: return "Tall grass";
     case BlockType::FLOWER_RED: return "Red flower";
     case BlockType::FLOWER_YELLOW: return "Yellow flower";
+    case BlockType::SAND:  return "Sand";
+    case BlockType::WATER: return "Water";
     default:               return "Air";
     }
 }
@@ -112,6 +114,7 @@ bool Application::Init() {
     // Block textures must be resolved before the world starts meshing.
     LoadBlockTextures();
     world = std::make_unique<World>(terrain);
+    world->StartWaterThread();
     UpdateWindowTitle();
     return true;
 }
@@ -167,6 +170,8 @@ void Application::Run() {
         params.wireframe = wireframe;
         params.ambientOcclusion = ambientOcclusion;
         params.sunBrightness = sunBrightness;
+        params.cameraPosition = camera.GetPosition();
+        params.underwater = world->IsUnderwater(camera.GetPosition());
         if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), kReach)) {
             params.highlightedBlock = hit->block;
         }
@@ -236,13 +241,14 @@ void Application::DrawDebugWindow(float deltaTime) {
         ImGui::Text("Placing: %s (1-%d to change)", BlockName(placeBlock), static_cast<int>(std::size(kPlaceableBlocks)));
         ImGui::Text("Position %.3f, %.3f, %.3f", pos.x, pos.y, pos.z);
         const glm::vec3 velocity = player.GetVelocity();
-        ImGui::Text("%s%s, velocity %.2f, %.2f, %.2f", player.IsFlying() ? "Flying" : "Walking",
-                    player.IsFlying() ? "" : player.IsOnGround() ? " (on ground)" : " (airborne)",
+        ImGui::Text("%s%s, velocity %.2f, %.2f, %.2f", player.IsFlying() ? "Flying" : player.IsSwimming() ? "Swimming" : "Walking",
+                    player.IsFlying() || player.IsSwimming() ? "" : player.IsOnGround() ? " (on ground)" : " (airborne)",
                     velocity.x, velocity.y, velocity.z);
         ImGui::Text("Angles %.3f, %.3f", angles.x, angles.y);
         ImGui::Text("Frame %.3f ms (%.1f FPS)", deltaTime * 1000.0f, deltaTime > 0.0f ? 1.0f / deltaTime : 0.0f);
         ImGui::PlotLines("Frame Time (ms)", frameTimes.data(), kFrameHistory, frameTimeIndex);
         ImGui::Text("Chunks: %zu in world, %d alive", world->GetLoadedChunkCount(), Chunk::GetLiveCount());
+        ImGui::Text("Active water cells: %zu", world->GetWater().GetActiveCount());
 
         const TextureAtlas& atlas = renderer->GetAtlas();
         if (ImGui::CollapsingHeader("Texture atlas")) {
@@ -315,17 +321,20 @@ void Application::OnMouseButton(int button, int action) {
     if (!hit) return;
 
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        world->SetBlock(hit->block.x, hit->block.y, hit->block.z, BlockType::AIR);
+        // Breaking a waterlogged block leaves its water behind.
+        Block broken;
+        world->GetBlock(hit->block.x, hit->block.y, hit->block.z, broken);
+        world->SetBlock(hit->block.x, hit->block.y, hit->block.z, broken.HasWater() ? Block::Water(broken.WaterVolume()) : Block());
     }
     else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         const glm::ivec3 place = hit->block + hit->normal;
-        // Don't build a block inside yourself when walking.
-        if (!player.IsFlying()) {
+        // Don't build a block inside yourself when walking (water is fine).
+        if (!player.IsFlying() && placeBlock != BlockType::WATER) {
             const Collision::AABB body = player.GetBounds();
             const glm::vec3 lo(place), hi = lo + glm::vec3(1.0f);
             if (glm::all(glm::lessThan(lo, body.max)) && glm::all(glm::greaterThan(hi, body.min))) return;
         }
-        world->SetBlock(place.x, place.y, place.z, placeBlock);
+        world->SetBlock(place.x, place.y, place.z, placeBlock == BlockType::WATER ? Block::Water(Block::kMaxWaterVolume) : Block(placeBlock));
     }
 }
 

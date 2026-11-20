@@ -63,6 +63,7 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
     if (std::all_of(local.begin(), local.end(), [](const Block& b) { return b.IsAir(); })) {
         std::lock_guard<std::mutex> lock(meshMutex);
         pendingMesh.clear();
+        pendingWaterMesh.clear();
         hasPendingMesh = true;
         return;
     }
@@ -78,14 +79,20 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
     // so neighbours' light can be read without locking.
     auto lightGrid = std::make_unique<std::array<uint8_t, P * P * P>>();
     auto& lights = *lightGrid;
+    // The blocks themselves over the same region: water faces need neighbours' water
+    // levels and slope shapes.
+    auto blockGrid = std::make_unique<std::array<Block, P * P * P>>();
+    auto& cells = *blockGrid;
     grid.fill(false);
     lights.fill(0);
 
     for (int z = 0; z < CHUNK_SIZE; z++)
         for (int y = 0; y < CHUNK_SIZE; y++)
             for (int x = 0; x < CHUNK_SIZE; x++) {
-                grid[paddedIndex(x, y, z)] = local[Index(x, y, z)].IsFullBlock();
+                const Block& b = local[Index(x, y, z)];
+                grid[paddedIndex(x, y, z)] = b.IsFullBlock();
                 lights[paddedIndex(x, y, z)] = light[Index(x, y, z)];
+                cells[paddedIndex(x, y, z)] = b;
             }
 
     // Border cells, one neighbour at a time so each neighbour is locked only once.
@@ -114,6 +121,7 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
                             const int i = Index(x - dx * CHUNK_SIZE, y - dy * CHUNK_SIZE, z - dz * CHUNK_SIZE);
                             grid[paddedIndex(x, y, z)] = neighbour->blocks[i].IsFullBlock();
                             lights[paddedIndex(x, y, z)] = neighbour->light[i];
+                            cells[paddedIndex(x, y, z)] = neighbour->blocks[i];
                         }
             }
         }
@@ -121,6 +129,118 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
     auto isOpaque = [&](const glm::ivec3& p) { return grid[paddedIndex(p.x, p.y, p.z)]; };
     auto blockLightAt = [&](const glm::ivec3& p) { return lights[paddedIndex(p.x, p.y, p.z)] & 0x0F; };
     auto skyLightAt = [&](const glm::ivec3& p) { return lights[paddedIndex(p.x, p.y, p.z)] >> 4; };
+    auto inGrid = [](const glm::ivec3& p) { return glm::all(glm::greaterThanEqual(p, glm::ivec3(-1))) && glm::all(glm::lessThanEqual(p, glm::ivec3(CHUNK_SIZE))); };
+    auto cellAt = [&](const glm::ivec3& p) -> const Block& { return cells[paddedIndex(p.x, p.y, p.z)]; };
+    auto hasWater = [&](const glm::ivec3& p) { return inGrid(p) && cellAt(p).HasWater(); };
+
+    // Per-corner shading for a face. Classic voxel AO: each corner is darkened by the
+    // two edge neighbours and the diagonal neighbour in the layer in front of the face;
+    // two solid edges fully occlude the corner. Smooth lighting: each corner averages
+    // the light of the open cells among the same four (front, both edges, diagonal).
+    auto shadeFace = [&](const glm::ivec3& pos, int face, bool withAO) {
+        const glm::ivec3 front = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
+        const auto& tangents = kFaceTangents[kFaceAxis[face]];
+        FaceShading shading;
+        for (int a = 0; a < 2; a++) {
+            for (int b = 0; b < 2; b++) {
+                glm::ivec3 ta(0), tb(0);
+                ta[tangents[0]] = a ? 1 : -1;
+                tb[tangents[1]] = b ? 1 : -1;
+                const bool side1 = isOpaque(front + ta);
+                const bool side2 = isOpaque(front + tb);
+                const bool corner = isOpaque(front + ta + tb);
+                const bool cornerHidden = side1 && side2;
+                if (withAO) shading.ao[a][b] = cornerHidden ? 0 : static_cast<uint8_t>(3 - (side1 + side2 + corner));
+
+                int blockSum = blockLightAt(front), skySum = skyLightAt(front), count = 1;
+                auto addCell = [&](const glm::ivec3& c) { blockSum += blockLightAt(c); skySum += skyLightAt(c); count++; };
+                if (!side1) addCell(front + ta);
+                if (!side2) addCell(front + tb);
+                if (!corner && !cornerHidden) addCell(front + ta + tb);
+                shading.light[a][b] = static_cast<uint8_t>((blockSum + count / 2) / count);
+                shading.sky[a][b] = static_cast<uint8_t>((skySum + count / 2) / count);
+            }
+        }
+        return shading;
+    };
+
+    // --- Water surfaces ---
+    // Each surface corner is the average level of the water cells sharing it (full if
+    // any of them has water above), so neighbouring cells meet exactly: the surface is
+    // continuous and no faces are drawn between water cells. Heights are in eighths.
+    constexpr int kUnitsPerEighth = Block::kMaxWaterVolume / 8;
+    constexpr int kCornerOfEdge[4][2] = { { 0, 1 }, { 1, 0 }, { 0, 0 }, { 1, 1 } }; // EdgeData order
+    auto cornerHeight = [&](const glm::ivec3& p, int cx, int cz) {
+        int sum = 0, n = 0;
+        for (int dx = cx - 1; dx <= cx; dx++) {
+            for (int dz = cz - 1; dz <= cz; dz++) {
+                const glm::ivec3 q = p + glm::ivec3(dx, 0, dz);
+                if (!hasWater(q)) continue;
+                if (hasWater(q + glm::ivec3(0, 1, 0))) return 8;
+                sum += cellAt(q).WaterLevel();
+                n++;
+            }
+        }
+        return std::clamp((sum + n * kUnitsPerEighth / 2) / (n * kUnitsPerEighth), 1, 8);
+    };
+    // Side faces: our two edges on that side, and the neighbour's edges they touch.
+    struct SideEdges { int ours[2], theirs[2]; };
+    auto sideEdges = [](int face) -> SideEdges {
+        switch (static_cast<Face>(face)) {
+        case Face::Right: return { { 1, 3 }, { 2, 0 } };
+        case Face::Left:  return { { 0, 2 }, { 3, 1 } };
+        case Face::Back:  return { { 0, 3 }, { 2, 1 } };
+        default:          return { { 1, 2 }, { 3, 0 } }; // Front
+        }
+    };
+
+    std::vector<uint32_t> waterVertices;
+    auto emitWater = [&](const glm::ivec3& here, const Block& self) {
+        uint8_t top[4], bottom[4];
+        bool visible = false;
+        for (int e = 0; e < 4; e++) {
+            top[e] = static_cast<uint8_t>(cornerHeight(here, kCornerOfEdge[e][0], kCornerOfEdge[e][1]));
+            // In a waterlogged block the water sits on the slope.
+            bottom[e] = self.IsPartial() ? std::min(self.edgeData.GetTopY(e), top[e]) : 0;
+            visible |= top[e] > bottom[e];
+        }
+        if (!visible) return; // entirely below the slope
+
+        for (int face = 0; face < kFaceCount; ++face) {
+            const glm::ivec3 n = here + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
+            // A solid block hides the face it touches. The top only touches the block
+            // above when the water reaches the top of the cell; a lower surface shows.
+            if (isOpaque(n)) {
+                const bool touchesAbove = top[0] == 8 && top[1] == 8 && top[2] == 8 && top[3] == 8;
+                if (face != static_cast<int>(Face::Top) || touchesAbove) continue;
+            }
+            const Block& neighbour = cellAt(n);
+            if (neighbour.HasWater()) continue;                                      // continuous water: no face
+            if (face == static_cast<int>(Face::Bottom) && self.IsPartial()) continue; // the slope is the floor
+
+            Block shape;
+            shape.type = BlockType::WATER;
+            for (int e = 0; e < 4; e++) {
+                shape.edgeData.SetTopY(e, top[e]);
+                shape.edgeData.SetBottomY(e, bottom[e]);
+            }
+            if (face != static_cast<int>(Face::Top) && face != static_cast<int>(Face::Bottom)) {
+                // Against a dry slope, only the part above its surface on the shared
+                // edge is exposed (below that is the slope's own solid face).
+                const SideEdges edges = sideEdges(face);
+                bool exposed = false;
+                for (int k = 0; k < 2; k++) {
+                    const int e = edges.ours[k];
+                    uint8_t from = bottom[e];
+                    if (neighbour.IsPartial()) from = std::max(from, std::min(neighbour.edgeData.GetTopY(edges.theirs[k]), top[e]));
+                    shape.edgeData.SetBottomY(e, from);
+                    exposed |= top[e] > from;
+                }
+                if (!exposed) continue;
+            }
+            shape.AddFaceVertices(waterVertices, static_cast<Face>(face), here.x, here.y, here.z, shadeFace(here, face, false));
+        }
+    };
 
     std::vector<uint32_t> vertices;
 
@@ -129,102 +249,94 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
             for (int z = 0; z < CHUNK_SIZE; ++z) {
                 const Block& block = local[Index(x, y, z)];
                 if (block.IsAir()) continue;
+                const glm::ivec3 pos(x, y, z);
+
+                if (block.IsLiquid()) {
+                    emitWater(pos, block);
+                    continue;
+                }
 
                 if (block.IsPlant()) {
-                    const glm::ivec3 here(x, y, z);
-                    block.AddPlantVertices(vertices, x, y, z, static_cast<uint8_t>(blockLightAt(here)), static_cast<uint8_t>(skyLightAt(here)));
+                    block.AddPlantVertices(vertices, x, y, z, static_cast<uint8_t>(blockLightAt(pos)), static_cast<uint8_t>(skyLightAt(pos)));
                     continue;
                 }
 
                 const bool full = block.IsFullBlock();
-                const glm::ivec3 pos(x, y, z);
-
                 for (int face = 0; face < kFaceCount; ++face) {
-                    const glm::ivec3 normal(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
-                    const glm::ivec3 front = pos + normal;
+                    const glm::ivec3 front = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
                     if (full && isOpaque(front)) continue;
-
-                    // Classic voxel AO: each corner is darkened by the two edge
-                    // neighbours and the diagonal neighbour in the layer in front of
-                    // the face. Two solid edges fully occlude the corner.
-                    // Smooth lighting: each corner averages the light of the open
-                    // cells among the same four (front, both edges, diagonal).
-                    const auto& tangents = kFaceTangents[kFaceAxis[face]];
-                    FaceShading shading;
-                    for (int a = 0; a < 2; a++) {
-                        for (int b = 0; b < 2; b++) {
-                            glm::ivec3 ta(0), tb(0);
-                            ta[tangents[0]] = a ? 1 : -1;
-                            tb[tangents[1]] = b ? 1 : -1;
-                            bool side1 = isOpaque(front + ta);
-                            bool side2 = isOpaque(front + tb);
-                            bool corner = isOpaque(front + ta + tb);
-                            const bool cornerHidden = side1 && side2;
-                            shading.ao[a][b] = cornerHidden ? 0 : static_cast<uint8_t>(3 - (side1 + side2 + corner));
-
-                            int blockSum = blockLightAt(front), skySum = skyLightAt(front), count = 1;
-                            auto addCell = [&](const glm::ivec3& c) { blockSum += blockLightAt(c); skySum += skyLightAt(c); count++; };
-                            if (!side1) addCell(front + ta);
-                            if (!side2) addCell(front + tb);
-                            if (!corner && !cornerHidden) addCell(front + ta + tb);
-                            shading.light[a][b] = static_cast<uint8_t>((blockSum + count / 2) / count);
-                            shading.sky[a][b] = static_cast<uint8_t>((skySum + count / 2) / count);
-                        }
-                    }
-
-                    block.AddFaceVertices(vertices, static_cast<Face>(face), x, y, z, shading);
+                    block.AddFaceVertices(vertices, static_cast<Face>(face), x, y, z, shadeFace(pos, face, true));
                 }
+
+                // A waterlogged slope also gets the water above it.
+                if (block.HasWater()) emitWater(pos, block);
             }
         }
     }
 
     std::lock_guard<std::mutex> lock(meshMutex);
     pendingMesh = std::move(vertices);
+    pendingWaterMesh = std::move(waterVertices);
     hasPendingMesh = true;
 }
+
+namespace {
+
+// Uploads vertices into a VAO/VBO pair, creating them on first use. Empty meshes
+// don't create GL objects.
+void UploadMesh(std::vector<uint32_t>& vertices, GLuint& vao, GLuint& vbo, GLsizei& count) {
+    if (vertices.empty()) {
+        count = 0;
+        return;
+    }
+    if (!vao) {
+        glGenVertexArrays(1, &vao);
+        glGenBuffers(1, &vbo);
+        glBindVertexArray(vao);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glVertexAttribIPointer(0, 1, GL_UNSIGNED_INT, 2 * sizeof(uint32_t), (void*)0);
+        glVertexAttribIPointer(1, 1, GL_UNSIGNED_INT, 2 * sizeof(uint32_t), (void*)sizeof(uint32_t));
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(uint32_t), vertices.data(), GL_STATIC_DRAW);
+    count = static_cast<GLsizei>(vertices.size() / 2);
+    std::vector<uint32_t>().swap(vertices);
+}
+
+void DeleteMesh(GLuint& vao, GLuint& vbo, GLsizei& count) {
+    if (vao) glDeleteVertexArrays(1, &vao);
+    if (vbo) glDeleteBuffers(1, &vbo);
+    vao = vbo = 0;
+    count = 0;
+}
+
+} // namespace
 
 void Chunk::UploadPendingMesh() {
     if (removed) return;
 
-    {
-        std::lock_guard<std::mutex> lock(meshMutex);
-        if (hasPendingMesh && pendingMesh.empty()) {
-            // Nothing to draw; keep any existing buffers but skip creating new ones.
-            vertexCount = 0;
-            hasPendingMesh = false;
-        }
-        else if (hasPendingMesh) {
-            if (!vao) {
-                glGenVertexArrays(1, &vao);
-                glGenBuffers(1, &vbo);
-                glBindVertexArray(vao);
-                glBindBuffer(GL_ARRAY_BUFFER, vbo);
-                glVertexAttribIPointer(0, 1, GL_UNSIGNED_INT, 2 * sizeof(uint32_t), (void*)0);
-                glVertexAttribIPointer(1, 1, GL_UNSIGNED_INT, 2 * sizeof(uint32_t), (void*)sizeof(uint32_t));
-                glEnableVertexAttribArray(0);
-                glEnableVertexAttribArray(1);
-            }
-
-            glBindBuffer(GL_ARRAY_BUFFER, vbo);
-            glBufferData(GL_ARRAY_BUFFER, pendingMesh.size() * sizeof(uint32_t), pendingMesh.data(), GL_STATIC_DRAW);
-            vertexCount = static_cast<GLsizei>(pendingMesh.size() / 2);
-
-            std::vector<uint32_t>().swap(pendingMesh);
-            hasPendingMesh = false;
-        }
-    }
+    std::lock_guard<std::mutex> lock(meshMutex);
+    if (!hasPendingMesh) return;
+    UploadMesh(pendingMesh, vao, vbo, vertexCount);
+    UploadMesh(pendingWaterMesh, waterVao, waterVbo, waterVertexCount);
+    hasPendingMesh = false;
 }
 
 void Chunk::Draw() const {
     if (vertexCount == 0) return;
-
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, vertexCount);
 }
 
+void Chunk::DrawWater() const {
+    if (waterVertexCount == 0) return;
+    glBindVertexArray(waterVao);
+    glDrawArrays(GL_TRIANGLES, 0, waterVertexCount);
+}
+
 void Chunk::ReleaseGpu() {
-    if (vao) glDeleteVertexArrays(1, &vao);
-    if (vbo) glDeleteBuffers(1, &vbo);
-    vao = vbo = 0;
-    vertexCount = 0;
+    DeleteMesh(vao, vbo, vertexCount);
+    DeleteMesh(waterVao, waterVbo, waterVertexCount);
 }

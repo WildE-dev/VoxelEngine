@@ -22,14 +22,14 @@ build copies it next to the binary.
 | Key | Action |
 | --- | --- |
 | WASD | Walk (or fly) |
-| Space | Jump (fly: up) |
+| Space | Jump (swim: up; fly: up) |
 | Shift | Sprint (fly: faster) |
 | F | Toggle fly mode (no collision) |
 | Q / E | Fly down / up |
 | Mouse | Look |
 | Left click | Break block |
 | Right click | Place the selected block |
-| 1-6 | Select block: dirt, stone, grass, lamp, log, leaves |
+| 1-8 | Select block: dirt, stone, grass, lamp, log, leaves, sand, water |
 | L (hold) | Laser: carve a tunnel along the view ray |
 | R | Reload shaders and block textures, rebuild all chunk meshes |
 | Tab | Toggle mouse capture |
@@ -54,6 +54,30 @@ build copies it next to the binary.
 4. **Plants:** tall grass and flowers, drawn as crossed sprites that sit on the
    sloped surface. Breaking the block under a plant removes it.
 
+Open space below sea level (row -3) becomes seas and lakes, with sandy beaches
+and sea floors. Caves never open under water, so they stay dry.
+
+## Water
+
+Water is translucent and drawn in its own pass after solid geometry. It absorbs
+light, so deeper water gets darker, and the screen tints blue when your head is
+underwater. You swim in it: you sink slowly, Space swims up, and swimming into
+a ledge with Space held climbs out.
+
+Water is finite and flows (`Water.cpp`). Each cell holds up to 128 units of
+water: water blocks, and sloped blocks whose open space above the slope can be
+waterlogged. Water is only ever moved, never created or destroyed. It falls into
+any room below it, otherwise it levels out by height with nearby water. A cell
+over a drop counts as lower, so water pours over edges in big shares and falls
+as a continuous stream. A bucket poured on flat ground spreads into a shallow
+puddle and stops, and digging next to a lake lowers it slightly as the hole
+fills.
+
+The simulation runs on its own thread, up to 32,768 water cells per tick, ten
+ticks a second, and only near something that changed. It holds a world-wide edit
+lock in short slices and steps aside for waiting edits, so player edits never
+wait more than a couple of milliseconds. Place a full block of water with 8.
+
 ## Player
 
 You walk on the terrain with gravity and collision. The body is a 0.6 x 1.8
@@ -73,6 +97,7 @@ cross chunk borders:
   block sideways, so overhangs, tunnels and caves get darker the further they
   are from open sky. The day/night setting scales it in the shader.
 - **Block light** spreads from lamps (level 15), losing one level per block.
+- Both lose two levels instead of one entering water.
 
 Leaves and plants let light through, so the ground under trees stays lit.
 
@@ -96,5 +121,5 @@ src/
   app/     Application (window, input, main loop), Camera, Player (movement and physics)
   render/  Renderer (frame passes, skybox, post effect), Shader, Textures, DebugDraw
   world/   World (chunk streaming + worker thread), Chunk, Block, TerrainGenerator,
-           Caves, Features, Noise, Lighting, Collision, Raycast
+           Caves, Features, Noise, Lighting, Water, Collision, Raycast
 ```

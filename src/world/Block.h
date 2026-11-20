@@ -79,6 +79,9 @@ enum class BlockType : uint8_t {
     TALL_GRASS,
     FLOWER_RED,
     FLOWER_YELLOW,
+    SAND,
+    // Liquid: no collision, translucent, finite volume that flows (see Water.cpp).
+    WATER,
     COUNT
 };
 
@@ -150,9 +153,12 @@ struct FaceShading {
 struct Block {
     BlockType type = BlockType::AIR;
     EdgeData edgeData;
+    // Water in this cell, 0..kMaxWaterVolume units: a water block's volume, or water
+    // filling the space above a partial block's slope ("waterlogged").
+    uint8_t water = 0;
 
     Block() = default;
-    explicit Block(BlockType t) : type(t) {}
+    explicit Block(BlockType t) : type(t), water(t == BlockType::WATER ? kMaxWaterVolume : 0) {}
     // Partial block. Falls back to air if the edge data is degenerate.
     Block(BlockType t, EdgeData edges) : type(t) { SetEdgeData(edges); }
 
@@ -166,16 +172,59 @@ struct Block {
     bool IsPlant() const { return IsPlantType(type); }
     float PlantDrop() const { return (edgeData.edges[0] & 0x0F) / 8.0f; }
 
+    // Water volumes are in units: a full cell holds 128, so surfaces can level to within
+    // a small fraction of a block.
+    static constexpr uint8_t kMaxWaterVolume = 128;
+    static Block Water(uint8_t volume) {
+        Block b(BlockType::WATER);
+        b.water = volume;
+        return b;
+    }
+    // A cell of only water (as opposed to a waterlogged partial block).
+    bool IsLiquid() const { return type == BlockType::WATER; }
+    bool HasWater() const { return water > 0; }
+    uint8_t WaterVolume() const { return water; }
+    bool IsFullWater() const { return IsLiquid() && water == kMaxWaterVolume; }
+    // A sloped block: solid below its surface, open above it.
+    bool IsPartial() const { return !IsAir() && !IsPlant() && !IsLiquid() && !IsFullBlock(); }
+    bool CanHoldWater() const { return IsReplaceableByWater() || IsLiquid() || IsPartial(); }
+    // Water in a partial block sits above its slope. For flow it's treated as a cell
+    // with a raised floor at the slope's average height, so the capacity is right.
+    uint8_t WaterFloor() const;
+    uint8_t WaterCapacity() const { return static_cast<uint8_t>(kMaxWaterVolume - WaterFloor()); }
+    // Height of the water surface within the cell, in units (floor + volume).
+    int WaterLevel() const { return WaterFloor() + water; }
+    // Drawn height of the water surface in eighths of a block (when nothing is above
+    // it): the level rounded, at least one eighth so thin water stays visible.
+    uint8_t WaterSurfaceEighths() const {
+        constexpr int unitsPerEighth = kMaxWaterVolume / 8;
+        const int eighths = (WaterLevel() + unitsPerEighth / 2) / unitsPerEighth;
+        return static_cast<uint8_t>(eighths < 1 ? 1 : eighths);
+    }
+    // This cell holding `volume` units: the same partial block waterlogged, or a water
+    // block (air if the volume is 0). Water washes plants away.
+    Block WithWater(uint8_t volume) const {
+        if (IsPartial()) { Block b = *this; b.water = volume; return b; }
+        return volume > 0 ? Water(volume) : Block();
+    }
+    // Same block apart from how much water it holds (whether it holds any counts).
+    bool DiffersOnlyInWaterVolume(const Block& o) const {
+        return type == o.type && edgeData == o.edgeData && HasWater() == o.HasWater();
+    }
+
     void SetEdgeData(EdgeData edges);
     void Shrink();
 
     bool IsAir() const { return type == BlockType::AIR; }
     // Full, opaque cube that hides any neighbouring face touching it, and collides.
-    bool IsFullBlock() const { return type != BlockType::AIR && !IsPlant() && edgeData.IsFull(); }
-    // Light passes through air, partial blocks, plants and leaves.
+    bool IsFullBlock() const { return type != BlockType::AIR && !IsPlant() && !IsLiquid() && edgeData.IsFull(); }
+    // Light passes through air, partial blocks, plants, leaves and water (water also
+    // absorbs some; see LightPropagator).
     bool BlocksLight() const { return IsFullBlock() && type != BlockType::LEAVES; }
-    // Air or a plant: nothing to stand on or bump into.
-    bool IsPassable() const { return IsAir() || IsPlant(); }
+    // Air, a plant or water: nothing to stand on or bump into.
+    bool IsPassable() const { return IsAir() || IsPlant() || IsLiquid(); }
+    // Water may flow into this cell (washing away any plant).
+    bool IsReplaceableByWater() const { return IsAir() || IsPlant(); }
     uint8_t GetLightEmission() const { return ::GetLightEmission(type); }
 
     // Height of the block's top surface (0..1) at a point inside its footprint,
@@ -190,6 +239,6 @@ struct Block {
     // Appends 6 vertices (2 packed uint32 each) for the given face.
     void AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading) const;
 
-    bool operator==(const Block& o) const { return type == o.type && edgeData == o.edgeData; }
+    bool operator==(const Block& o) const { return type == o.type && edgeData == o.edgeData && water == o.water; }
     bool operator!=(const Block& o) const { return !(*this == o); }
 };

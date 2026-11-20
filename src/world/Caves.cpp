@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "world/Noise.h"
+#include "world/TerrainGenerator.h"
 
 namespace Caves {
 
@@ -47,8 +48,10 @@ Sample Interpolate(const Sample c[8], float fx, float fy, float fz) {
     return Lerp(Lerp(x00, x10, fy), Lerp(x01, x11, fy), fz);
 }
 
-// Whether tunnels may break through the surface in this column.
-bool IsEntranceZone(int wx, int wz) {
+// Whether tunnels may break through the surface in this column. Never on beaches or
+// under water.
+bool IsEntranceZone(int wx, int wz, int surfaceRow) {
+    if (surfaceRow <= TerrainGenerator::kSeaLevel + 1) return false; // beaches, sea floors and just above
     return Noise::Perlin2(wx / 64.0f - 4000.0f, wz / 64.0f + 9000.0f) > 0.32f;
 }
 
@@ -83,7 +86,7 @@ bool IsCave(int wx, int wy, int wz, int surfaceRow) {
     const float fx = static_cast<float>(wx - lx * kSpacing) / kSpacing;
     const float fy = static_cast<float>(wy - ly * kSpacing) / kSpacing;
     const float fz = static_cast<float>(wz - lz * kSpacing) / kSpacing;
-    return IsCaveSample(Interpolate(c, fx, fy, fz), surfaceRow - wy, IsEntranceZone(wx, wz));
+    return IsCaveSample(Interpolate(c, fx, fy, fz), surfaceRow - wy, IsEntranceZone(wx, wz, surfaceRow));
 }
 
 void Carve(const glm::ivec3& coords, const std::array<int, S * S>& rows, std::array<Block, Chunk::VOLUME>& blocks) {
@@ -105,7 +108,7 @@ void Carve(const glm::ivec3& coords, const std::array<int, S * S>& rows, std::ar
             const int k = z / kSpacing;
             const float fz = static_cast<float>(z % kSpacing) / kSpacing;
             const int surfaceRow = rows[x * S + z];
-            const bool entranceZone = IsEntranceZone(origin.x + x, origin.z + z);
+            const bool entranceZone = IsEntranceZone(origin.x + x, origin.z + z, surfaceRow);
             for (int y = 0; y < S; y++) {
                 const int wy = bottom + y;
                 if (wy > surfaceRow) break;

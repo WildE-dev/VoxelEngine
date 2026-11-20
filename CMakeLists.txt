@@ -62,6 +62,8 @@ add_executable(${PROJECT_NAME}
     src/world/Raycast.h
     src/world/TerrainGenerator.cpp
     src/world/TerrainGenerator.h
+    src/world/Water.cpp
+    src/world/Water.h
     src/world/World.cpp
     src/world/World.h
 )

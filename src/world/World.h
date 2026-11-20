@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -17,6 +18,7 @@
 #include "world/Coords.h"
 #include "world/Lighting.h"
 #include "world/TerrainGenerator.h"
+#include "world/Water.h"
 
 class Shader;
 
@@ -32,6 +34,12 @@ class Shader;
 //  - Finished meshes are handed to the chunk and uploaded lazily on the main thread.
 //  - Block light lives entirely on the worker: the main thread only queues the
 //    positions of edited blocks, and the worker propagates light before meshing.
+//  - Flowing water runs on its own thread (StartWaterThread). GetBlock and SetBlock
+//    are safe from the main and water threads: lookups take `chunksMutex` shared, and
+//    every edit holds `editMutex`, which the water thread also holds around each slice
+//    of cell updates, so its read-modify-writes can't interleave with player edits.
+//    Lock order: editMutex, then chunksMutex, then a chunk's block mutex, then
+//    queueMutex.
 class World
 {
 public:
@@ -48,13 +56,30 @@ public:
     // Main thread: load/unload chunks around the camera.
     void Update(const glm::vec3& cameraPosition);
     void Render(Shader& shader, const glm::mat4& view, const glm::mat4& projection, float time);
+    // Translucent water, after all opaque geometry: chunks drawn back to front.
+    void RenderWater(Shader& shader, const glm::mat4& view, const glm::mat4& projection, float time, const glm::vec3& cameraPosition);
 
-    // Main thread, world coordinates. GetBlock returns false if the chunk isn't loaded.
+    // World coordinates; main or water thread. GetBlock returns false if the chunk
+    // isn't loaded.
     bool GetBlock(int x, int y, int z, Block& block) const;
     void SetBlock(int x, int y, int z, const Block& block);
     void SetBlock(int x, int y, int z, BlockType type) { SetBlock(x, y, z, Block(type)); }
 
+    // Main or water thread: whether a point is below the water surface in its cell.
+    bool IsUnderwater(const glm::vec3& point) const;
+
     void RebuildAllChunks();
+
+    // Starts simulating flowing water on its own thread. Without it, water only moves
+    // when WaterSimulation::Tick is called (tests step it deterministically).
+    void StartWaterThread() { water.Start(*this); }
+    WaterSimulation& GetWater() { return water; }
+    // Held for every block edit; the water thread holds it around each update slice.
+    std::recursive_mutex& GetEditMutex() { return editMutex; }
+    // Edits waiting for (or holding) the edit mutex. The water thread lets them go
+    // first between slices: the mutex itself isn't fair, so without this an edit could
+    // lose the race for it several slices in a row.
+    bool HasPendingEdits() const { return pendingEdits.load(std::memory_order_acquire) > 0; }
 
     size_t GetLoadedChunkCount() const { return chunks.size(); }
 
@@ -67,6 +92,8 @@ private:
 
     // Caller must be the main thread or hold `chunksMutex`.
     ChunkPtr FindChunk(const glm::ivec3& chunkCoords) const;
+    // Any thread: takes `chunksMutex` shared for the lookup.
+    ChunkPtr FindChunkShared(const glm::ivec3& chunkCoords) const;
 
     void RefreshChunksAround(const glm::ivec3& center);
     void RequestRebuild(const ChunkPtr& chunk);
@@ -85,6 +112,8 @@ private:
 
     std::unordered_map<glm::ivec3, ChunkPtr, Coords::IVec3Hash> chunks;
     mutable std::shared_mutex chunksMutex;
+    std::recursive_mutex editMutex; // recursive: SetBlock may uproot a plant above
+    std::atomic<int> pendingEdits{0};
 
     // Offsets within render distance, nearest first, so close chunks load first.
     std::vector<glm::ivec3> loadOffsets;
@@ -103,5 +132,6 @@ private:
     };
     std::unordered_map<glm::ivec2, std::unique_ptr<TerrainGenerator::ColumnHeights>, IVec2Hash> columnHeights; // worker thread only
     LightPropagator light; // worker thread only
+    WaterSimulation water; // main thread only
     std::thread worker;
 };

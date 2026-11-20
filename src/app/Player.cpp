@@ -22,6 +22,16 @@ constexpr float kAirAcceleration = 12.0f;
 
 constexpr float kFlySpeed = 10.0f;
 
+// Swimming.
+constexpr float kSwimSpeedFactor = 0.5f;
+constexpr float kSwimAcceleration = 20.0f;
+constexpr float kWaterGravityFactor = 0.3f;
+constexpr float kMaxSinkSpeed = 3.0f;
+constexpr float kSwimUpSpeed = 4.0f;
+constexpr float kSwimUpAcceleration = 25.0f;
+constexpr float kWaterDrag = 2.0f;      // per second, on vertical speed
+constexpr float kClimbOutSpeed = 7.5f;  // swimming into a ledge with jump held
+
 constexpr float kMaxSubstep = 0.2f; // never move further than this per collision test
 constexpr float kSkin = 1e-3f;      // gap kept between the box and surfaces
 constexpr float kGroundSnap = 0.35f; // stick to the ground walking down slopes and steps
@@ -34,6 +44,15 @@ glm::vec2 Approach(glm::vec2 current, glm::vec2 target, float maxDelta) {
 }
 
 } // namespace
+
+bool Player::InWater(const World& world) const {
+    // Feet or waist below the water surface counts as swimming.
+    return world.IsUnderwater(feet + glm::vec3(0.0f, 0.1f, 0.0f)) || world.IsUnderwater(feet + glm::vec3(0.0f, 0.9f, 0.0f));
+}
+
+bool Player::IsHeadUnderwater(const World& world) const {
+    return world.IsUnderwater(GetEyePosition());
+}
 
 Collision::AABB Player::BoundsAt(const glm::vec3& feet) {
     const float half = kWidth * 0.5f;
@@ -97,20 +116,34 @@ void Player::Step(const World& world, const PlayerInput& input, float dt) {
     if (glm::length(move) > 1.0f) move = glm::normalize(move);
     const glm::vec2 wish = (forward * move.y + right * move.x) * (input.sprint ? kSprintSpeed : kWalkSpeed);
 
-    const float acceleration = onGround ? kGroundAcceleration : kAirAcceleration;
-    glm::vec2 horizontal = Approach({ velocity.x, velocity.z }, wish, acceleration * dt);
+    inWater = InWater(world);
+
+    const float acceleration = inWater ? kSwimAcceleration : onGround ? kGroundAcceleration : kAirAcceleration;
+    glm::vec2 horizontal = Approach({ velocity.x, velocity.z }, inWater ? wish * kSwimSpeedFactor : wish, acceleration * dt);
     velocity.x = horizontal.x;
     velocity.z = horizontal.y;
 
-    if (input.jump && onGround) {
-        velocity.y = kJumpSpeed;
-        onGround = false;
+    if (inWater) {
+        // Buoyant and damped; holding jump swims up.
+        velocity.y -= kGravity * kWaterGravityFactor * dt;
+        velocity.y *= std::exp(-kWaterDrag * dt);
+        if (input.jump) velocity.y = std::min(kSwimUpSpeed, velocity.y + kSwimUpAcceleration * dt);
+        velocity.y = std::max(velocity.y, -kMaxSinkSpeed);
     }
-    velocity.y = std::max(velocity.y - kGravity * dt, -kTerminalVelocity);
+    else {
+        if (input.jump && onGround) {
+            velocity.y = kJumpSpeed;
+            onGround = false;
+        }
+        velocity.y = std::max(velocity.y - kGravity * dt, -kTerminalVelocity);
+    }
 
     const bool wasOnGround = onGround;
+    blockedHorizontally = false;
     MoveHorizontal(world, 0, velocity.x * dt);
     MoveHorizontal(world, 2, velocity.z * dt);
+    // Swimming into a ledge with jump held: push up so we can climb out.
+    if (inWater && input.jump && blockedHorizontally) velocity.y = std::max(velocity.y, kClimbOutSpeed);
     MoveVertical(world, velocity.y * dt, wasOnGround);
 }
 
@@ -151,6 +184,7 @@ void Player::MoveHorizontal(const World& world, int axis, float distance) {
             if (step > 0) feet[axis] = std::floor(next[axis] + half) - half - kSkin;
             else feet[axis] = std::floor(next[axis] - half) + 1.0f + half + kSkin;
             velocity[axis] = 0.0f;
+            blockedHorizontally = true;
             return;
         }
 
@@ -163,6 +197,7 @@ void Player::MoveHorizontal(const World& world, int axis, float distance) {
             Collision::BoxBlocked(world, BoundsAt(glm::vec3(next.x, *slope + kSkin, next.z)));
         if (unknown || tooSteep || noHeadroom) {
             velocity[axis] = 0.0f;
+            blockedHorizontally = true;
             return;
         }
         feet = next;

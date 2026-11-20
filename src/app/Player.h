@@ -16,7 +16,8 @@ struct PlayerInput {
 };
 
 // First person player body: an upright box with gravity, jumping and collision.
-// In fly mode it moves freely through blocks like the old free camera.
+// In water it swims: slower, buoyant, jump swims up. In fly mode it moves freely
+// through blocks like the old free camera.
 class Player
 {
 public:
@@ -38,6 +39,8 @@ public:
     void SetFlying(const World& world, bool fly);
     bool IsFlying() const { return flying; }
     bool IsOnGround() const { return onGround; }
+    bool IsSwimming() const { return inWater; }
+    bool IsHeadUnderwater(const World& world) const;
 
     glm::vec3 GetFeetPosition() const { return feet; }
     glm::vec3 GetEyePosition() const { return feet + glm::vec3(0.0f, kEyeHeight, 0.0f); }
@@ -51,11 +54,14 @@ private:
     void StepFlying(const PlayerInput& input, float dt);
     void MoveHorizontal(const World& world, int axis, float distance);
     void MoveVertical(const World& world, float distance, bool wasOnGround);
+    bool InWater(const World& world) const;
 
     glm::vec3 feet;
     glm::vec3 velocity{0.0f};
     bool onGround = false;
     bool flying = false;
     bool spawned = false;
+    bool inWater = false;
+    bool blockedHorizontally = false; // set by MoveHorizontal during a step
     float accumulator = 0.0f;
 };

@@ -19,7 +19,10 @@ uint8_t Emission(LightChannel channel, const Block& block) {
 }
 
 // Level a transparent neighbour in direction `dir` receives from a cell at `level`.
-uint8_t Spread(LightChannel channel, uint8_t level, const glm::ivec3& dir) {
+// Water absorbs light: entering it costs 2 levels instead of 1, and full strength
+// sky light doesn't pass straight down into it unchanged.
+uint8_t Spread(LightChannel channel, uint8_t level, const glm::ivec3& dir, bool intoWater) {
+    if (intoWater) return level > 2 ? level - 2 : 0;
     if (channel == LightChannel::Sky && level == kMaxLight && dir == kDown) return kMaxLight;
     return level > 0 ? level - 1 : 0;
 }
@@ -40,6 +43,12 @@ bool LightPropagator::Resolve(const glm::ivec3& worldPos, Cell& cell) {
     return true;
 }
 
+uint8_t LightPropagator::SkyFromUnloadedAbove(const glm::ivec3& worldPos, const Cell& cell, const Block& block) {
+    if (cell.local.y != S - 1 || block.BlocksLight()) return 0;
+    if (lookup(Coords::ChunkOf(worldPos) + kUp)) return 0; // the chunk above is loaded: it's a normal neighbour
+    return Spread(LightChannel::Sky, cell.chunk->GetSkyFromAbove(cell.local.x, cell.local.z), kDown, block.HasWater());
+}
+
 uint8_t LightPropagator::GetLight(LightChannel channel, const Cell& cell) const {
     return cell.chunk->GetLight(channel, cell.local.x, cell.local.y, cell.local.z);
 }
@@ -53,7 +62,7 @@ void LightPropagator::OnBlockChanged(const glm::ivec3& worldPos) {
     changedBlocks.push_back(worldPos);
 }
 
-void LightPropagator::OnChunkLoaded(Chunk& chunk, const std::array<int, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE>* surfaceRows) {
+void LightPropagator::OnChunkLoaded(Chunk& chunk, const std::array<uint8_t, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE>* skyFromAbove) {
     cacheValid = false;
     const glm::ivec3 coords = chunk.GetCoords();
     const glm::ivec3 origin = coords * S;
@@ -71,29 +80,31 @@ void LightPropagator::OnChunkLoaded(Chunk& chunk, const std::array<int, Chunk::C
                     QueuesFor(LightChannel::Block).addition.push_back(origin + glm::ivec3(x, y, z));
                 }
 
-    // --- Sky light: full strength down each column until the first opaque block ---
-    // A column is open if the cell above has full sky light, or, with the chunk above
-    // not loaded, if no generated terrain lies above this chunk in that column.
+    if (skyFromAbove) chunk.SetSkyFromAbove(*skyFromAbove);
+
+    // --- Sky light: straight down each column from the cell above ---
+    // That cell's level comes from the chunk above if it's loaded, otherwise from the
+    // generator's estimate (exact for the straight-down path, so never too bright).
     Chunk* above = lookup(coords + kUp);
-    const int chunkTop = origin.y + S - 1;
-    bool anyShadowed = false;
+    bool anyDim = false;
     for (int z = 0; z < S; z++) {
         for (int x = 0; x < S; x++) {
-            bool open = above ? (above->GetLight(LightChannel::Sky, x, 0, z) == kMaxLight && !above->GetBlock(x, 0, z).BlocksLight())
-                              : (!surfaceRows || chunkTop + 1 >= (*surfaceRows)[x * S + z]);
+            uint8_t level = above ? above->GetLight(LightChannel::Sky, x, 0, z)
+                                  : (skyFromAbove ? (*skyFromAbove)[x * S + z] : kMaxLight);
             for (int y = S - 1; y >= 0; y--) {
-                if (blocks[Index(x, y, z)].BlocksLight()) open = false;
-                else if (open) chunk.SetLight(LightChannel::Sky, x, y, z, kMaxLight);
-                else anyShadowed = true;
+                const Block& block = blocks[Index(x, y, z)];
+                level = block.BlocksLight() ? 0 : Spread(LightChannel::Sky, level, kDown, block.HasWater());
+                chunk.SetLight(LightChannel::Sky, x, y, z, level);
+                if (!block.BlocksLight() && level < kMaxLight) anyDim = true;
             }
         }
     }
-    // Shadowed cells (under an edited chunk above) get lit sideways from open columns.
-    if (anyShadowed) {
+    // Dim cells (shadows, water, caves) may get more light sideways from brighter ones.
+    if (anyDim) {
         for (int z = 0; z < S; z++)
             for (int y = 0; y < S; y++)
                 for (int x = 0; x < S; x++)
-                    if (chunk.GetLight(LightChannel::Sky, x, y, z) == kMaxLight)
+                    if (chunk.GetLight(LightChannel::Sky, x, y, z) > 1)
                         QueuesFor(LightChannel::Sky).addition.push_back(origin + glm::ivec3(x, y, z));
     }
 
@@ -115,15 +126,16 @@ void LightPropagator::OnChunkLoaded(Chunk& chunk, const std::array<int, Chunk::C
                 ours[ta] = theirs[ta] = a;
                 ours[tb] = theirs[tb] = b;
 
-                const bool oursOpen = !blocks[Index(ours.x, ours.y, ours.z)].BlocksLight();
+                const Block& ourBlock = blocks[Index(ours.x, ours.y, ours.z)];
+                const bool oursOpen = !ourBlock.BlocksLight();
                 for (LightChannel channel : kChannels) {
                     uint8_t ourLevel = chunk.GetLight(channel, ours.x, ours.y, ours.z);
                     uint8_t theirLevel = neighbour->GetLight(channel, theirs.x, theirs.y, theirs.z);
-                    // Ours -> theirs (the addition pass checks their transparency).
-                    if (Spread(channel, ourLevel, dir) > theirLevel)
+                    // Ours -> theirs (an upper bound; the addition pass checks their block).
+                    if (Spread(channel, ourLevel, dir, false) > theirLevel)
                         QueuesFor(channel).addition.push_back(origin + ours);
                     // Theirs -> ours.
-                    if (oursOpen && Spread(channel, theirLevel, -dir) > ourLevel)
+                    if (oursOpen && Spread(channel, theirLevel, -dir, ourBlock.HasWater()) > ourLevel)
                         QueuesFor(channel).addition.push_back((coords + dir) * S + theirs);
                 }
             }
@@ -170,12 +182,27 @@ void LightPropagator::PropagateChannel(LightChannel channel, ChunkSet& dirty) {
             if (dependent && Emission(channel, n.chunk->GetBlock(n.local.x, n.local.y, n.local.z)) == 0) {
                 SetLight(channel, np, n, 0, dirty);
                 q.removal.push_back({ np, level });
+                // It may still get light straight from unloaded space above; restore
+                // that once removal is done (doing it now could loop).
+                if (channel == LightChannel::Sky && n.local.y == S - 1) clearedSkySources.push_back(np);
             }
             else {
                 q.addition.push_back(np); // lit by another source: re-flood from here
             }
         }
     }
+
+    // Cells under unloaded space keep the sky light coming straight down into them.
+    for (const auto& pos : clearedSkySources) {
+        if (!Resolve(pos, cell)) continue;
+        const Block block = cell.chunk->GetBlock(cell.local.x, cell.local.y, cell.local.z);
+        const uint8_t fromAbove = SkyFromUnloadedAbove(pos, cell, block);
+        if (fromAbove > GetLight(channel, cell)) {
+            SetLight(channel, pos, cell, fromAbove, dirty);
+            q.addition.push_back(pos);
+        }
+    }
+    clearedSkySources.clear();
 
     // 2. Re-seed changed blocks: new emitters shine, newly transparent cells let
     //    neighbouring light back in.
@@ -194,9 +221,11 @@ void LightPropagator::PropagateChannel(LightChannel channel, ChunkSet& dirty) {
                 if (GetLight(channel, n) > 1) q.addition.push_back(np);
             }
             else if (channel == LightChannel::Sky && d == kUp && Resolve(pos, cell)) {
-                // Directly under unloaded space, which is open sky.
-                SetLight(channel, pos, cell, kMaxLight, dirty);
-                q.addition.push_back(pos);
+                // Directly under unloaded space: the light coming down from it.
+                if (uint8_t fromAbove = SkyFromUnloadedAbove(pos, cell, block); fromAbove > GetLight(channel, cell)) {
+                    SetLight(channel, pos, cell, fromAbove, dirty);
+                    q.addition.push_back(pos);
+                }
             }
         }
     }
@@ -210,11 +239,14 @@ void LightPropagator::PropagateChannel(LightChannel channel, ChunkSet& dirty) {
         if (level <= 1) continue;
 
         for (const auto& d : kNeighbours) {
-            const uint8_t spread = Spread(channel, level, d);
             const glm::ivec3 np = pos + d;
             if (!Resolve(np, n)) continue;
-            if (GetLight(channel, n) >= spread) continue; // cheap check before locking the block
-            if (n.chunk->GetBlock(n.local.x, n.local.y, n.local.z).BlocksLight()) continue;
+            const uint8_t current = GetLight(channel, n);
+            if (current >= Spread(channel, level, d, false)) continue; // cheap upper bound before locking the block
+            const Block block = n.chunk->GetBlock(n.local.x, n.local.y, n.local.z);
+            if (block.BlocksLight()) continue;
+            const uint8_t spread = Spread(channel, level, d, block.HasWater());
+            if (current >= spread) continue;
             SetLight(channel, np, n, spread, dirty);
             q.addition.push_back(np);
         }

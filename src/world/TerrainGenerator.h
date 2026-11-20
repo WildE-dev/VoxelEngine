@@ -11,13 +11,19 @@
 // noise, then surface features (trees, bushes, boulders, grass and flowers).
 // Stateless and safe to call from any thread.
 //
-// Invariant relied on by sky lighting (see LightPropagator): above each column's
-// surface row, generated terrain never has an opaque block hanging over open air.
-// Caves only remove blocks, trunks and boulders are solid down to the ground, and
-// leaves and plants let light through.
+// Invariants relied on by sky lighting (see LightPropagator): above each column's
+// surface row, generated terrain never has an opaque block hanging over open air,
+// and the only thing between the ground and the sky is water up to sea level.
+// Caves only remove blocks (and never flood), trunks and boulders are solid down to
+// the ground, and leaves and plants let light through.
 class TerrainGenerator {
 public:
     static constexpr int S = Chunk::CHUNK_SIZE;
+    // Air below this row (above the ground) is filled with water.
+    static constexpr int kSeaLevel = -3;
+    // Columns whose surface is at most one row above sea level are sand (beaches and
+    // sea floors), and nothing grows there.
+    static constexpr bool IsSandyRow(int surfaceRow) { return surfaceRow <= kSeaLevel; }
     using Blocks = std::array<Block, Chunk::VOLUME>;
 
     // Heights at the (S + 1)^2 block corners of one chunk column. Identical for every
@@ -38,6 +44,13 @@ public:
         bool HasSlopedTop() const { return EdgesAt(surfaceRow).IsValid(); }
         // Height of the visible ground at the column's centre.
         float GroundHeightAtCentre() const;
+        // First row above the ground that's entirely open (water fills from here).
+        int FirstOpenRow() const { return HasSlopedTop() ? surfaceRow + 1 : surfaceRow; }
+        // Sandy beaches and sea floors instead of grass.
+        bool IsSandy() const { return IsSandyRow(surfaceRow); }
+        // Sky light reaching the cell just above `row` in untouched terrain, coming
+        // straight down: 0 under the ground, reduced by any water above.
+        uint8_t SkyLightAbove(int row) const;
     };
 
     float GetHeight(int x, int z) const;

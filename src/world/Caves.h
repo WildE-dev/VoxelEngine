@@ -23,6 +23,7 @@ void Carve(const glm::ivec3& chunkCoords, const std::array<int, Chunk::CHUNK_SIZ
            std::array<Block, Chunk::VOLUME>& blocks);
 
 // Whether the block at a world position is carved out, given its column's surface row.
+// Columns at or below sea level never get entrances, so seas don't sit over caves.
 bool IsCave(int wx, int wy, int wz, int surfaceRow);
 
 } // namespace Caves

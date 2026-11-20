@@ -45,6 +45,22 @@ float TerrainGenerator::Column::GroundHeightAtCentre() const {
     return static_cast<float>(surfaceRow);
 }
 
+uint8_t TerrainGenerator::Column::SkyLightAbove(int row) const {
+    // The light in cell row + 1, coming straight down. Cells in this column: solid
+    // ground below the surface row, the (transparent) sloped top if any, then water up
+    // to sea level, then open sky. Below sea level the sloped top is waterlogged.
+    // Light loses 2 entering each cell holding water.
+    const int cell = row + 1;
+    if (cell < surfaceRow) return 0;
+    const int waterAtOrAbove = kSeaLevel - std::max(cell, FirstOpenRow());
+    const bool waterloggedSlope = cell < FirstOpenRow() && surfaceRow < kSeaLevel;
+    if (waterAtOrAbove <= 0 && !waterloggedSlope) return kMaxLight;
+    int level = kMaxLight - 2 * waterAtOrAbove;
+    // The sloped sea floor block under the water is waterlogged: one more water cell.
+    if (cell < FirstOpenRow()) level -= 2;
+    return static_cast<uint8_t>(std::max(0, level));
+}
+
 float TerrainGenerator::GetHeight(int x, int z) const {
     float value = 0.0f;
     float freq = 1.0f;
@@ -94,18 +110,21 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
             const int m = column.surfaceRow;
             const EdgeData edges = column.EdgesAt(m);
             const bool sloped = edges.IsValid();
+            // Near and below sea level the ground is sand instead of grass and dirt.
+            const BlockType top = column.IsSandy() ? BlockType::SAND : BlockType::GRASS;
+            const BlockType under = column.IsSandy() ? BlockType::SAND : BlockType::DIRT;
             for (int y = 0; y < S; y++) {
                 const int blockY = coords.y * S + y;
                 if (blockY == m) {
-                    // Sloped grass top. If the surface is (almost) flat at the bottom of
-                    // this cell the cell stays empty and the block below is grass instead.
-                    if (sloped) out[Index(x, y, z)] = Block(BlockType::GRASS, edges);
+                    // Sloped top. If the surface is (almost) flat at the bottom of this
+                    // cell the cell stays empty and the block below is the top instead.
+                    if (sloped) out[Index(x, y, z)] = Block(top, edges);
                 }
                 else if (blockY == m - 1 && !sloped) {
-                    out[Index(x, y, z)] = Block(BlockType::GRASS);
+                    out[Index(x, y, z)] = Block(top);
                 }
                 else if (blockY < m && blockY > m - 5) {
-                    out[Index(x, y, z)] = Block(BlockType::DIRT);
+                    out[Index(x, y, z)] = Block(under);
                 }
                 else if (blockY < m) {
                     out[Index(x, y, z)] = Block(BlockType::STONE);
@@ -115,6 +134,23 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
     }
 
     Caves::Carve(coords, rows, out);
+
+    // Seas and lakes: open cells above the ground and below sea level, plus the open
+    // space above a sloped sea floor (waterlogged). Caves are underground (below the
+    // surface row), so they stay dry.
+    for (int x = 0; x < S; x++) {
+        for (int z = 0; z < S; z++) {
+            const Column column = ColumnFrom(heights, x, z);
+            const int firstOpen = column.FirstOpenRow();
+            for (int y = 0; y < S; y++) {
+                const int blockY = coords.y * S + y;
+                Block& cell = out[Index(x, y, z)];
+                if (blockY >= firstOpen && blockY < kSeaLevel) cell = Block::Water(Block::kMaxWaterVolume);
+                else if (blockY == column.surfaceRow && blockY < kSeaLevel && cell.IsPartial()) cell.water = cell.WaterCapacity();
+            }
+        }
+    }
+
     Features::Place(*this, coords, rows, out);
     PlacePlants(coords, heights, out);
 }
@@ -125,6 +161,7 @@ void TerrainGenerator::PlacePlants(const glm::ivec3& coords, const ColumnHeights
         for (int z = 0; z < S; z++) {
             const int wx = coords.x * S + x, wz = coords.z * S + z;
             const Column column = ColumnFrom(heights, x, z);
+            if (column.IsSandy()) continue; // grass and flowers only grow on grass
 
             // The plant stands in the first air cell above the ground. On a sloped top
             // that's the cell above the slope, lowered so it sits on the surface.

@@ -235,6 +235,8 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* TALL_GRASS    */ {{ "tall_grass", nullptr, nullptr, nullptr, nullptr, nullptr }},
     /* FLOWER_RED    */ {{ "flower_red", nullptr, nullptr, nullptr, nullptr, nullptr }},
     /* FLOWER_YELLOW */ {{ "flower_yellow", nullptr, nullptr, nullptr, nullptr, nullptr }},
+    /* SAND  */ {{ "sand", "sand", "sand", "sand", "sand", "sand" }},
+    /* WATER */ {{ "water", "water", "water", "water", "water", "water" }},
 };
 
 // Resolved atlas indices. Written on the main thread on (re)load, read by the
@@ -294,6 +296,15 @@ void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, i
         vertices.push_back(vertex.PackPosition());
         vertices.push_back(vertex.PackShading());
     }
+}
+
+uint8_t Block::WaterFloor() const {
+    if (!IsPartial()) return 0;
+    // Mean height of the two top triangles (see SurfaceHeight), in units.
+    const int c00 = edgeData.GetTopY(2), c10 = edgeData.GetTopY(1), c01 = edgeData.GetTopY(0), c11 = edgeData.GetTopY(3);
+    const int sixths = c00 + c11 + 2 * (c10 + c01);           // 6 * mean, in eighths
+    constexpr int unitsPerEighth = kMaxWaterVolume / 8;
+    return static_cast<uint8_t>((sixths * unitsPerEighth + 3) / 6);
 }
 
 float Block::SurfaceHeight(float fx, float fz) const {

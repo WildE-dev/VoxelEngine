@@ -203,6 +203,21 @@ void Renderer::RenderFrame(World& world, const FrameParams& params) {
 
     DrawSkybox(params);
 
+    // Translucent water last: blended over everything, without writing depth, and
+    // with both sides visible so the surface shows from underwater too.
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);
+    atlas.Bind(GL_TEXTURE0);
+    worldShader.Use();
+    worldShader.SetUniform("waterPass", 1.0f);
+    world.RenderWater(worldShader, params.view, params.projection, params.time, params.cameraPosition);
+    worldShader.SetUniform("waterPass", 0.0f);
+    glEnable(GL_CULL_FACE);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+
     if (params.highlightedBlock) {
         debugDraw.DrawWireCube(debugShader, params.view, params.projection, glm::vec3(*params.highlightedBlock));
     }
@@ -215,6 +230,7 @@ void Renderer::RenderFrame(World& world, const FrameParams& params) {
 
     screenShader.Use();
     screenShader.SetUniform("screenTexture", 0);
+    screenShader.SetUniform("underwater", params.underwater ? 1.0f : 0.0f);
     glBindVertexArray(screenVAO);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, sceneColor);

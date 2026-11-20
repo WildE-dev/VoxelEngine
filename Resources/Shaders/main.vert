@@ -9,6 +9,8 @@ uniform mat4 projection;
 uniform float aoStrength;     // 0 = off, 1 = full
 uniform float sunBrightness;  // 0 = night, 1 = day
 uniform vec3 blockLightColor; // colour of light from emitting blocks
+uniform float waterPass;      // 1 while drawing translucent water
+uniform float time;           // seconds, for the water shimmer
 
 out vec2 TexCoord;
 out vec3 Light;
@@ -78,6 +80,12 @@ void main()
 
     // Ambient occlusion: fully occluded corners drop to 40% brightness.
     light *= mix(1.0f, mix(0.4f, 1.0f, data.ao), aoStrength);
+
+    // Water surfaces shimmer gently.
+    if (waterPass > 0.5f) {
+        vec3 world = (model * vec4(data.pos, 1.0f)).xyz;
+        light *= 0.92f + 0.08f * sin(time * 1.8f + world.x * 0.9f + world.z * 0.7f);
+    }
 
     Light = min(light, vec3(1.0f));
 }
