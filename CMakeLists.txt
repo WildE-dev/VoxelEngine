@@ -29,6 +29,8 @@ add_executable(${PROJECT_NAME}
     src/app/Application.h
     src/app/Camera.cpp
     src/app/Camera.h
+    src/app/Player.cpp
+    src/app/Player.h
 
     src/render/DebugDraw.cpp
     src/render/DebugDraw.h
@@ -38,11 +40,18 @@ add_executable(${PROJECT_NAME}
     src/render/Shader.h
     src/render/Textures.cpp
     src/render/Textures.h
+    src/render/TextureAtlas.cpp
+    src/render/TextureAtlas.h
 
     src/world/Block.cpp
     src/world/Block.h
     src/world/Chunk.cpp
     src/world/Chunk.h
+    src/world/Collision.cpp
+    src/world/Collision.h
+    src/world/Coords.h
+    src/world/Lighting.cpp
+    src/world/Lighting.h
     src/world/Raycast.cpp
     src/world/Raycast.h
     src/world/TerrainGenerator.cpp

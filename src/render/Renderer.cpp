@@ -52,6 +52,8 @@ const float kHoleVerts[] = {
 };
 
 const glm::vec3 kBlackHolePosition(0.0f, 2.0f, 0.0f);
+const char* kBlockTextureDirectory = "Resources/Textures/Blocks";
+const glm::vec3 kBlockLightColor(1.0f, 0.85f, 0.6f); // warm lamp light
 
 void CreateVertexBuffer(GLuint& vao, GLuint& vbo, const float* data, GLsizeiptr size) {
     glGenVertexArrays(1, &vao);
@@ -81,7 +83,6 @@ Renderer::~Renderer() {
     glDeleteVertexArrays(1, &holeVAO);
     glDeleteBuffers(1, &holeVBO);
 
-    glDeleteTextures(1, &atlasTexture);
     glDeleteTextures(1, &skyboxTexture);
 }
 
@@ -89,7 +90,7 @@ bool Renderer::Init(int framebufferWidth, int framebufferHeight) {
     width = framebufferWidth;
     height = framebufferHeight;
 
-    atlasTexture = Textures::LoadTexture2D("Resources/Textures/atlas.png");
+    atlas.Build(kBlockTextureDirectory);
     skyboxTexture = Textures::LoadCubemap({
         "Resources/Textures/right.bmp",
         "Resources/Textures/left.bmp",
@@ -171,6 +172,10 @@ void Renderer::ReloadShaders() {
     holeShader.Reload();
 }
 
+void Renderer::ReloadTextures() {
+    atlas.Build(kBlockTextureDirectory);
+}
+
 void Renderer::RenderFrame(World& world, const FrameParams& params) {
     // --- Scene pass into the offscreen framebuffer ---
     glBindFramebuffer(GL_FRAMEBUFFER, sceneFBO);
@@ -184,10 +189,13 @@ void Renderer::RenderFrame(World& world, const FrameParams& params) {
     glPolygonMode(GL_FRONT_AND_BACK, params.wireframe ? GL_LINE : GL_FILL);
     if (params.wireframe) glDisable(GL_CULL_FACE); else glEnable(GL_CULL_FACE);
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, atlasTexture);
+    atlas.Bind(GL_TEXTURE0);
     worldShader.Use();
     worldShader.SetUniform("ourTexture", 0);
+    atlas.ApplyUniforms(worldShader);
+    worldShader.SetUniform("aoStrength", params.ambientOcclusion ? 1.0f : 0.0f);
+    worldShader.SetUniform("sunBrightness", params.sunBrightness);
+    worldShader.SetUniform("blockLightColor", kBlockLightColor);
     world.Render(worldShader, params.view, params.projection, params.time);
 
     glEnable(GL_CULL_FACE);
@@ -226,6 +234,7 @@ void Renderer::DrawSkybox(const FrameParams& params) {
     skyboxShader.SetUniform("view", glm::mat4(glm::mat3(params.view))); // strip translation
     skyboxShader.SetUniform("projection", params.projection);
     skyboxShader.SetUniform("skybox", 0);
+    skyboxShader.SetUniform("brightness", 0.05f + 0.95f * params.sunBrightness);
 
     glBindVertexArray(skyboxVAO);
     glActiveTexture(GL_TEXTURE0);

@@ -18,6 +18,8 @@ class TerrainGenerator;
 // Threading contract:
 //  - Block data is guarded by an internal mutex and may be read/written from any thread.
 //  - Generate() and BuildMesh() run on the world worker thread.
+//  - Light (block and sky) is only ever read or written on the worker thread (by the light
+//    propagation and the mesher), so it needs no lock.
 //  - UploadPendingMesh(), Draw() and ReleaseGpu() must run on the thread that owns the GL context.
 //  - The destructor never touches GL, so the last reference may be dropped on any thread.
 class Chunk
@@ -33,7 +35,10 @@ public:
         Loaded,     // block data is valid
     };
 
-    using Neighbours = std::array<std::shared_ptr<const Chunk>, kFaceCount>;
+    // The 3x3x3 block of chunks around this one (the centre slot is unused).
+    // Diagonal neighbours are needed for ambient occlusion at chunk edges.
+    using Neighbours = std::array<std::shared_ptr<const Chunk>, 27>;
+    static constexpr int NeighbourIndex(int dx, int dy, int dz) { return (dx + 1) + 3 * ((dy + 1) + 3 * (dz + 1)); }
 
     explicit Chunk(glm::ivec3 coords);
     ~Chunk();
@@ -62,9 +67,28 @@ public:
     bool IsOpaque(int x, int y, int z) const;
     void SetBlock(int x, int y, int z, const Block& block);
 
+    // Light, 0..kMaxLight per channel. Worker thread only.
+    uint8_t GetLight(LightChannel channel, int x, int y, int z) const {
+        uint8_t v = light[Index(x, y, z)];
+        return channel == LightChannel::Block ? (v & 0x0F) : (v >> 4);
+    }
+    void SetLight(LightChannel channel, int x, int y, int z, uint8_t value) {
+        uint8_t& v = light[Index(x, y, z)];
+        v = channel == LightChannel::Block ? static_cast<uint8_t>((v & 0xF0) | value)
+                                           : static_cast<uint8_t>((v & 0x0F) | (value << 4));
+    }
+
+    // Copies all blocks out under a single lock.
+    void CopyBlocks(std::array<Block, VOLUME>& out) const;
+
+    // Terrain heights at the (CHUNK_SIZE + 1)^2 block corners of one chunk column.
+    // Identical for every chunk stacked in that column, so World caches it.
+    using ColumnHeights = std::array<float, (CHUNK_SIZE + 1) * (CHUNK_SIZE + 1)>;
+    static void ComputeColumnHeights(const TerrainGenerator& terrain, int chunkX, int chunkZ, ColumnHeights& out);
+
     // Worker thread.
     bool TryBeginGenerate();
-    void Generate(const TerrainGenerator& terrain);
+    void Generate(const ColumnHeights& heights);
     void BuildMesh(const Neighbours& neighbours);
 
     // GL thread. Upload the latest mesh from the worker (if any), then draw it.
@@ -82,6 +106,7 @@ private:
 
     mutable std::mutex blockMutex;
     std::array<Block, VOLUME> blocks{};
+    std::array<uint8_t, VOLUME> light{}; // block light (low nibble), sky light (high nibble); worker thread only
 
     // Mesh hand-off from the worker to the GL thread.
     std::mutex meshMutex;

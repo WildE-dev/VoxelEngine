@@ -7,6 +7,7 @@
 
 #include "render/DebugDraw.h"
 #include "render/Shader.h"
+#include "render/TextureAtlas.h"
 
 class World;
 
@@ -15,6 +16,8 @@ struct FrameParams {
     glm::mat4 projection{1.0f};
     float time = 0.0f;
     bool wireframe = false;
+    bool ambientOcclusion = true;
+    float sunBrightness = 1.0f; // 0 = night, 1 = day
     std::optional<glm::ivec3> highlightedBlock;
 };
 
@@ -34,6 +37,10 @@ public:
     bool Init(int framebufferWidth, int framebufferHeight);
 
     void ReloadShaders();
+    // Rebuild the block texture atlas from disk. Tile indices may change, so
+    // block textures must be re-resolved and chunk meshes rebuilt afterwards.
+    void ReloadTextures();
+    const TextureAtlas& GetAtlas() const { return atlas; }
     void RenderFrame(World& world, const FrameParams& params);
 
     GLuint GetSceneTexture() const { return sceneColor; }
@@ -55,10 +62,10 @@ private:
     Shader holeShader;
 
     DebugDraw debugDraw;
+    TextureAtlas atlas;
 
     int width = 0, height = 0;
 
-    GLuint atlasTexture = 0;
     GLuint skyboxTexture = 0;
 
     GLuint skyboxVAO = 0, skyboxVBO = 0;

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <string>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -70,7 +72,20 @@ enum class BlockType : uint8_t {
     GRASS,
     DIRT,
     STONE,
+    LAMP,
+    COUNT
 };
+
+constexpr uint8_t kMaxLight = 15;
+
+// Light from emitting blocks, and daylight from the sky. Stored and propagated
+// separately so day/night can scale sky light in the shader without re-meshing.
+enum class LightChannel : uint8_t { Block, Sky };
+
+// Block light emitted by a block type, 0..kMaxLight.
+inline uint8_t GetLightEmission(BlockType type) {
+    return type == BlockType::LAMP ? kMaxLight : 0;
+}
 
 // Indices into the texture atlas for each face of a block.
 struct TextureData {
@@ -82,7 +97,13 @@ struct TextureData {
         : top(top), bottom(bottom), front(front), back(back), left(left), right(right) {}
 };
 
-const TextureData& GetTextureData(BlockType type);
+// Atlas tile indices for each face of a block type. Thread-safe.
+TextureData GetTextureData(BlockType type);
+
+// Maps the texture names each block type uses (see Block.cpp) to atlas indices.
+// Call after (re)building the atlas, then rebuild chunk meshes. Safe to call while
+// the world worker is meshing.
+void ResolveBlockTextures(const std::function<int(const std::string&)>& lookup);
 
 // Face order is shared by the mesher, the vertex generator and the neighbour lookup.
 enum class Face : int {
@@ -104,6 +125,18 @@ constexpr int kFaceOffsets[kFaceCount][3] = {
     { 0,  0, -1},
 };
 
+// Axis (0 = x, 1 = y, 2 = z) each face points along, and the two tangent axes
+// spanning it. Used to address the four corners of a face for ambient occlusion.
+constexpr int kFaceAxis[kFaceCount] = { 0, 0, 1, 1, 2, 2 };
+constexpr int kFaceTangents[3][2] = { {1, 2}, {0, 2}, {0, 1} };
+
+// Per-corner shading for one face, indexed [high side of tangent A][high side of tangent B].
+struct FaceShading {
+    uint8_t ao[2][2] = { {3, 3}, {3, 3} };    // 0 (darkest) to 3 (unoccluded)
+    uint8_t light[2][2] = { {0, 0}, {0, 0} }; // block light, 0..kMaxLight
+    uint8_t sky[2][2] = { {0, 0}, {0, 0} };   // sky light, 0..kMaxLight
+};
+
 struct Block {
     BlockType type = BlockType::AIR;
     EdgeData edgeData;
@@ -119,9 +152,17 @@ struct Block {
     bool IsAir() const { return type == BlockType::AIR; }
     // Full, opaque cube that hides any neighbouring face touching it.
     bool IsFullBlock() const { return type != BlockType::AIR && edgeData.IsFull(); }
+    // Light passes through air and partial blocks but not full ones.
+    bool BlocksLight() const { return IsFullBlock(); }
+    uint8_t GetLightEmission() const { return ::GetLightEmission(type); }
+
+    // Height of the block's top surface (0..1) at a point inside its footprint,
+    // fx, fz in [0, 1]. Matches the two triangles the mesher draws for the top face,
+    // so things standing on it sit exactly on the visible surface.
+    float SurfaceHeight(float fx, float fz) const;
 
     // Appends 6 vertices (2 packed uint32 each) for the given face.
-    void AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z) const;
+    void AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading) const;
 
     bool operator==(const Block& o) const { return type == o.type && edgeData == o.edgeData; }
     bool operator!=(const Block& o) const { return !(*this == o); }

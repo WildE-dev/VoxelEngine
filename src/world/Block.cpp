@@ -1,6 +1,7 @@
 #include "world/Block.h"
 
 #include <array>
+#include <atomic>
 
 namespace {
 
@@ -10,6 +11,9 @@ struct VertexData {
     glm::vec2 tex{0.0f};
     int textureIndex = 0;
     glm::vec3 norm{0.0f};
+    uint32_t ao = 3;
+    uint32_t light = 0;
+    uint32_t sky = 0;
 
     VertexData() = default;
     VertexData(glm::vec3 pos, glm::vec2 tex, int textureIndex, glm::vec3 norm)
@@ -25,12 +29,15 @@ struct VertexData {
         return ((x & 0xFFu) << 24) | ((y & 0xFFu) << 16) | ((z & 0xFFu) << 8) | ((u & 0xFu) << 4) | (v & 0xFu);
     }
 
-    // Normal quantised to 4 bits per axis, plus a 20-bit texture index.
-    uint32_t PackNormalAndTexture() const {
+    // Normal quantised to 4 bits per axis, 2-bit ambient occlusion, 4-bit block
+    // light, 4-bit sky light, 10-bit texture index.
+    uint32_t PackShading() const {
         uint32_t nx = static_cast<uint32_t>((norm.x + 1.0f) * 7.5f);
         uint32_t ny = static_cast<uint32_t>((norm.y + 1.0f) * 7.5f);
         uint32_t nz = static_cast<uint32_t>((norm.z + 1.0f) * 7.5f);
-        return ((nx & 0xFu) << 28) | ((ny & 0xFu) << 24) | ((nz & 0xFu) << 20) | (static_cast<uint32_t>(textureIndex) & 0xFFFFFu);
+        return ((nx & 0xFu) << 28) | ((ny & 0xFu) << 24) | ((nz & 0xFu) << 20) |
+               ((ao & 0x3u) << 18) | ((light & 0xFu) << 14) | ((sky & 0xFu) << 10) |
+               (static_cast<uint32_t>(textureIndex) & 0x3FFu);
     }
 };
 
@@ -206,26 +213,96 @@ std::array<VertexData, 6> GetFaceVertices(Face face, const EdgeData& edgeData, i
 
 } // namespace
 
-const TextureData& GetTextureData(BlockType type) {
-    static constexpr TextureData kNone{};
-    static constexpr TextureData kGrass{0, 2, 1, 1, 1, 1};
-    static constexpr TextureData kDirt{2};
-    static constexpr TextureData kStone{3};
+namespace {
 
-    switch (type) {
-    case BlockType::GRASS: return kGrass;
-    case BlockType::DIRT:  return kDirt;
-    case BlockType::STONE: return kStone;
-    default:               return kNone;
+// Texture file names (without extension) in Resources/Textures/Blocks, per face:
+// top, bottom, front, back, left, right.
+struct BlockTextureNames {
+    const char* faces[6];
+};
+
+constexpr int kBlockTypeCount = static_cast<int>(BlockType::COUNT);
+
+const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
+    /* AIR   */ {{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr }},
+    /* GRASS */ {{ "grass_top", "dirt", "grass_side", "grass_side", "grass_side", "grass_side" }},
+    /* DIRT  */ {{ "dirt", "dirt", "dirt", "dirt", "dirt", "dirt" }},
+    /* STONE */ {{ "stone", "stone", "stone", "stone", "stone", "stone" }},
+    /* LAMP  */ {{ "lamp", "lamp", "lamp", "lamp", "lamp", "lamp" }},
+};
+
+// Resolved atlas indices. Written on the main thread on (re)load, read by the
+// mesher on the worker thread, hence atomic.
+std::atomic<int> gBlockTextureIndices[kBlockTypeCount][6] = {};
+
+} // namespace
+
+void ResolveBlockTextures(const std::function<int(const std::string&)>& lookup) {
+    for (int type = 0; type < kBlockTypeCount; type++) {
+        for (int face = 0; face < 6; face++) {
+            const char* name = kBlockTextureNames[type].faces[face];
+            gBlockTextureIndices[type][face] = name ? lookup(name) : 0;
+        }
     }
 }
 
-void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z) const {
-    auto faceVertices = GetFaceVertices(face, edgeData, x, y, z, GetTextureData(type));
-    for (const auto& v : faceVertices) {
-        vertices.push_back(v.PackPosition());
-        vertices.push_back(v.PackNormalAndTexture());
+TextureData GetTextureData(BlockType type) {
+    int t = static_cast<int>(type);
+    if (t < 0 || t >= kBlockTypeCount) return {};
+    const auto& i = gBlockTextureIndices[t];
+    return { i[0].load(std::memory_order_relaxed), i[1].load(std::memory_order_relaxed),
+             i[2].load(std::memory_order_relaxed), i[3].load(std::memory_order_relaxed),
+             i[4].load(std::memory_order_relaxed), i[5].load(std::memory_order_relaxed) };
+}
+
+void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading) const {
+    auto v = GetFaceVertices(face, edgeData, x, y, z, GetTextureData(type));
+
+    // Work out which face corner each vertex sits on. Horizontal coordinates are
+    // always 0 or 1 within the block; vertical ones may be partial heights, so any
+    // vertex above the block's base counts as a top corner.
+    const glm::vec3 origin(x, y, z);
+    const auto& tangents = kFaceTangents[kFaceAxis[static_cast<int>(face)]];
+    auto isHigh = [&](const glm::vec3& pos, int axis) {
+        float rel = pos[axis] - origin[axis];
+        return axis == 1 ? rel > 0.001f : rel > 0.5f;
+    };
+    for (auto& vertex : v) {
+        const int a = isHigh(vertex.pos, tangents[0]);
+        const int b = isHigh(vertex.pos, tangents[1]);
+        vertex.ao = shading.ao[a][b];
+        vertex.light = shading.light[a][b];
+        vertex.sky = shading.sky[a][b];
     }
+
+    // The quad is two triangles (p1, p2, p3) and (p3, p2, p4) sharing the p2-p3
+    // diagonal. Interpolating AO across that diagonal gives visible creases when
+    // the darker corners lie on it, so for flat (full block) faces split along
+    // p1-p4 instead when that pair is brighter.
+    const VertexData p1 = v[0], p2 = v[1], p3 = v[2], p4 = v[5];
+    if (IsFullBlock() && p1.ao + p4.ao > p2.ao + p3.ao) {
+        v = { p1, p2, p4, p4, p3, p1 };
+    }
+
+    for (const auto& vertex : v) {
+        vertices.push_back(vertex.PackPosition());
+        vertices.push_back(vertex.PackShading());
+    }
+}
+
+float Block::SurfaceHeight(float fx, float fz) const {
+    if (IsAir()) return 0.0f;
+    if (IsFullBlock()) return 1.0f;
+
+    // Corner heights. See GetFaceVertices(Face::Top): edge 2 is (0,0), 1 is (1,0),
+    // 0 is (0,1) and 3 is (1,1), and the quad is split along the (0,1)-(1,0) diagonal.
+    const float c00 = edgeData.GetTopY(2) / 8.0f;
+    const float c10 = edgeData.GetTopY(1) / 8.0f;
+    const float c01 = edgeData.GetTopY(0) / 8.0f;
+    const float c11 = edgeData.GetTopY(3) / 8.0f;
+
+    if (fx + fz <= 1.0f) return c00 + (c10 - c00) * fx + (c01 - c00) * fz;
+    return c11 + (c01 - c11) * (1.0f - fx) + (c10 - c11) * (1.0f - fz);
 }
 
 void Block::Shrink() {

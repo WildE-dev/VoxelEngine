@@ -14,18 +14,11 @@
 
 #include "world/Block.h"
 #include "world/Chunk.h"
+#include "world/Coords.h"
+#include "world/Lighting.h"
 #include "world/TerrainGenerator.h"
 
 class Shader;
-
-struct IVec3Hash {
-    size_t operator()(const glm::ivec3& v) const noexcept {
-        uint64_t h = static_cast<uint32_t>(v.x);
-        h = h * 0x9E3779B97F4A7C15ull ^ static_cast<uint32_t>(v.y);
-        h = h * 0x9E3779B97F4A7C15ull ^ static_cast<uint32_t>(v.z);
-        return static_cast<size_t>(h ^ (h >> 32));
-    }
-};
 
 // Owns all chunks and a background worker that generates terrain and builds meshes.
 //
@@ -36,7 +29,9 @@ struct IVec3Hash {
 //  - Chunks are shared_ptrs so a chunk the worker is processing stays alive even if
 //    the main thread unloads it meanwhile. Unloaded chunks are flagged as removed and
 //    have their GL objects released on the main thread before being dropped.
-//  - Finished meshes are handed to the chunk and uploaded lazily in Chunk::Render.
+//  - Finished meshes are handed to the chunk and uploaded lazily on the main thread.
+//  - Block light lives entirely on the worker: the main thread only queues the
+//    positions of edited blocks, and the worker propagates light before meshing.
 class World
 {
 public:
@@ -78,11 +73,17 @@ private:
     void RequestNeighbourRebuilds(const glm::ivec3& chunkCoords);
 
     void WorkerLoop();
-    void BuildChunkMesh(Chunk& chunk);
+    // Worker thread: heights for a chunk column, cached since every chunk stacked in
+    // the column needs the same (expensive) noise samples.
+    const Chunk::ColumnHeights& GetColumnHeights(int chunkX, int chunkZ);
+    // Returns false (and builds nothing) while a neighbour is still waiting to generate.
+    bool BuildChunkMesh(Chunk& chunk);
+    // Worker thread: runs light propagation and queues rebuilds for affected chunks.
+    void PropagateLight(const std::vector<ChunkPtr>& loadedChunks, const std::vector<glm::ivec3>& changedBlocks);
 
     const TerrainGenerator& terrain;
 
-    std::unordered_map<glm::ivec3, ChunkPtr, IVec3Hash> chunks;
+    std::unordered_map<glm::ivec3, ChunkPtr, Coords::IVec3Hash> chunks;
     mutable std::shared_mutex chunksMutex;
 
     // Offsets within render distance, nearest first, so close chunks load first.
@@ -94,7 +95,13 @@ private:
     std::condition_variable queueCv;
     std::deque<ChunkPtr> generateQueue;
     std::deque<ChunkPtr> rebuildQueue;
+    std::vector<glm::ivec3> lightQueue; // edited block positions
     bool stopping = false;
 
+    struct IVec2Hash {
+        size_t operator()(const glm::ivec2& v) const noexcept { return Coords::IVec3Hash{}(glm::ivec3(v, 0)); }
+    };
+    std::unordered_map<glm::ivec2, std::unique_ptr<Chunk::ColumnHeights>, IVec2Hash> columnHeights; // worker thread only
+    LightPropagator light; // worker thread only
     std::thread worker;
 };

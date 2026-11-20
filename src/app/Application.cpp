@@ -1,7 +1,9 @@
 #include "app/Application.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
+#include <iterator>
 #include <string>
 
 #include <glad/glad.h>
@@ -26,7 +28,18 @@ constexpr const char* kGlslVersion = "#version 330 core";
 constexpr float kReach = 50.0f;
 constexpr float kLaserRange = 100.0f;
 constexpr int kLaserRadius = 4;
-constexpr BlockType kPlaceBlock = BlockType::DIRT;
+// Blocks selectable with the number keys, in order.
+constexpr BlockType kPlaceableBlocks[] = { BlockType::DIRT, BlockType::STONE, BlockType::GRASS, BlockType::LAMP };
+
+const char* BlockName(BlockType type) {
+    switch (type) {
+    case BlockType::GRASS: return "Grass";
+    case BlockType::DIRT:  return "Dirt";
+    case BlockType::STONE: return "Stone";
+    case BlockType::LAMP:  return "Lamp";
+    default:               return "Air";
+    }
+}
 
 void GlfwErrorCallback(int error, const char* description) {
     std::cerr << "GLFW error " << error << ": " << description << std::endl;
@@ -91,8 +104,21 @@ bool Application::Init() {
     renderer = std::make_unique<Renderer>();
     if (!renderer->Init(framebufferWidth, framebufferHeight)) return false;
 
+    // Block textures must be resolved before the world starts meshing.
+    LoadBlockTextures();
     world = std::make_unique<World>(terrain);
+    UpdateWindowTitle();
     return true;
+}
+
+void Application::LoadBlockTextures() {
+    const TextureAtlas& atlas = renderer->GetAtlas();
+    ResolveBlockTextures([&](const std::string& name) {
+        int index = atlas.GetIndex(name);
+        if (index == TextureAtlas::kMissingIndex)
+            std::cerr << "Missing block texture '" << name << "'" << std::endl;
+        return index;
+    });
 }
 
 void Application::Shutdown() {
@@ -126,6 +152,7 @@ void Application::Run() {
         glfwPollEvents();
 
         HandleContinuousInput(deltaTime);
+        camera.SetPosition(player.GetEyePosition());
         world->Update(camera.GetPosition());
 
         FrameParams params;
@@ -133,6 +160,8 @@ void Application::Run() {
         params.projection = camera.GetProjectionMatrix(static_cast<float>(renderer->GetWidth()) / renderer->GetHeight());
         params.time = static_cast<float>(now);
         params.wireframe = wireframe;
+        params.ambientOcclusion = ambientOcclusion;
+        params.sunBrightness = sunBrightness;
         if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), kReach)) {
             params.highlightedBlock = hit->block;
         }
@@ -155,7 +184,20 @@ void Application::Run() {
 }
 
 void Application::HandleContinuousInput(float deltaTime) {
-    camera.UpdateMove(window, deltaTime);
+    auto down = [&](int key) { return glfwGetKey(window, key) == GLFW_PRESS; };
+
+    // The player drops onto the terrain once the chunks under it have loaded.
+    if (!player.IsSpawned() && !player.IsFlying()) player.Spawn(*world);
+
+    PlayerInput input;
+    input.move = glm::vec2((down(GLFW_KEY_D) ? 1.0f : 0.0f) - (down(GLFW_KEY_A) ? 1.0f : 0.0f),
+                           (down(GLFW_KEY_W) ? 1.0f : 0.0f) - (down(GLFW_KEY_S) ? 1.0f : 0.0f));
+    input.jump = down(GLFW_KEY_SPACE) || (player.IsFlying() && down(GLFW_KEY_E));
+    input.descend = down(GLFW_KEY_Q) || down(GLFW_KEY_LEFT_CONTROL);
+    input.sprint = down(GLFW_KEY_LEFT_SHIFT);
+    input.yaw = camera.GetYaw();
+    input.lookDirection = camera.GetDirection();
+    player.Update(*world, input, deltaTime);
 
     // Laser: carve a tunnel along the view ray while L is held.
     if (captureCursor && glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
@@ -184,11 +226,26 @@ void Application::DrawDebugWindow(float deltaTime) {
 
         ImGui::Checkbox("VSync", &vsync);
         ImGui::Checkbox("Wireframe", &wireframe);
+        ImGui::Checkbox("Ambient occlusion", &ambientOcclusion);
+        ImGui::SliderFloat("Sun brightness", &sunBrightness, 0.0f, 1.0f);
+        ImGui::Text("Placing: %s (1-%d to change)", BlockName(placeBlock), static_cast<int>(std::size(kPlaceableBlocks)));
         ImGui::Text("Position %.3f, %.3f, %.3f", pos.x, pos.y, pos.z);
+        const glm::vec3 velocity = player.GetVelocity();
+        ImGui::Text("%s%s, velocity %.2f, %.2f, %.2f", player.IsFlying() ? "Flying" : "Walking",
+                    player.IsFlying() ? "" : player.IsOnGround() ? " (on ground)" : " (airborne)",
+                    velocity.x, velocity.y, velocity.z);
         ImGui::Text("Angles %.3f, %.3f", angles.x, angles.y);
         ImGui::Text("Frame %.3f ms (%.1f FPS)", deltaTime * 1000.0f, deltaTime > 0.0f ? 1.0f / deltaTime : 0.0f);
         ImGui::PlotLines("Frame Time (ms)", frameTimes.data(), kFrameHistory, frameTimeIndex);
         ImGui::Text("Chunks: %zu in world, %d alive", world->GetLoadedChunkCount(), Chunk::GetLiveCount());
+
+        const TextureAtlas& atlas = renderer->GetAtlas();
+        if (ImGui::CollapsingHeader("Texture atlas")) {
+            glm::ivec2 size = atlas.GetSize();
+            ImGui::Text("%zu textures, %dx%d, %dpx tiles (R to reload)", atlas.GetNames().size() - 1, size.x, size.y, atlas.GetTileSize());
+            const float scale = 128.0f / std::max(size.x, size.y);
+            ImGui::Image(static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture())), ImVec2(size.x * scale, size.y * scale));
+        }
 
         const float previewScale = 0.25f;
         ImGui::Image(static_cast<ImTextureID>(static_cast<uintptr_t>(renderer->GetSceneTexture())),
@@ -207,6 +264,8 @@ void Application::OnKey(int key, int action) {
         break;
     case GLFW_KEY_R:
         renderer->ReloadShaders();
+        renderer->ReloadTextures();
+        LoadBlockTextures();
         world->RebuildAllChunks();
         break;
     case GLFW_KEY_TAB:
@@ -220,9 +279,27 @@ void Application::OnKey(int key, int action) {
     case GLFW_KEY_F2:
         showDebug = !showDebug;
         break;
+    case GLFW_KEY_F3:
+        ambientOcclusion = !ambientOcclusion;
+        break;
+    case GLFW_KEY_F:
+        player.SetFlying(*world, !player.IsFlying());
+        break;
+    case GLFW_KEY_N:
+        sunBrightness = sunBrightness > 0.5f ? 0.0f : 1.0f;
+        break;
     default:
+        if (key >= GLFW_KEY_1 && key < GLFW_KEY_1 + static_cast<int>(std::size(kPlaceableBlocks))) {
+            placeBlock = kPlaceableBlocks[key - GLFW_KEY_1];
+            UpdateWindowTitle();
+        }
         break;
     }
+}
+
+void Application::UpdateWindowTitle() {
+    std::string title = std::string("VoxelEngine - placing ") + BlockName(placeBlock);
+    glfwSetWindowTitle(window, title.c_str());
 }
 
 void Application::OnMouseButton(int button, int action) {
@@ -237,7 +314,13 @@ void Application::OnMouseButton(int button, int action) {
     }
     else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         const glm::ivec3 place = hit->block + hit->normal;
-        world->SetBlock(place.x, place.y, place.z, kPlaceBlock);
+        // Don't build a block inside yourself when walking.
+        if (!player.IsFlying()) {
+            const Collision::AABB body = player.GetBounds();
+            const glm::vec3 lo(place), hi = lo + glm::vec3(1.0f);
+            if (glm::all(glm::lessThan(lo, body.max)) && glm::all(glm::greaterThan(hi, body.min))) return;
+        }
+        world->SetBlock(place.x, place.y, place.z, placeBlock);
     }
 }
 

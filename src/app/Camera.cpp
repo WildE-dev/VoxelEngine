@@ -2,13 +2,10 @@
 
 #include <cmath>
 
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace {
 constexpr float kMouseSensitivity = 0.1f;
-constexpr float kMoveSpeed = 10.0f;
 constexpr float kFovDegrees = 45.0f;
 }
 
@@ -32,21 +29,6 @@ void Camera::UpdateLook(double xPos, double yPos) {
     direction.y = std::sin(glm::radians(pitch));
     direction.z = std::sin(glm::radians(yaw)) * std::cos(glm::radians(pitch));
     front = glm::normalize(direction);
-}
-
-void Camera::UpdateMove(GLFWwindow* window, float deltaTime) {
-    float speed = kMoveSpeed * deltaTime;
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
-        speed *= 2.0f;
-
-    const glm::vec3 right = glm::normalize(glm::cross(front, up));
-
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) position += front * speed;
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) position -= front * speed;
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) position -= right * speed;
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) position += right * speed;
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) position -= up * speed;
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) position += up * speed;
 }
 
 glm::mat4 Camera::GetViewMatrix() const {

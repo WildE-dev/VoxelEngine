@@ -6,8 +6,6 @@
 
 namespace Textures
 {
-    // Returns 0 on failure.
-    GLuint LoadTexture2D(const char* path);
     // Faces in GL order: +X, -X, +Y, -Y, +Z, -Z. Returns 0 if any face fails to load.
     GLuint LoadCubemap(const std::array<const char*, 6>& paths);
 }

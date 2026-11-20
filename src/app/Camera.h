@@ -2,9 +2,7 @@
 
 #include <glm/glm.hpp>
 
-struct GLFWwindow;
-
-// Free-fly first person camera.
+// First person view: orientation from the mouse, position set by the Player.
 class Camera
 {
 public:
@@ -12,8 +10,7 @@ public:
     void UpdateLook(double xPos, double yPos);
     // Call when the cursor is released so the next look update doesn't jump.
     void ResetLook() { firstMouse = true; }
-    // WASD + QE movement, Shift to go faster.
-    void UpdateMove(GLFWwindow* window, float deltaTime);
+    void SetPosition(const glm::vec3& eye) { position = eye; }
 
     glm::mat4 GetViewMatrix() const;
     glm::mat4 GetProjectionMatrix(float aspectRatio) const;
@@ -21,6 +18,7 @@ public:
     glm::vec3 GetPosition() const { return position; }
     glm::vec3 GetDirection() const { return front; }
     glm::vec2 GetDirectionAngles() const { return { pitch, yaw }; }
+    float GetYaw() const { return yaw; }
 
 private:
     glm::vec3 position{7.0f, 7.0f, 7.0f};

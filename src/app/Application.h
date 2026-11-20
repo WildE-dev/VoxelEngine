@@ -4,6 +4,8 @@
 #include <memory>
 
 #include "app/Camera.h"
+#include "app/Player.h"
+#include "world/Block.h"
 #include "world/TerrainGenerator.h"
 
 struct GLFWwindow;
@@ -24,6 +26,8 @@ public:
 
 private:
     void Shutdown();
+    void LoadBlockTextures();
+    void UpdateWindowTitle();
 
     void HandleContinuousInput(float deltaTime);
     void DrawDebugWindow(float deltaTime);
@@ -40,6 +44,7 @@ private:
     bool imguiInitialized = false;
 
     Camera camera;
+    Player player{ glm::vec3(7.0f, 7.0f, 7.0f) };
     TerrainGenerator terrain;
     // Both own GL resources, so they're destroyed explicitly before the context.
     std::unique_ptr<Renderer> renderer;
@@ -47,6 +52,9 @@ private:
 
     bool captureCursor = true;
     bool wireframe = false;
+    bool ambientOcclusion = true;
+    float sunBrightness = 1.0f;
+    BlockType placeBlock = BlockType::DIRT;
     bool showDebug = false;
     bool vsync = true;
 
