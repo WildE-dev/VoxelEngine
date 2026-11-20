@@ -395,8 +395,8 @@ void World::Render(Shader& shader, const glm::mat4& view, const glm::mat4& proje
 }
 
 void World::RenderWater(Shader& shader, const glm::mat4& view, const glm::mat4& projection, float time, const glm::vec3& cameraPosition) {
-    // Back to front so overlapping translucent surfaces blend correctly (per chunk;
-    // within a chunk water is mostly a single surface).
+    // Front to back: water is drawn opaque (the shader refracts the scene copied behind
+    // it), so nearer surfaces hide farther ones before they're shaded.
     std::vector<std::pair<float, Chunk*>> order;
     for (auto& [coords, chunk] : chunks) {
         if (!chunk->IsLoaded() || !chunk->HasWater()) continue;
@@ -404,7 +404,7 @@ void World::RenderWater(Shader& shader, const glm::mat4& view, const glm::mat4& 
         const glm::vec3 d = centre - cameraPosition;
         order.emplace_back(glm::dot(d, d), chunk.get());
     }
-    std::sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    std::sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
 
     shader.Use();
     shader.SetUniform("time", time);

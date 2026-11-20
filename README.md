@@ -59,9 +59,13 @@ and sea floors. Caves never open under water, so they stay dry.
 
 ## Water
 
-Water is translucent and drawn in its own pass after solid geometry. It absorbs
-light, so deeper water gets darker, and the screen tints blue when your head is
-underwater. You swim in it: you sink slowly, Space swims up, and swimming into
+Water is drawn in its own pass after solid geometry and the sky (`water.vert`,
+`water.frag`). The scene behind it is copied first, and the surface shows that
+copy bent by small moving waves (refraction), fading to blue-green with the
+amount of water the light passes through (red goes first). It reflects the sky,
+more at grazing angles (Fresnel), dimmed in caves and at night, and catches a
+glint of the sun. From below you mostly see through the surface, and the screen
+tints blue when your head is underwater. You swim in it: you sink slowly, Space swims up, and swimming into
 a ledge with Space held climbs out.
 
 Water is finite and flows (`Water.cpp`). Each cell holds up to 128 units of

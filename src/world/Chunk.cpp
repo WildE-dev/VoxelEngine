@@ -170,9 +170,11 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
     // faces are drawn between water cells. A column's surface is taken near this row:
     // one row up where that column is taller, one row down where it's lower and open
     // above, so flowing water slopes smoothly between rows instead of breaking into
-    // separate boxes. Heights are in 32nds of a block: the mesh geometry has eighths,
-    // and the remaining 0..3 32nds go in the vertex bits water doesn't use for AO
-    // (main.vert adds them in the water pass).
+    // separate boxes. Heights are in 32nds of a block: the mesh geometry has eighths
+    // (rounded up), and the 0..3 32nds to take back off go in the vertex bits water
+    // doesn't use for AO (water.vert subtracts them). Rounding up keeps a corner's top
+    // vertex at least an eighth above the cell's bottom, so the two can be told apart
+    // even for a surface only a 32nd high.
     constexpr int kUnitsPer32nd = Block::kMaxWaterVolume / 32;
     constexpr int kFullUnits = Block::kMaxWaterVolume;
     constexpr int kCornerOfEdge[4][2] = { { 0, 1 }, { 1, 0 }, { 0, 0 }, { 1, 1 } }; // EdgeData order
@@ -207,7 +209,13 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
         int sum = 0, n = 0;
         for (int dx = cx - 1; dx <= cx; dx++) {
             for (int dz = cz - 1; dz <= cz; dz++) {
-                const int surface = columnSurface(p + glm::ivec3(dx, 0, dz));
+                const glm::ivec3 q = p + glm::ivec3(dx, 0, dz);
+                // Water continues above this row in that column (or sits on a solid block
+                // there): the corner must reach the top of the cell. The cell above starts
+                // exactly there, and no faces are drawn between water cells, so anything
+                // lower leaves a slit between the two rows.
+                if ((hasWater(q) || isOpaque(q)) && hasWater(q + up)) return 32;
+                const int surface = columnSurface(q);
                 if (surface == kNoSurface) continue;
                 sum += surface;
                 n++;
@@ -230,15 +238,15 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
 
     std::vector<uint32_t> waterVertices;
     auto emitWater = [&](const glm::ivec3& here, const Block& self) {
-        uint8_t top[4], fine[4], bottom[4]; // top in eighths + fine (0..3 32nds); bottom in eighths
+        uint8_t top[4], fine[4], bottom[4]; // top in eighths, rounded up, less fine (0..3 32nds); bottom in eighths
         int top32[4];
         bool visible = false;
         // With more water directly above, this cell is full and meets it exactly.
         const bool covered = hasWater(here + up);
         for (int e = 0; e < 4; e++) {
             top32[e] = covered ? 32 : cornerHeight(here, kCornerOfEdge[e][0], kCornerOfEdge[e][1]);
-            top[e] = static_cast<uint8_t>(top32[e] / 4);
-            fine[e] = static_cast<uint8_t>(top32[e] % 4);
+            top[e] = static_cast<uint8_t>((top32[e] + 3) / 4);
+            fine[e] = static_cast<uint8_t>(top[e] * 4 - top32[e]);
             // In a waterlogged block the water sits on the slope.
             bottom[e] = self.IsPartial() ? std::min(self.edgeData.GetTopY(e), top[e]) : 0;
             visible |= top32[e] > bottom[e] * 4;
@@ -280,8 +288,9 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
             const size_t first = waterVertices.size();
             shape.AddFaceVertices(waterVertices, static_cast<Face>(face), here.x, here.y, here.z, shadeFace(here, face, false));
 
-            // Fine height: vertices on a corner's top edge get that corner's extra 32nds
-            // (in the AO bits, 18-19); all other water vertices get none.
+            // Fine height: vertices on a corner's top edge get the 32nds that corner sits
+            // below its rounded-up top (in the AO bits, 18-19); all others get none. A
+            // bottom vertex never matches: a visible corner's top is above its bottom.
             for (size_t i = first; i < waterVertices.size(); i += 2) {
                 const uint32_t position = waterVertices[i];
                 const int cx = static_cast<int>((position >> 24) & 0xFF) - here.x * 8; // 0 or 8

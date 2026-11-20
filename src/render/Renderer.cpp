@@ -54,6 +54,8 @@ const float kHoleVerts[] = {
 const glm::vec3 kBlackHolePosition(0.0f, 2.0f, 0.0f);
 const char* kBlockTextureDirectory = "Resources/Textures/Blocks";
 const glm::vec3 kBlockLightColor(1.0f, 0.85f, 0.6f); // warm lamp light
+// Where the sun glints off water from (it isn't tied to the skybox texture).
+const glm::vec3 kSunDirection(0.35f, 0.75f, 0.55f);
 
 void CreateVertexBuffer(GLuint& vao, GLuint& vbo, const float* data, GLsizeiptr size) {
     glGenVertexArrays(1, &vao);
@@ -70,7 +72,8 @@ Renderer::Renderer()
       debugShader("Resources/Shaders/debug.vert", "Resources/Shaders/debug.frag"),
       skyboxShader("Resources/Shaders/skybox.vert", "Resources/Shaders/skybox.frag"),
       screenShader("Resources/Shaders/screen.vert", "Resources/Shaders/screen.frag"),
-      holeShader("Resources/Shaders/hole.vert", "Resources/Shaders/hole.frag") {
+      holeShader("Resources/Shaders/hole.vert", "Resources/Shaders/hole.frag"),
+      waterShader("Resources/Shaders/water.vert", "Resources/Shaders/water.frag") {
 }
 
 Renderer::~Renderer() {
@@ -148,6 +151,28 @@ bool Renderer::CreateSceneFramebuffer() {
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, sceneDepth);
 
     bool complete = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+
+    // The refraction copy: same formats as the scene so it can be blitted into, with
+    // depth as a texture so the water shader can read it.
+    glGenFramebuffers(1, &refractFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, refractFBO);
+    glGenTextures(1, &refractColor);
+    glBindTexture(GL_TEXTURE_2D, refractColor);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, refractColor, 0);
+    glGenTextures(1, &refractDepth);
+    glBindTexture(GL_TEXTURE_2D, refractDepth);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, refractDepth, 0);
+    complete = complete && glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     if (!complete) {
@@ -162,6 +187,10 @@ void Renderer::DestroySceneFramebuffer() {
     glDeleteTextures(1, &sceneColor);
     glDeleteRenderbuffers(1, &sceneDepth);
     sceneFBO = sceneColor = sceneDepth = 0;
+    glDeleteFramebuffers(1, &refractFBO);
+    glDeleteTextures(1, &refractColor);
+    glDeleteTextures(1, &refractDepth);
+    refractFBO = refractColor = refractDepth = 0;
 }
 
 void Renderer::ReloadShaders() {
@@ -170,6 +199,7 @@ void Renderer::ReloadShaders() {
     skyboxShader.Reload();
     screenShader.Reload();
     holeShader.Reload();
+    waterShader.Reload();
 }
 
 void Renderer::ReloadTextures() {
@@ -203,20 +233,7 @@ void Renderer::RenderFrame(World& world, const FrameParams& params) {
 
     DrawSkybox(params);
 
-    // Translucent water last: blended over everything, without writing depth, and
-    // with both sides visible so the surface shows from underwater too.
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_CULL_FACE);
-    atlas.Bind(GL_TEXTURE0);
-    worldShader.Use();
-    worldShader.SetUniform("waterPass", 1.0f);
-    world.RenderWater(worldShader, params.view, params.projection, params.time, params.cameraPosition);
-    worldShader.SetUniform("waterPass", 0.0f);
-    glEnable(GL_CULL_FACE);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
+    DrawWater(world, params);
 
     if (params.highlightedBlock) {
         debugDraw.DrawWireCube(debugShader, params.view, params.projection, glm::vec3(*params.highlightedBlock));
@@ -239,6 +256,53 @@ void Renderer::RenderFrame(World& world, const FrameParams& params) {
     DrawBlackHole(params);
 
     glBindVertexArray(0);
+}
+
+void Renderer::DrawWater(World& world, const FrameParams& params) {
+    // Copy what's behind the water (opaque world and sky) for the shader to sample.
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, sceneFBO);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, refractFBO);
+    glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT, GL_NEAREST);
+
+    // Near/far planes from the projection matrix, to turn depth back into distance.
+    const glm::mat4& p = params.projection;
+    const float nearPlane = p[3][2] / (p[2][2] - 1.0f);
+    const float farPlane = p[3][2] / (p[2][2] + 1.0f);
+
+    waterShader.Use();
+    waterShader.SetUniform("atlas", 0);
+    atlas.ApplyUniforms(waterShader);
+    atlas.Bind(GL_TEXTURE0);
+    waterShader.SetUniform("skybox", 1);
+    waterShader.SetUniform("sceneColor", 2);
+    waterShader.SetUniform("sceneDepth", 3);
+    waterShader.SetUniform("screenSize", glm::vec2(width, height));
+    waterShader.SetUniform("nearPlane", nearPlane);
+    waterShader.SetUniform("farPlane", farPlane);
+    waterShader.SetUniform("cameraPos", params.cameraPosition);
+    waterShader.SetUniform("sunBrightness", params.sunBrightness);
+    waterShader.SetUniform("sunDirection", glm::normalize(kSunDirection));
+    waterShader.SetUniform("blockLightColor", kBlockLightColor);
+    waterShader.SetUniform("underwater", params.underwater ? 1.0f : 0.0f);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTexture);
+
+    // The surface itself into the scene, opaque: refraction and absorption stand in for
+    // blending. Both sides draw so it shows from underwater too.
+    glBindFramebuffer(GL_FRAMEBUFFER, sceneFBO);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, refractColor);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, refractDepth);
+    glDisable(GL_CULL_FACE);
+    world.RenderWater(waterShader, params.view, params.projection, params.time, params.cameraPosition);
+    glEnable(GL_CULL_FACE);
+
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
 }
 
 void Renderer::DrawSkybox(const FrameParams& params) {

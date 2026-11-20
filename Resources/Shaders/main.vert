@@ -9,8 +9,6 @@ uniform mat4 projection;
 uniform float aoStrength;     // 0 = off, 1 = full
 uniform float sunBrightness;  // 0 = night, 1 = day
 uniform vec3 blockLightColor; // colour of light from emitting blocks
-uniform float waterPass;      // 1 while drawing translucent water
-uniform float time;           // seconds, for the water shimmer
 
 out vec2 TexCoord;
 out vec3 Light;
@@ -48,12 +46,7 @@ Data getData()
     int textureIndex = int(aData2 & 0x3FFu);
     float blockLight = float((aData2 >> 14) & 0xFu);
     float skyLight = float((aData2 >> 10) & 0xFu);
-    // Water has no AO; its two AO bits are extra surface height in 32nds of a block.
-    float ao = float((aData2 >> 18) & 0x3u) / 3.0f;
-    if (waterPass > 0.5f) {
-        y += float((aData2 >> 18) & 0x3u) / 32.0f;
-        ao = 1.0f;
-    }
+    float ao = float((aData2 >> 18) & 0x3u) / 3.0f; // (water is drawn by water.vert)
     
     vec2 coords = getTextureCoords(textureIndex, u, v);
 
@@ -78,9 +71,6 @@ void main()
     // Sun: simple directional term from straight above, only where the sky reaches.
     // Directions must ignore the model translation (w = 0).
     vec3 normal = normalize(mat3(model) * data.norm);
-    // Water is translucent and scatters light: its steps and falling curtains shouldn't
-    // darken like solid faces (that made the joins between water levels read as cracks).
-    if (waterPass > 0.5f) normal = normalize(mix(normal, vec3(0.0f, 1.0f, 0.0f), 0.7f));
     float sun = dot(normal, vec3(0.0f, 1.0f, 0.0f));
     sun = clamp((sun + 1.0f) / 2.0f, 0.0f, 1.0f) * sky * sunBrightness;
 
@@ -89,12 +79,6 @@ void main()
 
     // Ambient occlusion: fully occluded corners drop to 40% brightness.
     light *= mix(1.0f, mix(0.4f, 1.0f, data.ao), aoStrength);
-
-    // Water surfaces shimmer gently.
-    if (waterPass > 0.5f) {
-        vec3 world = (model * vec4(data.pos, 1.0f)).xyz;
-        light *= 0.92f + 0.08f * sin(time * 1.8f + world.x * 0.9f + world.z * 0.7f);
-    }
 
     Light = min(light, vec3(1.0f));
 }

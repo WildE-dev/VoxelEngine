@@ -56,12 +56,14 @@ private:
 
     void DrawSkybox(const FrameParams& params);
     void DrawBlackHole(const FrameParams& params);
+    void DrawWater(World& world, const FrameParams& params);
 
     Shader worldShader;
     Shader debugShader;
     Shader skyboxShader;
     Shader screenShader;
     Shader holeShader;
+    Shader waterShader;
 
     DebugDraw debugDraw;
     TextureAtlas atlas;
@@ -75,4 +77,7 @@ private:
     GLuint holeVAO = 0, holeVBO = 0;
 
     GLuint sceneFBO = 0, sceneColor = 0, sceneDepth = 0;
+    // Copy of the scene taken before water is drawn, which the water shader samples for
+    // refraction and to measure how much water lies in front of what's behind it.
+    GLuint refractFBO = 0, refractColor = 0, refractDepth = 0;
 };
