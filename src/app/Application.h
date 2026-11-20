@@ -82,6 +82,11 @@ private:
     double scrollAccumulator = 0.0;
     bool showDebug = false;
     bool vsync = true;
+    // VOXEL_BENCH: per-section frame timing, printed once a second.
+    bool bench = false;
+    double benchSections[7] = {};
+    double benchLast = 0.0;
+    int benchFrames = 0;
     bool screenshotRequested = false;
     double autoScreenshotAt = 0.0;
     std::string autoScreenshotPath;

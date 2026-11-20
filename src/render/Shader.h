@@ -25,11 +25,13 @@ public:
     void SetUniform(const char* name, float value);
     void SetUniform(const char* name, int value);
 
+    // For uniforms set many times a frame: look the location up once, then use gl calls.
+    GLint GetLocation(const char* name);
+
     // Recompile from disk. Keeps the current program if the new one fails to build.
     void Reload();
 
 private:
-    GLint GetLocation(const char* name);
 
     GLuint program = 0;
     std::string vertexPath, fragmentPath;

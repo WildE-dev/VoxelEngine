@@ -30,8 +30,9 @@ public:
     void BuildMesh(const Neighbours& neighbours);
 
     // GL thread. Upload the latest meshes from the worker (if any), then draw them.
-    // Water is a separate translucent mesh, drawn after all opaque geometry.
-    void UploadPendingMesh();
+    // Water is a separate mesh, drawn after all opaque geometry. Returns whether
+    // anything was uploaded.
+    bool UploadPendingMesh();
     void Draw() const;
     void DrawWater() const;
     void ReleaseGpu();

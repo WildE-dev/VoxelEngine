@@ -238,6 +238,18 @@ without the extension; the face-to-texture mapping for each block type lives in
 square size (others are resampled to match the first). Missing textures show up
 as a magenta checkerboard.
 
+## Performance
+
+Most loaded chunks are solid ground or empty air and have no mesh. The client keeps a
+list of the ones that do, culls it against the view frustum every frame and draws
+what's left nearest first, so a typical view draws a few hundred chunks out of
+15,000 loaded. The water pass (including its full-screen copy for refraction) is
+skipped when no water is in view.
+
+`VOXEL_BENCH=1 ./VoxelEngine` turns vsync off and prints, once a second, the frame
+rate, where the frame time goes (network, update, draw submission, GPU, UI) and how
+many chunks were drawn.
+
 ## Layout
 
 ```

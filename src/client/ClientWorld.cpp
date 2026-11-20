@@ -119,6 +119,7 @@ void ClientWorld::RemoveChunk(const glm::ivec3& coords) {
     it->second->MarkRemoved();
     it->second->ReleaseGpu();
     chunks.erase(it);
+    drawListDirty = true; // it may be in the draw list
 }
 
 void ClientWorld::RebuildAllChunks() {
@@ -219,46 +220,88 @@ void ClientWorld::WorkerLoop() {
         // Clear before building so a change made during the build re-queues it.
         chunk->ClearDirty();
         if (chunk->IsRemoved() || !chunk->IsLoaded()) continue;
-        BuildChunkMesh(*chunk);
+        if (!BuildChunkMesh(*chunk)) continue;
+        std::lock_guard<std::mutex> lock(uploadMutex);
+        uploadQueue.push_back(std::move(chunk));
     }
+}
+
+void ClientWorld::PrepareDraw() {
+    {
+        std::lock_guard<std::mutex> lock(uploadMutex);
+        uploading.swap(uploadQueue);
+    }
+    for (const auto& chunk : uploading)
+        if (chunk->UploadPendingMesh()) drawListDirty = true;
+    uploading.clear();
+
+    if (!drawListDirty) return;
+    drawListDirty = false;
+    drawList.clear();
+    for (auto& [coords, chunk] : chunks)
+        if (chunk->HasGeometry() || chunk->HasWater()) drawList.push_back({ chunk.get(), glm::vec3(coords * Chunk::CHUNK_SIZE), 0.0f });
 }
 
 void ClientWorld::Render(Shader& shader, const glm::mat4& view, const glm::mat4& projection, float time) {
+    PrepareDraw();
+
+    // Frustum planes (pointing inward) from the combined matrix: a point p is inside
+    // when dot(plane.xyz, p) + plane.w >= 0 for all six.
+    const glm::mat4 m = projection * view;
+    auto row = [&](int i) { return glm::vec4(m[0][i], m[1][i], m[2][i], m[3][i]); };
+    const glm::vec4 planes[6] = { row(3) + row(0), row(3) - row(0), row(3) + row(1), row(3) - row(1), row(3) + row(2), row(3) - row(2) };
+    const glm::vec3 camera = glm::vec3(glm::inverse(view)[3]);
+
+    // A chunk's mesh stays inside its cube, give or take a block (see Block.cpp).
+    constexpr float kMargin = 1.0f;
+    constexpr float kSize = Chunk::CHUNK_SIZE;
+    visible.clear();
+    visibleWater = false;
+    for (const auto& item : drawList) {
+        const glm::vec3 lo = item.origin - kMargin, hi = item.origin + kSize + kMargin;
+        bool inside = true;
+        for (const auto& plane : planes) {
+            // The box corner furthest along the plane's normal.
+            const glm::vec3 corner(plane.x >= 0.0f ? hi.x : lo.x, plane.y >= 0.0f ? hi.y : lo.y, plane.z >= 0.0f ? hi.z : lo.z);
+            if (glm::dot(glm::vec3(plane), corner) + plane.w < 0.0f) {
+                inside = false;
+                break;
+            }
+        }
+        if (!inside) continue;
+        const glm::vec3 d = item.origin + kSize * 0.5f - camera;
+        visible.push_back({ item.chunk, item.origin, glm::dot(d, d) });
+        visibleWater = visibleWater || item.chunk->HasWater();
+    }
+    std::sort(visible.begin(), visible.end(), [](const DrawItem& a, const DrawItem& b) { return a.distance < b.distance; });
+
     shader.Use();
     shader.SetUniform("time", time);
     shader.SetUniform("view", view);
     shader.SetUniform("projection", projection);
-
-    for (auto& [coords, chunk] : chunks) {
-        if (!chunk->IsLoaded()) continue;
-
-        chunk->UploadPendingMesh();
-        if (!chunk->HasGeometry()) continue;
-
-        glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(coords * Chunk::CHUNK_SIZE));
-        shader.SetUniform("model", model);
-        chunk->Draw();
+    const GLint modelLocation = shader.GetLocation("model");
+    glm::mat4 model(1.0f);
+    for (const auto& item : visible) {
+        if (!item.chunk->HasGeometry()) continue;
+        model[3] = glm::vec4(item.origin, 1.0f);
+        glUniformMatrix4fv(modelLocation, 1, GL_FALSE, &model[0][0]);
+        item.chunk->Draw();
     }
 }
 
-void ClientWorld::RenderWater(Shader& shader, const glm::mat4& view, const glm::mat4& projection, float time, const glm::vec3& cameraPosition) {
+void ClientWorld::RenderWater(Shader& shader, const glm::mat4& view, const glm::mat4& projection, float time) {
     // Front to back: water is drawn opaque (the shader refracts the scene copied behind
     // it), so nearer surfaces hide farther ones before they're shaded.
-    std::vector<std::pair<float, ClientChunk*>> order;
-    for (auto& [coords, chunk] : chunks) {
-        if (!chunk->IsLoaded() || !chunk->HasWater()) continue;
-        const glm::vec3 centre = glm::vec3(coords * Chunk::CHUNK_SIZE) + glm::vec3(Chunk::CHUNK_SIZE * 0.5f);
-        const glm::vec3 d = centre - cameraPosition;
-        order.emplace_back(glm::dot(d, d), chunk.get());
-    }
-    std::sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-
     shader.Use();
     shader.SetUniform("time", time);
     shader.SetUniform("view", view);
     shader.SetUniform("projection", projection);
-    for (const auto& [distance, chunk] : order) {
-        shader.SetUniform("model", glm::translate(glm::mat4(1.0f), glm::vec3(chunk->GetCoords() * Chunk::CHUNK_SIZE)));
-        chunk->DrawWater();
+    const GLint modelLocation = shader.GetLocation("model");
+    glm::mat4 model(1.0f);
+    for (const auto& item : visible) {
+        if (!item.chunk->HasWater()) continue;
+        model[3] = glm::vec4(item.origin, 1.0f);
+        glUniformMatrix4fv(modelLocation, 1, GL_FALSE, &model[0][0]);
+        item.chunk->DrawWater();
     }
 }

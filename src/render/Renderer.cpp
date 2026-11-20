@@ -266,6 +266,9 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
 }
 
 void Renderer::DrawWater(ClientWorld& world, const FrameParams& params) {
+    // No water in view: skip the full-screen copy as well.
+    if (!world.HasVisibleWater()) return;
+
     // Copy what's behind the water (opaque world and sky) for the shader to sample.
     glBindFramebuffer(GL_READ_FRAMEBUFFER, sceneFBO);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, refractFBO);
@@ -302,7 +305,7 @@ void Renderer::DrawWater(ClientWorld& world, const FrameParams& params) {
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, refractDepth);
     glDisable(GL_CULL_FACE);
-    world.RenderWater(waterShader, params.view, params.projection, params.time, params.cameraPosition);
+    world.RenderWater(waterShader, params.view, params.projection, params.time);
     glEnable(GL_CULL_FACE);
 
     glActiveTexture(GL_TEXTURE3);

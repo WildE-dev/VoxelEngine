@@ -84,7 +84,7 @@ int main(int argc, char** argv)
         else if (arg == "--water-distance" && i + 1 < argc) {
             waterDistance = std::atoi(argv[++i]);
         }
-        if (arg == "--connect" && i + 1 < argc) {
+        else if (arg == "--connect" && i + 1 < argc) {
             std::string target = argv[++i];
             const size_t colon = target.rfind(':');
             if (colon != std::string::npos) {

@@ -46,14 +46,15 @@ void DeleteMesh(GLuint& vao, GLuint& vbo, GLsizei& count) {
 
 } // namespace
 
-void ClientChunk::UploadPendingMesh() {
-    if (IsRemoved()) return;
+bool ClientChunk::UploadPendingMesh() {
+    if (IsRemoved()) return false;
 
     std::lock_guard<std::mutex> lock(meshMutex);
-    if (!hasPendingMesh) return;
+    if (!hasPendingMesh) return false;
     UploadMesh(pendingMesh, vao, vbo, vertexCount);
     UploadMesh(pendingWaterMesh, waterVao, waterVbo, waterVertexCount);
     hasPendingMesh = false;
+    return true;
 }
 
 void ClientChunk::Draw() const {

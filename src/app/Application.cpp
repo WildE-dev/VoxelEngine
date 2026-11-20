@@ -120,6 +120,12 @@ bool Application::Init(const ClientOptions& options) {
             autoScreenshotPath = spec.substr(colon + 1);
         }
     }
+    // VOXEL_BENCH=1 turns vsync off and prints where frame time goes, once a second.
+    if (std::getenv("VOXEL_BENCH")) {
+        bench = true;
+        vsync = false;
+        glfwSwapInterval(0);
+    }
     if (const char* yaw = std::getenv("VOXEL_START_YAW")) camera.SetYaw(static_cast<float>(std::atof(yaw)));
 
     // Installed before ImGui so its backend chains to ours.
@@ -222,10 +228,19 @@ void Application::Run() {
 
         glfwPollEvents();
 
+        double mark = glfwGetTime();
+        auto lap = [&](int section) {
+            if (!bench) return;
+            const double t = glfwGetTime();
+            benchSections[section] += t - mark;
+            mark = t;
+        };
         UpdateNetwork();
+        lap(0);
         HandleContinuousInput(deltaTime);
         camera.SetPosition(player.GetEyePosition());
         world->Update(camera.GetPosition());
+        lap(1);
 
         FrameParams params;
         params.view = camera.GetViewMatrix();
@@ -243,7 +258,11 @@ void Application::Run() {
             params.players.push_back({ other.feet, other.yaw, other.pitch, PlayerModels::ColorFor(other.id) });
         }
 
+        lap(2);
         renderer->RenderFrame(*world, params);
+        lap(3);
+        if (bench) glFinish(); // wait for the GPU, so its time shows up as its own section
+        lap(6);
 
         // With the cursor captured it's hidden but still moves; keep it from clicking
         // on the UI by accident.
@@ -259,6 +278,7 @@ void Application::Run() {
         if (showDebug) DrawDebugWindow(deltaTime);
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        lap(4);
 
         if (screenshotRequested || (!autoScreenshotPath.empty() && now >= autoScreenshotAt)) {
             std::string path = autoScreenshotPath;
@@ -278,6 +298,21 @@ void Application::Run() {
             appliedVsync = vsync;
         }
         glfwSwapBuffers(window);
+        lap(5);
+        if (bench) {
+            benchFrames++;
+            if (now - benchLast >= 1.0) {
+                const double n = benchFrames;
+                std::printf("[bench] %.1f fps | network %.2f  update %.2f  raycast %.2f  render %.2f  gpu %.2f  ui %.2f  swap %.2f ms | %zu chunks, %zu meshed, %zu drawn\n",
+                            n / (now - benchLast), benchSections[0] / n * 1e3, benchSections[1] / n * 1e3, benchSections[2] / n * 1e3,
+                            benchSections[3] / n * 1e3, benchSections[6] / n * 1e3, benchSections[4] / n * 1e3, benchSections[5] / n * 1e3, world->GetLoadedChunkCount(),
+                            world->GetMeshedChunkCount(), world->GetDrawnChunkCount());
+                std::fflush(stdout);
+                benchLast = now;
+                benchFrames = 0;
+                for (double& s : benchSections) s = 0.0;
+            }
+        }
     }
 }
 

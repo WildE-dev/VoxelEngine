@@ -30,8 +30,13 @@ class Shader;
 //  - Chunks are shared_ptrs so a chunk being meshed stays alive even if it's unloaded
 //    meanwhile. Unloaded chunks are flagged as removed and have their GL objects
 //    released on the main thread before being dropped.
-//  - Finished meshes are handed to the chunk and uploaded lazily on the main thread.
+//  - Finished meshes are handed to the chunk, and the chunk is queued for the main
+//    thread to upload at the start of the next frame.
 //  - GetBlock is safe from any thread.
+//
+// Drawing: only chunks that have a mesh are kept in a draw list (most loaded chunks are
+// solid ground or empty air). Each frame the list is culled against the view frustum
+// and drawn nearest first, so nearer terrain hides farther terrain before it's shaded.
 class ClientWorld : public BlockAccess
 {
 public:
@@ -48,8 +53,16 @@ public:
     // Main thread: track the chunks expected around the camera (see Update in the .cpp).
     void Update(const glm::vec3& cameraPosition);
     void Render(Shader& shader, const glm::mat4& view, const glm::mat4& projection, float time);
-    // Water, after all opaque geometry: chunks drawn front to back.
-    void RenderWater(Shader& shader, const glm::mat4& view, const glm::mat4& projection, float time, const glm::vec3& cameraPosition);
+    // Water, after all opaque geometry, front to back. Draws the chunks Render found
+    // visible, so call it after Render with the same camera.
+    void RenderWater(Shader& shader, const glm::mat4& view, const glm::mat4& projection, float time);
+
+    // Whether any chunk the last Render found visible has water.
+    bool HasVisibleWater() const { return visibleWater; }
+
+    // Chunks with a mesh, and how many of them the last Render drew.
+    size_t GetMeshedChunkCount() const { return drawList.size(); }
+    size_t GetDrawnChunkCount() const { return visible.size(); }
 
     // Network data, main thread.
     void ApplyChunk(const glm::ivec3& coords, const Chunk::Blocks& blocks, const Chunk::Light& light);
@@ -97,4 +110,21 @@ private:
     std::thread worker;
 
     std::vector<int> changedCells; // ApplyLight scratch
+
+    // Chunks the worker has new meshes for, waiting for the main thread to upload them.
+    std::mutex uploadMutex;
+    std::vector<ChunkPtr> uploadQueue;
+    std::vector<ChunkPtr> uploading; // main thread scratch
+
+    // Main thread. Uploads queued meshes and rebuilds the draw list if it changed.
+    void PrepareDraw();
+    struct DrawItem {
+        ClientChunk* chunk;
+        glm::vec3 origin;
+        float distance; // squared, camera to chunk centre
+    };
+    std::vector<DrawItem> drawList; // every chunk with opaque geometry or water
+    std::vector<DrawItem> visible;  // those in the frustum, nearest first
+    bool drawListDirty = false;
+    bool visibleWater = false;
 };
