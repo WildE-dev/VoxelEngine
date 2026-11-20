@@ -69,7 +69,7 @@ void Player::Update(const BlockAccess& world, const PlayerInput& input, float de
 
 bool Player::Spawn(const BlockAccess& world) {
     // Terrain heights stay well within this range (see TerrainGenerator).
-    constexpr int kTop = 64, kBottom = -64;
+    constexpr int kTop = 200, kBottom = -64; // mountains reach about 110
     if (resumeHere) {
         // Wait until every cell the body touches has loaded, then stay put if it fits.
         const auto box = BoundsAt(feet);
@@ -88,9 +88,18 @@ bool Player::Spawn(const BlockAccess& world) {
     }
     const int bx = static_cast<int>(std::floor(feet.x));
     const int bz = static_cast<int>(std::floor(feet.z));
+    // Down from the top: past anything not loaded above the loaded range, then through
+    // open air to the ground. A gap in the loaded cells on the way down (or no open air
+    // seen above the ground) means it isn't all here yet: try again later.
+    bool seenLoaded = false;
     for (int y = kTop; y >= kBottom; y--) {
         Block block;
-        if (!world.GetBlock(bx, y, bz, block)) return false; // not loaded yet
+        if (!world.GetBlock(bx, y, bz, block)) {
+            if (seenLoaded) return false;
+            continue;
+        }
+        if (!seenLoaded && !block.IsPassable()) return false; // the top of what's loaded is underground
+        seenLoaded = true;
         if (block.IsPassable()) continue;
 
         feet.y = y + block.SurfaceHeight(feet.x - bx, feet.z - bz) + kSkin;

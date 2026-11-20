@@ -107,6 +107,7 @@ bool Server::Start(const Options& opts) {
         }
         if (storage->IsNew()) {
             storage->SetWorldType(static_cast<uint8_t>(options.worldType));
+            storage->SetDefaultMode(static_cast<uint8_t>(options.defaultMode));
         }
         else if (storage->GetWorldType() > static_cast<uint8_t>(TerrainGenerator::kLastType)) {
             std::cerr << "[server] " << options.worldDirectory << " uses a world type this version doesn't know" << std::endl;
@@ -118,6 +119,15 @@ bool Server::Start(const Options& opts) {
         }
     }
     terrain.SetType(storage ? static_cast<TerrainGenerator::Type>(storage->GetWorldType()) : options.worldType);
+    if (storage) timeOfDay = storage->GetTimeOfDay();
+    defaultMode = storage ? static_cast<net::GameMode>(storage->GetDefaultMode()) : options.defaultMode;
+    LoadOperators();
+    for (const auto& name : options.operators) SetOperator(name, true);
+    weatherSeed ^= static_cast<uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+    weatherMode = options.weather;
+    raining = options.weather == Options::Weather::Rain;
+    rainLevel = raining ? 1.0f : 0.0f;
+    weatherTimer = 10.0 * 60.0; // the first shower comes after a while
     if (storage) {
         Log("world: " + storage->GetDirectory().string() + " (" + std::string(terrain.GetType() == TerrainGenerator::Type::Empty ? "empty, " : "") +
             std::to_string(storage->GetStoredChunkCount()) + " saved chunks)");
@@ -185,7 +195,9 @@ void Server::StorePlayer(const ClientState& client) {
     record.feet = client.feet;
     record.yaw = client.yaw;
     record.pitch = client.pitch;
-    record.flags = client.flags;
+    record.flags = static_cast<uint8_t>(client.noclip ? client.flags : client.flags & ~net::kFlagFlying);
+    record.mode = static_cast<uint8_t>(client.mode);
+    record.resources = client.resources;
     storage->StorePlayer(client.name, record);
 }
 
@@ -195,6 +207,7 @@ void Server::Save(bool shuttingDown) {
     if (shuttingDown) world->GetWater().Stop();
     const double start = Now();
     for (const auto& [peer, client] : clients) StorePlayer(client);
+    storage->SetTimeOfDay(static_cast<float>(timeOfDay));
     const size_t saved = world->SaveAll();
     const bool ok = storage->Flush();
     lastSaveTime = Now();
@@ -216,9 +229,12 @@ void Server::HandleEvent(const net::NetEvent& event) {
     case net::NetEvent::Type::Disconnect: {
         auto it = clients.find(event.peer);
         if (it == clients.end()) break;
-        if (it->second.welcomed) Log(it->second.name + " (player " + std::to_string(it->second.id) + ") left");
+        const bool announce = it->second.welcomed;
+        const std::string name = it->second.name;
+        if (announce) Log(name + " (player " + std::to_string(it->second.id) + ") left");
         StorePlayer(it->second);
         clients.erase(it);
+        if (announce) Broadcast(net::ChatMessage::Kind::Info, name + " left the game");
         break;
     }
     case net::NetEvent::Type::Receive: {
@@ -256,12 +272,26 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     }
     case net::MsgType::EditPlace: {
         net::EditPlace m;
-        if ((ok = net::Decode(in, m))) HandlePlace(client, m.pos, m.type);
+        if ((ok = net::Decode(in, m))) HandlePlace(client, m.pos, m.type, m.height, m.faceAxis);
+        break;
+    }
+    case net::MsgType::EditChisel: {
+        net::EditChisel m;
+        if ((ok = net::Decode(in, m))) HandleChisel(client, m);
         break;
     }
     case net::MsgType::EditCarve: {
         net::EditCarve m;
         if ((ok = net::Decode(in, m))) HandleCarve(client, m);
+        break;
+    }
+    case net::MsgType::SkipTime:
+        ok = in.AtEnd();
+        if (ok) HandleSkipTime(client);
+        break;
+    case net::MsgType::ChatSend: {
+        net::ChatSend m;
+        if ((ok = net::Decode(in, m))) HandleChat(client, m.text);
         break;
     }
     default:
@@ -271,7 +301,10 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
 }
 
 void Server::Kick(ClientState& client, const std::string& reason) {
-    Log("kicking " + (client.name.empty() ? std::string("a client") : client.name) + ": " + reason);
+    // Players who'd joined are announced (their disconnect isn't, as they're no longer
+    // welcomed once kicked); clients that never got in aren't.
+    if (client.welcomed) Broadcast(net::ChatMessage::Kind::Info, client.name + " was kicked (" + reason + ")");
+    else Log("kicking " + (client.name.empty() ? std::string("a client") : client.name) + ": " + reason);
     net.Send(client.peer, net::kChannelReliable, net::Encode(net::Kick{ reason }));
     net.Disconnect(client.peer);
     client.welcomed = false;
@@ -284,6 +317,7 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
                                 std::to_string(net::kProtocolVersion) + ")");
     }
     client.id = nextPlayerId++;
+    client.mode = defaultMode;
     client.name = hello.name.empty() ? "Player " + std::to_string(client.id) : hello.name;
     client.welcomed = true;
 
@@ -296,6 +330,7 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
 
     net::Welcome welcome;
     welcome.playerId = client.id;
+    if (terrain.GetType() == TerrainGenerator::Type::Empty) welcome.flags |= net::kWelcomeEmptyWorld;
     welcome.spawn = client.feet;
     welcome.renderDistance = ServerWorld::RENDER_DISTANCE;
     welcome.verticalRenderDistance = ServerWorld::VERTICAL_RENDER_DISTANCE;
@@ -307,15 +342,26 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
             client.feet = client.lastValid = saved->feet;
             client.yaw = saved->yaw;
             client.pitch = saved->pitch;
+            client.mode = static_cast<net::GameMode>(saved->mode);
+            client.resources = saved->resources;
             client.flags = saved->flags;
             welcome.spawn = saved->feet;
             welcome.yaw = saved->yaw;
             welcome.pitch = saved->pitch;
-            welcome.flags = static_cast<uint8_t>(net::kWelcomeResume | (saved->flags & net::kFlagFlying));
+            // Still in no-clip if they left in it and are still allowed it.
+            client.noclip = (saved->flags & net::kFlagFlying) && IsOperatorName(client.name);
+            welcome.flags |= static_cast<uint8_t>(net::kWelcomeResume | (client.noclip ? net::kFlagFlying : 0));
         }
     }
     net.Send(client.peer, net::kChannelReliable, net::Encode(welcome));
     Log(client.name + " joined as player " + std::to_string(client.id));
+    Broadcast(net::ChatMessage::Kind::Info, client.name + " joined the game");
+    SendChat(client, net::ChatMessage::Kind::Info, "Press T to chat, / for commands (/help lists them)");
+    if (IsOperator(&client)) SendChat(client, net::ChatMessage::Kind::Info, "You are an operator");
+    SendAbilities(client);
+    SendHealth(client, false);
+    SendMode(client);
+    SendResources(client);
 }
 
 void Server::HandlePlayerState(ClientState& client, const net::PlayerState& state) {
@@ -327,7 +373,8 @@ void Server::HandlePlayerState(ClientState& client, const net::PlayerState& stat
 
     const double now = Now();
     const float dt = static_cast<float>(std::clamp(now - client.lastStateTime, 0.05, 2.0));
-    const bool flying = state.flags & net::kFlagFlying;
+    // Only flying (through blocks) with no-clip on: otherwise the flag is ignored.
+    const bool flying = (state.flags & net::kFlagFlying) && client.noclip;
 
     auto correct = [&](const glm::vec3& to, const char* why) {
         client.correctionId++;
@@ -379,27 +426,69 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos) {
     }
     // Breaking a waterlogged block leaves its water behind.
     world->SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
+    // Survival: the block's worth goes to the player.
+    if (!Creative(client)) {
+        uint32_t& held = client.resources[static_cast<size_t>(block.type)];
+        held += static_cast<uint32_t>(block.ResourceUnits());
+        SendResources(client);
+    }
 }
 
-void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType type) {
+void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType type, int height, int faceAxis) {
     Block existing;
     const bool valid = type != BlockType::AIR && InReach(client, pos, kReach) && world->GetBlock(pos.x, pos.y, pos.z, existing) &&
                        existing.IsPassable();
     if (!valid) return Echo(client, pos);
 
+    const Block placed = Block::Placed(type, height, faceAxis);
+    // Survival: it costs its worth, which the player must have. Water can't be
+    // collected (only moved, with pumps), so it can't be placed either.
+    const uint32_t cost = static_cast<uint32_t>(placed.ResourceUnits());
+    uint32_t& held = client.resources[static_cast<size_t>(type)];
+    if (!Creative(client) && (held < cost || placed.IsLiquid())) {
+        SendResources(client); // so the client's count is right again
+        return Echo(client, pos);
+    }
     // No solid blocks inside a walking player (water is fine).
-    if (type != BlockType::WATER) {
+    if (placed.IsFullBlock()) {
         const glm::vec3 lo(pos), hi = lo + glm::vec3(1.0f);
         for (const auto& [peer, other] : clients) {
-            if (!other.welcomed || (other.flags & net::kFlagFlying)) continue;
+            if (!other.welcomed || ((other.flags & net::kFlagFlying) && other.noclip)) continue;
             const Collision::AABB body = BodyAt(other.feet);
             if (glm::all(glm::lessThan(lo, body.max)) && glm::all(glm::greaterThan(hi, body.min))) return Echo(client, pos);
         }
     }
-    world->SetBlock(pos.x, pos.y, pos.z, type == BlockType::WATER ? Block::Water(Block::kMaxWaterVolume) : Block(type));
+    world->SetBlock(pos.x, pos.y, pos.z, placed);
+    if (!Creative(client)) {
+        held -= cost;
+        SendResources(client);
+    }
+}
+
+// A quarter of a block, up or down, per chisel stroke.
+constexpr int kChiselStep = 2; // eighths
+
+void Server::HandleChisel(ClientState& client, const net::EditChisel& chisel) {
+    const glm::ivec3& p = chisel.pos;
+    Block block;
+    if (!InReach(client, p, kReach) || !world->GetBlock(p.x, p.y, p.z, block) || !block.CanChisel()) return Echo(client, p);
+    const Block after = block.Chiselled(chisel.edge, chisel.raise ? kChiselStep : -kChiselStep);
+    // Survival: chiselling off gives back what it takes away; building up costs it.
+    if (!Creative(client)) {
+        uint32_t& held = client.resources[static_cast<size_t>(block.type)];
+        const int change = after.ResourceUnits() - block.ResourceUnits(); // + costs, - gives
+        if (change > 0 && held < static_cast<uint32_t>(change)) {
+            SendResources(client);
+            return Echo(client, p);
+        }
+        held = static_cast<uint32_t>(static_cast<int64_t>(held) - change);
+        SendResources(client);
+    }
+    world->SetBlock(p.x, p.y, p.z, after);
 }
 
 void Server::HandleCarve(ClientState& client, const net::EditCarve& carve) {
+    if (!IsOperator(&client)) return; // the laser is for operators (their client doesn't offer it otherwise)
     const int r = carve.radius;
     for (const auto& center : carve.centers) {
         if (!InReach(client, center, kLaserReach)) continue;
@@ -410,10 +499,208 @@ void Server::HandleCarve(ClientState& client, const net::EditCarve& carve) {
     }
 }
 
+void Server::HandleSkipTime(ClientState& client) {
+    // By day, on to the evening (just after dark); at night, on to the morning.
+    const bool day = timeOfDay < 0.5;
+    timeOfDay = day ? 0.6 : 0.1;
+    Log(client.name + " skipped to " + (day ? "night" : "morning"));
+}
+
+void Server::UpdateSky() {
+    const double dt = 1.0 / kTickRate;
+    timeOfDay += dt / std::max(1.0f, options.dayLengthSeconds);
+    timeOfDay -= std::floor(timeOfDay);
+
+    auto randomRange = [&](double lo, double hi) {
+        weatherSeed = weatherSeed * 1664525u + 1013904223u; // LCG: plenty for weather
+        return lo + (hi - lo) * (weatherSeed >> 8) / double(1u << 24);
+    };
+    switch (weatherMode) {
+    case Options::Weather::Clear: raining = false; break;
+    case Options::Weather::Rain: raining = true; break;
+    case Options::Weather::Auto:
+        weatherTimer -= dt;
+        if (weatherTimer <= 0.0) {
+            raining = !raining;
+            weatherTimer = raining ? randomRange(2.0 * 60.0, 5.0 * 60.0) : randomRange(10.0 * 60.0, 25.0 * 60.0);
+            Log(raining ? "it starts to rain" : "the rain stops");
+        }
+        break;
+    }
+    const float target = raining ? 1.0f : 0.0f;
+    const float step = static_cast<float>(dt / 10.0); // fades over ten seconds
+    rainLevel = rainLevel < target ? std::min(target, rainLevel + step) : std::max(target, rainLevel - step);
+    world->GetWater().SetRaining(rainLevel > 0.5f);
+}
+
+// --- Traps and health -------------------------------------------------------------
+
+void Server::SendMode(ClientState& client) {
+    net.Send(client.peer, net::kChannelReliable, net::Encode(net::GameModeIs{ client.mode }));
+}
+
+void Server::SendResources(ClientState& client) {
+    net::Resources m;
+    for (size_t t = 0; t < client.resources.size(); t++)
+        if (client.resources[t] > 0) m.held.emplace_back(static_cast<BlockType>(t), client.resources[t]);
+    net.Send(client.peer, net::kChannelReliable, net::Encode(m));
+}
+
+glm::vec3 Server::SpawnPoint() const {
+    return glm::vec3(7.5f, static_cast<float>(terrain.ColumnAt(7, 7).FirstOpenRow()) + 1.0f, 7.5f);
+}
+
+void Server::SendHealth(ClientState& client, bool hurt) {
+    client.sentHealth = client.health;
+    client.sentAir = static_cast<int>(std::ceil(client.air));
+    client.sentAirCause = client.airCause;
+    net::Health m;
+    m.health = static_cast<uint8_t>(client.health);
+    m.max = static_cast<uint8_t>(kMaxHealth);
+    m.hurt = static_cast<uint8_t>(hurt ? 1 : 0);
+    m.air = static_cast<uint8_t>(client.sentAir);
+    m.airMax = static_cast<uint8_t>(Breathing::kMaxAir);
+    m.airCause = static_cast<uint8_t>(client.airCause);
+    net.Send(client.peer, net::kChannelReliable, net::Encode(m));
+}
+
+void Server::Hurt(ClientState& client, int amount, const std::string& deathMessage) {
+    const double now = Now();
+    if (now < client.invulnerableUntil || Creative(client)) return; // nothing hurts in creative
+    client.health = std::max(0, client.health - amount);
+    client.lastHurt = now;
+    client.nextRegen = now + kRegenDelay;
+    if (client.health > 0) return SendHealth(client, true);
+
+    // Dead: back to the spawn point, healed, and briefly safe.
+    Broadcast(net::ChatMessage::Kind::Info, client.name + " " + deathMessage);
+    client.health = kMaxHealth;
+    client.air = Breathing::kMaxAir;
+    client.invulnerableUntil = now + 3.0;
+    Teleport(client, SpawnPoint());
+    SendHealth(client, true);
+}
+
+void Server::TriggerPlate(ClientState& client, const glm::ivec3& plate) {
+    int opened = 0;
+    const int r = kSluiceReach;
+    for (int x = -r; x <= r; x++)
+        for (int y = -r; y <= r; y++)
+            for (int z = -r; z <= r; z++) {
+                Block b;
+                const glm::ivec3 p = plate + glm::ivec3(x, y, z);
+                if (world->GetBlock(p.x, p.y, p.z, b) && b.type == BlockType::SLUICE) {
+                    world->SetBlock(p.x, p.y, p.z, Block());
+                    opened++;
+                }
+            }
+    if (opened) {
+        SendChat(client, net::ChatMessage::Kind::Info, "*click* Something grinds open overhead...");
+        Log(client.name + " opened " + std::to_string(opened) + " sluice gates");
+    }
+}
+
+void Server::UpdateBreath(ClientState& client, float dt) {
+    using namespace Breathing;
+    Air air;
+    // In creative or no-clip, nothing takes your breath away.
+    if (!Creative(client) && !(client.noclip && (client.flags & net::kFlagFlying))) {
+        const glm::vec3 eye = client.feet + glm::vec3(0.0f, Breathing::kEyeHeight, 0.0f);
+        const glm::ivec3 cell(glm::floor(eye));
+        Block block;
+        const bool underWater = world->GetBlock(cell.x, cell.y, cell.z, block) && UnderWater(block, eye.y - cell.y);
+        air = At(eye.y, underWater);
+    }
+    client.airCause = air.cause;
+    const float before = client.air;
+    client.air = Step(client.air, air, dt);
+    if (Suffocating(client.air, air)) {
+        const double now = Now();
+        if (before > 0.0f) client.nextBreathHit = now; // the first hit comes straight away
+        if (now >= client.nextBreathHit) {
+            const bool drowning = air.cause == Cause::Water;
+            client.nextBreathHit = now + (drowning ? kDrownInterval : kSuffocateInterval);
+            Hurt(client, drowning ? kDrownDamage : kSuffocateDamage,
+                 drowning                       ? "drowned"
+                 : air.cause == Cause::ThinAir ? "ran out of breath in the thin air up high"
+                                                : "suffocated in the stale air deep underground");
+        }
+    }
+    if (static_cast<int>(std::ceil(client.air)) != client.sentAir || client.airCause != client.sentAirCause) SendHealth(client, false);
+}
+
+void Server::UpdateTraps() {
+    const double now = Now();
+    for (auto& [peer, client] : clients) {
+        if (!client.welcomed || !client.hasState) continue;
+        // Slow healing once nothing has hurt them for a while.
+        if (client.health < kMaxHealth && now >= client.nextRegen) {
+            client.health = std::min(kMaxHealth, client.health + 2);
+            client.nextRegen = now + kRegenInterval;
+            SendHealth(client, false);
+        }
+        UpdateBreath(client, 1.0f / kTickRate);
+        if (client.noclip && (client.flags & net::kFlagFlying)) continue; // flying through it all
+
+        // The cells the body's feet are in, and the cells just under them, at the
+        // corners of its footprint.
+        const float half = 0.29f;
+        glm::ivec3 feetCells[4], underCells[4];
+        int n = 0;
+        for (const float dx : { -half, half })
+            for (const float dz : { -half, half }) {
+                feetCells[n] = glm::ivec3(glm::floor(client.feet + glm::vec3(dx, 0.01f, dz)));
+                underCells[n] = glm::ivec3(glm::floor(client.feet + glm::vec3(dx, -0.05f, dz)));
+                n++;
+            }
+        bool spiked = false;
+        for (int i = 0; i < 4; i++) {
+            Block b;
+            const glm::ivec3& f = feetCells[i];
+            if (world->GetBlock(f.x, f.y, f.z, b)) {
+                if (b.type == BlockType::SPIKES) spiked = true;
+                if (b.type == BlockType::PRESSURE_PLATE) {
+                    auto it = plateReady.find(f);
+                    if (it == plateReady.end() || now >= it->second) {
+                        plateReady[f] = now + 2.0;
+                        TriggerPlate(client, f);
+                    }
+                }
+            }
+            const glm::ivec3& u = underCells[i];
+            if (world->GetBlock(u.x, u.y, u.z, b) && b.type == BlockType::CRUMBLING_BRICK && !crumbling.count(u)) crumbling[u] = now + kCrumbleDelay;
+        }
+        if (spiked && now >= client.nextSpikeHit) {
+            client.nextSpikeHit = now + kSpikeInterval;
+            Hurt(client, kSpikeDamage, "was impaled on spikes");
+        }
+    }
+
+    // Crumbling bricks whose time has come fall away, and set off those touching them.
+    std::vector<glm::ivec3> due;
+    for (const auto& [pos, when] : crumbling)
+        if (now >= when) due.push_back(pos);
+    for (const auto& pos : due) {
+        crumbling.erase(pos);
+        Block b;
+        if (!world->GetBlock(pos.x, pos.y, pos.z, b) || b.type != BlockType::CRUMBLING_BRICK) continue;
+        world->SetBlock(pos.x, pos.y, pos.z, Block());
+        for (const glm::ivec3 d : { glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0), glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1) }) {
+            const glm::ivec3 q = pos + d;
+            if (world->GetBlock(q.x, q.y, q.z, b) && b.type == BlockType::CRUMBLING_BRICK && !crumbling.count(q)) crumbling[q] = now + kCrumbleSpread;
+        }
+    }
+    // Plates' cooldowns that have run out.
+    for (auto it = plateReady.begin(); it != plateReady.end();) it = now >= it->second ? plateReady.erase(it) : std::next(it);
+}
+
 // --- Tick -------------------------------------------------------------------------
 
 void Server::Tick() {
     tickCount++;
+    RunConsoleCommands();
+    UpdateSky();
+    UpdateTraps();
     if (storage && options.autosaveSeconds > 0.0f && Now() - lastSaveTime >= options.autosaveSeconds) Save(false);
 
     std::vector<glm::ivec3> centers;
@@ -574,6 +861,8 @@ void Server::StreamWorld(ClientState& client) {
 void Server::BroadcastPlayers() {
     net::PlayerSnapshot snapshot;
     snapshot.tick = tickCount;
+    snapshot.timeOfDay = static_cast<float>(timeOfDay);
+    snapshot.rain = static_cast<uint8_t>(std::lround(rainLevel * 255.0f));
     for (const auto& [peer, client] : clients) {
         if (!client.welcomed || !client.hasState) continue;
         snapshot.players.push_back({ client.id, client.feet, client.yaw, client.pitch, client.flags });

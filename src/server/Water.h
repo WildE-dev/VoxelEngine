@@ -42,10 +42,17 @@ class ServerWorld;
 // Evaporation, the one exception to water only ever moving, runs on random ticks:
 // every tick, kRandomTicksPerChunk random cells of each chunk in the simulation area
 // are looked at, and a shallow puddle at rest among them dries up. A puddle is a cell
-// with at most kPuddleVolume units that isn't full, has no water above it and isn't
-// waiting for an update (so it's not flowing). Each cell is picked about every
+// with at most kPuddleVolume units that isn't full, has no water above or below it
+// (a lake's thin top layer isn't a puddle) and isn't waiting for an update (so it's
+// not flowing). Each cell is picked about every
 // 4096 / kRandomTicksPerChunk ticks, so a spill fades away cell by cell over a few
 // minutes. Lakes are deep, so only thin water left by spills and drained pools goes.
+//
+// Rain (while SetRaining is on) also runs on the random ticks: when one lands in a body
+// of water, the column's top water cell gets kRainUnits more, if it's open to the sky,
+// isn't full and has water under it. Rain never puts water in a dry cell or above a
+// full one, so it tops drained lakes and pools back up to the level they had, and
+// deep water (hit more often) fills fastest. Puddles don't evaporate while it rains.
 //
 // Pumps: each tick, a pump takes up to kPumpRate units from the water in the cells
 // around it and sends them through the pipes connected to it (pipes join face to
@@ -92,6 +99,12 @@ public:
     size_t GetPumpCount() const { return pumpCount.load(std::memory_order_relaxed); }
 
     size_t GetActiveCount() const { return activeCount.load(std::memory_order_relaxed); }
+    // Rain on or off (the server's weather). Any thread.
+    void SetRaining(bool on) { raining.store(on, std::memory_order_relaxed); }
+    bool IsRaining() const { return raining.load(std::memory_order_relaxed); }
+    // Units rain has added so far (for tests and stats).
+    size_t GetRainedUnits() const { return rainedUnits.load(std::memory_order_relaxed); }
+
     // Puddles dried up so far (for tests and stats).
     size_t GetEvaporatedCount() const { return evaporatedCount.load(std::memory_order_relaxed); }
     size_t GetParkedCount() const { return parkedCount.load(std::memory_order_relaxed); }
@@ -108,6 +121,8 @@ public:
     // a puddle cell lasts about 1365 ticks (2.3 minutes) on average.
     static constexpr int kPuddleVolume = Block::kMaxWaterVolume / 4;
     static constexpr int kRandomTicksPerChunk = 3;
+    // Water a raindrop hit adds to a surface cell: a 16th of a block.
+    static constexpr int kRainUnits = Block::kMaxWaterVolume / 16;
     // Pipes searched per pump per tick; larger networks only reach this many.
     static constexpr size_t kMaxPipes = 4096;
 
@@ -119,6 +134,8 @@ private:
     // Takes the edit mutex itself.
     void RandomTicks(ServerWorld& world);
     static bool IsPuddle(const ServerWorld& world, const glm::ivec3& pos, const Block& block);
+    // Rain landing in the body of water at `pos`. Edit mutex held.
+    void RainOn(ServerWorld& world, const glm::ivec3& pos);
     void RunPump(ServerWorld& world, const glm::ivec3& pump);
     // Whether a cell is within `range` chunks of a simulation centre. Edit mutex held.
     bool NearCenter(const glm::ivec3& pos, int range) const;
@@ -139,7 +156,9 @@ private:
     std::atomic<size_t> pumpCount{0};
 
     std::mt19937 random{0x5EED}; // ticking thread only (fixed seed: tests repeat)
-    std::vector<glm::ivec3> randomChunks, puddles; // tick scratch
+    std::vector<glm::ivec3> randomChunks, puddles, wet; // tick scratch
+    std::atomic<bool> raining{false};
+    std::atomic<size_t> rainedUnits{0};
     std::atomic<size_t> evaporatedCount{0};
     std::atomic<bool> ticking{false};
     struct Pending {

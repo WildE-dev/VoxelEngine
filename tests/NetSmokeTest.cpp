@@ -144,6 +144,7 @@ int main(int argc, char** argv) {
         Server::Options options;
         options.bindHost = "127.0.0.1";
         options.port = 0;
+        options.defaultMode = net::GameMode::Creative; // building freely
         if (!server->Start(options)) return EXIT_FAILURE;
         server->RunInBackground();
         port = server->GetPort();

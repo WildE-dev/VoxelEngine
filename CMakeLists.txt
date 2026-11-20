@@ -41,6 +41,8 @@ add_library(voxel_common STATIC
     src/world/Collision.cpp
     src/world/Collision.h
     src/world/Coords.h
+    src/world/Dungeons.cpp
+    src/world/Dungeons.h
     src/world/Features.cpp
     src/world/Features.h
     src/world/Lighting.cpp
@@ -60,6 +62,7 @@ target_link_libraries(voxel_common PUBLIC glm::glm unofficial::enet::enet Thread
 add_library(voxel_server STATIC
     src/server/Server.cpp
     src/server/Server.h
+    src/server/ServerCommands.cpp
     src/server/ServerWorld.cpp
     src/server/ServerWorld.h
     src/server/Water.cpp
@@ -99,6 +102,8 @@ add_executable(${PROJECT_NAME}
     src/render/DebugDraw.h
     src/render/PlayerModels.cpp
     src/render/PlayerModels.h
+    src/render/Rain.cpp
+    src/render/Rain.h
     src/render/Renderer.cpp
     src/render/Renderer.h
     src/render/Textures.cpp
@@ -135,7 +140,39 @@ target_link_libraries(PumpTest PRIVATE voxel_server)
 add_executable(EvaporationTest tests/EvaporationTest.cpp)
 target_link_libraries(EvaporationTest PRIVATE voxel_server)
 
-foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest)
+# Thin water, rain, and the day/night clock.
+add_executable(WeatherTest tests/WeatherTest.cpp)
+target_link_libraries(WeatherTest PRIVATE voxel_server voxel_client)
+
+# Chat and commands between a server and two clients.
+add_executable(ChatTest tests/ChatTest.cpp)
+target_link_libraries(ChatTest PRIVATE voxel_server voxel_client)
+
+# Dungeon layouts and generation.
+add_executable(DungeonTest tests/DungeonTest.cpp)
+target_link_libraries(DungeonTest PRIVATE voxel_common)
+
+# Traps, health, no-clip and the laser between a server and two clients.
+add_executable(TrapTest tests/TrapTest.cpp src/app/Player.cpp)
+target_link_libraries(TrapTest PRIVATE voxel_server voxel_client)
+
+# Breathing: drowning, thin air up mountains, stale air deep down.
+add_executable(BreathTest tests/BreathTest.cpp)
+target_link_libraries(BreathTest PRIVATE voxel_server voxel_client)
+
+# Creative and survival: resources, costs, /gamemode, /give, saving.
+add_executable(ModeTest tests/ModeTest.cpp src/app/Player.cpp)
+target_link_libraries(ModeTest PRIVATE voxel_server voxel_client)
+
+# Block shapes (sloped and stepped), the chisel, joined slopes, thin water, mountains.
+add_executable(ShapeTest tests/ShapeTest.cpp src/app/Player.cpp)
+target_link_libraries(ShapeTest PRIVATE voxel_server voxel_client)
+
+# Biomes: climate, ground, plants, ice and swamps.
+add_executable(BiomeTest tests/BiomeTest.cpp)
+target_link_libraries(BiomeTest PRIVATE voxel_common)
+
+foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W3)
     else()

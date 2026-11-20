@@ -1,0 +1,267 @@
+// Dungeon generation. Lays out the dungeons of a block of regions, generates their
+// chunks with the real terrain generator, and checks that
+//  - most regions have one, and between them they use every room type,
+//  - layouts and chunks come out the same every time,
+//  - every room has an open interior and solid corners,
+//  - every room can be reached from the entrance through open space (corridors work
+//    across chunk borders), and the entrance shaft (where there is one) reaches the
+//    surface,
+//  - water sits in sealed basins: nothing under or beside it is open,
+//  - rooms are well below the ground,
+//  - pump rooms have a pump under water with a pipe beside it.
+#include <algorithm>
+#include <chrono>
+#include <cstdlib>
+#include <deque>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+
+#include "world/Coords.h"
+#include "world/Dungeons.h"
+#include "world/TerrainGenerator.h"
+
+namespace {
+
+int failures = 0;
+
+void Check(bool ok, const std::string& what) {
+    std::cout << (ok ? "  PASS  " : "  FAIL  ") << what << std::endl;
+    if (!ok) failures++;
+}
+
+// Generated chunks on demand.
+struct World {
+    TerrainGenerator terrain;
+    std::unordered_map<glm::ivec3, std::unique_ptr<TerrainGenerator::Blocks>, Coords::IVec3Hash> chunks;
+    double generateSeconds = 0.0;
+    size_t generated = 0;
+
+    const Block& Get(const glm::ivec3& p) {
+        const glm::ivec3 c = Coords::ChunkOf(p);
+        auto& chunk = chunks[c];
+        if (!chunk) {
+            chunk = std::make_unique<TerrainGenerator::Blocks>();
+            TerrainGenerator::ColumnHeights heights;
+            const auto t0 = std::chrono::steady_clock::now();
+            terrain.ComputeColumnHeights(c.x, c.z, heights);
+            terrain.GenerateChunk(c, heights, *chunk);
+            generateSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            generated++;
+        }
+        const glm::ivec3 l = Coords::LocalOf(p);
+        return (*chunk)[Chunk::Index(l.x, l.y, l.z)];
+    }
+};
+
+bool IsBrick(const Block& b) { return b.type == BlockType::STONE_BRICK || b.type == BlockType::MOSSY_BRICK; }
+// Somewhere a player can be: not a full block (air, water, plants, slopes).
+bool Open(const Block& b) { return !b.IsFullBlock(); }
+
+} // namespace
+
+int main() {
+    World world;
+
+    std::cout << "Layouts" << std::endl;
+    std::vector<std::pair<glm::ivec2, Dungeons::Layout>> dungeons;
+    std::set<Dungeons::RoomType> types;
+    int regions = 0;
+    for (int rx = -7; rx <= 7; rx++)
+        for (int rz = -7; rz <= 7; rz++) {
+            regions++;
+            auto layout = Dungeons::LayoutFor(world.terrain, rx, rz);
+            if (!layout.exists) continue;
+            for (const auto& r : layout.rooms) types.insert(r.type);
+            dungeons.emplace_back(glm::ivec2(rx, rz), std::move(layout));
+        }
+    // About three regions in ten: rare enough to be a find.
+    Check(dungeons.size() * 100 >= static_cast<size_t>(regions) * 15 && dungeons.size() * 100 <= static_cast<size_t>(regions) * 45,
+          std::to_string(dungeons.size()) + " of " + std::to_string(regions) + " regions have a dungeon (about 30% wanted)");
+    Check(types.size() == static_cast<size_t>(Dungeons::RoomType::Count), std::to_string(types.size()) + " room types appear");
+    {
+        std::map<std::string, int> all;
+        for (const auto& [region, layout] : dungeons)
+            for (const auto& r : layout.rooms) all[Dungeons::RoomName(r.type)]++;
+        std::string mix;
+        for (const auto& [name, count] : all) mix += (mix.empty() ? "" : ", ") + name + " " + std::to_string(count);
+        std::cout << "        across all of them: " << mix << std::endl;
+    }
+    {
+        const auto again = Dungeons::LayoutFor(world.terrain, dungeons[0].first.x, dungeons[0].first.y);
+        bool same = again.rooms.size() == dungeons[0].second.rooms.size() && again.corridors.size() == dungeons[0].second.corridors.size();
+        for (size_t i = 0; same && i < again.rooms.size(); i++)
+            same = again.rooms[i].inner.min == dungeons[0].second.rooms[i].inner.min && again.rooms[i].type == dungeons[0].second.rooms[i].type;
+        Check(same, "a region's layout comes out the same every time");
+    }
+
+    std::cout << "Generated dungeons" << std::endl;
+    bool interiors = true, corners = true, connected = true, sealed = true, deep = true, shafts = true, pumps = true;
+    bool gardens = true, archives = true; // furnished all over, whatever the chunk borders
+    bool pitsOk = true, vaultsOk = true, floodsOk = true;
+    int coveredPits = 0, openPits = 0, vaults = 0, floods = 0;
+    int checked = 0, withShaft = 0, pumpRooms = 0, rooms = 0;
+    std::map<std::string, int> typeCounts;
+    for (const auto& entry : dungeons) {
+        const Dungeons::Layout& layout = entry.second; // (a plain reference: lambdas below capture it)
+        if (checked == 16) break;
+        checked++;
+        const Dungeons::Box& bounds = layout.bounds;
+
+        for (const auto& r : layout.rooms) {
+            rooms++;
+            typeCounts[Dungeons::RoomName(r.type)]++;
+            const glm::ivec3 lo = r.inner.min, hi = r.inner.max;
+            if (!world.Get({ lo.x + 1, hi.y, lo.z + 1 }).IsAir()) interiors = false;
+            // Corners aren't doorways, but another corridor may pass through one.
+            auto inCorridor = [&](const glm::ivec3& p) {
+                return std::any_of(layout.corridors.begin(), layout.corridors.end(), [&](const Dungeons::Box& c) { return c.Contains(p); });
+            };
+            for (const glm::ivec3 corner : { glm::ivec3(lo.x - 1, lo.y, lo.z - 1), glm::ivec3(hi.x + 1, hi.y + 1, hi.z + 1) })
+                if (!inCorridor(corner) && !IsBrick(world.Get(corner))) corners = false;
+            // Furnishings everywhere in the room, not just where they share a chunk with
+            // the floor or wall they stand against.
+            if (r.type == Dungeons::RoomType::Garden) {
+                int found = 0, cells = 0;
+                for (int x = lo.x; x <= hi.x; x++)
+                    for (int z = lo.z; z <= hi.z; z++, cells++) {
+                        const Block& b = world.Get({ x, lo.y, z });
+                        found += b.IsPlant() || b.type == BlockType::LEAVES;
+                    }
+                if (found * 4 < cells) gardens = false; // about 45% of the floor
+            }
+            if (r.type == Dungeons::RoomType::Archive) {
+                // Exactly where the layout says: every wall cell (not a corner) that isn't
+                // a gap or a doorway has a shelf.
+                auto doorway = [&](const glm::ivec3& p) {
+                    return std::any_of(layout.corridors.begin(), layout.corridors.end(), [&](const Dungeons::Box& c) { return c.Contains(p); });
+                };
+                auto expect = [&](const glm::ivec3& cell, const glm::ivec3& behind, int along) {
+                    const bool want = along % 5 != 2 && !doorway(behind);
+                    if (want != (world.Get(cell).type == BlockType::LOG)) archives = false;
+                };
+                for (int x = lo.x + 1; x <= hi.x - 1; x++) {
+                    expect({ x, lo.y, lo.z }, { x, lo.y, lo.z - 1 }, x - lo.x);
+                    expect({ x, lo.y, hi.z }, { x, lo.y, hi.z + 1 }, x - lo.x);
+                }
+                for (int z = lo.z + 1; z <= hi.z - 1; z++) {
+                    expect({ lo.x, lo.y, z }, { lo.x - 1, lo.y, z }, z - lo.z);
+                    expect({ hi.x, lo.y, z }, { hi.x + 1, lo.y, z }, z - lo.z);
+                }
+            }
+            // Traps in rooms.
+            const glm::ivec3 c = (lo + hi) / 2;
+            if (r.type == Dungeons::RoomType::Vault) {
+                vaults++;
+                for (int x = c.x - 1; x <= c.x + 1; x++)
+                    for (int z = c.z - 1; z <= c.z + 1; z++) {
+                        if (x == c.x && z == c.z) continue;
+                        if (world.Get({ x, lo.y - 1, z }).type != BlockType::CRUMBLING_BRICK || world.Get({ x, lo.y - 3, z }).type != BlockType::SPIKES ||
+                            !world.Get({ x, lo.y - 2, z }).IsAir())
+                            vaultsOk = false;
+                    }
+            }
+            if (r.type == Dungeons::RoomType::FloodChamber) {
+                floods++;
+                if (world.Get({ c.x, lo.y, c.z }).type != BlockType::PRESSURE_PLATE || world.Get({ c.x, hi.y + 1, c.z }).type != BlockType::SLUICE ||
+                    !world.Get({ c.x, hi.y + 2, c.z }).IsFullWater() || !world.Get({ lo.x + 1, hi.y + 4, lo.z + 1 }).IsFullWater())
+                    floodsOk = false;
+            }
+            // Well below the ground at the room's corners.
+            for (const glm::ivec2 c : { glm::ivec2(lo.x, lo.z), glm::ivec2(hi.x, hi.z), glm::ivec2(lo.x, hi.z), glm::ivec2(hi.x, lo.z) })
+                if (hi.y + 1 > world.terrain.ColumnAt(c.x, c.y).surfaceRow - 8) deep = false;
+        }
+
+        // Corridor spike pits: spikes all along the bottom, a crumbling cover or none.
+        for (const auto& pit : layout.pits) {
+            (pit.covered ? coveredPits : openPits)++;
+            for (int x = pit.open.min.x; x <= pit.open.max.x; x++)
+                for (int z = pit.open.min.z; z <= pit.open.max.z; z++) {
+                    const BlockType top = world.Get({ x, pit.open.max.y, z }).type;
+                    if (world.Get({ x, pit.open.min.y, z }).type != BlockType::SPIKES) pitsOk = false;
+                    if (top != (pit.covered ? BlockType::CRUMBLING_BRICK : BlockType::AIR)) pitsOk = false;
+                    if (!IsBrick(world.Get({ x, pit.open.min.y - 1, z }))) pitsOk = false; // something to stand the spikes on
+                }
+        }
+
+        // Flood fill through open space inside the dungeon's bounds, from the entrance.
+        const auto& e = layout.rooms[0].inner;
+        std::unordered_set<glm::ivec3, Coords::IVec3Hash> seen;
+        std::deque<glm::ivec3> queue{ glm::ivec3(e.min.x + 1, e.max.y, e.min.z + 1) };
+        seen.insert(queue.front());
+        const glm::ivec3 dirs[6] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+        while (!queue.empty()) {
+            const glm::ivec3 p = queue.front();
+            queue.pop_front();
+            for (const auto& d : dirs) {
+                const glm::ivec3 q = p + d;
+                if (!bounds.Contains(q) || seen.count(q) || !Open(world.Get(q))) continue;
+                seen.insert(q);
+                queue.push_back(q);
+            }
+        }
+        for (const auto& r : layout.rooms)
+            if (!seen.count({ r.inner.min.x + 1, r.inner.max.y, r.inner.min.z + 1 })) connected = false;
+        if (layout.hasShaft) {
+            withShaft++;
+            bool out = false;
+            for (const glm::ivec3& p : seen)
+                if (p.y > layout.shaftTop + 2) out = true;
+            if (!out) shafts = false;
+        }
+
+        // Water: nothing open below or beside it (so it can't run anywhere), and pumps.
+        for (int x = bounds.min.x; x <= bounds.max.x; x++)
+            for (int y = bounds.min.y; y <= std::min(bounds.max.y, layout.floorY + 8); y++)
+                for (int z = bounds.min.z; z <= bounds.max.z; z++) {
+                    const Block& b = world.Get({ x, y, z });
+                    if (b.type == BlockType::PUMP) {
+                        pumpRooms++;
+                        const bool wet = world.Get({ x, y + 1, z }).IsLiquid();
+                        const bool piped = world.Get({ x + 1, y, z }).type == BlockType::PIPE || world.Get({ x - 1, y, z }).type == BlockType::PIPE;
+                        if (!wet || !piped) pumps = false;
+                    }
+                    if (!b.HasWater()) continue;
+                    for (const glm::ivec3 d : { glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0), glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1), glm::ivec3(0, -1, 0) }) {
+                        const Block& n = world.Get(glm::ivec3(x, y, z) + d);
+                        if (!n.HasWater() && !n.IsFullBlock()) sealed = false;
+                    }
+                }
+    }
+    Check(interiors, "every room's interior is open (" + std::to_string(rooms) + " rooms in " + std::to_string(checked) + " dungeons)");
+    Check(corners, "and its corners are brick");
+    Check(connected, "every room can be reached from the entrance, across chunk borders");
+    Check(shafts && withShaft > 0, std::to_string(withShaft) + " entrance shafts lead up to the surface");
+    Check(sealed, "water sits in sealed basins");
+    Check(deep, "rooms are at least 8 blocks below the ground");
+    Check(pitsOk && coveredPits > 0 && openPits > 0,
+          std::to_string(coveredPits) + " covered and " + std::to_string(openPits) + " open corridor pits, with spikes along the bottom");
+    Check(vaultsOk && vaults > 0, std::to_string(vaults) + " vault pedestals ringed by crumbling floor over spikes");
+    Check(floodsOk && floods > 0, std::to_string(floods) + " flood chambers with a plate, sluice gates and a full reservoir");
+    Check(gardens, "gardens are planted all over");
+    Check(archives, "archive shelves are exactly where the layout puts them (all along the walls, gaps and doorways aside)");
+    Check(pumps && pumpRooms > 0, std::to_string(pumpRooms) + " pump rooms have a pump under water with a pipe beside it");
+    std::string mix;
+    for (const auto& [name, count] : typeCounts) mix += (mix.empty() ? "" : ", ") + name + " " + std::to_string(count);
+    std::cout << "        rooms: " << mix << std::endl;
+
+    std::cout << "Determinism and cost" << std::endl;
+    {
+        const auto& layout = dungeons[0].second;
+        const glm::ivec3 c = Coords::ChunkOf(Dungeons::Box(layout.rooms[0].inner).min);
+        TerrainGenerator::ColumnHeights heights;
+        world.terrain.ComputeColumnHeights(c.x, c.z, heights);
+        TerrainGenerator::Blocks a, b;
+        world.terrain.GenerateChunk(c, heights, a);
+        world.terrain.GenerateChunk(c, heights, b);
+        Check(a == b, "a chunk with a dungeon in it generates the same twice");
+        std::cout << "        " << world.generated << " chunks generated, " << world.generateSeconds * 1000.0 / world.generated << " ms each on average" << std::endl;
+    }
+
+    std::cout << (failures ? "DUNGEON TEST FAILED (" : "ALL DUNGEON CHECKS PASSED (") << failures << " failures)" << std::endl;
+    return failures ? EXIT_FAILURE : EXIT_SUCCESS;
+}

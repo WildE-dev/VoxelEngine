@@ -99,7 +99,12 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
     // and only changes what clients draw if its drawn surface height changes. Those
     // changes aren't sent: clients get the new volume with the next visible change.
     const bool waterVolumeOnly = previous.DiffersOnlyInWaterVolume(block);
-    if (waterVolumeOnly && previous.WaterSurface32nds() == block.WaterSurface32nds()) return;
+    if (waterVolumeOnly) {
+        // Water resting on water (a lake's top layer) is drawn down to a 32nd.
+        Block below;
+        const bool onWater = GetBlock(x, y - 1, z, below) && below.HasWater();
+        if (previous.WaterSurface32nds(onWater) == block.WaterSurface32nds(onWater)) return;
+    }
 
     {
         std::lock_guard<std::mutex> lock(logMutex);
@@ -286,18 +291,17 @@ void ServerWorld::WorkerLoop() {
             if (chunk->IsRemoved() || !chunk->TryBeginGenerate()) continue;
 
             const glm::ivec3 c = chunk->GetCoords();
-            if (storage && storage->LoadChunk(c, *generatedBlocks)) {
-                // Water in a saved chunk may have been moving when it was saved.
-                constexpr int S = Chunk::CHUNK_SIZE;
-                for (int i = 0; i < Chunk::VOLUME; i++) {
-                    const Block& b = (*generatedBlocks)[i];
-                    if (!b.HasWater() && b.type != BlockType::PUMP) continue;
-                    const glm::ivec3 pos = c * S + glm::ivec3(i % S, (i / S) % S, i / (S * S));
-                    (b.type == BlockType::PUMP ? savedPumps : savedWater).push_back(pos);
-                }
-            }
-            else {
-                terrain.GenerateChunk(c, GetColumnHeights(c.x, c.z), *generatedBlocks);
+            constexpr int S = Chunk::CHUNK_SIZE;
+            const bool saved = storage && storage->LoadChunk(c, *generatedBlocks);
+            if (!saved) terrain.GenerateChunk(c, GetColumnHeights(c.x, c.z), *generatedBlocks);
+            // Pumps (saved, or in a dungeon's pump room) start working; water in a saved
+            // chunk may have been moving when it was saved. Generated water is at rest.
+            for (int i = 0; i < Chunk::VOLUME; i++) {
+                const Block& b = (*generatedBlocks)[i];
+                const bool pump = b.type == BlockType::PUMP;
+                if (!pump && !(saved && b.HasWater())) continue;
+                const glm::ivec3 pos = c * S + glm::ivec3(i % S, (i / S) % S, i / (S * S));
+                (pump ? savedPumps : savedWater).push_back(pos);
             }
             chunk->SetGenerated(*generatedBlocks);
             generated.push_back(chunk);

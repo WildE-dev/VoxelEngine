@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -11,6 +12,7 @@
 #include <glm/glm.hpp>
 
 #include "net/Protocol.h"
+#include "world/Breathing.h"
 #include "net/Transport.h"
 
 class ClientWorld;
@@ -64,8 +66,46 @@ public:
 
     // Edits (predicted locally).
     void BreakBlock(const glm::ivec3& pos);
-    void PlaceBlock(const glm::ivec3& pos, BlockType type);
+    // heightEighths: how tall a shapeable block is placed (8 full, see Block::Placed).
+    // faceAxis: the axis of the face it's placed against (0 x, 1 y, 2 z); logs lie along it.
+    void PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths = 8, int faceAxis = 1);
+    // Lowers (or raises) one quarter of a block by a quarter (predicted, like edits).
+    void Chisel(const glm::ivec3& pos, int edge, bool raise);
     void Carve(const std::vector<glm::ivec3>& centers, int radius);
+    // Asks the server to skip to the next dawn or dusk.
+    void SkipTime();
+
+    // Chat: send a line (a command if it starts with '/'), and the lines received.
+    struct ChatLine {
+        net::ChatMessage::Kind kind;
+        std::string text;
+        double time; // when it arrived (seconds, same clock as the snapshots)
+    };
+    void SendChat(const std::string& text);
+    const std::deque<ChatLine>& GetChat() const { return chat; }
+    static double Now();
+
+    // The sky, from the latest snapshot: time of day (0..1, 0 sunrise, 0.25 noon,
+    // 0.5 sunset, 0.75 midnight) and rain intensity (0..1).
+    float GetTimeOfDay() const { return timeOfDay; }
+    // What the server lets us do (net::kAbility*).
+    uint8_t GetAbilities() const { return abilities; }
+    // Health in half hearts, and when we were last hurt (Now() clock; very negative if never).
+    int GetHealth() const { return health; }
+    int GetMaxHealth() const { return maxHealth; }
+    double GetLastHurt() const { return lastHurt; }
+    // Breath (survival): air left (0..GetMaxAir()) and what's taking it.
+    int GetAir() const { return air; }
+    int GetMaxAir() const { return maxAir; }
+    Breathing::Cause GetAirCause() const { return airCause; }
+    float GetRain() const { return rain; }
+    // Game mode, and in survival the resource units held of each block type (predicted
+    // on edits, put right by the server).
+    net::GameMode GetMode() const { return mode; }
+    bool IsCreative() const { return mode == net::GameMode::Creative; }
+    uint32_t GetResources(BlockType type) const { return resources[static_cast<size_t>(type)]; }
+    // Whether we may place this (creative, or we hold enough of it).
+    bool CanAfford(BlockType type, int heightEighths) const;
 
     // Other players, interpolated kInterpolationDelay seconds in the past so movement is
     // smooth between snapshots.
@@ -85,7 +125,6 @@ public:
 
 private:
     void HandleMessage(const std::vector<uint8_t>& data);
-    static double Now();
 
     ClientWorld& world;
     net::NetClient net;
@@ -107,6 +146,16 @@ private:
     };
     std::unordered_map<uint16_t, std::deque<Sample>> remote;
     uint32_t lastSnapshotTick = 0;
+    float timeOfDay = 0.05f, rain = 0.0f;
+    uint8_t abilities = 0;
+    int health = 20, maxHealth = 20;
+    int air = 20, maxAir = 20;
+    Breathing::Cause airCause = Breathing::Cause::None;
+    net::GameMode mode = net::GameMode::Creative;
+    std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{};
+    double lastHurt = -1000.0;
+    std::deque<ChatLine> chat; // the last kMaxChatLines
+    static constexpr size_t kMaxChatLines = 100;
 
     std::unique_ptr<net::ChunkBlocks> blocks;
     std::unique_ptr<net::ChunkLight> light;

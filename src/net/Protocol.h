@@ -26,7 +26,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 3;
+constexpr uint32_t kProtocolVersion = 13;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -39,6 +39,9 @@ enum class MsgType : uint8_t {
     EditBreak,     // break the block at a position
     EditPlace,     // place a block type at a position
     EditCarve,     // laser: clear spheres around a list of centres
+    SkipTime,      // jump to the next dawn (at night) or dusk (by day)
+    ChatSend,      // a chat line, or a command if it starts with '/'
+    EditChisel,    // lower (or raise) one quarter of a block by a quarter of a block
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -47,8 +50,13 @@ enum class MsgType : uint8_t {
     ChunkUnload,   // forget a chunk (out of range)
     LightData,     // new light for a chunk you have
     BlockDeltas,   // changed cells in one chunk
-    PlayerSnapshot,// every connected player's state
+    PlayerSnapshot,// every connected player's state, the time of day and the weather
     Correction,    // your position was rejected: move here
+    ChatMessage,   // a line for the chat log: someone's chat, or a server message
+    Abilities,     // what you may do: operator (laser), no-clip
+    Health,        // your health changed (hurt, healing, or respawned)
+    GameModeIs,    // you're in creative or survival
+    Resources,     // what you hold (survival): units of each block type
 };
 
 // ---------------------------------------------------------------------------------
@@ -124,7 +132,8 @@ void EncodeChunkPlanes(ByteWriter& out, const ChunkBlocks& blocks, const ChunkLi
 bool DecodeChunkPlanes(ByteReader& in, ChunkBlocks& blocks, ChunkLight& light);
 // Just the block planes (saved chunks store no light; it's recomputed on load).
 void EncodeBlockPlanes(ByteWriter& out, const ChunkBlocks& blocks);
-bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks);
+// withAxis: false for planes saved before blocks had an axis (region format < 5).
+bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis = true);
 void EncodeLightPlane(ByteWriter& out, const ChunkLight& light);
 bool DecodeLightPlane(ByteReader& in, ChunkLight& light);
 
@@ -152,6 +161,7 @@ struct Welcome {
     float yaw = -90.0f, pitch = 0.0f;
 };
 constexpr uint8_t kWelcomeResume = 0x80;
+constexpr uint8_t kWelcomeEmptyWorld = 0x40; // the world is a flat empty plain (no biomes)
 
 struct Kick {
     std::string reason;
@@ -181,6 +191,25 @@ struct EditBreak {
 struct EditPlace {
     glm::ivec3 pos{0};
     BlockType type = BlockType::AIR;
+    uint8_t height = 8; // eighths: a slab lower than full (blocks that can be shaped)
+    uint8_t faceAxis = 1; // axis of the face it was placed against (0 x, 1 y, 2 z): logs lie along it
+};
+
+// Game modes. Creative: build with anything, nothing hurts you. Survival: blocks cost
+// the resources you've collected by breaking blocks, and traps hurt.
+enum class GameMode : uint8_t { Survival = 0, Creative = 1 };
+struct GameModeIs {
+    GameMode mode = GameMode::Survival;
+};
+// Units held of each block type (see Block::ResourceUnits), types with none left out.
+struct Resources {
+    std::vector<std::pair<BlockType, uint32_t>> held;
+};
+
+struct EditChisel {
+    glm::ivec3 pos{0};
+    uint8_t edge = 0;  // which quarter (EdgeData order, 0..3)
+    uint8_t raise = 0; // 1: raise it instead of lowering it
 };
 
 struct EditCarve {
@@ -214,6 +243,39 @@ struct PlayerInfo {
 struct PlayerSnapshot {
     uint32_t tick = 0;
     std::vector<PlayerInfo> players;
+    float timeOfDay = 0.0f; // 0..1: 0 sunrise, 0.25 noon, 0.5 sunset, 0.75 midnight
+    uint8_t rain = 0;       // rain intensity, 0..255 (fades in and out)
+};
+
+struct SkipTime {};
+
+// What the server lets a player do. No-clip is switched with /noclip (operators); the
+// laser is for operators. The server enforces both.
+constexpr uint8_t kAbilityOperator = 1 << 0;
+constexpr uint8_t kAbilityNoclip = 1 << 1;
+struct Abilities {
+    uint8_t flags = 0;
+};
+
+// Health in half hearts (20 = ten hearts). `hurt` is set when this change was damage.
+struct Health {
+    uint8_t health = 20, max = 20;
+    uint8_t hurt = 0;
+    // Breath (survival): air left, 0..airMax (Breathing::kMaxAir), and what's taking
+    // it (Breathing::Cause; 0 none).
+    uint8_t air = 20, airMax = 20;
+    uint8_t airCause = 0;
+};
+
+// Chat: what a player typed, and lines for the chat log.
+constexpr size_t kMaxChatLength = 256;
+struct ChatSend {
+    std::string text;
+};
+struct ChatMessage {
+    enum class Kind : uint8_t { Chat = 0, Info = 1, Error = 2, Private = 3 };
+    Kind kind = Kind::Chat;
+    std::string text;
 };
 
 struct Correction {
@@ -228,6 +290,21 @@ std::vector<uint8_t> Encode(const PlayerState& m);
 std::vector<uint8_t> Encode(const EditBreak& m);
 std::vector<uint8_t> Encode(const EditPlace& m);
 std::vector<uint8_t> Encode(const EditCarve& m);
+std::vector<uint8_t> Encode(const SkipTime& m);
+std::vector<uint8_t> Encode(const EditChisel& m);
+bool Decode(ByteReader& in, EditChisel& m);
+std::vector<uint8_t> Encode(const Abilities& m);
+bool Decode(ByteReader& in, Abilities& m);
+std::vector<uint8_t> Encode(const Health& m);
+bool Decode(ByteReader& in, Health& m);
+std::vector<uint8_t> Encode(const GameModeIs& m);
+bool Decode(ByteReader& in, GameModeIs& m);
+std::vector<uint8_t> Encode(const Resources& m);
+bool Decode(ByteReader& in, Resources& m);
+std::vector<uint8_t> Encode(const ChatSend& m);
+std::vector<uint8_t> Encode(const ChatMessage& m);
+bool Decode(ByteReader& in, ChatSend& m);
+bool Decode(ByteReader& in, ChatMessage& m);
 std::vector<uint8_t> EncodeChunkData(const glm::ivec3& coords, const ChunkBlocks& blocks, const ChunkLight& light);
 std::vector<uint8_t> Encode(const ChunkUnload& m);
 std::vector<uint8_t> EncodeLightData(const glm::ivec3& coords, const ChunkLight& light);

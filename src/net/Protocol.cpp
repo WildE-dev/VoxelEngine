@@ -72,6 +72,7 @@ void WriteBlock(ByteWriter& out, const Block& b) {
     for (int e = 0; e < 4; e++) out.U8(b.edgeData.edges[e]);
     out.U8(b.water);
     out.U8(b.shown);
+    out.U8(b.axis);
 }
 
 bool ReadBlock(ByteReader& in, Block& b) {
@@ -80,8 +81,8 @@ bool ReadBlock(ByteReader& in, Block& b) {
     b.type = static_cast<BlockType>(type);
     for (int e = 0; e < 4; e++)
         if (!in.U8(b.edgeData.edges[e])) return false;
-    if (!in.U8(b.water) || !in.U8(b.shown)) return false;
-    return b.water <= Block::kMaxWaterVolume && b.shown <= Block::kMaxWaterVolume;
+    if (!in.U8(b.water) || !in.U8(b.shown) || !in.U8(b.axis)) return false;
+    return b.water <= Block::kMaxWaterVolume && b.shown <= Block::kMaxWaterVolume && b.axis <= Block::kAlongZ;
 }
 
 void EncodeBlockPlanes(ByteWriter& out, const ChunkBlocks& blocks) {
@@ -89,6 +90,7 @@ void EncodeBlockPlanes(ByteWriter& out, const ChunkBlocks& blocks) {
     for (int e = 0; e < 4; e++) EncodePlane(out, [&](int i) { return blocks[i].edgeData.edges[e]; });
     EncodePlane(out, [&](int i) { return blocks[i].water; });
     EncodePlane(out, [&](int i) { return blocks[i].shown; });
+    EncodePlane(out, [&](int i) { return blocks[i].axis; });
 }
 
 void EncodeChunkPlanes(ByteWriter& out, const ChunkBlocks& blocks, const ChunkLight& light) {
@@ -100,7 +102,7 @@ bool DecodeChunkPlanes(ByteReader& in, ChunkBlocks& blocks, ChunkLight& light) {
     return DecodeBlockPlanes(in, blocks) && DecodeLightPlane(in, light);
 }
 
-bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks) {
+bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis) {
     bool valid = true;
     if (!DecodePlane(in, [&](int i, uint8_t v) {
             if (v >= static_cast<uint8_t>(BlockType::COUNT)) valid = false;
@@ -118,6 +120,14 @@ bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks) {
             if (v > Block::kMaxWaterVolume) valid = false;
             blocks[i].shown = v;
         }))
+        return false;
+    if (!withAxis) {
+        for (auto& b : blocks) b.axis = Block::kUpright;
+    }
+    else if (!DecodePlane(in, [&](int i, uint8_t v) {
+                 if (v > Block::kAlongZ) valid = false;
+                 blocks[i].axis = v;
+             }))
         return false;
     return valid;
 }
@@ -185,7 +195,119 @@ std::vector<uint8_t> Encode(const EditPlace& m) {
     Begin(w, MsgType::EditPlace);
     w.IVec3(m.pos);
     w.U8(static_cast<uint8_t>(m.type));
+    w.U8(m.height);
+    w.U8(m.faceAxis);
     return std::move(w.data);
+}
+
+std::vector<uint8_t> Encode(const EditChisel& m) {
+    ByteWriter w;
+    Begin(w, MsgType::EditChisel);
+    w.IVec3(m.pos);
+    w.U8(m.edge);
+    w.U8(m.raise);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, EditChisel& m) {
+    return in.IVec3(m.pos) && in.U8(m.edge) && in.U8(m.raise) && m.edge < 4 && m.raise <= 1 && in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const SkipTime&) {
+    ByteWriter w;
+    Begin(w, MsgType::SkipTime);
+    return std::move(w.data);
+}
+
+std::vector<uint8_t> Encode(const Abilities& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Abilities);
+    w.U8(m.flags);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Abilities& m) {
+    return in.U8(m.flags) && in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const GameModeIs& m) {
+    ByteWriter w;
+    Begin(w, MsgType::GameModeIs);
+    w.U8(static_cast<uint8_t>(m.mode));
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, GameModeIs& m) {
+    uint8_t mode;
+    if (!in.U8(mode) || mode > static_cast<uint8_t>(GameMode::Creative)) return false;
+    m.mode = static_cast<GameMode>(mode);
+    return in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const Resources& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Resources);
+    w.VarU32(static_cast<uint32_t>(m.held.size()));
+    for (const auto& [type, units] : m.held) {
+        w.U8(static_cast<uint8_t>(type));
+        w.VarU32(units);
+    }
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Resources& m) {
+    uint32_t n;
+    if (!in.VarU32(n) || n > static_cast<uint32_t>(BlockType::COUNT)) return false;
+    m.held.resize(n);
+    for (auto& [type, units] : m.held) {
+        uint8_t t;
+        if (!in.U8(t) || t >= static_cast<uint8_t>(BlockType::COUNT) || !in.VarU32(units)) return false;
+        type = static_cast<BlockType>(t);
+    }
+    return in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const Health& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Health);
+    w.U8(m.health);
+    w.U8(m.max);
+    w.U8(m.hurt);
+    w.U8(m.air);
+    w.U8(m.airMax);
+    w.U8(m.airCause);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Health& m) {
+    return in.U8(m.health) && in.U8(m.max) && in.U8(m.hurt) && in.U8(m.air) && in.U8(m.airMax) && in.U8(m.airCause) && m.max > 0 &&
+           m.health <= m.max && m.airMax > 0 && m.air <= m.airMax && m.airCause <= 3 && in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const ChatSend& m) {
+    ByteWriter w;
+    Begin(w, MsgType::ChatSend);
+    w.Str(m.text.substr(0, kMaxChatLength));
+    return std::move(w.data);
+}
+
+std::vector<uint8_t> Encode(const ChatMessage& m) {
+    ByteWriter w;
+    Begin(w, MsgType::ChatMessage);
+    w.U8(static_cast<uint8_t>(m.kind));
+    w.Str(m.text.substr(0, 2 * kMaxChatLength)); // room for "<name> " in front
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, ChatSend& m) {
+    return in.Str(m.text, kMaxChatLength) && in.AtEnd();
+}
+
+bool Decode(ByteReader& in, ChatMessage& m) {
+    uint8_t kind;
+    if (!in.U8(kind) || kind > static_cast<uint8_t>(ChatMessage::Kind::Private)) return false;
+    m.kind = static_cast<ChatMessage::Kind>(kind);
+    return in.Str(m.text, 2 * kMaxChatLength);
 }
 
 std::vector<uint8_t> Encode(const EditCarve& m) {
@@ -247,6 +369,8 @@ std::vector<uint8_t> Encode(const PlayerSnapshot& m) {
         w.F32(p.pitch);
         w.U8(p.flags);
     }
+    w.F32(m.timeOfDay);
+    w.U8(m.rain);
     return std::move(w.data);
 }
 
@@ -292,7 +416,7 @@ bool Decode(ByteReader& in, EditPlace& m) {
     uint8_t type;
     if (!in.IVec3(m.pos) || !in.U8(type) || type >= static_cast<uint8_t>(BlockType::COUNT)) return false;
     m.type = static_cast<BlockType>(type);
-    return true;
+    return in.U8(m.height) && m.height >= 1 && m.height <= 8 && in.U8(m.faceAxis) && m.faceAxis <= 2;
 }
 
 bool Decode(ByteReader& in, EditCarve& m) {
@@ -331,7 +455,7 @@ bool Decode(ByteReader& in, PlayerSnapshot& m) {
     m.players.resize(n);
     for (auto& p : m.players)
         if (!in.U16(p.id) || !in.Vec3(p.feet) || !in.F32(p.yaw) || !in.F32(p.pitch) || !in.U8(p.flags)) return false;
-    return true;
+    return in.F32(m.timeOfDay) && in.U8(m.rain) && std::isfinite(m.timeOfDay) && m.timeOfDay >= 0.0f && m.timeOfDay < 1.0f;
 }
 
 bool Decode(ByteReader& in, Correction& m) {

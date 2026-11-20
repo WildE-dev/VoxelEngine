@@ -50,6 +50,13 @@ struct EdgeData {
         edges[edgeIndex] = (edges[edgeIndex] & 0x0F) | ((value & 0x0F) << 4);
     }
 
+    // For drawing only: a top height above the cell (up to 15 eighths), where a slope
+    // carries on into the cell above (see ChunkMesher). Not a valid block shape.
+    void SetTopYForDrawing(int edgeIndex, uint8_t value) {
+        if (edgeIndex < 0 || edgeIndex >= 4 || value > 15) return;
+        edges[edgeIndex] = (edges[edgeIndex] & 0x0F) | static_cast<uint8_t>(value << 4);
+    }
+
     uint8_t GetBottomY(int edgeIndex) const {
         if (edgeIndex < 0 || edgeIndex >= 4) return 0;
         return edges[edgeIndex] & 0x0F;
@@ -86,18 +93,65 @@ enum class BlockType : uint8_t {
     // connected to it, out of the pipes' open ends (see Water.cpp).
     PUMP,
     PIPE,
+    // Dungeon walls (see Dungeons.cpp); also placeable.
+    STONE_BRICK,
+    MOSSY_BRICK,
+    // Traps (see Server.cpp's UpdateTraps). Spikes hurt whoever stands in them (drawn
+    // as a sprite, like plants); crumbling bricks give way soon after someone stands
+    // on them; a pressure plate (a thin slab) opens every sluice gate near it.
+    SPIKES,
+    CRUMBLING_BRICK,
+    PRESSURE_PLATE,
+    SLUICE,
+    // Mountain peaks.
+    SNOW,
+    // Biomes (see TerrainGenerator): savanna's dry grass, jungle and swamp's lush grass,
+    // the frozen north's snowy grass and pines, desert cacti and dead bushes, sea ice.
+    DRY_GRASS,
+    LUSH_GRASS,
+    SNOWY_GRASS,
+    PINE_LEAVES,
+    CACTUS,
+    DEAD_BUSH,
+    ICE,
     COUNT
 };
 
 inline bool IsPlantType(BlockType type) {
-    return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW;
+    return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW || type == BlockType::SPIKES ||
+           type == BlockType::DEAD_BUSH;
 }
+
+// Grass of any biome (plants grow on it).
+inline bool IsGrassType(BlockType type) {
+    return type == BlockType::GRASS || type == BlockType::DRY_GRASS || type == BlockType::LUSH_GRASS || type == BlockType::SNOWY_GRASS;
+}
+// Leaves of any tree: full blocks that let light through.
+inline bool IsLeavesType(BlockType type) { return type == BlockType::LEAVES || type == BlockType::PINE_LEAVES; }
 
 constexpr uint8_t kMaxLight = 15;
 
 // Light from emitting blocks, and daylight from the sky. Stored and propagated
 // separately so day/night can scale sky light in the shader without re-meshing.
 enum class LightChannel : uint8_t { Block, Sky };
+
+// How a partial block's shape is drawn (and stood on): natural ground slopes smoothly
+// between its four corner heights; anything built is four quarter-columns, each as
+// high as its corner (like small steps).
+enum class ShapeStyle : uint8_t { Sloped, Stepped };
+inline ShapeStyle StyleOf(BlockType type) {
+    switch (type) {
+    case BlockType::GRASS:
+    case BlockType::DIRT:
+    case BlockType::SAND:
+    case BlockType::STONE:
+    case BlockType::SNOW:
+    case BlockType::DRY_GRASS:
+    case BlockType::LUSH_GRASS:
+    case BlockType::SNOWY_GRASS: return ShapeStyle::Sloped;
+    default: return ShapeStyle::Stepped;
+    }
+}
 
 // Block light emitted by a block type, 0..kMaxLight.
 inline uint8_t GetLightEmission(BlockType type) {
@@ -114,8 +168,16 @@ struct TextureData {
         : top(top), bottom(bottom), front(front), back(back), left(left), right(right) {}
 };
 
+// A short id for a block type ("dirt", "stone_brick"), for commands; and back
+// (BlockType::COUNT if there's no such id).
+const char* BlockId(BlockType type);
+BlockType BlockFromId(const std::string& id);
+
 // Atlas tile indices for each face of a block type. Thread-safe.
 TextureData GetTextureData(BlockType type);
+// Atlas tile a block shows where it's been carved (chiselled faces inside its cell),
+// or -1 if it looks the same inside (only logs differ: wood under the bark).
+int GetCarvedTexture(BlockType type);
 
 // Maps the texture names each block type uses (see Block.cpp) to atlas indices.
 // Call after (re)building the atlas, then rebuild chunk meshes. Safe to call while
@@ -163,8 +225,24 @@ struct Block {
     // The volume as drawn. While water is moving it only follows `water` once that has
     // drifted kShownDeadband away, which hides the small back-and-forth of flowing water
     // (otherwise visible as jitter while a lake drains); once the cell is at rest the
-    // water simulation snaps it to the true volume. Rendering only.
+    // water simulation snaps it to the true volume. Below kShownDeadband it follows
+    // exactly, so the last thin layer of a draining lake thins out smoothly instead of
+    // holding at an eighth and then vanishing. Rendering only.
     uint8_t shown = 0;
+    // Which way an orientable block (a log) runs: kUpright, kAlongX or kAlongZ. Its
+    // ends face that way and its grain runs along it. Always kUpright for others.
+    uint8_t axis = 0;
+    static constexpr uint8_t kUpright = 0, kAlongX = 1, kAlongZ = 2;
+    static bool IsOrientable(BlockType t) { return t == BlockType::LOG; }
+    // The axis in kFaceAxis terms (0 x, 1 y, 2 z), and the orientation for one.
+    int GrainAxis() const { return axis == kAlongX ? 0 : axis == kAlongZ ? 2 : 1; }
+    static uint8_t AxisFor(int faceAxis) { return faceAxis == 0 ? kAlongX : faceAxis == 2 ? kAlongZ : kUpright; }
+    // The same block turned to run along `faceAxis` (if it can be).
+    Block Turned(int faceAxis) const {
+        Block b = *this;
+        b.axis = IsOrientable(type) ? AxisFor(faceAxis) : kUpright;
+        return b;
+    }
 
     Block() = default;
     explicit Block(BlockType t) : type(t), water(t == BlockType::WATER ? kMaxWaterVolume : 0), shown(water) {}
@@ -173,6 +251,28 @@ struct Block {
 
     // A plant whose sprite is drawn `dropEighths` (0..8) below its cell's floor, so it
     // stands on a sloped block underneath. Stored in the otherwise unused edge data.
+    // A pressure plate: a slab an eighth of a block high.
+    static Block PressurePlate() {
+        EdgeData edges;
+        for (int e = 0; e < 4; e++) edges.SetTopY(e, 1);
+        return Block(BlockType::PRESSURE_PLATE, edges);
+    }
+    // What placing a block of this type puts in the world (a full cell of water, a
+    // plate's slab, a sprite standing on the floor below). Blocks that can be shaped
+    // may be placed lower than full: a slab `heightEighths` high (2, 4 or 6 of 8).
+    // Orientable blocks run along `faceAxis` (0 x, 1 y, 2 z): the axis of the face
+    // they were placed against.
+    static Block Placed(BlockType t, int heightEighths = 8, int faceAxis = 1);
+    // Whether a type can be placed as a slab (and chiselled): building blocks, not
+    // liquids, plants or machines.
+    static bool CanShape(BlockType t) { return Block(t).CanChisel(); }
+
+    // Resources (survival mode): a full block is worth kUnitsPerBlock units of its
+    // type; a shaped one is worth its volume (a half slab 32, each eighth of a
+    // quarter 2). Things that can't be shaped (plants, machines) are worth a full block.
+    static constexpr int kUnitsPerBlock = 64;
+    int ResourceUnits() const;
+
     static Block Plant(BlockType t, uint8_t dropEighths) {
         Block b(t);
         b.edgeData.edges[0] = dropEighths;
@@ -208,11 +308,14 @@ struct Block {
     // Level of the water as drawn, in units (floor + shown volume).
     int WaterShownLevel() const { return WaterFloor() + shown; }
     // Height of the water surface as drawn, in 32nds of a block (when nothing is above
-    // it): the shown level rounded, at least an eighth so thin water stays visible.
-    uint8_t WaterSurface32nds() const {
+    // it): the shown level rounded. On dry ground at least an eighth, so a thin film's
+    // small changes don't count as visible; on top of other water (`onWater`, the top
+    // layer of a lake or pool) down to a 32nd, so a draining surface goes down evenly.
+    uint8_t WaterSurface32nds(bool onWater = false) const {
         constexpr int unitsPer32nd = kMaxWaterVolume / 32;
         const int h = (WaterShownLevel() + unitsPer32nd / 2) / unitsPer32nd;
-        return static_cast<uint8_t>(h < 4 ? 4 : h);
+        const int minimum = onWater ? 1 : 4;
+        return static_cast<uint8_t>(h < minimum ? minimum : h);
     }
     // This cell holding `volume` units: the same partial block waterlogged, or a water
     // block (air if the volume is 0). Water washes plants away.
@@ -220,26 +323,34 @@ struct Block {
         if (!IsPartial() && volume == 0) return Block();
         Block b = IsPartial() || IsLiquid() ? *this : Water(volume);
         b.water = volume;
-        // Newly wet or dried cells show their volume at once; otherwise the drawn
-        // volume only moves once the real one is a whole drawn step away.
+        // Newly wet or dried cells, and thin water, show their volume at once; otherwise
+        // the drawn volume only moves once the real one is a whole drawn step away.
         const int drift = static_cast<int>(volume) - static_cast<int>(shown);
-        if (volume == 0 || !HasWater() || drift >= kShownDeadband || drift <= -kShownDeadband) b.shown = volume;
+        if (volume == 0 || volume < kShownDeadband || !HasWater() || drift >= kShownDeadband || drift <= -kShownDeadband) b.shown = volume;
         return b;
     }
     // Same block apart from how much water it holds (whether it holds any counts).
     bool DiffersOnlyInWaterVolume(const Block& o) const {
-        return type == o.type && edgeData == o.edgeData && HasWater() == o.HasWater();
+        return type == o.type && edgeData == o.edgeData && axis == o.axis && HasWater() == o.HasWater();
     }
 
     void SetEdgeData(EdgeData edges);
     void Shrink();
+    bool IsStepped() const { return StyleOf(type) == ShapeStyle::Stepped; }
+    // Whether a block can be chiselled (shaped by quarters): solid building blocks,
+    // not liquids, plants or machines.
+    bool CanChisel() const;
+    // Height of the quarter (or slope corner) `edge` (EdgeData order), in eighths.
+    // Raising every corner to the top makes the block full again; lowering them all
+    // removes it (air).
+    Block Chiselled(int edge, int deltaEighths) const;
 
     bool IsAir() const { return type == BlockType::AIR; }
     // Full, opaque cube that hides any neighbouring face touching it, and collides.
     bool IsFullBlock() const { return type != BlockType::AIR && !IsPlant() && !IsLiquid() && edgeData.IsFull(); }
     // Light passes through air, partial blocks, plants, leaves and water (water also
     // absorbs some; see LightPropagator).
-    bool BlocksLight() const { return IsFullBlock() && type != BlockType::LEAVES; }
+    bool BlocksLight() const { return IsFullBlock() && !IsLeavesType(type) && type != BlockType::ICE; }
     // Air, a plant or water: nothing to stand on or bump into.
     bool IsPassable() const { return IsAir() || IsPlant() || IsLiquid(); }
     // Water may flow into this cell (washing away any plant).
@@ -255,9 +366,30 @@ struct Block {
     // light in its own cell.
     void AddPlantVertices(std::vector<uint32_t>& vertices, int x, int y, int z, uint8_t blockLight, uint8_t skyLight) const;
 
+    // The edges of the block's shape (pairs of points, block-local), for the outline
+    // around the block in view: a cube, a slope's outline, a stepped block's quarters,
+    // or the box a plant stands in.
+    std::vector<glm::vec3> OutlineSegments() const;
+
     // Appends 6 vertices (2 packed uint32 each) for the given face.
     void AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading) const;
+    // A stepped partial block's faces pointing one way: the quarters' own faces, and
+    // where a quarter stands above its neighbour, the exposed part of its side. Faces on
+    // the block's outside are left out when `outside` is false (a solid block there).
+    void AddSteppedFaces(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading, bool outside) const;
 
-    bool operator==(const Block& o) const { return type == o.type && edgeData == o.edgeData && water == o.water && shown == o.shown; }
+    bool operator==(const Block& o) const {
+        return type == o.type && edgeData == o.edgeData && water == o.water && shown == o.shown && axis == o.axis;
+    }
     bool operator!=(const Block& o) const { return !(*this == o); }
 };
+
+inline Block Block::Placed(BlockType t, int heightEighths, int faceAxis) {
+    if (t == BlockType::WATER) return Water(kMaxWaterVolume);
+    if (t == BlockType::PRESSURE_PLATE) return PressurePlate();
+    if (IsPlantType(t)) return Plant(t, 0);
+    if (heightEighths >= 8 || heightEighths <= 0 || !CanShape(t)) return Block(t).Turned(faceAxis);
+    EdgeData slab;
+    for (int e = 0; e < 4; e++) slab.SetTopY(e, static_cast<uint8_t>(heightEighths));
+    return Block(t, slab).Turned(faceAxis);
+}

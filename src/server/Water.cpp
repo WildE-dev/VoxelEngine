@@ -170,8 +170,10 @@ void WaterSimulation::RunPump(ServerWorld& world, const glm::ivec3& pump) {
 
 bool WaterSimulation::IsPuddle(const ServerWorld& world, const glm::ivec3& pos, const Block& block) {
     if (!block.HasWater() || block.WaterVolume() > kPuddleVolume || block.WaterVolume() >= block.WaterCapacity()) return false;
-    Block above;
-    return !world.GetBlock(pos.x, pos.y + 1, pos.z, above) || !above.HasWater();
+    // Not under water, and not the thin top layer of a lake or pool (on more water).
+    Block above, below;
+    if (world.GetBlock(pos.x, pos.y + 1, pos.z, above) && above.HasWater()) return false;
+    return !world.GetBlock(pos.x, pos.y - 1, pos.z, below) || !below.HasWater();
 }
 
 void WaterSimulation::RandomTicks(ServerWorld& world) {
@@ -192,17 +194,22 @@ void WaterSimulation::RandomTicks(ServerWorld& world) {
     // Look at random cells without the edit mutex (block reads don't need it)...
     constexpr int S = Chunk::CHUNK_SIZE;
     std::uniform_int_distribution<int> local(0, S - 1);
+    const bool rain = IsRaining();
     puddles.clear();
+    wet.clear();
     for (const auto& chunk : randomChunks)
         for (int i = 0; i < kRandomTicksPerChunk; i++) {
             const glm::ivec3 pos = chunk * S + glm::ivec3(local(random), local(random), local(random));
             Block block;
-            if (world.GetBlock(pos.x, pos.y, pos.z, block) && block.HasWater() && block.WaterVolume() <= kPuddleVolume) puddles.push_back(pos);
+            if (!world.GetBlock(pos.x, pos.y, pos.z, block) || !block.HasWater()) continue;
+            if (rain) wet.push_back(pos);                                // rain lands in it
+            else if (block.WaterVolume() <= kPuddleVolume) puddles.push_back(pos); // may dry up
         }
-    if (puddles.empty()) return;
+    if (puddles.empty() && wet.empty()) return;
 
     // ...then check the few candidates properly and dry them up under it.
     std::lock_guard<std::recursive_mutex> lock(world.GetEditMutex());
+    for (const auto& pos : wet) RainOn(world, pos);
     for (const auto& pos : puddles) {
         Block block;
         if (!world.GetBlock(pos.x, pos.y, pos.z, block) || !IsPuddle(world, pos, block)) continue;
@@ -212,6 +219,30 @@ void WaterSimulation::RandomTicks(ServerWorld& world) {
         SetWater(world, pos, block, 0);
         evaporatedCount.fetch_add(1, std::memory_order_relaxed);
     }
+}
+
+void WaterSimulation::RainOn(ServerWorld& world, const glm::ivec3& hit) {
+    // Up to the top of the water in this column.
+    glm::ivec3 top = hit;
+    Block block, b;
+    if (!world.GetBlock(top.x, top.y, top.z, block) || !block.HasWater()) return;
+    for (int i = 0; i < 256 && world.GetBlock(top.x, top.y + 1, top.z, b) && b.HasWater(); i++) {
+        top.y++;
+        block = b;
+    }
+    // Only an unfilled cell on top of more water: a body of water, not a puddle, and
+    // never a new cell.
+    const int room = block.WaterCapacity() - block.WaterVolume();
+    if (room <= 0) return;
+    if (!world.GetBlock(top.x, top.y - 1, top.z, b) || !b.HasWater()) return;
+    // Open to the sky: nothing but air or plants above, as far as is loaded.
+    for (int y = top.y + 1; y <= top.y + 64; y++) {
+        if (!world.GetBlock(top.x, y, top.z, b)) break; // unloaded: assume open
+        if (!b.IsAir() && !b.IsPlant()) return;
+    }
+    const int added = std::min(kRainUnits, room);
+    SetWater(world, top, block, block.WaterVolume() + added);
+    rainedUnits.fetch_add(static_cast<size_t>(added), std::memory_order_relaxed);
 }
 
 void WaterSimulation::Wake() {

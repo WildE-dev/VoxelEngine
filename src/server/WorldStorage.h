@@ -35,12 +35,15 @@ class WorldStorage
 {
 public:
     static constexpr int kRegionSize = 8;      // chunks per region along each axis
-    static constexpr uint32_t kFormatVersion = 2; // 2: world type in world.dat
+    // 2: world type; 3: time of day; 4: game modes and resources; 5: block axes (logs)
+    static constexpr uint32_t kFormatVersion = 5;
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
         float yaw = -90.0f, pitch = 0.0f;
         uint8_t flags = 0; // net::kFlagFlying etc.
+        uint8_t mode = 0;  // net::GameMode
+        std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{}; // units held (survival)
     };
 
     // One bit per block column of a chunk (index x * CHUNK_SIZE + z).
@@ -58,6 +61,14 @@ public:
     // before it was recorded. Set it once for a new world.
     uint8_t GetWorldType() const;
     void SetWorldType(uint8_t worldType);
+    // Time of day (0..1, see net::PlayerSnapshot), saved with the world. Worlds saved
+    // before it was recorded start in the morning.
+    float GetTimeOfDay() const;
+    void SetTimeOfDay(float timeOfDay);
+    // The game mode new players start in (net::GameMode). Worlds saved before modes
+    // existed were played as creative.
+    uint8_t GetDefaultMode() const;
+    void SetDefaultMode(uint8_t mode);
 
     // The saved blocks of a chunk, if it was ever stored.
     bool LoadChunk(const glm::ivec3& coords, Chunk::Blocks& out) const;
@@ -113,4 +124,6 @@ private:
     bool playersDirty = false;
     bool isNew = true;
     uint8_t worldType = 0;
+    float timeOfDay = 0.05f;
+    uint8_t defaultMode = 1; // creative, for worlds saved before modes
 };

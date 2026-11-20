@@ -18,6 +18,25 @@ uniform float time;
 uniform float sunBrightness;   // 0 = night, 1 = day
 uniform vec3 sunDirection;     // towards the sun
 uniform vec3 blockLightColor;
+
+// Distance fog (set by Renderer::SetFogUniforms): towards the edge of the render
+// distance, things fade into the sky behind them, so the world's edge and chunks
+// still loading there blend into the sky instead of ending sharply.
+uniform float fogStart;      // horizontal distance where the fog begins
+uniform float fogEnd;        // where everything is sky (0: no fog)
+uniform samplerCube fogSky;  // the skybox, coloured as skybox.frag does
+uniform float skyBrightness;
+uniform vec3 skyTint;
+uniform float skyOvercast;
+
+vec3 ApplyFog(vec3 color, vec3 worldPos) {
+    if (fogEnd <= 0.0) return color;
+    float amount = smoothstep(fogStart, fogEnd, length(worldPos.xz - cameraPos.xz));
+    vec3 c = texture(fogSky, normalize(worldPos - cameraPos)).rgb;
+    float grey = dot(c, vec3(0.3, 0.59, 0.11));
+    c = mix(c, vec3(grey * 0.75), skyOvercast) * skyTint * skyBrightness;
+    return mix(color, c, amount);
+}
 uniform float underwater;      // 1 when the camera is inside water
 
 out vec4 FragColor;
@@ -124,5 +143,5 @@ void main() {
         color += vec3(1.0, 0.95, 0.85) * glint * 1.6 * sunBrightness * SkyLight;
     }
 
-    FragColor = vec4(color, 1.0);
+    FragColor = vec4(ApplyFog(color, WorldPos), 1.0);
 }

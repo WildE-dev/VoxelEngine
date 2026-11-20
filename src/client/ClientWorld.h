@@ -49,6 +49,7 @@ public:
 
     // View distance as told by the server (Welcome).
     void SetViewDistance(int horizontal, int vertical);
+    int GetViewDistance() const { return renderDistance; } // chunks, horizontally
 
     // Main thread: track the chunks expected around the camera (see Update in the .cpp).
     void Update(const glm::vec3& cameraPosition);

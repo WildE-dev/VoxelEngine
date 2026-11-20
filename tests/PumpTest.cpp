@@ -91,7 +91,8 @@ void Tick(ServerWorld& world, int n) {
 
 int main() {
     constexpr int kFull = Block::kMaxWaterVolume, kRate = WaterSimulation::kPumpRate;
-    TerrainGenerator terrain;
+    // An empty world: no dungeon pump rooms to register pumps of their own meanwhile.
+    TerrainGenerator terrain(TerrainGenerator::Type::Empty);
 
     std::cout << "Pumping" << std::endl;
     {

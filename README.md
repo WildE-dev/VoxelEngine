@@ -21,7 +21,13 @@ build copies it next to the binary.
 
 The build also produces `VoxelServer` (a dedicated server that doesn't link GL or
 GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
-[Saving](#saving)), and `WaterAreaTest`, `PumpTest` and `EvaporationTest` (see [Water](#water)).
+[Saving](#saving)), `WaterAreaTest`, `PumpTest` and `EvaporationTest` (see [Water](#water)),
+`WeatherTest` (see [Day, night and weather](#day-night-and-weather)), `ChatTest`
+(see [Chat and commands](#chat-and-commands)), `DungeonTest` (see
+[Dungeons](#dungeons)), `TrapTest` (see [Health and traps](#health-and-traps)),
+`ShapeTest` (see [Block shapes](#block-shapes)), `BiomeTest` (see [Biomes](#biomes))
+`ModeTest` (see [Game modes](#game-modes)) and `BreathTest` (see
+[Breathing](#breathing)).
 
 ## Multiplayer
 
@@ -122,12 +128,14 @@ were). If that spot has been built over since, you land on the surface instead.
 - **Water** that was still moving when it was saved carries on once its chunk
   loads.
 - **Format** (`src/server/WorldStorage.h`): `world.dat` holds the format version,
-  the world type and the players; `regions/r.X.Y.Z.vxr` holds the stored chunks of an 8x8x8-chunk
+  the world type, the time of day, the default game mode and the players (with their
+  game modes and survival resources); `regions/r.X.Y.Z.vxr` holds the stored chunks of an 8x8x8-chunk
   region, as the same run-length encoded block planes the network uses (an edited
   surface chunk is a few KB). Each file is written to a temporary file and renamed,
   so a crash mid-save leaves the previous save intact. A damaged file, or one from
   a newer format, stops the server from starting rather than being skipped and
-  then overwritten.
+  then overwritten. Saves from older formats still load (region files from before
+  blocks had an axis are read with every log upright).
 
 `SaveTest` saves and reloads a world in a temporary directory. It checks that
 edits come back, that chunks are saved when they unload, light under a saved roof,
@@ -140,28 +148,35 @@ that damaged files are refused, and that a rejoining player is put back in place
 | WASD | Walk (or fly) |
 | Space | Jump (swim: up; fly: up) |
 | Shift | Sprint (fly: faster) |
-| F | Toggle fly mode (no collision) |
-| Q / E | Fly down / up |
-| Mouse | Look |
+| Q / E | In no-clip (`/noclip`, operators): fly down / up |
+| Mouse | Look (a crosshair marks the middle of the screen) |
 | Left click | Break block |
 | Right click | Place the selected block |
-| 1-9, 0 / mouse wheel | Select the block to place (shown in the hotbar at the bottom; with Tab you can also click a slot) |
-| L (hold) | Laser: carve a tunnel along the view ray |
+| V / Shift+V | Placement height for building blocks: full, 3/4, 1/2, 1/4 (and back) |
+| 1-9, 0 / mouse wheel | Select the hotbar slot to place from (with Tab you can also click a slot) |
+| I | Inventory: pick which block goes in each hotbar slot |
+| C / Shift+C | Chisel: lower / raise the quarter of the block you're looking at by a quarter |
+| L (hold) | Laser, operators only: carve a tunnel along the view ray |
 | R | Reload shaders and block textures, rebuild all chunk meshes |
 | Tab | Toggle mouse capture |
 | F1 | Toggle wireframe |
 | F2 | Toggle debug window |
 | F3 | Toggle ambient occlusion |
 | F12 | Save a screenshot (`screenshot-<date>-<time>.png` in the working directory) |
-| N | Toggle day / night |
-| Esc | Quit |
+| N | Skip to the next dusk (by day) or dawn (at night), for everyone on the server |
+| T / Enter | Open chat (Enter sends, Esc closes) |
+| / | Open chat with a command started |
+| Esc | Quit (or close the chat) |
 
 ## World generation
 
 `TerrainGenerator` builds each chunk independently and deterministically:
 
 1. **Surface:** a heightmap from 8 octaves of Perlin noise, snapped to eighths of
-   a block. Each column gets a sloped grass block on top, then dirt, then stone.
+   a block, plus mountain ranges, with swamps sunk to sea level (below). Each column
+   gets a sloped block on top from its biome (below): grass, dry or lush grass, snowy
+   grass or desert sand over dirt or sand; beaches by the sea, bare rock high up and on
+   steep slopes, and snow on the peaks; stone underneath.
 2. **Caves** (`Caves.cpp`): winding tunnels where two 3D noise fields are both
    near zero, plus large caverns more than 24 blocks down. Tunnels that reach
    the surface form entrances. Noise is sampled every 4 blocks and interpolated.
@@ -170,9 +185,105 @@ that damaged files are refused, and that a rejoining player is put back in place
    of features rooted in neighbouring columns.
 4. **Plants:** tall grass and flowers, drawn as crossed sprites that sit on the
    sloped surface. Breaking the block under a plant removes it.
+5. **Dungeons** (`Dungeons.cpp`): see below.
 
 Open space below sea level (row -3) becomes seas and lakes, with sandy beaches
 and sea floors. Caves never open under water, so they stay dry.
+
+### Biomes
+
+Every column has a climate: a temperature and a humidity, each from a very
+large-scale noise field (so a biome spans hundreds of blocks), with temperature
+falling the higher the ground. Where it falls between the two decides its biome:
+
+| | dry | | wet |
+| --- | --- | --- | --- |
+| **freezing** | Tundra | | Snowy taiga |
+| **cold** | Taiga | Taiga | Taiga |
+| **temperate** | Plains | Forest | Swamp |
+| **hot** | Desert | Savanna | Jungle |
+
+- **Plains:** open grass full of flowers, a tree here and there.
+- **Forest:** oak woods. Spawn is in one.
+- **Swamp:** lowland sunk to sea level, so the sea fills its hollows with shallow standing
+  water among lush grass and muddy beds.
+- **Desert:** sand, cacti, dead bushes, no trees.
+- **Savanna:** dry yellow grass with flat-topped trees far apart.
+- **Jungle:** lush grass, thick undergrowth, and tall big-crowned trees close together.
+- **Taiga:** pine forest.
+- **Snowy taiga, Tundra:** snow-covered ground (dense pines, or open with the odd stunted
+  one), only dead bushes poking through, and seas frozen over (their top layer is ice,
+  with water underneath).
+
+Mountains climb out of any of them into bare rock and snow (below). Biome borders
+change gradually, since the climate does. The debug window (F2) shows the biome where
+you stand, with its temperature and humidity. New blocks: dry, lush and snowy grass,
+pine needles, cactus, dead bush and ice (in the inventory). `BiomeTest` checks that
+every biome turns up with a fair share, spawn is temperate, climate changes smoothly
+and cools with height, and, deep inside each biome, that it has its ground and plants
+(cacti but no trees in deserts, pines in taigas, many more trees in jungles than on
+plains), frozen seas have ice over water, swamps have shallow water, and nothing
+floats. Chunks generate in about 0.2 ms.
+
+### Mountains
+
+Ranges rise out of the hills in about a fifth of the world: a very large-scale noise
+field decides where they run, and ridges inside them (rounded at the crests, with
+smaller ridges on their flanks) climb up to about 90 blocks above the hills, so peaks
+reach around 100. Above row 44 the ground is bare rock, with nothing growing (trees,
+bushes, grass and flowers stay below that tree line); above row 70 it's snow. The
+slopes are kept mostly under 45 degrees, since each column's surface is one sloped
+block (about 1% of mountain columns are steeper, and show a step). The nearest big
+range to spawn is about 700 blocks out, towards +x +z.
+
+### Dungeons
+
+Deep underground (their floors 43 to 52 blocks down, well below any sea floor) lie
+dungeons of brick rooms joined by corridors. The world is divided into 128 x 128
+regions and about three in ten hold one: 7 to 12 rooms on one level, linked by a
+spanning tree of 3-wide corridors plus a few extra loops, with lamps set into the
+corridor walls. Each dungeon's first room is its entrance: a spiral staircase climbs
+a shaft from it to the surface, marked by a ring of bricks on the ground (unless the
+entrance is under the sea or a beach). Otherwise you'll have to dig.
+
+The other rooms work through the room types in a shuffled order, so a dungeon only
+repeats one once it has used them all:
+
+| Room | |
+| --- | --- |
+| Pillared hall | a tall room with rows of pillars crowned with lamps |
+| Archive | shelves (logs) along the walls, a table under a hanging lamp |
+| Pool | a sunken pool of water |
+| Overgrown garden | grass floor, leafy bushes, tall grass and flowers, mossy walls |
+| Crypt | a low room with rows of stone tombs |
+| Vault | clean bricks, lamps set into the floor around a lit pedestal (ringed by a trap) |
+| Collapsed room | heaps of stone, dirt and sand |
+| Cistern | a deep pit of water with pillars, a ledge all round |
+| Pump room | a working pump lifting water from a sunken basin up a pipe into a raised tub |
+| Shrine | a lamp on a plinth, pews facing it |
+| Flood chamber | a pressure plate in the floor opens sluice gates in the ceiling, and the reservoir above pours in |
+
+**Traps.** Some long corridors have a spike pit across them: either hidden under
+crumbling bricks (three long; they're cracked, if you look) or open (two long, so you
+can jump it). A vault's lit pedestal is ringed by crumbling floor over spikes. Fall in
+and there's no climbing out. Flood chambers flood when you step on their plate.
+
+Layouts come from a seed hashed from the region's coordinates, and everything a
+dungeon places is a function of world position, so each chunk stamps just its own
+part and neighbouring chunks agree at their borders. Stamping runs in three passes:
+brick shells, then the open space (so a corridor opens a doorway where it meets a
+room), then furnishings, which never read neighbouring blocks (they might be in a
+chunk that isn't generated). Raised furniture keeps out of corridors (one can run
+straight through a room), water sits in sealed basins, and a pump room's pump starts
+working once a player is near. It costs little: chunks still generate in about
+0.15 ms. New blocks: stone bricks and mossy bricks (on the hotbar after 0; pick them
+with the mouse wheel). Empty worlds (`--empty-world`) have no dungeons.
+
+`DungeonTest` lays out 225 regions and generates 16 dungeons chunk by chunk. It checks
+that every room type turns up, layouts and chunks are deterministic, every room can
+be reached from the entrance across chunk borders, shafts reach the surface, water
+can't spill, rooms stay deep, gardens and archives are furnished all over regardless
+of chunk borders, and pump rooms are wired up.
 
 ## Water
 
@@ -219,6 +330,25 @@ the water simulation distance, like flowing water, and keep running after a save
 and reload. `PumpTest` checks the rate, that water is conserved, that pumps stop
 when the pipe is cut or the outlet is full, and that saved pumps carry on.
 
+**Water on water** (a lake's top layer, or a pool topped up) comes right down to the
+water below wherever it meets an empty column over that water, so a thin layer thins
+out to nothing at its edges instead of ending in a little wall. As a lake drains, its
+last layer shrinks smoothly rather than breaking into patches.
+
+**Thin water**: while water moves, its drawn height follows the real volume in steps
+of an eighth of a block (which hides the jitter of flowing water), but below an eighth
+it follows exactly, and water lying on more water (the top layer of a lake or pool)
+is sent to clients down to a 32nd. So a draining lake's last layer thins out evenly
+instead of holding at an eighth and vanishing cell by cell. A thin film on dry ground
+still ignores changes under an eighth, so puddle edges don't flicker.
+
+**Rain** tops up bodies of water. While it rains, the same random ticks that dry up
+puddles look for water: when one lands in a body of water, the top water cell of
+that column gets a 16th of a block more, if it's open to the sky, isn't full and has
+water under it. So rain refills drained lakes and pools to the level they had, deep
+water (hit more often) fastest, and never puts water in a dry cell, above a full one,
+or in a puddle on dry ground. Puddles don't evaporate while it rains.
+
 **Evaporation**: shallow puddles that have stopped flowing dry up. Every water tick,
 3 random cells of each chunk near a player are looked at (random ticks), and a resting
 puddle among them disappears: a cell with at most a quarter of a block of water that
@@ -246,6 +376,225 @@ surface and walk up and down hills smoothly. You can step up ledges up to 0.6
 blocks; anything taller needs a jump (about 1.25 blocks high). Physics runs at
 a fixed 120 Hz. Until the chunks under you have loaded, you wait in place. Fly
 mode (F) moves freely through blocks like the old free camera.
+
+## Block shapes
+
+A block can be shaped by its four quarters, each 0 to 8 eighths high (the terrain's
+sloped tops are shaped this way). How a shape is drawn, and stood on, depends on the
+block: natural ground (grass, dirt, sand, stone, snow) slopes smoothly between its
+four corners, while anything built (bricks, logs, lamps and the rest) is four
+quarter-columns, each as high as its corner, like small steps.
+
+Shape blocks yourself with the chisel: **C** lowers the quarter you're looking at by
+a quarter of a block, **Shift+C** raises it again. Raising every quarter to the top
+makes the block whole; lowering them all removes it. Machines (pumps, pipes, sluice
+gates, pressure plates), water and plants can't be chiselled. Shaped blocks hold
+water above their quarters like the terrain's slopes do.
+
+Where a slope climbs past the top of its block (its corner clipped at the block's
+top), the column next to it holds the rest of the slope in the row above. The mesher
+draws the clipped corner up to meet that slope, so the terrain has no notches where a
+slope crosses from one row into the next. (Walking still uses each block's own shape.)
+
+The outline around the block you're looking at follows its shape (a slope's corners
+and fold, a stepped block's quarters, a pressure plate's slab), and blocks in front of
+it hide it. Aiming follows shapes too: looking over a slope or past a quarter-column
+targets the block behind it, so you can break and build through the open part of a
+partial block.
+
+`ShapeTest` checks standing heights and water for both styles, aiming past and into
+partial blocks, the outlines' shapes, chiselling (down to
+nothing and back to whole), that the mesher draws quarter-columns, joins slopes
+across rows and tapers thin water to nothing with no walls, chiselling over the
+network, and the mountains: high snowy peaks, bare rock with nothing growing above the
+tree line, gentle enough slopes, and that a player spawning on a peak lands on top.
+
+### Logs
+
+Logs lie along the face you place them against. Against the top or bottom of a
+block they stand upright. Against a side they lie on their side, pointing away from
+that face. The rings of the end grain show on their two ends, and the bark's grain
+runs along the log. That holds for log slabs (V) too, and chiselling keeps the
+direction. Carving into a log shows the wood inside (`log_inside.png`). A
+quarter's top cut below the log's, and the step from it up to a taller quarter,
+show light wood with its grain along the log. The outside keeps its bark and end
+grain. A log slab's top counts as cut too. The direction is part of the block (`Block::axis`), so it's sent to other
+players and saved with the world. `ShapeTest` checks placement, which texture each
+face gets, the direction of the bark, which carved faces show the inside wood,
+encoding, and that another player sees a sideways log.
+
+## Inventory
+
+The hotbar holds ten blocks (keys 1-9 and 0). Press I to open the inventory: every
+block you can place (in survival, the ones you have), in a grid. Click one to put it in the selected hotbar slot; pick
+the slot with the number keys or by clicking it. I or Esc closes it. Your hotbar is
+kept in `hotbar.txt` in the working directory, so it's the same next time.
+
+## Game modes
+
+There are two, and each player is in one:
+
+- **Survival** (the default): you build with what you collect. Breaking a block
+  gives you its worth in that block type, and placing one costs it. Traps hurt, and
+  you have hearts.
+- **Creative**: every block, as many as you like, and nothing hurts you.
+
+A full block is worth 64 units. Shaped blocks are worth their volume: a half slab is
+32, a quarter slab 16, and a chiselled block whatever's left of it (a slope its mean
+height). Press V to pick the height you place building blocks at (full, 3/4, 1/2,
+1/4; Shift+V goes back up). The hotbar label shows the height, what it costs and how
+much you have. Counts are shown in blocks, so 32 units reads as 0.5. Chiselling a
+block down gives back what it takes off, and building it up costs the same.
+Plants, pumps, pipes, sluices and pressure plates can't be shaped, so they're
+always worth a whole block. Water can't be collected, so in survival it can't be
+placed either; use pumps to move it. The laser gives nothing.
+
+In survival the inventory (I) lists only the blocks you have, with counts on them
+and on the hotbar slots; a slot you've run out of is dimmed. The server keeps
+everyone's mode and resources and saves them with the player. It refuses an edit you
+can't afford, so a modified client gets nothing for free.
+
+A new world starts players in survival, or in creative with `--empty-world`, since
+that world is for testing. Choose with `--mode creative|survival` (for `VoxelEngine`
+and `VoxelServer`). The world remembers the mode it was made with. Operators change a
+player's mode with `/gamemode <creative|survival> [player]`, and hand out blocks
+with `/give <block> [count] [player]`, for example `/give stone_brick 32`.
+
+`ModeTest` checks:
+
+- what blocks are worth;
+- that breaking gives and placing costs, at each height;
+- that what you can't afford isn't placed;
+- that chisel refunds and costs balance;
+- that spikes hurt in survival and not in creative;
+- that `/gamemode` and `/give` are for operators;
+- that modes and resources survive a restart.
+
+## Health and traps
+
+In survival you have ten hearts, shown above the hotbar (creative has none). The server keeps track of them, so traps
+work the same for everyone:
+
+- **Spikes** cost two hearts every half second you stand in them.
+- **Crumbling bricks** give way 0.4 seconds after you stand on them, and the collapse
+  spreads to the crumbling bricks touching them, so a whole pit cover falls in.
+- **Pressure plates** open every sluice gate within 8 blocks.
+
+The screen flashes red when you're hurt. Hearts come back one every 4 seconds once
+nothing has hurt you for 5. With none left, everyone hears how you died and you
+respawn at the spawn point with full health (and three seconds' grace). In no-clip
+nothing can hurt you. All four blocks are in the inventory, for building traps of
+your own. `TrapTest` checks spikes, death and respawn, crumbling floors, pressure
+plates and sluice gates, and that no-clip and the laser are operators' only.
+
+## Breathing
+
+In survival you also need air. Ten bubbles appear above the right end of the hotbar
+whenever something is taking your breath, along with what it is:
+
+| Where | Your air | Once it's gone |
+| --- | --- | --- |
+| Head under water | drains, in 15 seconds | drowning: a heart a second |
+| Thin air, above height 300 (far above the highest peaks: build up to reach it) | settles at a level that falls with height: half at 350, none from 400 | half a heart every 1.5 s |
+| Stale air, below -100 (well under the dungeons) | the same going down: half at -150, none from -200 | half a heart every 1.5 s |
+
+Thin and stale air don't drain your air over time: they only limit how much you can
+hold, so you can stay at any height where there's some. Under water in thin air,
+you start from that lower level. Anywhere else your breath comes back in five seconds. As your air runs low the edges
+of the screen darken (blue under water), pulsing once it's gone. With half your air
+gone in thin or stale air you're short of breath and can't sprint. Everyone hears if
+you drown or suffocate, and you respawn with full air. In creative or no-clip nothing
+takes your breath.
+
+The server keeps the air meter, using the rules in `src/world/Breathing.h`.
+`BreathTest` checks those rules. It also uses a client that stays wherever it's put
+to check:
+
+- drowning, in a water-filled well;
+- thin air settling at its level at 345 and running out at 400;
+- fine air at -95 and stale air settling at -130;
+- recovery on the ground;
+- creative.
+
+## Chat and commands
+
+Press T (or Enter) to chat: Enter sends the line to everyone, Esc closes the box. New
+lines show in the bottom left for ten seconds, then fade; while the box is open, the
+last few stay. Join, leave and server messages are yellow, errors red, private
+messages purple.
+
+A line starting with `/` is a command (press `/` to start one). `/help` lists the
+ones you're allowed to use:
+
+| Command | Who | |
+| --- | --- | --- |
+| `/help`, `/list` | everyone | list the commands, who's online |
+| `/me <action>` | everyone | say what you're doing |
+| `/msg <player> <text>` | everyone | a private message (also `/tell`, `/w`) |
+| `/spawn` | everyone | back to the spawn point |
+| `/time`, `/weather`, `/ops` | everyone | show the time, the weather, the operators |
+| `/time <day\|noon\|dusk\|night\|midnight\|dawn\|HH:MM>` | operators | set the time (sunrise is 06:00) |
+| `/weather <clear\|rain\|auto>` | operators | set the weather |
+| `/tp <x> <y> <z>`, `/tp <player>`, `/tp <player> <x> <y> <z>` | operators | teleport; `~` means relative (`/tp ~ ~10 ~`) |
+| `/save` | operators | save the world now |
+| `/kick <player> [reason]` | operators | remove a player |
+| `/op <player>`, `/deop <player>` | operators | make or unmake an operator |
+| `/noclip [player]` | operators | fly through blocks, on or off (Space / E up, Q down) |
+| `/gamemode` | everyone | show your game mode |
+| `/gamemode <creative\|survival> [player]` | operators | change a game mode (also `/gm`, `c`/`s`) |
+| `/give <block> [count] [player]` | operators | give survival blocks (`count` in blocks, default 64) |
+| `/stop` | console | shut the server down |
+
+A dedicated server (`--server` or `VoxelServer`) also takes commands typed into its
+console, with or without the slash; `stop` shuts it down cleanly.
+
+**Permissions.** Players can chat and use the harmless commands; operators can also
+change the time and weather, teleport, save, kick, make other operators, use no-clip
+(`/noclip`) and the laser (L). The server enforces it: it ignores a player's laser and
+flying unless they're allowed. The server
+console is always an operator. In singleplayer you are too: the game makes its local
+player the server's owner, who is always an operator and can't be removed. On a
+dedicated server, make the first operator from the console (`op Alice`) or with
+`--op Alice` on the command line; operators can then use `/op` themselves. The list is
+kept in `ops.txt` in the world folder, one name per line (case doesn't matter), which
+you can also edit while the server is stopped.
+
+Players are only known by the name they join with (`--name`), and nothing checks it,
+so anyone who knows an operator's name can join as them. The permissions keep players
+from changing things by accident or casually, not from someone set on impersonating an
+operator, so only host for people you trust.
+
+`ChatTest` checks chat, every command, permissions (including `ops.txt` surviving a
+restart and the owner) and the console, with a server and two clients.
+
+## Day, night and weather
+
+The server runs the clock and the weather and sends both to every player 20 times a
+second, so everyone sees the same sky. A day lasts 20 minutes: the sun rises in the
+east, crosses the sky (lighting the terrain, the water's glint and players from its
+current direction), and the sky turns warm around sunrise and sunset and dark at
+night. The time of day is saved with the world.
+
+Now and then it rains: clear spells last 10 to 25 minutes and showers 2 to 5, fading
+in and out over ten seconds. Rain greys and dims the sky, falls as streaks around
+the player (not under a roof or underwater), and tops up lakes and pools (see
+[Water](#water)).
+
+`--day-length SECONDS` and `--weather clear|rain|auto` change these, on `VoxelEngine`
+(singleplayer or `--server`) and `VoxelServer`. `WeatherTest` checks thin water, that
+rain fills a drained pool to the brim and no further while leaving full, covered and
+dry-ground water alone, and that the clock runs, saves, resumes and can be skipped.
+
+## Fog
+
+Toward the edge of the render distance, everything fades into the sky behind it.
+Terrain, water and other players all fade, from a little over half the distance
+(105 blocks at the default 12 chunks) to the edge itself (192 blocks). The fog
+colour is the skybox's colour in that direction, with the same time-of-day tint,
+night dimming and rain grey. So the world's edge, and chunks still loading out
+there, blend into the sky instead of ending in a hard line. The fog is measured
+horizontally, matching how chunks are loaded. It's `ApplyFog` in `main.frag`,
+`water.frag` and `player.frag`, set up by `Renderer::SetFogUniforms`.
 
 ## Lighting
 
@@ -294,13 +643,15 @@ src/
   app/      Application (window, input, main loop), Camera, Player (movement and physics)
   client/   Client (connection), ClientWorld (received chunks, mesh worker),
             ClientChunk (meshes and GL buffers), ChunkMesher
-  server/   Server (clients, streaming, validation), ServerWorld (chunk loading,
+  server/   Server (clients, streaming, validation), ServerCommands (chat and
+            commands), ServerWorld (chunk loading,
             generation and light worker), Water, WorldStorage (saving),
             main.cpp (VoxelServer)
   net/      Protocol (messages, RLE chunk planes), Transport (ENet wrapper)
-  render/   Renderer (frame passes, skybox, post effect), PlayerModels, Shader,
+  render/   Renderer (frame passes, skybox, post effect), Rain, PlayerModels, Shader,
             Textures, DebugDraw
   world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
-            Features, Noise, Lighting, Collision, Raycast
-tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest
+            Features, Dungeons, Noise, Lighting, Collision, Raycast
+tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
+            ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest
 ```

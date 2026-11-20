@@ -1,8 +1,11 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -11,8 +14,11 @@
 
 #include <glm/glm.hpp>
 
+#include <cmath>
+
 #include "net/Protocol.h"
 #include "net/Transport.h"
+#include "world/Breathing.h"
 #include "world/Coords.h"
 #include "world/TerrainGenerator.h"
 
@@ -37,11 +43,48 @@ class WorldStorage;
 // With a world directory, the world is saved there (see WorldStorage): edited chunks,
 // and each player's position by name, so rejoining puts them back where they left.
 // It autosaves every `autosaveSeconds` and saves when the server stops.
+//
+// The server also runs the clock and the weather: a day lasts `dayLengthSeconds`, and
+// rain comes now and then (clear spells of 10-25 minutes, showers of 2-5), fading in
+// and out over ten seconds. Both go to every client in the player snapshot; rain also
+// tops up bodies of water (WaterSimulation::SetRaining).
+//
+// Chat: a player's line goes to everyone; a line starting with '/' is a command (see
+// ServerCommands.cpp; /help lists them). Commands can also be typed into a dedicated
+// server's console (QueueConsoleCommand).
+//
+// Game modes: in creative, players build with anything and nothing hurts them; in
+// survival, every block costs resources (units of its type, see Block::ResourceUnits)
+// that players collect by breaking blocks, and traps hurt. The server keeps everyone's
+// mode and resources (saved with the player) and refuses what they can't afford.
+//
+// Health and traps (UpdateTraps): players have kMaxHealth half hearts. Standing in
+// spikes hurts; crumbling bricks give way soon after someone stands on them (and the
+// collapse spreads to crumbling bricks touching them); a pressure plate opens every
+// sluice gate within kSluiceReach. At no health a player respawns at the spawn point.
+// Health comes back slowly once nothing has hurt them for a while. Players in no-clip
+// set off nothing and can't be hurt. Players also need air (UpdateBreath): it runs
+// out under water, and slowly far up (above 300) and deep underground (below -100).
+//
+// Permissions: players can chat and use the harmless commands; operators can also
+// change the world's time and weather, teleport, save, kick and make or unmake other
+// operators. The console is always an operator, and so is `ownerName` (singleplayer's
+// host). The operators are kept in ops.txt in the world directory, one name per line
+// (case doesn't matter). Players are only known by the name they join with, so this
+// stops casual misuse, not someone joining under an operator's name.
 class Server
 {
 public:
     static constexpr int kTickRate = 20;
     static constexpr size_t kMaxClients = 16;
+
+    static constexpr int kMaxHealth = 20;           // half hearts
+    static constexpr int kSpikeDamage = 4;          // two hearts...
+    static constexpr double kSpikeInterval = 0.5;   // ...every half second
+    static constexpr double kCrumbleDelay = 0.4;    // after first being stood on
+    static constexpr double kCrumbleSpread = 0.12;  // to each crumbling brick touching it
+    static constexpr int kSluiceReach = 8;          // blocks (per axis) a plate reaches
+    static constexpr double kRegenDelay = 5.0, kRegenInterval = 4.0; // a heart per 4 s, 5 s after harm
 
     struct Options {
         std::string bindHost = "0.0.0.0";
@@ -55,6 +98,15 @@ public:
         int waterSimulationDistance = 6;
         // Generator for a new world (a saved world keeps the one it was created with).
         TerrainGenerator::Type worldType = TerrainGenerator::Type::Normal;
+        float dayLengthSeconds = 20.0f * 60.0f;
+        enum class Weather { Auto, Clear, Rain } weather = Weather::Auto;
+        // Always an operator (singleplayer: the local player). Empty: nobody.
+        std::string ownerName;
+        // Made operators at startup, besides those in ops.txt (--op NAME).
+        std::vector<std::string> operators;
+        // The game mode new players start in, for a new world (a saved world keeps its
+        // own; /gamemode changes a player's).
+        net::GameMode defaultMode = net::GameMode::Survival;
     };
 
     Server();
@@ -71,6 +123,10 @@ public:
     // Runs on a thread of its own (singleplayer's in-process server).
     void RunInBackground();
     void Stop();
+
+    // A line typed into the server's console, run on the server thread at the next tick
+    // as a command (with or without the leading '/'). Any thread.
+    void QueueConsoleCommand(const std::string& line);
 
 private:
     struct ClientState {
@@ -94,6 +150,23 @@ private:
         bool allSent = false; // every chunk in range has been sent (until the centre moves)
 
         bool hasState = false; // has sent a valid PlayerState since joining
+        bool noclip = false;   // allowed to fly through blocks (/noclip)
+
+        net::GameMode mode = net::GameMode::Survival;
+        std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{}; // units held (survival)
+
+        int health = kMaxHealth;
+        int sentHealth = -1;          // last health the client was told
+        double lastHurt = -1000.0;    // when anything last hurt them
+        double nextSpikeHit = 0.0;    // spikes hurt at most this often
+        double nextRegen = 0.0;
+        double invulnerableUntil = 0.0; // just respawned
+        // Breath (UpdateBreath): air left, what's taking it, and what the client was told.
+        float air = Breathing::kMaxAir;
+        Breathing::Cause airCause = Breathing::Cause::None;
+        int sentAir = -1;
+        Breathing::Cause sentAirCause = Breathing::Cause::None;
+        double nextBreathHit = 0.0;
 
         // Chunks the client has, with the version of the light it has for each.
         std::unordered_map<glm::ivec3, uint32_t, Coords::IVec3Hash> sent;
@@ -109,8 +182,52 @@ private:
     void HandleHello(ClientState& client, const net::Hello& hello);
     void HandlePlayerState(ClientState& client, const net::PlayerState& state);
     void HandleBreak(ClientState& client, const glm::ivec3& pos);
-    void HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType type);
+    void HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType type, int height, int faceAxis);
+    void HandleChisel(ClientState& client, const net::EditChisel& chisel);
     void HandleCarve(ClientState& client, const net::EditCarve& carve);
+    void HandleSkipTime(ClientState& client);
+    void HandleChat(ClientState& client, const std::string& text);
+
+    // Commands (ServerCommands.cpp). `sender` is null for the console; `reply` answers
+    // whoever ran it.
+    using Reply = std::function<void(net::ChatMessage::Kind, const std::string&)>;
+    void RunCommand(const std::string& line, ClientState* sender, const Reply& reply);
+    void RunConsoleCommands();
+    // Sends a line to one client, or to everyone (and the log).
+    void SendChat(ClientState& client, net::ChatMessage::Kind kind, const std::string& text);
+    void Broadcast(net::ChatMessage::Kind kind, const std::string& text);
+    ClientState* FindPlayer(const std::string& name);
+    // Operators (names compared without case). `sender` null means the console.
+    bool IsOperator(const ClientState* sender) const;
+    bool IsOperatorName(const std::string& name) const;
+    // Adds or removes a name; returns false if nothing changed. Saves ops.txt.
+    bool SetOperator(const std::string& name, bool op);
+    void LoadOperators();
+    void SaveOperators() const;
+    // Moves a player (they're told with a correction, like a rejected move).
+    void Teleport(ClientState& client, const glm::vec3& feet);
+    void SetTimeOfDay(double t) { timeOfDay = t - std::floor(t); }
+    // Tells a client what it may do (after joining, /op, /deop, /noclip).
+    void SendAbilities(ClientState& client);
+    // Survival bookkeeping: tells the client its mode / what it holds.
+    void SendMode(ClientState& client);
+    void SendResources(ClientState& client);
+    static bool Creative(const ClientState& client) { return client.mode == net::GameMode::Creative; }
+    // Just above the ground at the spawn column (respawning, /spawn): mountains may be
+    // anywhere, so it's worked out from the terrain.
+    glm::vec3 SpawnPoint() const;
+
+    // Traps and health, every tick.
+    void UpdateTraps();
+    // A tick of a player's breathing: drains or refills their air, and hurts them
+    // once it has run out (see world/Breathing.h).
+    void UpdateBreath(ClientState& client, float dt);
+    void Hurt(ClientState& client, int amount, const std::string& deathMessage);
+    void SendHealth(ClientState& client, bool hurt);
+    // A pressure plate at `plate` was stepped on: opens the sluice gates near it.
+    void TriggerPlate(ClientState& client, const glm::ivec3& plate);
+    // Advances the clock and the weather by one tick.
+    void UpdateSky();
     bool InReach(const ClientState& client, const glm::ivec3& pos, float reach) const;
     // Re-sends the authoritative block to the client (after a refused edit).
     void Echo(ClientState& client, const glm::ivec3& pos);
@@ -133,6 +250,14 @@ private:
     std::unique_ptr<WorldStorage> storage; // declared before `world`, which uses it
     std::unique_ptr<ServerWorld> world;
     double lastSaveTime = 0.0;
+
+    double timeOfDay = 0.05;     // 0..1, see net::PlayerSnapshot
+    net::GameMode defaultMode = net::GameMode::Survival; // new players' (from the save, or the options)
+    Options::Weather weatherMode = Options::Weather::Auto; // starts as options.weather; /weather changes it
+    bool raining = false;
+    float rainLevel = 0.0f;      // 0..1, fades toward `raining`
+    double weatherTimer = 0.0;   // seconds until the weather changes (Auto)
+    uint32_t weatherSeed = 0x9E3779B9u;
     std::unordered_map<net::PeerId, ClientState> clients;
     uint16_t nextPlayerId = 1;
     uint32_t tickCount = 0;
@@ -142,6 +267,12 @@ private:
     std::unique_ptr<net::ChunkBlocks> blockScratch;
     std::unique_ptr<net::ChunkLight> lightScratch;
     std::vector<glm::ivec3> loadOffsets;                 // nearest first
+
+    std::unordered_set<std::string> operators; // lower case
+    std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> crumbling;   // crumbling bricks about to fall, and when
+    std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> plateReady;  // plates on cooldown until then
+    std::mutex consoleMutex;
+    std::vector<std::string> consoleQueue;
 
     std::atomic<bool> running{false};
     std::thread thread;

@@ -14,6 +14,7 @@ class Client;
 class ClientWorld;
 class Renderer;
 class Server;
+struct FrameParams;
 
 // How the game connects: to an in-process server (singleplayer, the default) or to a
 // server elsewhere. Either way the game is a network client of that server.
@@ -25,6 +26,9 @@ struct ClientOptions {
     std::string worldDirectory = "saves/singleplayer";
     int waterSimulationDistance = 6; // singleplayer's local server
     bool emptyWorld = false;         // singleplayer: a new world is a flat, empty plain
+    float dayLengthSeconds = 1200.0f; // singleplayer's local server
+    int weather = 0;                  // singleplayer: Server::Options::Weather (0 auto)
+    int mode = -1;                    // singleplayer: a new world's net::GameMode (-1: survival, creative if empty)
 };
 
 class Application
@@ -45,11 +49,28 @@ private:
     void DrawHotbar();
     BlockType SelectedBlock() const;
     void SelectSlot(int slot);
+    // Inventory (I): pick which block goes in each hotbar slot; kept in hotbar.txt.
+    void DrawInventory();
+    // C / Shift+C: lower / raise the quarter of the block in view.
+    void ChiselTarget(bool raise);
+    void SetInventoryOpen(bool open);
+    void LoadHotbar();
+    void SaveHotbar() const;
 
     void HandleContinuousInput(float deltaTime);
     void UpdateNetwork();
+    // Sun direction and brightness, sky colour and rain for this frame, from the
+    // server's time of day and weather.
+    void UpdateSky(float deltaTime, FrameParams& params);
     void DrawDebugWindow(float deltaTime);
     void DrawStatus();
+    // The chat log (bottom left) and, while typing, the input line.
+    void DrawChat();
+    // Hearts above the hotbar, and a red flash when hurt.
+    void DrawHealth();
+    // A small cross in the middle of the screen while aiming.
+    void DrawCrosshair();
+    void OpenChat(char openedWith);
 
     void OnKey(int key, int action);
     void OnMouseButton(int button, int action);
@@ -78,8 +99,20 @@ private:
     bool captureCursor = true;
     bool wireframe = false;
     bool ambientOcclusion = true;
-    float sunBrightness = 1.0f;
-    int selectedSlot = 0; // index into the hotbar (kPlaceableBlocks)
+    // Chat: open while typing a line (T, / or Enter opens it).
+    bool chatOpen = false;
+    char chatInput[260] = {};
+    char chatOpenedWith = 0; // the key that opened it ('t', '/' or 0), see DrawChat
+    int chatOpenFrames = 0;
+    bool sheltered = false; // something overhead: no rain falls here
+    float rainHere = 0.0f;  // rain drawn around the camera, eased toward the weather
+    static constexpr int kHotbarSlots = 10; // keys 1-9 and 0
+    std::array<BlockType, kHotbarSlots> hotbar = { BlockType::DIRT, BlockType::STONE, BlockType::GRASS, BlockType::LAMP, BlockType::LOG,
+                                                   BlockType::LEAVES, BlockType::SAND, BlockType::WATER, BlockType::STONE_BRICK, BlockType::PUMP };
+    int selectedSlot = 0; // index into the hotbar
+    int placeHeight = 8;  // eighths: how tall shapeable blocks are placed (V / Shift+V)
+    bool inventoryOpen = false;
+    bool cursorBeforeInventory = true;
     double scrollAccumulator = 0.0;
     bool showDebug = false;
     bool vsync = true;

@@ -81,6 +81,42 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         world.SetViewDistance(m.renderDistance, m.verticalRenderDistance);
         break;
     }
+    case net::MsgType::Health: {
+        net::Health m;
+        if (!(ok = net::Decode(in, m))) break;
+        health = m.health;
+        maxHealth = m.max;
+        air = m.air;
+        maxAir = m.airMax;
+        airCause = static_cast<Breathing::Cause>(m.airCause);
+        if (m.hurt) lastHurt = Now();
+        break;
+    }
+    case net::MsgType::GameModeIs: {
+        net::GameModeIs m;
+        if ((ok = net::Decode(in, m))) mode = m.mode;
+        break;
+    }
+    case net::MsgType::Resources: {
+        net::Resources m;
+        if (!(ok = net::Decode(in, m))) break;
+        resources.fill(0);
+        for (const auto& [type, units] : m.held)
+            if (static_cast<size_t>(type) < resources.size()) resources[static_cast<size_t>(type)] = units;
+        break;
+    }
+    case net::MsgType::Abilities: {
+        net::Abilities m;
+        if ((ok = net::Decode(in, m))) abilities = m.flags;
+        break;
+    }
+    case net::MsgType::ChatMessage: {
+        net::ChatMessage m;
+        if (!(ok = net::Decode(in, m))) break;
+        chat.push_back({ m.kind, m.text, Now() });
+        while (chat.size() > kMaxChatLines) chat.pop_front();
+        break;
+    }
     case net::MsgType::Kick: {
         net::Kick m;
         if ((ok = net::Decode(in, m))) disconnectReason = "kicked: " + m.reason;
@@ -122,6 +158,8 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         if (!(ok = net::Decode(in, m))) break;
         if (m.tick <= lastSnapshotTick) break; // out of order
         lastSnapshotTick = m.tick;
+        timeOfDay = m.timeOfDay;
+        rain = m.rain / 255.0f;
         const double now = Now();
         std::unordered_map<uint16_t, std::deque<Sample>> next;
         for (const auto& p : m.players) {
@@ -175,14 +213,46 @@ void Client::BreakBlock(const glm::ivec3& pos) {
     if (world.GetBlock(pos.x, pos.y, pos.z, block)) {
         // Breaking a waterlogged block leaves its water behind (as the server does).
         world.SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
+        if (!IsCreative()) resources[static_cast<size_t>(block.type)] += static_cast<uint32_t>(block.ResourceUnits());
     }
     net.Send(net::kChannelReliable, net::Encode(net::EditBreak{ pos }));
 }
 
-void Client::PlaceBlock(const glm::ivec3& pos, BlockType type) {
-    if (!welcomed) return;
-    world.SetBlock(pos.x, pos.y, pos.z, type == BlockType::WATER ? Block::Water(Block::kMaxWaterVolume) : Block(type));
-    net.Send(net::kChannelReliable, net::Encode(net::EditPlace{ pos, type }));
+bool Client::CanAfford(BlockType type, int heightEighths) const {
+    if (IsCreative()) return true;
+    const Block placed = Block::Placed(type, heightEighths);
+    return !placed.IsLiquid() && GetResources(type) >= static_cast<uint32_t>(placed.ResourceUnits());
+}
+
+void Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths, int faceAxis) {
+    if (!welcomed || !CanAfford(type, heightEighths)) return;
+    const Block placed = Block::Placed(type, heightEighths, faceAxis);
+    world.SetBlock(pos.x, pos.y, pos.z, placed);
+    if (!IsCreative()) resources[static_cast<size_t>(type)] -= static_cast<uint32_t>(placed.ResourceUnits());
+    net.Send(net::kChannelReliable, net::Encode(net::EditPlace{ pos, type, static_cast<uint8_t>(heightEighths), static_cast<uint8_t>(faceAxis) }));
+}
+
+void Client::Chisel(const glm::ivec3& pos, int edge, bool raise) {
+    if (!welcomed || edge < 0 || edge > 3) return;
+    Block block;
+    if (!world.GetBlock(pos.x, pos.y, pos.z, block) || !block.CanChisel()) return;
+    const Block after = block.Chiselled(edge, raise ? 2 : -2);
+    if (!IsCreative()) {
+        uint32_t& held = resources[static_cast<size_t>(block.type)];
+        const int change = after.ResourceUnits() - block.ResourceUnits();
+        if (change > 0 && held < static_cast<uint32_t>(change)) return; // can't afford to build it up
+        held = static_cast<uint32_t>(static_cast<int64_t>(held) - change);
+    }
+    world.SetBlock(pos.x, pos.y, pos.z, after);
+    net.Send(net::kChannelReliable, net::Encode(net::EditChisel{ pos, static_cast<uint8_t>(edge), static_cast<uint8_t>(raise ? 1 : 0) }));
+}
+
+void Client::SendChat(const std::string& text) {
+    if (welcomed && !text.empty()) net.Send(net::kChannelReliable, net::Encode(net::ChatSend{ text.substr(0, net::kMaxChatLength) }));
+}
+
+void Client::SkipTime() {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::SkipTime{}));
 }
 
 void Client::Carve(const std::vector<glm::ivec3>& centers, int radius) {

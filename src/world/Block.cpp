@@ -1,5 +1,6 @@
 #include "world/Block.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 
@@ -239,11 +240,32 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* WATER */ {{ "water", "water", "water", "water", "water", "water" }},
     /* PUMP  */ {{ "pump_top", "pump_top", "pump_side", "pump_side", "pump_side", "pump_side" }},
     /* PIPE  */ {{ "pipe_end", "pipe_end", "pipe_end", "pipe_end", "pipe_end", "pipe_end" }},
+    /* STONE_BRICK */ {{ "stone_brick", "stone_brick", "stone_brick", "stone_brick", "stone_brick", "stone_brick" }},
+    /* MOSSY_BRICK */ {{ "mossy_brick", "mossy_brick", "mossy_brick", "mossy_brick", "mossy_brick", "mossy_brick" }},
+    /* SPIKES */ {{ "spikes", nullptr, nullptr, nullptr, nullptr, nullptr }},
+    /* CRUMBLING_BRICK */ {{ "cracked_brick", "cracked_brick", "cracked_brick", "cracked_brick", "cracked_brick", "cracked_brick" }},
+    /* PRESSURE_PLATE */ {{ "pressure_plate", "pressure_plate", "pressure_plate", "pressure_plate", "pressure_plate", "pressure_plate" }},
+    /* SLUICE */ {{ "sluice", "sluice", "sluice", "sluice", "sluice", "sluice" }},
+    /* SNOW  */ {{ "snow", "stone", "snow_side", "snow_side", "snow_side", "snow_side" }},
+    /* DRY_GRASS   */ {{ "dry_grass_top", "dirt", "dry_grass_side", "dry_grass_side", "dry_grass_side", "dry_grass_side" }},
+    /* LUSH_GRASS  */ {{ "lush_grass_top", "dirt", "lush_grass_side", "lush_grass_side", "lush_grass_side", "lush_grass_side" }},
+    /* SNOWY_GRASS */ {{ "snowy_grass_top", "dirt", "snowy_grass_side", "snowy_grass_side", "snowy_grass_side", "snowy_grass_side" }},
+    /* PINE_LEAVES */ {{ "pine_leaves", "pine_leaves", "pine_leaves", "pine_leaves", "pine_leaves", "pine_leaves" }},
+    /* CACTUS */ {{ "cactus_top", "cactus_top", "cactus_side", "cactus_side", "cactus_side", "cactus_side" }},
+    /* DEAD_BUSH */ {{ "dead_bush", nullptr, nullptr, nullptr, nullptr, nullptr }},
+    /* ICE   */ {{ "ice", "ice", "ice", "ice", "ice", "ice" }},
 };
+
+// What a block shows where it's been carved into (chiselled faces inside its cell),
+// for blocks whose inside differs from their outside: a log's wood under the bark.
+const char* CarvedTextureName(BlockType type) {
+    return type == BlockType::LOG ? "log_inside" : nullptr;
+}
 
 // Resolved atlas indices. Written on the main thread on (re)load, read by the
 // mesher on the worker thread, hence atomic.
 std::atomic<int> gBlockTextureIndices[kBlockTypeCount][6] = {};
+std::atomic<int> gCarvedTextureIndices[kBlockTypeCount] = {}; // -1: none
 
 } // namespace
 
@@ -253,7 +275,33 @@ void ResolveBlockTextures(const std::function<int(const std::string&)>& lookup) 
             const char* name = kBlockTextureNames[type].faces[face];
             gBlockTextureIndices[type][face] = name ? lookup(name) : 0;
         }
+        const char* carved = CarvedTextureName(static_cast<BlockType>(type));
+        gCarvedTextureIndices[type] = carved ? lookup(carved) : -1;
     }
+}
+
+namespace {
+constexpr const char* kBlockIds[kBlockTypeCount] = {
+    "air", "grass", "dirt", "stone", "lamp", "log", "leaves", "tall_grass", "flower_red", "flower_yellow", "sand", "water", "pump", "pipe",
+    "stone_brick", "mossy_brick", "spikes", "crumbling_brick", "pressure_plate", "sluice", "snow", "dry_grass", "lush_grass", "snowy_grass",
+    "pine_leaves", "cactus", "dead_bush", "ice",
+};
+} // namespace
+
+const char* BlockId(BlockType type) {
+    const int t = static_cast<int>(type);
+    return t >= 0 && t < kBlockTypeCount ? kBlockIds[t] : "?";
+}
+
+BlockType BlockFromId(const std::string& id) {
+    for (int t = 1; t < kBlockTypeCount; t++)
+        if (id == kBlockIds[t]) return static_cast<BlockType>(t);
+    return BlockType::COUNT;
+}
+
+int GetCarvedTexture(BlockType type) {
+    const int t = static_cast<int>(type);
+    return t > 0 && t < kBlockTypeCount ? gCarvedTextureIndices[t].load(std::memory_order_relaxed) : -1;
 }
 
 TextureData GetTextureData(BlockType type) {
@@ -265,8 +313,122 @@ TextureData GetTextureData(BlockType type) {
              i[4].load(std::memory_order_relaxed), i[5].load(std::memory_order_relaxed) };
 }
 
+namespace {
+
+// A log's face, given the axis it runs along (kFaceAxis terms): its ends (the faces
+// along its axis) show the end grain, the rest bark, turned so the grain runs along
+// the log. A carved face (`carved`, an atlas index; -1 if not) shows the wood inside
+// instead, its grain also along the log.
+void OrientGrain(VertexData* v, int n, Face face, int grain, const TextureData& textures, int carved = -1) {
+    const int f = static_cast<int>(face);
+    const bool end = kFaceAxis[f] == grain;
+    if (carved >= 0) {
+        for (int i = 0; i < n; i++) v[i].textureIndex = carved;
+        if (end) return; // cut across the grain
+    }
+    else if (end) {
+        const bool positive = kFaceOffsets[f][grain] > 0;
+        for (int i = 0; i < n; i++) v[i].textureIndex = positive ? textures.top : textures.bottom;
+        return;
+    }
+    else {
+        for (int i = 0; i < n; i++) v[i].textureIndex = textures.front;
+    }
+    // The axis the texture's v (its grain, on bark) runs along on this face.
+    int vAxis = -1;
+    for (int i = 0; i < n && vAxis < 0; i++)
+        for (int j = 0; j < n && vAxis < 0; j++) {
+            if (std::abs(v[i].tex.x - v[j].tex.x) > 1e-4f || std::abs(v[i].tex.y - v[j].tex.y) < 1e-4f) continue;
+            const glm::vec3 d = glm::abs(v[j].pos - v[i].pos);
+            vAxis = d.x >= d.y && d.x >= d.z ? 0 : d.y >= d.z ? 1 : 2;
+        }
+    if (vAxis >= 0 && vAxis != grain)
+        for (int i = 0; i < n; i++) std::swap(v[i].tex.x, v[i].tex.y);
+}
+
+} // namespace
+
+void Block::AddSteppedFaces(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading, bool outside) const {
+    const TextureData textures = GetTextureData(type);
+    const int f = static_cast<int>(face);
+    const int texture = face == Face::Top ? textures.top : face == Face::Bottom ? textures.bottom : face == Face::Right ? textures.right
+                      : face == Face::Left ? textures.left : face == Face::Back ? textures.back : textures.front;
+    const glm::vec3 normal(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]);
+    const glm::vec3 origin(x, y, z);
+    // Quarter heights in eighths, [qx][qz]: EdgeData's edge 2 is (0,0), 1 is (1,0), 0 is
+    // (0,1) and 3 is (1,1).
+    const int h[2][2] = { { edgeData.GetTopY(2), edgeData.GetTopY(0) }, { edgeData.GetTopY(1), edgeData.GetTopY(3) } };
+    const auto& tangents = kFaceTangents[kFaceAxis[f]];
+
+    // One rectangle, given its corners as seen from outside: a bottom left, b bottom
+    // right, c top left, d top right (in eighths, block-local).
+    // Faces inside the cell (a quarter's top below the block's, the step up to a taller
+    // quarter) are carved: some blocks show their inside there.
+    const int carvedTexture = GetCarvedTexture(type);
+    auto quad = [&](glm::vec3 a, glm::vec3 b, glm::vec3 c, glm::vec3 d, bool carved) {
+        const glm::vec3 corners[4] = { a, b, c, d };
+        VertexData v[4];
+        for (int i = 0; i < 4; i++) {
+            const glm::vec3 p = corners[i] / 8.0f;
+            // Texture coordinates follow the face, so quarters show their part of it.
+            glm::vec2 uv;
+            switch (face) {
+            case Face::Right: uv = { 1.0f - p.z, 1.0f - p.y }; break;
+            case Face::Left: uv = { p.z, 1.0f - p.y }; break;
+            case Face::Back: uv = { p.x, 1.0f - p.y }; break;
+            case Face::Front: uv = { 1.0f - p.x, 1.0f - p.y }; break;
+            default: uv = { p.x, p.z }; break;
+            }
+            v[i] = VertexData(origin + p, uv, texture, normal);
+            // Shade from the face's corner the vertex is nearest (quarters share the
+            // whole face's light and ambient occlusion).
+            auto high = [&](int axis) { return axis == 1 ? p.y > 0.5f : p[axis] > 0.5f; };
+            const int ia = high(tangents[0]), ib = high(tangents[1]);
+            v[i].ao = shading.ao[ia][ib];
+            v[i].light = shading.light[ia][ib];
+            v[i].sky = shading.sky[ia][ib];
+        }
+        const int inside = carved ? carvedTexture : -1;
+        if (axis != kUpright || inside >= 0) OrientGrain(v, 4, face, GrainAxis(), textures, inside);
+        // (The engine's front faces wind clockwise as seen from outside.)
+        for (const VertexData& p : { v[0], v[2], v[1], v[1], v[2], v[3] }) {
+            vertices.push_back(p.PackPosition());
+            vertices.push_back(p.PackShading());
+        }
+    };
+
+    for (int qx = 0; qx < 2; qx++)
+        for (int qz = 0; qz < 2; qz++) {
+            const int top = h[qx][qz];
+            if (top == 0) continue;
+            const float x0 = qx * 4.0f, x1 = x0 + 4.0f, z0 = qz * 4.0f, z1 = z0 + 4.0f, t = static_cast<float>(top);
+            switch (face) {
+            case Face::Top: quad({ x0, t, z1 }, { x1, t, z1 }, { x0, t, z0 }, { x1, t, z0 }, top < 8); break;
+            case Face::Bottom: if (outside) quad({ x0, 0, z0 }, { x1, 0, z0 }, { x0, 0, z1 }, { x1, 0, z1 }, false); break;
+            default: {
+                // The side of this quarter facing that way: on the block's outside, all
+                // of it; inside, only what rises above the quarter next to it.
+                const int dx = kFaceOffsets[f][0], dz = kFaceOffsets[f][2];
+                const int nx = qx + dx, nz = qz + dz;
+                const bool atEdge = nx < 0 || nx > 1 || nz < 0 || nz > 1;
+                if (atEdge && !outside) break;
+                const float from = atEdge ? 0.0f : static_cast<float>(h[nx][nz]);
+                if (from >= t) break;
+                switch (face) {
+                // Sides on the block's outside are its own (bark); inside, carved.
+                case Face::Right: quad({ x1, from, z1 }, { x1, from, z0 }, { x1, t, z1 }, { x1, t, z0 }, !atEdge); break;
+                case Face::Left: quad({ x0, from, z0 }, { x0, from, z1 }, { x0, t, z0 }, { x0, t, z1 }, !atEdge); break;
+                case Face::Back: quad({ x0, from, z1 }, { x1, from, z1 }, { x0, t, z1 }, { x1, t, z1 }, !atEdge); break;
+                default: quad({ x1, from, z0 }, { x0, from, z0 }, { x1, t, z0 }, { x0, t, z0 }, !atEdge); break; // Front
+                }
+            }
+            }
+        }
+}
+
 void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading) const {
     auto v = GetFaceVertices(face, edgeData, x, y, z, GetTextureData(type));
+    if (axis != kUpright) OrientGrain(v.data(), static_cast<int>(v.size()), face, GrainAxis(), GetTextureData(type));
 
     // Work out which face corner each vertex sits on. Horizontal coordinates are
     // always 0 or 1 within the block; vertical ones may be partial heights, so any
@@ -302,10 +464,16 @@ void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, i
 
 uint8_t Block::WaterFloor() const {
     if (!IsPartial()) return 0;
+    constexpr int unitsPerEighth = kMaxWaterVolume / 8;
+    if (IsStepped()) {
+        // Four quarters: their mean height.
+        int sum = 0;
+        for (int e = 0; e < 4; e++) sum += edgeData.GetTopY(e);
+        return static_cast<uint8_t>((sum * unitsPerEighth + 2) / 4);
+    }
     // Mean height of the two top triangles (see SurfaceHeight), in units.
     const int c00 = edgeData.GetTopY(2), c10 = edgeData.GetTopY(1), c01 = edgeData.GetTopY(0), c11 = edgeData.GetTopY(3);
     const int sixths = c00 + c11 + 2 * (c10 + c01);           // 6 * mean, in eighths
-    constexpr int unitsPerEighth = kMaxWaterVolume / 8;
     return static_cast<uint8_t>((sixths * unitsPerEighth + 3) / 6);
 }
 
@@ -319,6 +487,7 @@ float Block::SurfaceHeight(float fx, float fz) const {
     const float c10 = edgeData.GetTopY(1) / 8.0f;
     const float c01 = edgeData.GetTopY(0) / 8.0f;
     const float c11 = edgeData.GetTopY(3) / 8.0f;
+    if (IsStepped()) return fx < 0.5f ? (fz < 0.5f ? c00 : c01) : (fz < 0.5f ? c10 : c11); // the quarter's height
 
     if (fx + fz <= 1.0f) return c00 + (c10 - c00) * fx + (c01 - c00) * fz;
     return c11 + (c01 - c11) * (1.0f - fx) + (c10 - c11) * (1.0f - fz);
@@ -353,6 +522,56 @@ void Block::AddPlantVertices(std::vector<uint32_t>& vertices, int x, int y, int 
     }
 }
 
+std::vector<glm::vec3> Block::OutlineSegments() const {
+    std::vector<glm::vec3> lines;
+    auto edge = [&](glm::vec3 a, glm::vec3 b) {
+        lines.push_back(a);
+        lines.push_back(b);
+    };
+    auto box = [&](glm::vec3 lo, glm::vec3 hi) {
+        const glm::vec3 c[8] = { { lo.x, lo.y, lo.z }, { hi.x, lo.y, lo.z }, { hi.x, lo.y, hi.z }, { lo.x, lo.y, hi.z },
+                                 { lo.x, hi.y, lo.z }, { hi.x, hi.y, lo.z }, { hi.x, hi.y, hi.z }, { lo.x, hi.y, hi.z } };
+        for (int i = 0; i < 4; i++) {
+            edge(c[i], c[(i + 1) % 4]);         // bottom
+            edge(c[4 + i], c[4 + (i + 1) % 4]); // top
+            edge(c[i], c[4 + i]);               // sides
+        }
+    };
+    if (IsPlant()) {
+        const float drop = PlantDrop();
+        box({ 0.15f, -drop, 0.15f }, { 0.85f, 0.9f - drop, 0.85f });
+        return lines;
+    }
+    if (IsFullBlock() || IsLiquid()) {
+        box(glm::vec3(0.0f), glm::vec3(1.0f));
+        return lines;
+    }
+    // Corner heights at (0,0), (1,0), (1,1), (0,1) (EdgeData edges 2, 1, 3, 0).
+    const float h[4] = { edgeData.GetTopY(2) / 8.0f, edgeData.GetTopY(1) / 8.0f, edgeData.GetTopY(3) / 8.0f, edgeData.GetTopY(0) / 8.0f };
+    if (IsStepped()) {
+        // One box when all four quarters match (a slab, a plate), else each quarter.
+        if (h[0] == h[1] && h[1] == h[2] && h[2] == h[3]) {
+            box(glm::vec3(0.0f), glm::vec3(1.0f, h[0], 1.0f));
+            return lines;
+        }
+        const glm::vec2 q[4] = { { 0, 0 }, { 0.5f, 0 }, { 0.5f, 0.5f }, { 0, 0.5f } };
+        for (int i = 0; i < 4; i++)
+            if (h[i] > 0.0f) box({ q[i].x, 0.0f, q[i].y }, { q[i].x + 0.5f, h[i], q[i].y + 0.5f });
+        return lines;
+    }
+    // A slope: its base, the corners up to their heights, the sloped top's edges, and
+    // the fold between its two triangles (along (0,1)-(1,0); see GetFaceVertices).
+    const glm::vec2 c[4] = { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 } };
+    for (int i = 0; i < 4; i++) {
+        const int j = (i + 1) % 4;
+        edge({ c[i].x, 0.0f, c[i].y }, { c[j].x, 0.0f, c[j].y });
+        edge({ c[i].x, h[i], c[i].y }, { c[j].x, h[j], c[j].y });
+        if (h[i] > 0.0f) edge({ c[i].x, 0.0f, c[i].y }, { c[i].x, h[i], c[i].y });
+    }
+    if (std::abs((h[0] + h[2]) - (h[1] + h[3])) > 0.001f) edge({ 1.0f, h[1], 0.0f }, { 0.0f, h[3], 1.0f });
+    return lines;
+}
+
 void Block::Shrink() {
     edgeData.Shrink();
     if (!edgeData.IsValid()) {
@@ -361,8 +580,54 @@ void Block::Shrink() {
     }
 }
 
+int Block::ResourceUnits() const {
+    if (IsAir() || IsLiquid()) return 0;
+    if (IsFullBlock() || !CanChisel()) return kUnitsPerBlock;
+    if (IsStepped()) {
+        // Four quarters: each eighth of a quarter's height is 1/32 of the block.
+        int eighths = 0;
+        for (int e = 0; e < 4; e++) eighths += edgeData.GetTopY(e);
+        return eighths * kUnitsPerBlock / 32;
+    }
+    // A slope's volume is its mean height (the two triangles it's drawn as).
+    const int c00 = edgeData.GetTopY(2), c10 = edgeData.GetTopY(1), c01 = edgeData.GetTopY(0), c11 = edgeData.GetTopY(3);
+    const int sixths = c00 + c11 + 2 * (c10 + c01); // 6 * mean height, in eighths
+    return (sixths * kUnitsPerBlock + 24) / 48;
+}
+
+bool Block::CanChisel() const {
+    if (IsAir() || IsLiquid() || IsPlant()) return false;
+    switch (type) {
+    case BlockType::PUMP:
+    case BlockType::PIPE:
+    case BlockType::SLUICE:
+    case BlockType::PRESSURE_PLATE: return false;
+    default: return true;
+    }
+}
+
+Block Block::Chiselled(int edge, int deltaEighths) const {
+    Block b = *this;
+    const int height = std::clamp(edgeData.GetTopY(edge) + deltaEighths, 0, 8);
+    b.edgeData.SetTopY(edge, static_cast<uint8_t>(height));
+    if (b.edgeData.IsFull()) {
+        b.water = b.shown = 0; // a full block holds no water
+        return b;
+    }
+    int remaining = 0;
+    for (int e = 0; e < 4; e++) remaining += b.edgeData.GetTopY(e);
+    if (remaining == 0) return HasWater() ? Water(water) : Block(); // nothing left: its water stays
+    b.SetEdgeData(b.edgeData);
+    return b;
+}
+
 void Block::SetEdgeData(EdgeData edges) {
-    if (edges.IsValid()) {
+    // A stepped block stands as long as any quarter does; a slope needs at least two
+    // corners above its base.
+    bool valid = edges.IsValid();
+    if (IsStepped())
+        for (int e = 0; e < 4; e++) valid |= edges.GetTopY(e) > edges.GetBottomY(e);
+    if (valid) {
         edgeData = edges;
     }
     else {

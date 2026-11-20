@@ -109,6 +109,14 @@ bool WorldStorage::ReadWorldFile() {
         std::cerr << "[storage] " << path.string() << " is truncated" << std::endl;
         return false;
     }
+    if (version >= 3 && (!r.F32(timeOfDay) || !std::isfinite(timeOfDay) || timeOfDay < 0.0f || timeOfDay >= 1.0f)) {
+        std::cerr << "[storage] " << path.string() << " has a bad time of day" << std::endl;
+        return false;
+    }
+    if (version >= 4 && (!r.U8(defaultMode) || defaultMode > 1)) {
+        std::cerr << "[storage] " << path.string() << " has a bad game mode" << std::endl;
+        return false;
+    }
     if (!r.VarU32(count)) count = 0;
     for (uint32_t i = 0; i < count; i++) {
         std::string name;
@@ -116,6 +124,21 @@ bool WorldStorage::ReadWorldFile() {
         if (!r.Str(name, kMaxNameLength) || !r.Vec3(p.feet) || !r.F32(p.yaw) || !r.F32(p.pitch) || !r.U8(p.flags)) {
             std::cerr << "[storage] " << path.string() << " is truncated" << std::endl;
             return false;
+        }
+        p.mode = defaultMode;
+        if (version >= 4) {
+            uint32_t kinds = 0;
+            bool ok = r.U8(p.mode) && p.mode <= 1 && r.VarU32(kinds) && kinds <= p.resources.size();
+            for (uint32_t k = 0; ok && k < kinds; k++) {
+                uint8_t type;
+                uint32_t units;
+                ok = r.U8(type) && type < p.resources.size() && r.VarU32(units);
+                if (ok) p.resources[type] = units;
+            }
+            if (!ok) {
+                std::cerr << "[storage] " << path.string() << " is truncated" << std::endl;
+                return false;
+            }
         }
         if (std::isfinite(p.feet.x) && std::isfinite(p.feet.y) && std::isfinite(p.feet.z) && std::isfinite(p.yaw) && std::isfinite(p.pitch))
             players[name] = p;
@@ -149,10 +172,16 @@ bool WorldStorage::ReadRegion(const fs::path& path) {
         for (uint32_t b = 0; b < length; b++) r.U8(chunk.data[b]);
 
         net::ByteReader planes(chunk.data.data(), chunk.data.size());
-        if (!net::DecodeBlockPlanes(planes, *blocks) || !planes.AtEnd()) {
+        if (!net::DecodeBlockPlanes(planes, *blocks, version >= 5) || !planes.AtEnd()) {
             std::cerr << "[storage] chunk " << coords.x << "," << coords.y << "," << coords.z << " in " << path.string()
                       << " is corrupt" << std::endl;
             return false;
+        }
+        if (version < 5) {
+            // Saved before blocks had an axis: kept in the current format from now on.
+            net::ByteWriter current;
+            net::EncodeBlockPlanes(current, *blocks);
+            chunk.data = std::move(current.data);
         }
         chunk.skyBlocked = SkyMaskOf(*blocks);
         Insert(coords, std::move(chunk));
@@ -223,6 +252,28 @@ void WorldStorage::SetWorldType(uint8_t type) {
     playersDirty = true; // world.dat needs writing
 }
 
+uint8_t WorldStorage::GetDefaultMode() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return defaultMode;
+}
+
+void WorldStorage::SetDefaultMode(uint8_t mode) {
+    std::lock_guard<std::mutex> lock(mutex);
+    defaultMode = mode;
+    playersDirty = true;
+}
+
+float WorldStorage::GetTimeOfDay() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return timeOfDay;
+}
+
+void WorldStorage::SetTimeOfDay(float t) {
+    std::lock_guard<std::mutex> lock(mutex);
+    timeOfDay = t;
+    playersDirty = true; // world.dat needs writing
+}
+
 size_t WorldStorage::GetStoredChunkCount() const {
     std::lock_guard<std::mutex> lock(mutex);
     return chunks.size();
@@ -259,6 +310,8 @@ bool WorldStorage::Flush() {
             WriteMagic(w, kWorldMagic);
             w.U32(kFormatVersion);
             w.U8(worldType);
+            w.F32(timeOfDay);
+            w.U8(defaultMode);
             w.VarU32(static_cast<uint32_t>(players.size()));
             for (const auto& [name, p] : players) {
                 w.Str(name);
@@ -266,6 +319,15 @@ bool WorldStorage::Flush() {
                 w.F32(p.yaw);
                 w.F32(p.pitch);
                 w.U8(p.flags);
+                w.U8(p.mode);
+                uint32_t kinds = 0;
+                for (uint32_t units : p.resources) kinds += units > 0;
+                w.VarU32(kinds);
+                for (size_t t = 0; t < p.resources.size(); t++)
+                    if (p.resources[t] > 0) {
+                        w.U8(static_cast<uint8_t>(t));
+                        w.VarU32(p.resources[t]);
+                    }
             }
             files.emplace_back(directory / "world.dat", std::move(w.data));
             writePlayers = true;

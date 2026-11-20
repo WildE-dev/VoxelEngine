@@ -164,6 +164,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
     };
     auto cornerHeight = [&](const glm::ivec3& p, int cx, int cz) {
         int sum = 0, n = 0;
+        bool meetsLowerWater = false; // a column here is dry, with water just under it
         for (int dx = cx - 1; dx <= cx; dx++) {
             for (int dz = cz - 1; dz <= cz; dz++) {
                 const glm::ivec3 q = p + glm::ivec3(dx, 0, dz);
@@ -172,15 +173,23 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 // exactly there, and no faces are drawn between water cells, so anything
                 // lower leaves a slit between the two rows.
                 if ((hasWater(q) || isOpaque(q)) && hasWater(q + up)) return 32;
+                if (!hasWater(q) && inGrid(q) && !isOpaque(q) && hasWater(q - up)) meetsLowerWater = true;
                 const int surface = columnSurface(q);
                 if (surface == kNoSurface) continue;
                 sum += surface;
                 n++;
             }
         }
-        // At least a 32nd so the surface never folds below the cell; at most its top.
+        // Water lying on more water (a lake's top layer) comes right down to the water
+        // below where it meets an empty column over it: a thin layer thins out to
+        // nothing at its edges, instead of ending in a little wall (which shows as
+        // patches while a lake drains).
+        const bool onWater = hasWater(p - up);
+        if (onWater && meetsLowerWater) return 0;
+        // Otherwise the columns' mean, at most the cell's top and at least a 32nd (so a
+        // film on dry ground never folds into it).
         const int average = (sum + (sum >= 0 ? n / 2 : -n / 2)) / n;
-        return std::clamp((average + kUnitsPer32nd / 2) / kUnitsPer32nd, 1, 32);
+        return std::clamp((average + kUnitsPer32nd / 2) / kUnitsPer32nd, onWater ? 0 : 1, 32);
     };
     // Side faces: our two edges on that side, and the neighbour's edges they touch.
     struct SideEdges { int ours[2], theirs[2]; };
@@ -259,6 +268,35 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
         }
     };
 
+    // --- Joining slopes across rows ---
+    // A column's ground is one sloped block, its corners clipped to that block's row.
+    // Where the slope goes on up past the top of the block, the column next to it holds
+    // the rest in the row above, and the clipped corner would leave a notch between
+    // them. So a corner at the top of its block is drawn as high as that next slope's
+    // corner, joining the two. (Drawing only: walking uses the block's own shape.)
+    constexpr int kEdgeAt[2][2] = { { 2, 0 }, { 1, 3 } }; // EdgeData index of corner [x][z]
+    auto natural = [](const Block& b) { return !b.IsAir() && !b.IsPlant() && !b.IsLiquid() && !b.IsStepped(); };
+    auto JoinSlope = [&](const glm::ivec3& pos, const Block& block) {
+        Block drawn = block;
+        for (int cx = 0; cx < 2; cx++)
+            for (int cz = 0; cz < 2; cz++) {
+                const int e = kEdgeAt[cx][cz];
+                if (block.edgeData.GetTopY(e) != 8) continue;
+                int lift = 0;
+                // The four columns around this corner, one row up.
+                for (int i = 0; i < 2; i++)
+                    for (int j = 0; j < 2; j++) {
+                        const glm::ivec3 q = pos + glm::ivec3(cx - 1 + i, 1, cz - 1 + j);
+                        if (!inGrid(q)) continue;
+                        const Block& above = cellAt(q);
+                        if (!natural(above)) continue;
+                        lift = std::max(lift, above.IsFullBlock() ? 7 : static_cast<int>(above.edgeData.GetTopY(kEdgeAt[1 - i][1 - j])));
+                    }
+                if (lift > 0) drawn.edgeData.SetTopYForDrawing(e, static_cast<uint8_t>(8 + std::min(lift, 7)));
+            }
+        return drawn;
+    };
+
     for (int x = 0; x < CHUNK_SIZE; ++x) {
         for (int y = 0; y < CHUNK_SIZE; ++y) {
             for (int z = 0; z < CHUNK_SIZE; ++z) {
@@ -277,10 +315,16 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 }
 
                 const bool full = block.IsFullBlock();
+                const bool stepped = !full && block.IsStepped(); // quarters, not a slope
+                const Block drawn = full || stepped ? block : JoinSlope(pos, block);
                 for (int face = 0; face < kFaceCount; ++face) {
                     const glm::ivec3 front = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
+                    if (stepped) {
+                        block.AddSteppedFaces(vertices, static_cast<Face>(face), x, y, z, shadeFace(pos, face, true), !isOpaque(front));
+                        continue;
+                    }
                     if (full && isOpaque(front)) continue;
-                    block.AddFaceVertices(vertices, static_cast<Face>(face), x, y, z, shadeFace(pos, face, true));
+                    drawn.AddFaceVertices(vertices, static_cast<Face>(face), x, y, z, shadeFace(pos, face, true));
                 }
 
                 // A waterlogged slope also gets the water above it.

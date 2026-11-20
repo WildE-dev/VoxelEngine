@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 
 #include "render/DebugDraw.h"
+#include "render/Rain.h"
 #include "render/PlayerModels.h"
 #include "render/Shader.h"
 #include "render/TextureAtlas.h"
@@ -20,10 +21,16 @@ struct FrameParams {
     float time = 0.0f;
     bool wireframe = false;
     bool ambientOcclusion = true;
-    float sunBrightness = 1.0f; // 0 = night, 1 = day
+    float sunBrightness = 1.0f; // 0 = night, 1 = day (already dimmed by rain)
+    glm::vec3 sunDirection{0.35f, 0.75f, 0.55f}; // towards the sun, normalised
+    glm::vec3 skyTint{1.0f};    // colour of the sky (warm at dawn and dusk)
+    float rain = 0.0f;          // 0..1: how hard it rains here (0 when sheltered)
+    float overcast = 0.0f;      // 0..1: how grey the sky is
     glm::vec3 cameraPosition{0.0f};
     bool underwater = false;    // camera is inside water: tint the screen
+    float fogEnd = 0.0f;        // horizontal distance where the world fades fully into the sky (0: no fog)
     std::optional<glm::ivec3> highlightedBlock;
+    std::vector<glm::vec3> highlightOutline; // the block's shape (Block::OutlineSegments)
     std::vector<PlayerModel> players; // other players
 };
 
@@ -60,6 +67,9 @@ private:
     void DestroySceneFramebuffer();
 
     void DrawSkybox(const FrameParams& params);
+    // Distance fog for a shader that includes ApplyFog; the skybox goes to texture
+    // unit `skyUnit` (left bound there).
+    void SetFogUniforms(Shader& shader, const FrameParams& params, int skyUnit);
     void DrawBlackHole(const FrameParams& params);
     void DrawWater(ClientWorld& world, const FrameParams& params);
 
@@ -69,9 +79,11 @@ private:
     Shader screenShader;
     Shader holeShader;
     Shader waterShader;
+    Shader rainShader;
     Shader playerShader;
 
     DebugDraw debugDraw;
+    Rain rain;
     PlayerModels playerModels;
     TextureAtlas atlas;
 

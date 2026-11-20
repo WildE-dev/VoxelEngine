@@ -57,7 +57,6 @@ constexpr bool kDrawBlackHole = false;
 const char* kBlockTextureDirectory = "Resources/Textures/Blocks";
 const glm::vec3 kBlockLightColor(1.0f, 0.85f, 0.6f); // warm lamp light
 // Where the sun glints off water from (it isn't tied to the skybox texture).
-const glm::vec3 kSunDirection(0.35f, 0.75f, 0.55f);
 
 void CreateVertexBuffer(GLuint& vao, GLuint& vbo, const float* data, GLsizeiptr size) {
     glGenVertexArrays(1, &vao);
@@ -76,6 +75,7 @@ Renderer::Renderer()
       screenShader("Resources/Shaders/screen.vert", "Resources/Shaders/screen.frag"),
       holeShader("Resources/Shaders/hole.vert", "Resources/Shaders/hole.frag"),
       waterShader("Resources/Shaders/water.vert", "Resources/Shaders/water.frag"),
+      rainShader("Resources/Shaders/rain.vert", "Resources/Shaders/rain.frag"),
       playerShader("Resources/Shaders/player.vert", "Resources/Shaders/player.frag") {
 }
 
@@ -203,6 +203,7 @@ void Renderer::ReloadShaders() {
     screenShader.Reload();
     holeShader.Reload();
     waterShader.Reload();
+    rainShader.Reload();
     playerShader.Reload();
 }
 
@@ -230,23 +231,31 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
     worldShader.SetUniform("aoStrength", params.ambientOcclusion ? 1.0f : 0.0f);
     worldShader.SetUniform("sunBrightness", params.sunBrightness);
     worldShader.SetUniform("blockLightColor", kBlockLightColor);
+    worldShader.SetUniform("cameraPos", params.cameraPosition);
+    SetFogUniforms(worldShader, params, 1);
     world.Render(worldShader, params.view, params.projection, params.time);
 
     glEnable(GL_CULL_FACE);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
     playerShader.Use();
-    playerShader.SetUniform("sunDirection", glm::normalize(kSunDirection));
+    playerShader.SetUniform("sunDirection", params.sunDirection);
     playerShader.SetUniform("sunBrightness", params.sunBrightness);
+    playerShader.SetUniform("cameraPos", params.cameraPosition);
+    SetFogUniforms(playerShader, params, 1);
     playerModels.Draw(playerShader, params.view, params.projection, params.players);
 
     DrawSkybox(params);
 
+    // The outline of the block in view, before the water: depth tested so blocks in
+    // front hide it, and seen through water (which refracts what's behind it).
+    if (params.highlightedBlock) {
+        debugDraw.DrawOutline(debugShader, params.view, params.projection, glm::vec3(*params.highlightedBlock), params.highlightOutline);
+    }
+
     DrawWater(world, params);
 
-    if (params.highlightedBlock) {
-        debugDraw.DrawWireCube(debugShader, params.view, params.projection, glm::vec3(*params.highlightedBlock));
-    }
+    rain.Draw(rainShader, params.view, params.projection, params.cameraPosition, params.time, params.rain, 0.25f + 0.75f * params.sunBrightness);
 
     // --- Composite to the default framebuffer ---
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -293,11 +302,10 @@ void Renderer::DrawWater(ClientWorld& world, const FrameParams& params) {
     waterShader.SetUniform("farPlane", farPlane);
     waterShader.SetUniform("cameraPos", params.cameraPosition);
     waterShader.SetUniform("sunBrightness", params.sunBrightness);
-    waterShader.SetUniform("sunDirection", glm::normalize(kSunDirection));
+    waterShader.SetUniform("sunDirection", params.sunDirection);
     waterShader.SetUniform("blockLightColor", kBlockLightColor);
     waterShader.SetUniform("underwater", params.underwater ? 1.0f : 0.0f);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTexture);
+    SetFogUniforms(waterShader, params, 1); // the same cube map as the reflections
 
     // The surface itself into the scene, opaque: refraction and absorption stand in for
     // blending. Both sides draw so it shows from underwater too.
@@ -326,6 +334,20 @@ void Renderer::DrawWater(ClientWorld& world, const FrameParams& params) {
     glActiveTexture(GL_TEXTURE0);
 }
 
+void Renderer::SetFogUniforms(Shader& shader, const FrameParams& params, int skyUnit) {
+    // Fog from a little over half the render distance; fully sky by its edge (the
+    // nearest the world can end, straight along an axis from the camera's chunk).
+    shader.SetUniform("fogEnd", params.fogEnd);
+    shader.SetUniform("fogStart", params.fogEnd * 0.55f);
+    shader.SetUniform("fogSky", skyUnit);
+    shader.SetUniform("skyBrightness", 0.05f + 0.95f * params.sunBrightness);
+    shader.SetUniform("skyTint", params.skyTint);
+    shader.SetUniform("skyOvercast", params.overcast);
+    glActiveTexture(GL_TEXTURE0 + skyUnit);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTexture);
+    glActiveTexture(GL_TEXTURE0);
+}
+
 void Renderer::DrawSkybox(const FrameParams& params) {
     // Drawn after the world at max depth so it only fills uncovered pixels.
     glDepthFunc(GL_LEQUAL);
@@ -336,6 +358,8 @@ void Renderer::DrawSkybox(const FrameParams& params) {
     skyboxShader.SetUniform("projection", params.projection);
     skyboxShader.SetUniform("skybox", 0);
     skyboxShader.SetUniform("brightness", 0.05f + 0.95f * params.sunBrightness);
+    skyboxShader.SetUniform("tint", params.skyTint);
+    skyboxShader.SetUniform("overcast", params.overcast);
 
     glBindVertexArray(skyboxVAO);
     glActiveTexture(GL_TEXTURE0);

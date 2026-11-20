@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "world/Caves.h"
+#include "world/Dungeons.h"
 #include "world/Features.h"
 #include "world/Noise.h"
 
@@ -61,8 +62,98 @@ uint8_t TerrainGenerator::Column::SkyLightAbove(int row) const {
     return static_cast<uint8_t>(std::max(0, level));
 }
 
+const char* BiomeName(Biome biome) {
+    switch (biome) {
+    case Biome::Plains: return "Plains";
+    case Biome::Forest: return "Forest";
+    case Biome::Swamp: return "Swamp";
+    case Biome::Desert: return "Desert";
+    case Biome::Savanna: return "Savanna";
+    case Biome::Jungle: return "Jungle";
+    case Biome::Taiga: return "Taiga";
+    case Biome::SnowyTaiga: return "Snowy taiga";
+    case Biome::Tundra: return "Tundra";
+    default: return "?";
+    }
+}
+
+BlockType TerrainGenerator::Column::TopType(Biome biome) const {
+    if (IsSandy()) return biome == Biome::Swamp ? BlockType::DIRT : BlockType::SAND; // muddy swamp beds, else beaches
+    if (surfaceRow >= kSnowLine) return BlockType::SNOW;
+    const float steepness = std::max({ corners[0], corners[1], corners[2], corners[3] }) - std::min({ corners[0], corners[1], corners[2], corners[3] });
+    if (surfaceRow >= kRockLine || steepness >= 1.5f) return BlockType::STONE; // bare rock high up and on cliffs
+    switch (biome) {
+    case Biome::Desert: return BlockType::SAND;
+    case Biome::Savanna: return BlockType::DRY_GRASS;
+    case Biome::Jungle:
+    case Biome::Swamp: return BlockType::LUSH_GRASS;
+    case Biome::SnowyTaiga:
+    case Biome::Tundra: return BlockType::SNOWY_GRASS;
+    default: return BlockType::GRASS;
+    }
+}
+
+BlockType TerrainGenerator::Column::UnderType(Biome biome) const {
+    const BlockType top = TopType(biome);
+    if (top == BlockType::SAND) return BlockType::SAND;
+    if (IsGrassType(top) || top == BlockType::DIRT) return BlockType::DIRT;
+    return BlockType::STONE;
+}
+
+TerrainGenerator::Climate TerrainGenerator::BaseClimate(int x, int z) const {
+    // Very large-scale fields, so a biome spans hundreds of blocks; a little smaller
+    // detail on top roughens their borders.
+    const float t = Noise::Perlin2(x / 1100.0f + 404.3f, z / 1100.0f - 251.9f) * 1.5f + Noise::Perlin2(x / 140.0f, z / 140.0f + 9.1f) * 0.08f;
+    const float h = Noise::Perlin2(x / 800.0f - 890.7f, z / 800.0f + 333.1f) * 1.5f + Noise::Perlin2(x / 120.0f + 51.0f, z / 120.0f) * 0.08f;
+    return { t, h };
+}
+
+TerrainGenerator::Climate TerrainGenerator::ClimateAt(int wx, int wz, int surfaceRow) const {
+    if (type == Type::Empty) return { 0.0f, -0.6f }; // plains
+    Climate c = BaseClimate(wx, wz);
+    c.temperature -= std::max(0, surfaceRow - 12) / 70.0f; // colder higher up
+    return c;
+}
+
+Biome TerrainGenerator::Classify(const Climate& c) {
+    const float t = c.temperature, h = c.humidity;
+    if (t < -0.42f) return h < 0.0f ? Biome::Tundra : Biome::SnowyTaiga;
+    if (t < -0.2f) return Biome::Taiga;
+    if (t < 0.22f) return h < -0.22f ? Biome::Plains : h < 0.32f ? Biome::Forest : Biome::Swamp;
+    return h < -0.18f ? Biome::Desert : h < 0.2f ? Biome::Savanna : Biome::Jungle;
+}
+
 float TerrainGenerator::GetHeight(int x, int z) const {
     if (type == Type::Empty) return 0.0f;
+    const float land = GetHillHeight(x, z) + GetMountainHeight(x, z);
+    // Swamps (temperate and very wet) sink toward sea level, rising and dipping just
+    // around it, so the sea fills their hollows with shallow standing water. The weight
+    // fades in over a band of climate, so the land slopes down into them.
+    const Climate c = BaseClimate(x, z);
+    const float swamp = glm::smoothstep(0.22f, 0.32f, c.humidity) * glm::smoothstep(-0.2f, -0.12f, c.temperature) *
+                        (1.0f - glm::smoothstep(0.14f, 0.22f, c.temperature));
+    if (swamp <= 0.0f) return land;
+    const float marsh = kSeaLevel - 0.1f + 1.4f * Noise::Perlin2(x / 21.0f + 7.7f, z / 21.0f - 3.3f);
+    return land + (marsh - land) * swamp;
+}
+
+float TerrainGenerator::GetMountainHeight(int x, int z) const {
+    // Where the ranges run: a very large-scale field, high in about a fifth of the
+    // world, fading in over a few hundred blocks so ranges rise out of the hills.
+    const float range = Noise::Perlin2(x / 900.0f + 31.7f, z / 900.0f - 77.3f);
+    const float mask = glm::smoothstep(0.12f, 0.42f, range);
+    if (mask <= 0.0f) return 0.0f;
+    // Ridges inside them: crests where the noise crosses zero, valleys between, with
+    // smaller ridges on the flanks. The crests are rounded (smoothstep, not |n|) and the
+    // scales wide enough that slopes stay mostly under 45 degrees: each column's
+    // surface is one sloped block, so anything much steeper shows as steps.
+    auto ridge = [](float n) { return 1.0f - glm::smoothstep(0.0f, 0.6f, std::abs(n)); };
+    const float big = ridge(Noise::Perlin2(x / 430.0f + 11.3f, z / 430.0f + 5.9f));
+    const float small = ridge(Noise::Perlin2(x / 170.0f - 3.1f, z / 170.0f + 17.7f));
+    return mask * kMountainHeight * big * (0.8f + 0.25f * small);
+}
+
+float TerrainGenerator::GetHillHeight(int x, int z) const {
     float value = 0.0f;
     float freq = 1.0f;
     float amp = 1.0f;
@@ -104,16 +195,27 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
     SurfaceRows rows;
     ComputeSurfaceRows(heights, rows);
 
-    // --- Base terrain: sloped grass surface over dirt over stone ---
+    // Each column's biome, where this chunk holds its surface or its sea's top (deep
+    // chunks are all stone and don't need it).
+    std::array<Biome, S * S> biomes;
+    const int bottom = coords.y * S, topRow = bottom + S - 1;
+    for (int x = 0; x < S; x++)
+        for (int z = 0; z < S; z++) {
+            const int m = rows[x * S + z];
+            const bool needed = topRow >= std::min(m - 6, kSeaLevel - 1) && bottom <= std::max(m + 1, kSeaLevel);
+            biomes[x * S + z] = needed ? BiomeAt(coords.x * S + x, coords.z * S + z, m) : Biome::Plains;
+        }
+
+    // --- Base terrain: the biome's sloped surface over dirt (or sand) over stone ---
     for (int x = 0; x < S; x++) {
         for (int z = 0; z < S; z++) {
             const Column column = ColumnFrom(heights, x, z);
             const int m = column.surfaceRow;
             const EdgeData edges = column.EdgesAt(m);
             const bool sloped = edges.IsValid();
-            // Near and below sea level the ground is sand instead of grass and dirt.
-            const BlockType top = column.IsSandy() ? BlockType::SAND : BlockType::GRASS;
-            const BlockType under = column.IsSandy() ? BlockType::SAND : BlockType::DIRT;
+            // Beaches, rock and snow on mountains, else the biome's ground.
+            const BlockType top = column.TopType(biomes[x * S + z]);
+            const BlockType under = column.UnderType(biomes[x * S + z]);
             for (int y = 0; y < S; y++) {
                 const int blockY = coords.y * S + y;
                 if (blockY == m) {
@@ -148,23 +250,44 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
             for (int y = 0; y < S; y++) {
                 const int blockY = coords.y * S + y;
                 Block& cell = out[Index(x, y, z)];
-                if (blockY >= firstOpen && blockY < kSeaLevel) cell = Block::Water(Block::kMaxWaterVolume);
+                if (blockY >= firstOpen && blockY < kSeaLevel) {
+                    // Frozen biomes: the sea's top layer is ice.
+                    const bool ice = blockY == kSeaLevel - 1 && IsFrozen(biomes[x * S + z]);
+                    cell = ice ? Block(BlockType::ICE) : Block::Water(Block::kMaxWaterVolume);
+                }
                 else if (blockY == column.surfaceRow && blockY < kSeaLevel && cell.IsPartial()) cell.water = cell.shown = cell.WaterCapacity();
             }
         }
     }
 
     Features::Place(*this, coords, rows, out);
-    PlacePlants(coords, heights, out);
+    PlacePlants(coords, heights, rows, out);
+    Dungeons::Stamp(*this, coords, out);
 }
 
-void TerrainGenerator::PlacePlants(const glm::ivec3& coords, const ColumnHeights& heights, Blocks& out) const {
+void TerrainGenerator::PlacePlants(const glm::ivec3& coords, const ColumnHeights& heights, const SurfaceRows& rows, Blocks& out) const {
     const int chunkBottom = coords.y * S;
+    // Plants stand just above the surface: nothing to do in chunks away from it.
+    const auto [lo, hi] = std::minmax_element(rows.begin(), rows.end());
+    if (chunkBottom > *hi + 1 || chunkBottom + S - 1 < *lo) return;
+    // Columns a tree, bush or boulder may take, worked out once for the chunk.
+    std::array<bool, S * S> occupied;
+    Features::OccupiedColumns(*this, coords, occupied);
     for (int x = 0; x < S; x++) {
         for (int z = 0; z < S; z++) {
             const int wx = coords.x * S + x, wz = coords.z * S + z;
             const Column column = ColumnFrom(heights, x, z);
-            if (column.IsSandy()) continue; // grass and flowers only grow on grass
+            {
+                const int plantRow = column.HasSlopedTop() ? column.surfaceRow + 1 : column.surfaceRow;
+                if (plantRow < chunkBottom || plantRow >= chunkBottom + S) continue;
+            }
+            const Biome biome = BiomeAt(wx, wz, column.surfaceRow);
+            const BlockType ground = column.TopType(biome);
+            // Grass and flowers grow on grass; in deserts, the odd dead bush on sand.
+            const bool desert = biome == Biome::Desert && ground == BlockType::SAND;
+            // Snowfields: only the odd dead bush pokes through.
+            const bool snowfield = ground == BlockType::SNOWY_GRASS;
+            if (!IsGrassType(ground) && !desert) continue;
 
             // The plant stands in the first air cell above the ground. On a sloped top
             // that's the cell above the slope, lowered so it sits on the surface.
@@ -174,22 +297,39 @@ void TerrainGenerator::PlacePlants(const glm::ivec3& coords, const ColumnHeights
             const int py = plantRow - chunkBottom;
             if (py < 0 || py >= S) continue;
 
-            // Meadows are grassier; flowers are rarer.
+            // How much grows, by biome; meadows are grassier within each.
+            float grass = 0.15f, flowers = 0.02f;
+            switch (biome) {
+            case Biome::Plains: grass = 0.28f; flowers = 0.06f; break;
+            case Biome::Forest: grass = 0.14f; flowers = 0.02f; break;
+            case Biome::Swamp: grass = 0.35f; flowers = 0.005f; break;
+            case Biome::Desert: grass = 0.0f; flowers = 0.0f; break;
+            case Biome::Savanna: grass = 0.26f; flowers = 0.006f; break;
+            case Biome::Jungle: grass = 0.5f; flowers = 0.03f; break;
+            case Biome::Taiga: grass = 0.12f; flowers = 0.004f; break;
+            case Biome::SnowyTaiga:
+            case Biome::Tundra: grass = 0.0f; flowers = 0.0f; break; // nothing green in the snow
+            default: break;
+            }
             const float meadow = Noise::Perlin2(wx / 40.0f + 300.0f, wz / 40.0f - 700.0f);
-            const float grassChance = std::clamp(0.10f + meadow * 0.5f, 0.02f, 0.35f);
+            const float grassChance = std::clamp(grass + meadow * grass * 1.5f, grass * 0.2f, grass * 2.0f);
             const float r = Noise::Random01(wx, 0, wz, kPlantSeed);
             BlockType type;
-            if (r < grassChance) type = BlockType::TALL_GRASS;
-            else if (r < grassChance + 0.012f) type = BlockType::FLOWER_RED;
-            else if (r < grassChance + 0.024f) type = BlockType::FLOWER_YELLOW;
+            if (desert || snowfield) {
+                if (r >= (desert ? 0.02f : 0.01f)) continue;
+                type = BlockType::DEAD_BUSH;
+            }
+            else if (r < grassChance) type = BlockType::TALL_GRASS;
+            else if (r < grassChance + flowers * 0.5f) type = BlockType::FLOWER_RED;
+            else if (r < grassChance + flowers) type = BlockType::FLOWER_YELLOW;
             else continue;
 
-            if (Features::MayOccupyColumn(wx, wz)) continue;
+            if (occupied[x * S + z]) continue;
             if (!out[Index(x, py, z)].IsAir()) continue;
 
             // The ground must still be grass: not carved into a cave entrance.
             const int gy = groundRow - chunkBottom;
-            const bool groundIntact = gy >= 0 ? out[Index(x, gy, z)].type == BlockType::GRASS
+            const bool groundIntact = gy >= 0 ? out[Index(x, gy, z)].type == ground
                                               : !Caves::IsCave(wx, groundRow, wz, column.surfaceRow);
             if (!groundIntact) continue;
 

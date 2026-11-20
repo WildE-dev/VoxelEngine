@@ -12,6 +12,7 @@ uniform vec3 blockLightColor; // colour of light from emitting blocks
 
 out vec2 TexCoord;
 out vec3 Light;
+out vec3 WorldPos;
 
 // Atlas layout, set by TextureAtlas::ApplyUniforms.
 uniform int atlasColumns;
@@ -61,7 +62,9 @@ void main()
 {
     Data data = getData();
 
-    gl_Position = projection * view * model * vec4(data.pos, 1.0f);
+    vec4 world = model * vec4(data.pos, 1.0f);
+    WorldPos = world.xyz;
+    gl_Position = projection * view * world;
     TexCoord = data.tex;
 
     // Light levels: each is ~85% as bright as the one above, level 0 is dark.
