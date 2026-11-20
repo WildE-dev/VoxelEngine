@@ -15,6 +15,7 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+find_package(unofficial-enet CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
 find_path(STB_INCLUDE_DIRS "stb_image.h")
@@ -31,6 +32,11 @@ add_executable(${PROJECT_NAME}
     src/app/Camera.h
     src/app/Player.cpp
     src/app/Player.h
+
+    src/net/Protocol.cpp
+    src/net/Protocol.h
+    src/net/Transport.cpp
+    src/net/Transport.h
 
     src/render/DebugDraw.cpp
     src/render/DebugDraw.h
@@ -69,7 +75,7 @@ add_executable(${PROJECT_NAME}
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE src ${STB_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME} PRIVATE glfw glad::glad glm::glm imgui::imgui Threads::Threads)
+target_link_libraries(${PROJECT_NAME} PRIVATE glfw glad::glad glm::glm imgui::imgui unofficial::enet::enet Threads::Threads)
 
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /W3)
