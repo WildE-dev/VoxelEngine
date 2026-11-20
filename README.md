@@ -1,8 +1,8 @@
 # VoxelEngine
 
 A small OpenGL voxel engine with sloped terrain, caves, trees, chunk streaming on a
-background thread, block lighting, ambient occlusion, a skybox and a black hole
-lensing effect.
+background thread, block lighting, ambient occlusion, finite flowing water, a skybox
+and a black hole lensing effect. Several players can share a world over the network.
 
 ## Building
 
@@ -16,6 +16,73 @@ cd build && ./VoxelEngine
 
 The executable loads `Resources/` relative to the working directory, and the
 build copies it next to the binary.
+
+The build also produces `VoxelServer` (a dedicated server that doesn't link GL or
+GLFW) and `NetSmokeTest` (see [Multiplayer](#multiplayer)).
+
+## Multiplayer
+
+Every game is a client of a server. Started without arguments, the game runs a
+server inside the same process on a free port of the loopback interface and
+connects to it, so singleplayer and multiplayer use the same code.
+
+Host a dedicated server (no window; Ctrl+C stops it):
+
+```bash
+cd build && ./VoxelEngine --server
+```
+
+`./VoxelEngine --server 30000` picks another port (the default is UDP 27450), and
+`./VoxelServer [port]` does the same without any graphics libraries. Others join
+with:
+
+```bash
+cd build && ./VoxelEngine --connect 192.168.1.20 --name Alice
+```
+
+`--connect host:port` sets the port. To play on the same machine as the server,
+connect to `127.0.0.1`. Over the internet, forward UDP port 27450 to the server.
+Other players appear as box figures in their own colour, with a dark visor on the
+side they're facing. The world is not saved: it's regenerated when the server
+restarts, and edits to chunks that no player is near are dropped.
+
+`NetSmokeTest` starts a server and two clients in one process (real sockets on
+localhost, no windows) and checks that chunks stream, edits and flowing water
+reach both clients identically, players see each other, and a flood stays cheap
+on the wire. `./NetSmokeTest host:port` runs the same checks against a running
+server.
+
+### How it works
+
+- **Server** (`src/server`): owns the world. Its worker thread generates terrain
+  and propagates light, the water simulation runs on its own thread, and the
+  server thread applies edits and streams the world at 20 ticks a second. It
+  loads chunks within view distance of any player.
+- **Client** (`src/client`): `ClientWorld` holds the chunks received from the
+  server and meshes them on a worker thread; it never generates, lights or
+  simulates anything itself. `Client` handles the connection.
+- **Protocol** (`src/net/Protocol.h`): one message per packet over
+  [ENet](http://enet.bespin.org) (reliable UDP). World data goes on a reliable,
+  ordered channel; player states and snapshots on an unreliable, sequenced one.
+- **Chunks** go to each client nearest first, once generated and lit. Blocks and
+  light are split into byte planes (type, the four slope edges, water, drawn water,
+  light), each run-length encoded in layer order: an empty or solid chunk is about
+  30 bytes, and joining costs about 3.5 MB for the 15,000 chunks in view.
+- **Changes** are batched per client and per chunk until the next send, so a cell
+  that changes several times in between goes out once with its latest value.
+  Flowing water is only sent when its drawn surface moves (most of what water does
+  is small volume changes within the same surface height), nearest chunks first
+  within a byte budget per tick, and a chunk with hundreds of changed cells is
+  re-sent whole. A flood of about a hundred water blocks costs each client around
+  30 KB/s. When light changes, the chunk's new light is sent.
+- **Movement** is predicted on the client with the usual collision and sent 20
+  times a second. The server checks it loosely (no faster than falling at terminal
+  velocity, not inside solid blocks for long) and otherwise moves the player back
+  to its last good position. Others are shown 100 ms in the past, interpolated
+  between snapshots.
+- **Edits** are applied on the client at once and sent to the server, which checks
+  reach and that solid blocks don't go inside a player. It answers with the real
+  block either way, so a refused edit is undone.
 
 ## Controls
 
@@ -36,6 +103,7 @@ build copies it next to the binary.
 | F1 | Toggle wireframe |
 | F2 | Toggle debug window |
 | F3 | Toggle ambient occlusion |
+| F12 | Save a screenshot (`screenshot-<date>-<time>.png` in the working directory) |
 | N | Toggle day / night |
 | Esc | Quit |
 
@@ -85,7 +153,7 @@ the water height of neighbouring columns across rows, so flowing water slopes
 between levels, thin edges taper to the ground, and a waterfall's curtain meets
 the water pouring over its brink.
 
-The simulation runs on its own thread, up to 32,768 water cells per tick, ten
+The simulation runs on the server, on its own thread, up to 32,768 water cells per tick, ten
 ticks a second, and only near something that changed. It holds a world-wide edit
 lock in short slices and steps aside for waiting edits, so player edits never
 wait more than a couple of milliseconds. Place a full block of water with 8.
@@ -102,7 +170,7 @@ mode (F) moves freely through blocks like the old free camera.
 
 ## Lighting
 
-Two light channels, each 0-15, are flood-filled on the world worker thread and
+Two light channels, each 0-15, are flood-filled on the server's world worker thread and
 cross chunk borders:
 
 - **Sky light** comes down from above at full strength and loses one level per
@@ -129,9 +197,16 @@ as a magenta checkerboard.
 
 ```
 src/
-  main.cpp
-  app/     Application (window, input, main loop), Camera, Player (movement and physics)
-  render/  Renderer (frame passes, skybox, post effect), Shader, Textures, DebugDraw
-  world/   World (chunk streaming + worker thread), Chunk, Block, TerrainGenerator,
-           Caves, Features, Noise, Lighting, Water, Collision, Raycast
+  main.cpp  command line: singleplayer, --server, --connect
+  app/      Application (window, input, main loop), Camera, Player (movement and physics)
+  client/   Client (connection), ClientWorld (received chunks, mesh worker),
+            ClientChunk (meshes and GL buffers), ChunkMesher
+  server/   Server (clients, streaming, validation), ServerWorld (chunk loading,
+            generation and light worker), Water, main.cpp (VoxelServer)
+  net/      Protocol (messages, RLE chunk planes), Transport (ENet wrapper)
+  render/   Renderer (frame passes, skybox, post effect), PlayerModels, Shader,
+            Textures, DebugDraw
+  world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
+            Features, Noise, Lighting, Collision, Raycast
+tests/      NetSmokeTest
 ```

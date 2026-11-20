@@ -4,7 +4,8 @@
 //  - both receive the chunks around them,
 //  - a block placed / broken by one client shows up on the other,
 //  - water poured by one client flows, and both clients end up seeing the same water,
-//  - each client sees the other player where it actually is.
+//  - each client sees the other player where it actually is,
+//  - a flood of ~100 water blocks streams to the clients at a modest rate.
 //
 // Usage: NetSmokeTest [host:port]   (with an address, joins that server instead of
 // starting one; run two at once against a dedicated server for a 4-client test).
@@ -203,6 +204,44 @@ int main(int argc, char** argv) {
         const int mismatches = WaterMismatches(a.world, b.world, pool, 6);
         Check(mismatches == 0, "A and B see the same water (" + std::to_string(mismatches) + " differing cells, A " +
                                    std::to_string(va.cells) + " / B " + std::to_string(vb.cells) + " wet cells mid-flow)");
+    }
+
+    // A flood: a 6x6x3 block of water (108 full cells) dropped on the terrain spreads
+    // over many ticks. Measure what that costs each client on the wire.
+    {
+        const glm::ivec3 feetB = glm::ivec3(glm::floor(b.player.GetFeetPosition()));
+        const glm::ivec3 base(feetB.x - 3, feetB.y + 3, feetB.z + 6);
+        const auto before = b.client.GetStats();
+        int placed = 0;
+        for (int y = 0; y < 3; y++)
+            for (int x = 0; x < 6; x++)
+                for (int z = 0; z < 6; z++) {
+                    Block cell;
+                    const glm::ivec3 p = base + glm::ivec3(x, y, z);
+                    if (b.world.GetBlock(p.x, p.y, p.z, cell) && cell.IsAir()) {
+                        b.client.PlaceBlock(p, BlockType::WATER);
+                        placed++;
+                    }
+                }
+        const double seconds = 10.0;
+        Pump(a, b, seconds, [] { return false; });
+        const auto after = b.client.GetStats();
+        const double kbPerSecond = (after.bytesReceived - before.bytesReceived) / 1024.0 / seconds;
+        // Water that has left the box it was placed in.
+        int outside = 0;
+        for (int x = -14; x <= 20; x++)
+            for (int y = -24; y <= 3; y++)
+                for (int z = -14; z <= 20; z++) {
+                    const bool inBox = x >= 0 && x < 6 && y >= 0 && y < 3 && z >= 0 && z < 6;
+                    Block cell;
+                    const glm::ivec3 p = base + glm::ivec3(x, y, z);
+                    if (!inBox && a.world.GetBlock(p.x, p.y, p.z, cell) && cell.HasWater()) outside++;
+                }
+        std::cout << "        flood: " << placed << " cells placed, " << outside << " wet cells outside that box after " << seconds << " s, "
+                  << (after.deltasReceived - before.deltasReceived) << " cell updates, " << kbPerSecond << " KB/s to each client"
+                  << std::endl;
+        Check(placed > 50 && outside > 30, "flood spreads (seen by A)");
+        Check(kbPerSecond < 256.0, "flood costs under 256 KB/s per client");
     }
 
     const Client::Stats sa = a.client.GetStats(), sb = b.client.GetStats();
