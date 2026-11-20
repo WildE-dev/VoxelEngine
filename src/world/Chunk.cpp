@@ -165,27 +165,57 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
     };
 
     // --- Water surfaces ---
-    // Each surface corner is the average level of the water cells sharing it (full if
-    // any of them has water above), so neighbouring cells meet exactly: the surface is
-    // continuous and no faces are drawn between water cells. Heights are in 32nds of
-    // a block: the mesh geometry has eighths, and the remaining 0..3 32nds go in the
-    // vertex bits water doesn't use for AO (main.vert adds them in the water pass), so
-    // slowly changing levels move smoothly instead of popping an eighth at a time.
+    // Each surface corner is the average height of the water surface in the columns
+    // sharing it, so neighbouring cells meet exactly: the surface is continuous and no
+    // faces are drawn between water cells. A column's surface is taken near this row:
+    // one row up where that column is taller, one row down where it's lower and open
+    // above, so flowing water slopes smoothly between rows instead of breaking into
+    // separate boxes. Heights are in 32nds of a block: the mesh geometry has eighths,
+    // and the remaining 0..3 32nds go in the vertex bits water doesn't use for AO
+    // (main.vert adds them in the water pass).
     constexpr int kUnitsPer32nd = Block::kMaxWaterVolume / 32;
+    constexpr int kFullUnits = Block::kMaxWaterVolume;
     constexpr int kCornerOfEdge[4][2] = { { 0, 1 }, { 1, 0 }, { 0, 0 }, { 1, 1 } }; // EdgeData order
+    const glm::ivec3 up(0, 1, 0);
+    // Height of a column's water surface relative to the base of row p.y, in units, or
+    // -1000 if the column has no water to connect with near this row.
+    constexpr int kNoSurface = -1000;
+    auto columnSurface = [&](const glm::ivec3& q) -> int {
+        if (hasWater(q)) {
+            if (!hasWater(q + up)) return cellAt(q).WaterShownLevel();
+            if (!hasWater(q + up + up)) return kFullUnits + cellAt(q + up).WaterShownLevel();
+            return 2 * kFullUnits; // well above this row
+        }
+        if (!inGrid(q)) return kNoSurface;
+        if (!cellAt(q).CanHoldWater()) {
+            // A solid block with water on top (the brink of a waterfall): reach up to it,
+            // so the falling curtain meets the water pouring over the edge. Otherwise a
+            // solid block is a wall, not a surface.
+            if (isOpaque(q) && hasWater(q + up)) return kFullUnits + cellAt(q + up).WaterShownLevel();
+            return kNoSurface;
+        }
+        // Dry ground at this row (a dry slope, or open air on solid ground): the water
+        // tapers down to it, so edges of flowing water and puddles slope instead of
+        // ending in little walls. (Water at rest is bounded by walls or slopes anyway.)
+        if (cellAt(q).IsPartial()) return cellAt(q).WaterFloor();
+        const glm::ivec3 below = q - up;
+        if (hasWater(below)) return cellAt(below).WaterShownLevel() - kFullUnits; // a lower water surface
+        if (inGrid(below) && (isOpaque(below) || cellAt(below).IsPartial())) return 0;
+        return kNoSurface; // a drop: don't sag toward it
+    };
     auto cornerHeight = [&](const glm::ivec3& p, int cx, int cz) {
         int sum = 0, n = 0;
         for (int dx = cx - 1; dx <= cx; dx++) {
             for (int dz = cz - 1; dz <= cz; dz++) {
-                const glm::ivec3 q = p + glm::ivec3(dx, 0, dz);
-                if (!hasWater(q)) continue;
-                if (hasWater(q + glm::ivec3(0, 1, 0))) return 32;
-                sum += cellAt(q).WaterShownLevel();
+                const int surface = columnSurface(p + glm::ivec3(dx, 0, dz));
+                if (surface == kNoSurface) continue;
+                sum += surface;
                 n++;
             }
         }
-        // At least an eighth, so thin water stays visible.
-        return std::clamp((sum + n * kUnitsPer32nd / 2) / (n * kUnitsPer32nd), 4, 32);
+        // At least a 32nd so the surface never folds below the cell; at most its top.
+        const int average = (sum + (sum >= 0 ? n / 2 : -n / 2)) / n;
+        return std::clamp((average + kUnitsPer32nd / 2) / kUnitsPer32nd, 1, 32);
     };
     // Side faces: our two edges on that side, and the neighbour's edges they touch.
     struct SideEdges { int ours[2], theirs[2]; };
@@ -203,8 +233,10 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
         uint8_t top[4], fine[4], bottom[4]; // top in eighths + fine (0..3 32nds); bottom in eighths
         int top32[4];
         bool visible = false;
+        // With more water directly above, this cell is full and meets it exactly.
+        const bool covered = hasWater(here + up);
         for (int e = 0; e < 4; e++) {
-            top32[e] = cornerHeight(here, kCornerOfEdge[e][0], kCornerOfEdge[e][1]);
+            top32[e] = covered ? 32 : cornerHeight(here, kCornerOfEdge[e][0], kCornerOfEdge[e][1]);
             top[e] = static_cast<uint8_t>(top32[e] / 4);
             fine[e] = static_cast<uint8_t>(top32[e] % 4);
             // In a waterlogged block the water sits on the slope.

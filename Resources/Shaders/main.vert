@@ -77,7 +77,11 @@ void main()
 
     // Sun: simple directional term from straight above, only where the sky reaches.
     // Directions must ignore the model translation (w = 0).
-    float sun = dot(normalize(mat3(model) * data.norm), vec3(0.0f, 1.0f, 0.0f));
+    vec3 normal = normalize(mat3(model) * data.norm);
+    // Water is translucent and scatters light: its steps and falling curtains shouldn't
+    // darken like solid faces (that made the joins between water levels read as cracks).
+    if (waterPass > 0.5f) normal = normalize(mix(normal, vec3(0.0f, 1.0f, 0.0f), 0.7f));
+    float sun = dot(normal, vec3(0.0f, 1.0f, 0.0f));
     sun = clamp((sun + 1.0f) / 2.0f, 0.0f, 1.0f) * sky * sunBrightness;
 
     // A little ambient so unlit areas at night aren't pure black.

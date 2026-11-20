@@ -76,7 +76,10 @@ fills.
 While water moves, the drawn surface hides small back-and-forth changes (it
 follows the real level once that has moved an eighth of a block, and snaps to it
 once the water settles), and surfaces are drawn in 32nds of a block, so a
-draining lake goes smoothly down instead of jittering.
+draining lake goes smoothly down instead of jittering. Surface corners average
+the water height of neighbouring columns across rows, so flowing water slopes
+between levels, thin edges taper to the ground, and a waterfall's curtain meets
+the water pouring over its brink.
 
 The simulation runs on its own thread, up to 32,768 water cells per tick, ten
 ticks a second, and only near something that changed. It holds a world-wide edit
