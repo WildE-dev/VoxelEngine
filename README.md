@@ -1,7 +1,8 @@
 # VoxelEngine
 
-A small OpenGL voxel engine with sloped terrain, chunk streaming on a background
-thread, block lighting, ambient occlusion, a skybox and a black hole lensing effect.
+A small OpenGL voxel engine with sloped terrain, caves, trees, chunk streaming on a
+background thread, block lighting, ambient occlusion, a skybox and a black hole
+lensing effect.
 
 ## Building
 
@@ -28,7 +29,7 @@ build copies it next to the binary.
 | Mouse | Look |
 | Left click | Break block |
 | Right click | Place the selected block |
-| 1-4 | Select block: dirt, stone, grass, lamp |
+| 1-6 | Select block: dirt, stone, grass, lamp, log, leaves |
 | L (hold) | Laser: carve a tunnel along the view ray |
 | R | Reload shaders and block textures, rebuild all chunk meshes |
 | Tab | Toggle mouse capture |
@@ -37,6 +38,21 @@ build copies it next to the binary.
 | F3 | Toggle ambient occlusion |
 | N | Toggle day / night |
 | Esc | Quit |
+
+## World generation
+
+`TerrainGenerator` builds each chunk independently and deterministically:
+
+1. **Surface:** a heightmap from 8 octaves of Perlin noise, snapped to eighths of
+   a block. Each column gets a sloped grass block on top, then dirt, then stone.
+2. **Caves** (`Caves.cpp`): winding tunnels where two 3D noise fields are both
+   near zero, plus large caverns more than 24 blocks down. Tunnels that reach
+   the surface form entrances. Noise is sampled every 4 blocks and interpolated.
+3. **Features** (`Features.cpp`): trees cluster in forests, plus bushes and
+   boulders. Each kind sits on a jittered grid, so a chunk can generate the parts
+   of features rooted in neighbouring columns.
+4. **Plants:** tall grass and flowers, drawn as crossed sprites that sit on the
+   sloped surface. Breaking the block under a plant removes it.
 
 ## Player
 
@@ -58,6 +74,8 @@ cross chunk borders:
   are from open sky. The day/night setting scales it in the shader.
 - **Block light** spreads from lamps (level 15), losing one level per block.
 
+Leaves and plants let light through, so the ground under trees stays lit.
+
 Faces combine both with a directional sun term and per-vertex ambient occlusion,
 all smoothed across vertices.
 
@@ -78,5 +96,5 @@ src/
   app/     Application (window, input, main loop), Camera, Player (movement and physics)
   render/  Renderer (frame passes, skybox, post effect), Shader, Textures, DebugDraw
   world/   World (chunk streaming + worker thread), Chunk, Block, TerrainGenerator,
-           Lighting, Collision, Raycast
+           Caves, Features, Noise, Lighting, Collision, Raycast
 ```

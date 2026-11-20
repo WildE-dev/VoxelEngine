@@ -18,9 +18,12 @@ class Chunk;
 //  - Sky light enters from above. Full strength sky light travels straight down
 //    without loss; in every other direction it loses one level per block.
 //
-// Space above the loaded region is treated as open sky. Unloaded chunks are always
-// freshly generated terrain (edits don't survive unloading), and the generator
-// makes a pure heightmap with no overhangs, so that assumption holds.
+// While the chunk above a column isn't loaded, the column counts as open to the sky
+// only if the new chunk reaches its terrain surface row. Unloaded chunks are always
+// freshly generated terrain (edits don't survive unloading), and generated terrain
+// never hangs opaque blocks over air above the surface row (see TerrainGenerator).
+// Below the surface the column starts dark; caves only remove blocks, so any opening
+// found there is lit additively once the chunks above load.
 //
 // Runs entirely on the world worker thread. The chunk lookup must only return
 // loaded chunks, and the pointers it returns must stay valid for the duration of
@@ -35,8 +38,10 @@ public:
 
     // Queue work. Nothing propagates until Propagate() is called.
     void OnBlockChanged(const glm::ivec3& worldPos);
-    // Seeds the chunk's light and links it with its loaded neighbours.
-    void OnChunkLoaded(Chunk& chunk);
+    // Seeds the chunk's light and links it with its loaded neighbours. surfaceRows
+    // (indexed [x * CHUNK_SIZE + z]) gives each column's terrain surface row; null
+    // means nothing above the chunk blocks the sky.
+    void OnChunkLoaded(Chunk& chunk, const std::array<int, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE>* surfaceRows = nullptr);
 
     // Runs all queued work. Adds every chunk whose mesh is affected to `dirty`.
     void Propagate(ChunkSet& dirty);

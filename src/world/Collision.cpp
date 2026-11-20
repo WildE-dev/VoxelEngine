@@ -48,7 +48,7 @@ std::optional<float> SlopeHeight(const World& world, float x, float z, float yLo
             unknown = true;
             return std::nullopt;
         }
-        if (block.IsAir()) continue;
+        if (block.IsPassable()) continue; // air or a plant
         if (block.IsFullBlock()) return std::nullopt; // a full block, not a slope
         const float surface = y + block.SurfaceHeight(fx, fz);
         if (surface <= yHi && surface >= yLo) return surface;

@@ -56,7 +56,7 @@ bool Player::Spawn(const World& world) {
     for (int y = kTop; y >= kBottom; y--) {
         Block block;
         if (!world.GetBlock(bx, y, bz, block)) return false; // not loaded yet
-        if (block.IsAir()) continue;
+        if (block.IsPassable()) continue;
 
         feet.y = y + block.SurfaceHeight(feet.x - bx, feet.z - bz) + kSkin;
         // Neighbouring full blocks can still stick up into the box; climb out.

@@ -91,6 +91,10 @@ void World::SetBlock(int x, int y, int z, const Block& block) {
 
     chunk->SetBlock(local.x, local.y, local.z, block);
 
+    // Plants need the block under them: any change there uproots them.
+    Block above;
+    if (GetBlock(x, y + 1, z, above) && above.IsPlant()) SetBlock(x, y + 1, z, Block());
+
     // Light depends on the new block, so let the worker update it; it requests the
     // mesh rebuilds once light is settled. Light-neutral edits (no light at or
     // around the block) still need rebuilding, so request those directly too.
@@ -210,15 +214,15 @@ void World::RequestNeighbourRebuilds(const glm::ivec3& chunkCoords) {
     for (const auto& neighbour : neighbours) RequestRebuild(neighbour);
 }
 
-const Chunk::ColumnHeights& World::GetColumnHeights(int chunkX, int chunkZ) {
+const TerrainGenerator::ColumnHeights& World::GetColumnHeights(int chunkX, int chunkZ) {
     // Enough for every column in range plus the hysteresis band, with room to move.
     const size_t maxEntries = 2 * static_cast<size_t>(2 * RENDER_DISTANCE + 5) * (2 * RENDER_DISTANCE + 5);
     if (columnHeights.size() > maxEntries) columnHeights.clear();
 
     auto& entry = columnHeights[glm::ivec2(chunkX, chunkZ)];
     if (!entry) {
-        entry = std::make_unique<Chunk::ColumnHeights>();
-        Chunk::ComputeColumnHeights(terrain, chunkX, chunkZ, *entry);
+        entry = std::make_unique<TerrainGenerator::ColumnHeights>();
+        terrain.ComputeColumnHeights(chunkX, chunkZ, *entry);
     }
     return *entry;
 }
@@ -247,13 +251,21 @@ bool World::BuildChunkMesh(Chunk& chunk) {
 }
 
 void World::PropagateLight(const std::vector<ChunkPtr>& loadedChunks, const std::vector<glm::ivec3>& changedBlocks) {
+    // Each new chunk's surface rows let sky light tell which columns are open to the
+    // sky while the chunk above hasn't loaded yet.
+    std::vector<TerrainGenerator::SurfaceRows> surfaceRows(loadedChunks.size());
+    for (size_t i = 0; i < loadedChunks.size(); i++) {
+        const glm::ivec3 c = loadedChunks[i]->GetCoords();
+        TerrainGenerator::ComputeSurfaceRows(GetColumnHeights(c.x, c.z), surfaceRows[i]);
+    }
+
     LightPropagator::ChunkSet dirty;
     {
         // Held shared for the whole pass: the propagator keeps raw chunk pointers,
         // and this stops the main thread unloading chunks underneath it.
         std::shared_lock<std::shared_mutex> lock(chunksMutex);
-        for (const auto& chunk : loadedChunks)
-            if (!chunk->IsRemoved()) light.OnChunkLoaded(*chunk);
+        for (size_t i = 0; i < loadedChunks.size(); i++)
+            if (!loadedChunks[i]->IsRemoved()) light.OnChunkLoaded(*loadedChunks[i], &surfaceRows[i]);
         for (const auto& pos : changedBlocks)
             light.OnBlockChanged(pos);
         light.Propagate(dirty);
@@ -272,6 +284,7 @@ void World::PropagateLight(const std::vector<ChunkPtr>& loadedChunks, const std:
 
 void World::WorkerLoop() {
     std::vector<ChunkPtr> batch, generated;
+    auto generatedBlocks = std::make_unique<TerrainGenerator::Blocks>(); // reused generation buffer
     std::vector<glm::ivec3> changedBlocks;
     batch.reserve(kGenerateBatchSize);
 
@@ -297,7 +310,8 @@ void World::WorkerLoop() {
             if (chunk->IsRemoved() || !chunk->TryBeginGenerate()) continue;
 
             const glm::ivec3 c = chunk->GetCoords();
-            chunk->Generate(GetColumnHeights(c.x, c.z));
+            terrain.GenerateChunk(c, GetColumnHeights(c.x, c.z), *generatedBlocks);
+            chunk->SetGenerated(*generatedBlocks);
             generated.push_back(chunk);
             RequestRebuild(chunk);
             RequestNeighbourRebuilds(chunk->GetCoords());

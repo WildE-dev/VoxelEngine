@@ -11,13 +11,11 @@
 
 #include "world/Block.h"
 
-class TerrainGenerator;
-
 // A CHUNK_SIZE^3 block of voxels.
 //
 // Threading contract:
 //  - Block data is guarded by an internal mutex and may be read/written from any thread.
-//  - Generate() and BuildMesh() run on the world worker thread.
+//  - SetGenerated() and BuildMesh() run on the world worker thread.
 //  - Light (block and sky) is only ever read or written on the worker thread (by the light
 //    propagation and the mesher), so it needs no lock.
 //  - UploadPendingMesh(), Draw() and ReleaseGpu() must run on the thread that owns the GL context.
@@ -81,14 +79,10 @@ public:
     // Copies all blocks out under a single lock.
     void CopyBlocks(std::array<Block, VOLUME>& out) const;
 
-    // Terrain heights at the (CHUNK_SIZE + 1)^2 block corners of one chunk column.
-    // Identical for every chunk stacked in that column, so World caches it.
-    using ColumnHeights = std::array<float, (CHUNK_SIZE + 1) * (CHUNK_SIZE + 1)>;
-    static void ComputeColumnHeights(const TerrainGenerator& terrain, int chunkX, int chunkZ, ColumnHeights& out);
-
-    // Worker thread.
+    // Worker thread. Generation itself is TerrainGenerator's job; the result is
+    // handed over here and the chunk becomes Loaded.
     bool TryBeginGenerate();
-    void Generate(const ColumnHeights& heights);
+    void SetGenerated(const std::array<Block, VOLUME>& generated);
     void BuildMesh(const Neighbours& neighbours);
 
     // GL thread. Upload the latest mesh from the worker (if any), then draw it.

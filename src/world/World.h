@@ -75,7 +75,7 @@ private:
     void WorkerLoop();
     // Worker thread: heights for a chunk column, cached since every chunk stacked in
     // the column needs the same (expensive) noise samples.
-    const Chunk::ColumnHeights& GetColumnHeights(int chunkX, int chunkZ);
+    const TerrainGenerator::ColumnHeights& GetColumnHeights(int chunkX, int chunkZ);
     // Returns false (and builds nothing) while a neighbour is still waiting to generate.
     bool BuildChunkMesh(Chunk& chunk);
     // Worker thread: runs light propagation and queues rebuilds for affected chunks.
@@ -101,7 +101,7 @@ private:
     struct IVec2Hash {
         size_t operator()(const glm::ivec2& v) const noexcept { return Coords::IVec3Hash{}(glm::ivec3(v, 0)); }
     };
-    std::unordered_map<glm::ivec2, std::unique_ptr<Chunk::ColumnHeights>, IVec2Hash> columnHeights; // worker thread only
+    std::unordered_map<glm::ivec2, std::unique_ptr<TerrainGenerator::ColumnHeights>, IVec2Hash> columnHeights; // worker thread only
     LightPropagator light; // worker thread only
     std::thread worker;
 };

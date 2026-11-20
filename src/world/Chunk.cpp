@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include "world/TerrainGenerator.h"
 
 std::atomic<int> Chunk::liveCount{0};
 
@@ -42,67 +41,10 @@ bool Chunk::TryBeginGenerate() {
     return state.compare_exchange_strong(expected, State::Generating);
 }
 
-void Chunk::ComputeColumnHeights(const TerrainGenerator& terrain, int chunkX, int chunkZ, ColumnHeights& out) {
-    for (int x = 0; x <= CHUNK_SIZE; x++)
-        for (int z = 0; z <= CHUNK_SIZE; z++)
-            out[x * (CHUNK_SIZE + 1) + z] = terrain.GetHeight(chunkX * CHUNK_SIZE + x, chunkZ * CHUNK_SIZE + z);
-}
-
-void Chunk::Generate(const ColumnHeights& columnHeights) {
-    // Build into a local buffer so the lock is only held for the final copy.
-    auto generated = std::make_unique<std::array<Block, VOLUME>>();
-    auto& out = *generated;
-
-    auto heightAt = [&](int x, int z) { return columnHeights[x * (CHUNK_SIZE + 1) + z]; };
-
-    const float smoothness = 8.0f;
-    auto quantise = [&](float h) { return std::round(h * smoothness) / smoothness; };
-    // Height above the block's base in eighths, clamped to the valid edge range.
-    auto edgeHeight = [](float h) { return static_cast<uint8_t>(std::clamp(static_cast<int>(h * 8), 0, 8)); };
-
-    for (int x = 0; x < CHUNK_SIZE; x++) {
-        for (int z = 0; z < CHUNK_SIZE; z++) {
-            // Corner heights, in edge order used by EdgeData.
-            float h0 = quantise(heightAt(x, z + 1));
-            float h1 = quantise(heightAt(x + 1, z));
-            float h2 = quantise(heightAt(x, z));
-            float h3 = quantise(heightAt(x + 1, z + 1));
-
-            int minHeight = static_cast<int>(std::floor(std::min(std::min(h0, h1), std::min(h2, h3))));
-
-            for (int y = 0; y < CHUNK_SIZE; y++) {
-                int blockY = coords.y * CHUNK_SIZE + y;
-
-                if (blockY == minHeight) {
-                    EdgeData edges;
-                    edges.SetTopY(0, edgeHeight(h0 - blockY));
-                    edges.SetTopY(1, edgeHeight(h1 - blockY));
-                    edges.SetTopY(2, edgeHeight(h2 - blockY));
-                    edges.SetTopY(3, edgeHeight(h3 - blockY));
-
-                    if (edges.IsValid()) {
-                        out[Index(x, y, z)] = Block(BlockType::GRASS, edges);
-                    }
-                    else if (y > 0) {
-                        // Surface is (almost) flat at the bottom of this cell: put a full
-                        // grass block underneath instead. At y == 0 that block belongs to
-                        // the chunk below, which generates dirt there.
-                        out[Index(x, y - 1, z)] = Block(BlockType::GRASS);
-                    }
-                }
-                else if (blockY < minHeight && blockY > minHeight - 5) {
-                    out[Index(x, y, z)] = Block(BlockType::DIRT);
-                }
-                else if (blockY < minHeight) {
-                    out[Index(x, y, z)] = Block(BlockType::STONE);
-                }
-            }
-        }
-    }
-
+void Chunk::SetGenerated(const std::array<Block, VOLUME>& generated) {
     {
         std::lock_guard<std::mutex> lock(blockMutex);
-        blocks = out;
+        blocks = generated;
     }
     state = State::Loaded;
 }
@@ -187,6 +129,12 @@ void Chunk::BuildMesh(const Neighbours& neighbours) {
             for (int z = 0; z < CHUNK_SIZE; ++z) {
                 const Block& block = local[Index(x, y, z)];
                 if (block.IsAir()) continue;
+
+                if (block.IsPlant()) {
+                    const glm::ivec3 here(x, y, z);
+                    block.AddPlantVertices(vertices, x, y, z, static_cast<uint8_t>(blockLightAt(here)), static_cast<uint8_t>(skyLightAt(here)));
+                    continue;
+                }
 
                 const bool full = block.IsFullBlock();
                 const glm::ivec3 pos(x, y, z);

@@ -73,8 +73,18 @@ enum class BlockType : uint8_t {
     DIRT,
     STONE,
     LAMP,
+    LOG,
+    LEAVES,
+    // Plants: drawn as crossed sprites, no collision, don't block light.
+    TALL_GRASS,
+    FLOWER_RED,
+    FLOWER_YELLOW,
     COUNT
 };
+
+inline bool IsPlantType(BlockType type) {
+    return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW;
+}
 
 constexpr uint8_t kMaxLight = 15;
 
@@ -146,20 +156,36 @@ struct Block {
     // Partial block. Falls back to air if the edge data is degenerate.
     Block(BlockType t, EdgeData edges) : type(t) { SetEdgeData(edges); }
 
+    // A plant whose sprite is drawn `dropEighths` (0..8) below its cell's floor, so it
+    // stands on a sloped block underneath. Stored in the otherwise unused edge data.
+    static Block Plant(BlockType t, uint8_t dropEighths) {
+        Block b(t);
+        b.edgeData.edges[0] = dropEighths;
+        return b;
+    }
+    bool IsPlant() const { return IsPlantType(type); }
+    float PlantDrop() const { return (edgeData.edges[0] & 0x0F) / 8.0f; }
+
     void SetEdgeData(EdgeData edges);
     void Shrink();
 
     bool IsAir() const { return type == BlockType::AIR; }
-    // Full, opaque cube that hides any neighbouring face touching it.
-    bool IsFullBlock() const { return type != BlockType::AIR && edgeData.IsFull(); }
-    // Light passes through air and partial blocks but not full ones.
-    bool BlocksLight() const { return IsFullBlock(); }
+    // Full, opaque cube that hides any neighbouring face touching it, and collides.
+    bool IsFullBlock() const { return type != BlockType::AIR && !IsPlant() && edgeData.IsFull(); }
+    // Light passes through air, partial blocks, plants and leaves.
+    bool BlocksLight() const { return IsFullBlock() && type != BlockType::LEAVES; }
+    // Air or a plant: nothing to stand on or bump into.
+    bool IsPassable() const { return IsAir() || IsPlant(); }
     uint8_t GetLightEmission() const { return ::GetLightEmission(type); }
 
     // Height of the block's top surface (0..1) at a point inside its footprint,
     // fx, fz in [0, 1]. Matches the two triangles the mesher draws for the top face,
     // so things standing on it sit exactly on the visible surface.
     float SurfaceHeight(float fx, float fz) const;
+
+    // Appends a plant's crossed sprite (two double-sided diagonal quads), lit by the
+    // light in its own cell.
+    void AddPlantVertices(std::vector<uint32_t>& vertices, int x, int y, int z, uint8_t blockLight, uint8_t skyLight) const;
 
     // Appends 6 vertices (2 packed uint32 each) for the given face.
     void AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading) const;

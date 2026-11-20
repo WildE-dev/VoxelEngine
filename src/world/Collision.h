@@ -9,7 +9,8 @@ class World;
 // Collision queries used by player physics. Main thread only (they use World::GetBlock).
 //
 // Full blocks collide as unit boxes. Partial (sloped) blocks are treated as a height
-// field: they never block sideways, but things stand on their top surface. Space in
+// field: they never block sideways, but things stand on their top surface. Plants
+// don't collide at all. Space in
 // chunks that aren't loaded yet counts as solid, so nothing falls out of the world
 // while terrain streams in.
 namespace Collision {

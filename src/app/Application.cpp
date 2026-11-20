@@ -29,7 +29,7 @@ constexpr float kReach = 50.0f;
 constexpr float kLaserRange = 100.0f;
 constexpr int kLaserRadius = 4;
 // Blocks selectable with the number keys, in order.
-constexpr BlockType kPlaceableBlocks[] = { BlockType::DIRT, BlockType::STONE, BlockType::GRASS, BlockType::LAMP };
+constexpr BlockType kPlaceableBlocks[] = { BlockType::DIRT, BlockType::STONE, BlockType::GRASS, BlockType::LAMP, BlockType::LOG, BlockType::LEAVES };
 
 const char* BlockName(BlockType type) {
     switch (type) {
@@ -37,6 +37,11 @@ const char* BlockName(BlockType type) {
     case BlockType::DIRT:  return "Dirt";
     case BlockType::STONE: return "Stone";
     case BlockType::LAMP:  return "Lamp";
+    case BlockType::LOG:   return "Log";
+    case BlockType::LEAVES: return "Leaves";
+    case BlockType::TALL_GRASS: return "Tall grass";
+    case BlockType::FLOWER_RED: return "Red flower";
+    case BlockType::FLOWER_YELLOW: return "Yellow flower";
     default:               return "Air";
     }
 }

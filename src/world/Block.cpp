@@ -19,10 +19,11 @@ struct VertexData {
     VertexData(glm::vec3 pos, glm::vec2 tex, int textureIndex, glm::vec3 norm)
         : pos(pos), tex(tex), textureIndex(textureIndex), norm(norm) {}
 
-    // xyz in 1/8 block units (8 bits each), uv in 1/8 units (4 bits each).
+    // xyz in 1/8 block units (8 bits each), uv in 1/8 units (4 bits each). y is
+    // stored one block up so plant sprites can reach below their chunk's floor.
     uint32_t PackPosition() const {
         uint32_t x = static_cast<uint32_t>(pos.x * 8);
-        uint32_t y = static_cast<uint32_t>(pos.y * 8);
+        uint32_t y = static_cast<uint32_t>((pos.y + 1.0f) * 8);
         uint32_t z = static_cast<uint32_t>(pos.z * 8);
         uint32_t u = static_cast<uint32_t>(tex.x * 8);
         uint32_t v = static_cast<uint32_t>(tex.y * 8);
@@ -229,6 +230,11 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* DIRT  */ {{ "dirt", "dirt", "dirt", "dirt", "dirt", "dirt" }},
     /* STONE */ {{ "stone", "stone", "stone", "stone", "stone", "stone" }},
     /* LAMP  */ {{ "lamp", "lamp", "lamp", "lamp", "lamp", "lamp" }},
+    /* LOG   */ {{ "log_top", "log_top", "log_side", "log_side", "log_side", "log_side" }},
+    /* LEAVES*/ {{ "leaves", "leaves", "leaves", "leaves", "leaves", "leaves" }},
+    /* TALL_GRASS    */ {{ "tall_grass", nullptr, nullptr, nullptr, nullptr, nullptr }},
+    /* FLOWER_RED    */ {{ "flower_red", nullptr, nullptr, nullptr, nullptr, nullptr }},
+    /* FLOWER_YELLOW */ {{ "flower_yellow", nullptr, nullptr, nullptr, nullptr, nullptr }},
 };
 
 // Resolved atlas indices. Written on the main thread on (re)load, read by the
@@ -291,7 +297,7 @@ void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, i
 }
 
 float Block::SurfaceHeight(float fx, float fz) const {
-    if (IsAir()) return 0.0f;
+    if (IsPassable()) return 0.0f;
     if (IsFullBlock()) return 1.0f;
 
     // Corner heights. See GetFaceVertices(Face::Top): edge 2 is (0,0), 1 is (1,0),
@@ -303,6 +309,35 @@ float Block::SurfaceHeight(float fx, float fz) const {
 
     if (fx + fz <= 1.0f) return c00 + (c10 - c00) * fx + (c01 - c00) * fz;
     return c11 + (c01 - c11) * (1.0f - fx) + (c10 - c11) * (1.0f - fz);
+}
+
+void Block::AddPlantVertices(std::vector<uint32_t>& vertices, int x, int y, int z, uint8_t blockLight, uint8_t skyLight) const {
+    const float bottom = y - PlantDrop();
+    const float top = bottom + 1.0f;
+    const int texture = GetTextureData(type).top;
+    const glm::vec3 up(0.0f, 1.0f, 0.0f); // lit like an upward face: plants catch the sun
+
+    auto vertex = [&](float vx, float vy, float vz, float u, float v) {
+        VertexData d(glm::vec3(vx, vy, vz), glm::vec2(u, v), texture, up);
+        d.light = blockLight;
+        d.sky = skyLight;
+        return d;
+    };
+
+    // Two quads along the cell's diagonals. v = 0 is the top of the texture.
+    const float diagonals[2][4] = { { 0, 0, 1, 1 }, { 1, 0, 0, 1 } }; // x0, z0, x1, z1
+    for (const auto& d : diagonals) {
+        VertexData bl = vertex(x + d[0], bottom, z + d[1], 0, 1);
+        VertexData br = vertex(x + d[2], bottom, z + d[3], 1, 1);
+        VertexData tl = vertex(x + d[0], top, z + d[1], 0, 0);
+        VertexData tr = vertex(x + d[2], top, z + d[3], 1, 0);
+        // Both windings so the sprite shows from either side with back-face culling on.
+        const VertexData quad[12] = { bl, tl, br, br, tl, tr,   bl, br, tl, br, tr, tl };
+        for (const auto& q : quad) {
+            vertices.push_back(q.PackPosition());
+            vertices.push_back(q.PackShading());
+        }
+    }
 }
 
 void Block::Shrink() {

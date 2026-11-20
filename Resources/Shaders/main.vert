@@ -37,7 +37,7 @@ struct Data
 Data getData()
 {
     float x = ((aData1 >> 24) & 0xFFu) / 8.0f;
-    float y = ((aData1 >> 16) & 0xFFu) / 8.0f;
+    float y = ((aData1 >> 16) & 0xFFu) / 8.0f - 1.0f; // stored one block up (see Block.cpp)
     float z = ((aData1 >> 8) & 0xFFu) / 8.0f;
     
     float u = ((aData1 >> 4) & 0xFu) / 8.0f;

@@ -47,11 +47,17 @@ add_executable(${PROJECT_NAME}
     src/world/Block.h
     src/world/Chunk.cpp
     src/world/Chunk.h
+    src/world/Caves.cpp
+    src/world/Caves.h
     src/world/Collision.cpp
     src/world/Collision.h
     src/world/Coords.h
+    src/world/Features.cpp
+    src/world/Features.h
     src/world/Lighting.cpp
     src/world/Lighting.h
+    src/world/Noise.cpp
+    src/world/Noise.h
     src/world/Raycast.cpp
     src/world/Raycast.h
     src/world/TerrainGenerator.cpp

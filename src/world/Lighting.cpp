@@ -53,7 +53,7 @@ void LightPropagator::OnBlockChanged(const glm::ivec3& worldPos) {
     changedBlocks.push_back(worldPos);
 }
 
-void LightPropagator::OnChunkLoaded(Chunk& chunk) {
+void LightPropagator::OnChunkLoaded(Chunk& chunk, const std::array<int, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE>* surfaceRows) {
     cacheValid = false;
     const glm::ivec3 coords = chunk.GetCoords();
     const glm::ivec3 origin = coords * S;
@@ -72,14 +72,15 @@ void LightPropagator::OnChunkLoaded(Chunk& chunk) {
                 }
 
     // --- Sky light: full strength down each column until the first opaque block ---
-    // A column is open if the chunk above isn't loaded (so it's untouched terrain,
-    // which is open to the sky wherever it isn't solid) or if the cell above has full
-    // sky light. Below the first opaque block, generated terrain is solid.
+    // A column is open if the cell above has full sky light, or, with the chunk above
+    // not loaded, if no generated terrain lies above this chunk in that column.
     Chunk* above = lookup(coords + kUp);
+    const int chunkTop = origin.y + S - 1;
     bool anyShadowed = false;
     for (int z = 0; z < S; z++) {
         for (int x = 0; x < S; x++) {
-            bool open = !above || (above->GetLight(LightChannel::Sky, x, 0, z) == kMaxLight && !above->IsOpaque(x, 0, z));
+            bool open = above ? (above->GetLight(LightChannel::Sky, x, 0, z) == kMaxLight && !above->GetBlock(x, 0, z).BlocksLight())
+                              : (!surfaceRows || chunkTop + 1 >= (*surfaceRows)[x * S + z]);
             for (int y = S - 1; y >= 0; y--) {
                 if (blocks[Index(x, y, z)].BlocksLight()) open = false;
                 else if (open) chunk.SetLight(LightChannel::Sky, x, y, z, kMaxLight);
