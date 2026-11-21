@@ -196,6 +196,7 @@ that damaged files are refused, and that a rejoining player is put back in place
 | F2 | Toggle debug window |
 | F3 | Toggle ambient occlusion |
 | F4 | Toggle the compass, coordinates and clock at the top of the screen |
+| P | Toggle the list of players online, with how far off each is and which way |
 | M | Toggle the minimap (top right): the ground around you from above, north up, with you as an arrow and other players as dots |
 | F12 | Save a screenshot (`screenshot-<date>-<time>.png` in the working directory) |
 | N | Skip to the next dusk (by day) or dawn (at night), for everyone on the server |

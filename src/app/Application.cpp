@@ -635,6 +635,7 @@ void Application::Run() {
         if (showMap) DrawMinimap();
         DrawToast();
         DrawDeath();
+        if (showPlayers) DrawPlayerList();
         DrawHotbar();
         DrawStatus();
         DrawChat();
@@ -902,6 +903,29 @@ void Application::DrawMinimap() {
     draw->AddTriangleFilled(ImVec2(me.x + f.x * 7.0f, me.y + f.y * 7.0f), ImVec2(me.x - f.x * 4.0f + r.x * 4.5f, me.y - f.y * 4.0f + r.y * 4.5f),
                             ImVec2(me.x - f.x * 4.0f - r.x * 4.5f, me.y - f.y * 4.0f - r.y * 4.5f), IM_COL32(255, 255, 255, 255));
     draw->AddText(ImVec2(lo.x + kShown * 0.5f - 4.0f, lo.y + 2.0f), IM_COL32(255, 110, 100, 255), "N");
+}
+
+void Application::DrawPlayerList() {
+    // Everyone here: you first, then the others with how far off they are and which way.
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 12.0f, viewport->WorkPos.y + 12.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.6f);
+    if (ImGui::Begin("Players", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings |
+                                             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoFocusOnAppearing)) {
+        const auto others = client->GetRemotePlayers();
+        ImGui::Text("Players online: %d", static_cast<int>(others.size()) + 1);
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.5f, 1.0f), "%s (you)", client->GetMyName().c_str());
+        const glm::vec3 me = player.GetFeetPosition();
+        for (const auto& o : others) {
+            const glm::vec3 d = o.feet - me;
+            const float bearing = std::fmod(glm::degrees(std::atan2(d.z, d.x)) + 90.0f + 720.0f, 360.0f);
+            static const char* kWays[] = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
+            ImGui::Text("%s   %d blocks %s", o.name.empty() ? "?" : o.name.c_str(), static_cast<int>(glm::length(d)),
+                        kWays[static_cast<int>((bearing + 22.5f) / 45.0f) % 8]);
+        }
+    }
+    ImGui::End();
 }
 
 void Application::DrawDeath() {
@@ -1539,6 +1563,9 @@ void Application::OnKey(int key, int action) {
         break;
     case GLFW_KEY_M:
         showMap = !showMap;
+        break;
+    case GLFW_KEY_P:
+        showPlayers = !showPlayers;
         break;
     case GLFW_KEY_F12:
         screenshotRequested = true;

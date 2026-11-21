@@ -265,6 +265,8 @@ private:
     size_t chatSeen = 0;
     void DrawToast();
     void DrawDeath(); // "You died", for a few seconds after dying
+    bool showPlayers = false; // P: who's online
+    void DrawPlayerList();
     bool vsync = true;
     // VOXEL_BENCH: per-section frame timing, printed once a second.
     bool bench = false;
