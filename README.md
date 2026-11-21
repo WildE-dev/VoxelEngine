@@ -1614,6 +1614,10 @@ cd build && ./ModelEditor            # or: ./ModelEditor structures blast_furnac
   grid of whole blocks (a structure's 3 x 3 footprint in yellow; red is +x, the way a
   creature faces). Drag to turn round it, shift-drag or middle-drag to move, scroll to
   zoom. The View menu sets it walking or working and the light.
+- **Click a part** in the view to pick it, and drag the handles on it: **1** moves its
+  box, **2** moves its frame (the pivot, with everything inside it), **3** sizes the box
+  by the face you drag (Shift: both ways). Hold Ctrl to snap to sixteenths of a block.
+  A part a model inherits is changed in the model it comes from.
 - **Right**: the parts as a tree (add, add inside, copy, move up and down, delete),
   and the picked part's frame, box, colour, texture (picked from the block textures,
   one for every face or top, bottom and sides, repeated or stretched), glow, when it's

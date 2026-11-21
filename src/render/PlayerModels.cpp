@@ -34,6 +34,19 @@ std::vector<float> CubeVertices() {
     return v;
 }
 
+const glm::vec3 kPartAxes[3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
+
+// A part's frame in its parent's: placed, turned, swung and flapped.
+glm::mat4 FrameOf(const glm::mat4& parent, const PlayerModels::ShapePart& p, float time, float swing, float motion, float phase) {
+    glm::mat4 f = glm::translate(parent, p.at);
+    if (p.rotate.x != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.x), kPartAxes[0]);
+    if (p.rotate.y != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.y), kPartAxes[1]);
+    if (p.rotate.z != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.z), kPartAxes[2]);
+    if (p.swingAxis >= 0) f = glm::rotate(f, swing * p.swing, kPartAxes[p.swingAxis]);
+    if (p.flapAxis >= 0) f = glm::rotate(f, std::sin(time * p.flapSpeed + phase) * p.flapAmount * motion, kPartAxes[p.flapAxis]);
+    return f;
+}
+
 constexpr float kWidth = 0.6f, kEyeHeight = 1.62f;
 constexpr float kHead = 0.5f;
 
@@ -364,15 +377,9 @@ void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const gl
 void PlayerModels::DrawShape(Shader& shader, const glm::mat4& base, const CreatureShape& shape, float time, float swing, float motion, bool tame, bool working,
                              bool hurt, float phase, const ShapePart* highlight) {
     const glm::vec3 kRed(0.9f, 0.15f, 0.1f);
-    static const glm::vec3 kAxes[3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
     std::function<void(const glm::mat4&, const ShapePart&)> draw = [&](const glm::mat4& parent, const ShapePart& p) {
         if ((p.when == "tame" && !tame) || (p.when == "working" && !working) || (p.when == "idle" && working)) return;
-        glm::mat4 f = glm::translate(parent, p.at);
-        if (p.rotate.x != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.x), kAxes[0]);
-        if (p.rotate.y != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.y), kAxes[1]);
-        if (p.rotate.z != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.z), kAxes[2]);
-        if (p.swingAxis >= 0) f = glm::rotate(f, swing * p.swing, kAxes[p.swingAxis]);
-        if (p.flapAxis >= 0) f = glm::rotate(f, std::sin(time * p.flapSpeed + phase) * p.flapAmount * motion, kAxes[p.flapAxis]);
+        const glm::mat4 f = FrameOf(parent, p, time, swing, motion, phase);
         if (p.hasBox) {
             if (p.glow) shader.SetUniform("glow", 1.0f);
             if (highlight) shader.SetUniform("highlight", &p == highlight ? 0.35f + 0.3f * std::sin(time * 8.0f) : 0.0f);
@@ -591,6 +598,34 @@ bool PlayerModels::LoadCreatureModels(const std::string& path, std::string& erro
 }
 
 bool PlayerModels::LoadStructureModels(const std::string& path, std::string& error) { return LoadShapes(path, {}, structureShapes, error); }
+
+void PlayerModels::Place(const CreatureShape& shape, const glm::mat4& base, float time, float swing, bool working, std::vector<PlacedPart>& out) {
+    out.clear();
+    std::function<void(const glm::mat4&, const ShapePart&)> walk = [&](const glm::mat4& parent, const ShapePart& p) {
+        if ((p.when == "working" && !working) || (p.when == "idle" && working)) return;
+        const glm::mat4 f = FrameOf(parent, p, time, swing, working ? 1.0f : 0.0f, 0.0f);
+        out.push_back({ &p, parent, f });
+        for (const auto& c : p.parts) walk(f, c);
+    };
+    const glm::mat4 scaled = glm::scale(base, glm::vec3(shape.scale));
+    for (const auto& p : shape.parts) walk(scaled, p);
+}
+
+void PlayerModels::DrawBoxes(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<std::pair<glm::mat4, glm::vec3>>& boxes) {
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 1.0f);
+    shader.SetUniform("textured", 0.0f);
+    shader.SetUniform("highlight", 0.0f);
+    glBindVertexArray(vao);
+    for (const auto& [m, c] : boxes) {
+        shader.SetUniform("model", m);
+        shader.SetUniform("color", c);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+    shader.SetUniform("glow", 0.0f);
+}
 
 void PlayerModels::DrawPreview(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const CreatureShape& shape, const glm::mat4& base, float time,
                                float swing, bool working, const ShapePart* highlight, const glm::vec2& light) {

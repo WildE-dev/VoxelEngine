@@ -168,6 +168,16 @@ public:
     void DrawPreview(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const CreatureShape& shape, const glm::mat4& base, float time,
                      float swing, bool working, const ShapePart* highlight, const glm::vec2& light);
 
+    // Where each part of a model is, as DrawPreview draws it: its parent's frame and its
+    // own (its box is at `box` in that, `size` big). For the model editor's picking.
+    struct PlacedPart {
+        const ShapePart* part;
+        glm::mat4 parent, frame;
+    };
+    static void Place(const CreatureShape& shape, const glm::mat4& base, float time, float swing, bool working, std::vector<PlacedPart>& out);
+    // Plain glowing boxes, each a unit cube in its matrix (the editor's handles).
+    void DrawBoxes(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<std::pair<glm::mat4, glm::vec3>>& boxes);
+
     void DrawStructures(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<struct StructureModel>& structures, float time);
 
 private:

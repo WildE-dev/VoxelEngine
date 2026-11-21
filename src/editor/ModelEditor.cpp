@@ -11,12 +11,14 @@
 //
 // For unattended checks: VOXEL_AUTO_SCREENSHOT="seconds:path.png" saves a screenshot
 // that long after starting and quits; VOXEL_EDITOR_PART="0,1" picks a part (by its place
-// in the tree).
+// in the tree), VOXEL_EDITOR_CLICK="x,y" clicks the view there (window coordinates), and
+// VOXEL_EDITOR_TOOL (0 move box, 1 move frame, 2 size) picks the handles.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <functional>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -179,6 +181,9 @@ public:
         if (!SelectedPart()) path_.clear();
         rebuild = true;
     }
+    // (For unattended checks: a click in the view, in window coordinates, and a tool.)
+    void ClickAt(float x, float y) { PickAt({ x, y }); }
+    void SetTool(int t) { tool = static_cast<Tool>(std::clamp(t, 0, 2)); }
     void OpenNamed(const std::string& name) {
         for (int i = 0; i < 2; i++)
             if (name == kFiles[i] || name + ".json" == kFiles[i]) Open(i);
@@ -205,6 +210,22 @@ private:
     int askFile = -1; // a file to open once the unsaved changes are dealt with
     std::string renameTo, newColour;
     Shader* shader = nullptr;
+    // Picking parts in the view, and the handles on the picked one.
+    enum class Tool { MoveBox, MoveFrame, Size } tool = Tool::MoveBox;
+    std::vector<PlayerModels::PlacedPart> placed;
+    glm::mat4 viewMatrix{ 1.0f }, projection{ 1.0f };
+    glm::vec4 region{ 0.0f };   // the view, in window coordinates (x, y, width, height)
+    glm::vec3 eye{ 0.0f };
+    float swingNow = 0.0f;
+    bool dragging = false, pressed = false, pressMoved = false;
+    int dragAxis = -1, hoverAxis = -1;
+    glm::vec2 dragStart{ 0.0f }, dragScreenAxis{ 0.0f }, pressAt{ 0.0f };
+    glm::vec3 dragFrom{ 0.0f }, dragFromCentre{ 0.0f };
+    struct Handle {
+        bool ok = false;
+        glm::vec3 origin{ 0.0f };
+        glm::vec3 axis[3]{};    // a unit of the value being changed, in the world
+    };
 
 public:
     void SetShader(Shader* s) { shader = s; }
@@ -325,6 +346,14 @@ private:
     }
 
     void DrawScene(int x, int y, int w, int h, float time);
+    glm::mat4 Base() const { return Structures() ? glm::translate(glm::mat4(1.0f), glm::vec3(-1.5f, 0.0f, -1.5f)) : glm::mat4(1.0f); }
+    Handle Handles();
+    glm::mat4 HandleMatrix(const Handle& h, int axis, float thickness, bool tip) const;
+    bool Ray(glm::vec2 mouse, glm::vec3& origin, glm::vec3& direction) const;
+    glm::vec2 ToScreen(glm::vec3 p) const;
+    void PickAt(glm::vec2 mouse);
+    void ViewInput(bool overView);
+    void ViewTools(float top);
     void MenuBar();
     void LeftPanel(float top, float height);
     void RightPanel(float left, float top, float height);
@@ -352,23 +381,19 @@ void Editor::Frame(int fbWidth, int fbHeight, int winWidth, int winHeight, float
     RightPanel(static_cast<float>(winWidth) - kRightWidth, top, height);
     UnsavedPrompt();
 
-    // The view between the panels: drag to turn, shift-drag (or middle) to move, scroll.
+    // The view between the panels.
+    region = glm::vec4(kLeftWidth, top, std::max(1.0f, winWidth - kLeftWidth - kRightWidth), std::max(1.0f, height));
+    eye = target + distance * glm::vec3(std::cos(glm::radians(pitch)) * std::cos(glm::radians(yaw)), std::sin(glm::radians(pitch)),
+                                        std::cos(glm::radians(pitch)) * std::sin(glm::radians(yaw)));
+    viewMatrix = glm::lookAt(eye, target, glm::vec3(0, 1, 0));
+    projection = glm::perspective(glm::radians(50.0f), region.z / region.w, 0.05f, 200.0f);
+    swingNow = walk ? std::sin(time * 6.0f) * 0.6f : 0.0f;
+    if (rebuild) Rebuild();
+    placed.clear();
+    if (auto it = shapes.find(model); it != shapes.end()) PlayerModels::Place(it->second, Base(), time, swingNow, working, placed);
+    ViewTools(top);
     const ImVec2 mouse = io.MousePos;
-    const bool overView = mouse.x > kLeftWidth && mouse.x < winWidth - kRightWidth && mouse.y > top;
-    if (!io.WantCaptureMouse && overView) {
-        const bool move = io.MouseDown[2] || ((io.MouseDown[0] || io.MouseDown[1]) && io.KeyShift);
-        if (move) {
-            const glm::vec3 forward(std::cos(glm::radians(pitch)) * std::cos(glm::radians(yaw)), std::sin(glm::radians(pitch)),
-                                    std::cos(glm::radians(pitch)) * std::sin(glm::radians(yaw)));
-            const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0, 1, 0)));
-            const glm::vec3 up = glm::cross(right, forward);
-            target += (right * io.MouseDelta.x - up * io.MouseDelta.y) * distance * 0.0025f;
-        } else if (io.MouseDown[0] || io.MouseDown[1]) {
-            yaw += io.MouseDelta.x * 0.4f;
-            pitch = std::clamp(pitch + io.MouseDelta.y * 0.4f, -89.0f, 89.0f);
-        }
-        if (io.MouseWheel != 0.0f) distance = std::clamp(distance * std::pow(0.9f, io.MouseWheel), 0.5f, 40.0f);
-    }
+    ViewInput(mouse.x > kLeftWidth && mouse.x < winWidth - kRightWidth && mouse.y > top);
     if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete) && SelectedPart()) {
         Value* list = SelectedList();
         list->array.erase(list->array.begin() + path_.back());
@@ -381,7 +406,7 @@ void Editor::Frame(int fbWidth, int fbHeight, int winWidth, int winHeight, float
         pending = true;
         rebuild = true;
     }
-    if (pending && !ImGui::IsAnyItemActive()) {
+    if (pending && !ImGui::IsAnyItemActive() && !dragging) {
         undo.push_back(committed);
         if (undo.size() > 200) undo.erase(undo.begin());
         redo.clear();
@@ -406,10 +431,7 @@ void Editor::DrawScene(int x, int y, int w, int h, float time) {
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
 
-    const glm::vec3 eye = target + distance * glm::vec3(std::cos(glm::radians(pitch)) * std::cos(glm::radians(yaw)), std::sin(glm::radians(pitch)),
-                                                        std::cos(glm::radians(pitch)) * std::sin(glm::radians(yaw)));
-    const glm::mat4 view = glm::lookAt(eye, target, glm::vec3(0, 1, 0));
-    const glm::mat4 projection = glm::perspective(glm::radians(50.0f), static_cast<float>(w) / static_cast<float>(h), 0.05f, 200.0f);
+    const glm::mat4& view = viewMatrix;
 
     Shader& s = *shader;
     s.Use();
@@ -425,7 +447,7 @@ void Editor::DrawScene(int x, int y, int w, int h, float time) {
     s.SetUniform("blockLightColor", glm::vec3(1.0f, 0.82f, 0.6f));
 
     // Structures are drawn in their own frame, 0 to 3 across: centred on the view.
-    const glm::mat4 base = Structures() ? glm::translate(glm::mat4(1.0f), glm::vec3(-1.5f, 0.0f, -1.5f)) : glm::mat4(1.0f);
+    const glm::mat4 base = Base();
 
     if (showGrid) {
         // A ground grid (whole blocks, for structures: their cells), and which way is +x
@@ -454,10 +476,235 @@ void Editor::DrawScene(int x, int y, int w, int h, float time) {
 
     auto it = shapes.find(model);
     if (it != shapes.end()) {
-        const float swing = walk ? std::sin(time * 6.0f) * 0.6f : 0.0f;
-        models.DrawPreview(s, view, projection, it->second, base, time, swing, working, flash ? HighlightPart() : nullptr, glm::vec2(sky, block));
+        models.DrawPreview(s, view, projection, it->second, base, time, swingNow, working, flash ? HighlightPart() : nullptr, glm::vec2(sky, block));
     }
+    // The handles on the picked part, over everything.
     glDisable(GL_DEPTH_TEST);
+    if (const Handle hd = Handles(); hd.ok) {
+        std::vector<std::pair<glm::mat4, glm::vec3>> boxes;
+        const glm::vec3 colours[3] = { { 0.95f, 0.3f, 0.25f }, { 0.35f, 0.9f, 0.3f }, { 0.3f, 0.5f, 1.0f } };
+        for (int i = 0; i < 3; i++) {
+            const bool hot = (dragging ? dragAxis : hoverAxis) == i;
+            const glm::vec3 c = hot ? glm::vec3(1.0f, 0.9f, 0.3f) : colours[i];
+            boxes.emplace_back(HandleMatrix(hd, i, 0.05f, false), c);
+            boxes.emplace_back(HandleMatrix(hd, i, 0.0f, true), c);
+        }
+        models.DrawBoxes(s, view, projection, boxes);
+    }
+}
+
+Editor::Handle Editor::Handles() {
+    Handle h;
+    const Part* part = HighlightPart();
+    if (!part) return h;
+    for (const auto& p : placed) {
+        if (p.part != part) continue;
+        if (tool == Tool::MoveFrame) {
+            // Its frame's origin ("at"), in its parent's frame.
+            h.origin = glm::vec3(p.frame[3]);
+            for (int i = 0; i < 3; i++) h.axis[i] = glm::vec3(p.parent[i]);
+        } else {
+            if (!part->hasBox) return h;
+            h.origin = glm::vec3(p.frame * glm::vec4(part->box, 1.0f));
+            for (int i = 0; i < 3; i++) h.axis[i] = glm::vec3(p.frame[i]);
+        }
+        h.ok = true;
+        for (int i = 0; i < 3; i++)
+            if (glm::length(h.axis[i]) < 1e-5f) h.ok = false;
+        return h;
+    }
+    return h;
+}
+
+// A handle's shaft (or the cube at its tip), along one axis, sized for the view.
+glm::mat4 Editor::HandleMatrix(const Handle& h, int axis, float thickness, bool tip) const {
+    const float length = distance * 0.2f;
+    const glm::vec3 d = glm::normalize(h.axis[axis]);
+    const glm::vec3 u = glm::normalize(glm::cross(d, std::abs(d.y) < 0.9f ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0)));
+    const glm::vec3 v = glm::cross(d, u);
+    glm::mat4 m(1.0f);
+    m[0] = glm::vec4(d, 0.0f), m[1] = glm::vec4(u, 0.0f), m[2] = glm::vec4(v, 0.0f);
+    if (tip) {
+        m[3] = glm::vec4(h.origin + d * length, 1.0f);
+        const float size = length * (tool == Tool::Size ? 0.14f : 0.1f) * (thickness > 0.0f ? 2.0f : 1.0f);
+        return glm::scale(m, glm::vec3(size));
+    }
+    m[3] = glm::vec4(h.origin + d * length * 0.5f, 1.0f);
+    return glm::scale(m, glm::vec3(length, length * thickness, length * thickness));
+}
+
+bool Editor::Ray(glm::vec2 mouse, glm::vec3& origin, glm::vec3& direction) const {
+    const float nx = (mouse.x - region.x) / region.z * 2.0f - 1.0f, ny = 1.0f - (mouse.y - region.y) / region.w * 2.0f;
+    const glm::mat4 inverse = glm::inverse(projection * viewMatrix);
+    glm::vec4 a = inverse * glm::vec4(nx, ny, -1.0f, 1.0f), b = inverse * glm::vec4(nx, ny, 1.0f, 1.0f);
+    if (a.w == 0.0f || b.w == 0.0f) return false;
+    a /= a.w, b /= b.w;
+    origin = glm::vec3(a);
+    direction = glm::normalize(glm::vec3(b - a));
+    return true;
+}
+
+glm::vec2 Editor::ToScreen(glm::vec3 p) const {
+    const glm::vec4 clip = projection * viewMatrix * glm::vec4(p, 1.0f);
+    const glm::vec3 ndc = glm::vec3(clip) / std::max(clip.w, 1e-4f);
+    return { region.x + (ndc.x + 1.0f) * 0.5f * region.z, region.y + (1.0f - ndc.y) * 0.5f * region.w };
+}
+
+// Where a ray first meets a unit cube in matrix m (or -1).
+float HitBox(const glm::mat4& m, glm::vec3 origin, glm::vec3 direction) {
+    const glm::mat4 inverse = glm::inverse(m);
+    const glm::vec3 o = glm::vec3(inverse * glm::vec4(origin, 1.0f)), d = glm::vec3(inverse * glm::vec4(direction, 0.0f));
+    float near = -1e30f, far = 1e30f;
+    for (int i = 0; i < 3; i++) {
+        if (std::abs(d[i]) < 1e-9f) {
+            if (o[i] < -0.5f || o[i] > 0.5f) return -1.0f;
+            continue;
+        }
+        float t0 = (-0.5f - o[i]) / d[i], t1 = (0.5f - o[i]) / d[i];
+        if (t0 > t1) std::swap(t0, t1);
+        near = std::max(near, t0), far = std::min(far, t1);
+        if (near > far) return -1.0f;
+    }
+    if (far < 0.0f) return -1.0f;
+    return std::max(near, 0.0f);
+}
+
+void Editor::PickAt(glm::vec2 mouse) {
+    glm::vec3 o, d;
+    if (!Ray(mouse, o, d)) return;
+    const Part* best = nullptr;
+    float bestT = 1e30f;
+    for (const auto& p : placed) {
+        if (!p.part->hasBox) continue;
+        const float t = HitBox(glm::scale(glm::translate(p.frame, p.part->box), glm::max(p.part->size, glm::vec3(0.002f))), o, d);
+        if (t >= 0.0f && t < bestT) bestT = t, best = p.part;
+    }
+    path_.clear();
+    if (!best) return;
+    const Shape& shape = shapes[model];
+    std::vector<int> found;
+    std::function<bool(const std::vector<Part>&)> search = [&](const std::vector<Part>& parts) {
+        for (size_t i = 0; i < parts.size(); i++) {
+            found.push_back(static_cast<int>(i));
+            if (&parts[i] == best || search(parts[i].parts)) return true;
+            found.pop_back();
+        }
+        return false;
+    };
+    if (!search(shape.parts)) return;
+    if (static_cast<size_t>(found[0]) < shape.ownStart) {
+        const Value* m = Model();
+        status = "That part comes from " + (m ? m->StringOr("inherits", "") : std::string()) + ": change it there.";
+        return;
+    }
+    found[0] -= static_cast<int>(shape.ownStart);
+    path_ = found;
+}
+
+void Editor::ViewTools(float top) {
+    ImGui::SetNextWindowPos(ImVec2(kLeftWidth + 8.0f, top + 8.0f));
+    ImGui::SetNextWindowBgAlpha(0.55f);
+    ImGui::Begin("tools", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+    int t = static_cast<int>(tool);
+    ImGui::RadioButton("Move box (1)", &t, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("Move frame (2)", &t, 1);
+    ImGui::SameLine();
+    ImGui::RadioButton("Size (3)", &t, 2);
+    if (!ImGui::GetIO().WantTextInput) {
+        if (ImGui::IsKeyPressed(ImGuiKey_1)) t = 0;
+        if (ImGui::IsKeyPressed(ImGuiKey_2)) t = 1;
+        if (ImGui::IsKeyPressed(ImGuiKey_3)) t = 2;
+    }
+    tool = static_cast<Tool>(t);
+    ImGui::TextDisabled("Click a part to pick it. Drag a handle; hold Ctrl to snap to 1/16%s.", tool == Tool::Size ? ", Shift to grow both ways" : "");
+    ImGui::End();
+}
+
+void Editor::ViewInput(bool overView) {
+    ImGuiIO& io = ImGui::GetIO();
+    const glm::vec2 mouse(io.MousePos.x, io.MousePos.y);
+    const bool free = overView && !io.WantCaptureMouse;
+    const Handle h = Handles();
+    hoverAxis = -1;
+    if (!dragging && free && h.ok) {
+        glm::vec3 o, d;
+        float best = 1e30f;
+        if (Ray(mouse, o, d))
+            for (int i = 0; i < 3; i++)
+                for (float t : { HitBox(HandleMatrix(h, i, 0.2f, false), o, d), HitBox(HandleMatrix(h, i, 1.0f, true), o, d) })
+                    if (t >= 0.0f && t < best) best = t, hoverAxis = i;
+    }
+
+    if (ImGui::IsMouseClicked(0) && free) {
+        if (hoverAxis >= 0 && !io.KeyShift && SelectedPart()) {
+            dragging = true;
+            dragAxis = hoverAxis;
+            dragStart = mouse;
+            const Value& part = *SelectedPart();
+            dragFrom = tool == Tool::MoveFrame ? GetVec(part, "at") : tool == Tool::Size ? GetVec(part, "size", glm::vec3(0.25f)) : GetVec(part, "box");
+            dragFromCentre = GetVec(part, "box");
+            dragScreenAxis = ToScreen(h.origin + h.axis[dragAxis]) - ToScreen(h.origin);
+        } else {
+            pressed = true;
+            pressMoved = false;
+            pressAt = mouse;
+        }
+    }
+
+    if (dragging) {
+        Value* part = SelectedPart();
+        if (!io.MouseDown[0] || !part) {
+            dragging = false;
+            return;
+        }
+        const float along = glm::dot(dragScreenAxis, dragScreenAxis);
+        if (along < 1e-6f) return;
+        float moved = glm::dot(mouse - dragStart, dragScreenAxis) / along;
+        if (io.KeyCtrl || io.KeySuper) moved = std::round(moved * 16.0f) / 16.0f;
+        glm::vec3 v = dragFrom;
+        const int i = dragAxis;
+        if (tool == Tool::MoveBox) {
+            v[i] += moved;
+            SetVec(*part, "box", v);
+        } else if (tool == Tool::MoveFrame) {
+            v[i] += moved;
+            SetVec(*part, "at", v);
+        } else if (io.KeyShift) {
+            v[i] = std::max(0.01f, dragFrom[i] + 2.0f * moved);
+            SetVec(*part, "size", v);
+            SetVec(*part, "box", dragFromCentre);
+        } else {
+            // Stretch the face the handle is on; the other stays put.
+            v[i] = std::max(0.01f, dragFrom[i] + moved);
+            glm::vec3 c = dragFromCentre;
+            c[i] += (v[i] - dragFrom[i]) * 0.5f;
+            SetVec(*part, "size", v);
+            SetVec(*part, "box", c);
+        }
+        Changed();
+        return;
+    }
+
+    // Turning round, moving and zooming the view.
+    if (pressed || (free && (io.MouseDown[1] || io.MouseDown[2]))) {
+        if (glm::length(mouse - pressAt) > 3.0f) pressMoved = true;
+        const bool pan = io.MouseDown[2] || ((io.MouseDown[0] || io.MouseDown[1]) && io.KeyShift);
+        if (pan) {
+            const glm::vec3 forward = glm::normalize(target - eye);
+            const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0, 1, 0)));
+            const glm::vec3 up = glm::cross(right, forward);
+            target += (-right * io.MouseDelta.x + up * io.MouseDelta.y) * distance * 0.0025f;
+        } else if ((pressed && io.MouseDown[0] && pressMoved) || io.MouseDown[1]) {
+            yaw += io.MouseDelta.x * 0.4f;
+            pitch = std::clamp(pitch + io.MouseDelta.y * 0.4f, -89.0f, 89.0f);
+        }
+    }
+    if (pressed && ImGui::IsMouseReleased(0)) {
+        if (!pressMoved) PickAt(mouse);
+        pressed = false;
+    }
+    if (free && io.MouseWheel != 0.0f) distance = std::clamp(distance * std::pow(0.9f, io.MouseWheel), 0.5f, 40.0f);
 }
 
 void Editor::MenuBar() {
@@ -1169,6 +1416,10 @@ int main(int argc, char** argv) {
             }
         }
 
+        float clickX = -1.0f, clickY = -1.0f;
+        if (const char* c = std::getenv("VOXEL_EDITOR_CLICK")) std::sscanf(c, "%f,%f", &clickX, &clickY);
+        if (const char* t = std::getenv("VOXEL_EDITOR_TOOL")) editor.SetTool(std::atoi(t));
+        int frames = 0;
         const double start = glfwGetTime();
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
@@ -1184,6 +1435,7 @@ int main(int argc, char** argv) {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             const float time = static_cast<float>(glfwGetTime() - start);
             editor.Frame(fbw, fbh, ww, wh, time);
+            if (++frames == 3 && clickX >= 0.0f) editor.ClickAt(clickX, clickY);
 
             glViewport(0, 0, fbw, fbh);
             ImGui::Render();
