@@ -194,6 +194,7 @@ that damaged files are refused, and that a rejoining player is put back in place
 | F1 | Toggle wireframe |
 | F2 | Toggle debug window |
 | F3 | Toggle ambient occlusion |
+| F4 | Toggle the compass, coordinates and clock at the top of the screen |
 | F12 | Save a screenshot (`screenshot-<date>-<time>.png` in the working directory) |
 | N | Skip to the next dusk (by day) or dawn (at night), for everyone on the server |
 | T / Enter | Open chat (Enter sends, Esc closes). While it's open the view stays still and the cursor is free |

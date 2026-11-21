@@ -548,6 +548,7 @@ void Application::Run() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         DrawNameTags(params.projection * params.view);
+        if (showCompass) DrawCompass();
         DrawHotbar();
         DrawStatus();
         DrawChat();
@@ -689,6 +690,43 @@ void Application::DrawCrosshair() {
         draw->AddLine(ImVec2(c.x, c.y - kArm), ImVec2(c.x, c.y - kGap), color, width);
         draw->AddLine(ImVec2(c.x, c.y + kGap), ImVec2(c.x, c.y + kArm), color, width);
     }
+}
+
+void Application::DrawCompass() {
+    // A strip across the top of the screen showing the way you face: N, E, S and W
+    // (north is -z) with ticks between, sliding as you turn; under it, where you are
+    // and the time of day.
+    if (!client->IsWelcomed()) return;
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const float width = 360.0f, cx = viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, top = viewport->WorkPos.y + 10.0f;
+    const float bearing = std::fmod(camera.GetYaw() + 90.0f + 720.0f, 360.0f); // degrees clockwise from north
+    draw->AddRectFilled(ImVec2(cx - width * 0.5f, top), ImVec2(cx + width * 0.5f, top + 26.0f), IM_COL32(0, 0, 0, 90), 4.0f);
+    draw->PushClipRect(ImVec2(cx - width * 0.5f, top), ImVec2(cx + width * 0.5f, top + 26.0f), true);
+    constexpr float kPixelsPerDegree = 2.0f; // 180 degrees across
+    for (int deg = 0; deg < 360; deg += 15) {
+        float offset = std::fmod(deg - bearing + 540.0f, 360.0f) - 180.0f;
+        const float x = cx + offset * kPixelsPerDegree;
+        if (std::abs(offset) > width * 0.5f / kPixelsPerDegree + 10.0f) continue;
+        const char* label = deg == 0 ? "N" : deg == 90 ? "E" : deg == 180 ? "S" : deg == 270 ? "W" : nullptr;
+        if (label) {
+            const ImVec2 size = ImGui::CalcTextSize(label);
+            draw->AddText(ImVec2(x - size.x * 0.5f, top + 5.0f), deg == 0 ? IM_COL32(255, 110, 100, 255) : IM_COL32(255, 255, 255, 235), label);
+        }
+        else draw->AddLine(ImVec2(x, top + (deg % 45 == 0 ? 7.0f : 11.0f)), ImVec2(x, top + 19.0f), IM_COL32(255, 255, 255, deg % 45 == 0 ? 200 : 120), 1.5f);
+    }
+    draw->PopClipRect();
+    draw->AddTriangleFilled(ImVec2(cx - 5.0f, top + 26.0f), ImVec2(cx + 5.0f, top + 26.0f), ImVec2(cx, top + 20.0f), IM_COL32(255, 230, 120, 255));
+    // Where, and when (the day runs from sunrise at 06:00).
+    const glm::vec3 feet = player.GetFeetPosition();
+    const float hours = std::fmod(client->GetTimeOfDay() * 24.0f + 6.0f, 24.0f);
+    const bool day = client->GetTimeOfDay() < 0.5f;
+    char line[96];
+    std::snprintf(line, sizeof line, "%d, %d, %d    %s %02d:%02d", static_cast<int>(std::floor(feet.x)), static_cast<int>(std::floor(feet.y)),
+                  static_cast<int>(std::floor(feet.z)), day ? "sun" : "moon", static_cast<int>(hours), static_cast<int>(std::fmod(hours, 1.0f) * 60.0f));
+    const ImVec2 size = ImGui::CalcTextSize(line);
+    draw->AddText(ImVec2(cx - size.x * 0.5f + 1.0f, top + 31.0f), IM_COL32(0, 0, 0, 200), line);
+    draw->AddText(ImVec2(cx - size.x * 0.5f, top + 30.0f), day ? IM_COL32(255, 244, 200, 235) : IM_COL32(190, 210, 255, 235), line);
 }
 
 void Application::DrawNameTags(const glm::mat4& viewProjection) {
@@ -1218,6 +1256,9 @@ void Application::OnKey(int key, int action) {
         break;
     case GLFW_KEY_F3:
         ambientOcclusion = !ambientOcclusion;
+        break;
+    case GLFW_KEY_F4:
+        showCompass = !showCompass;
         break;
     case GLFW_KEY_F12:
         screenshotRequested = true;

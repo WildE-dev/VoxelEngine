@@ -225,6 +225,8 @@ private:
     void DrawChest();
     double scrollAccumulator = 0.0;
     bool showDebug = false;
+    bool showCompass = true; // F4: the compass, coordinates and clock at the top
+    void DrawCompass();
     bool vsync = true;
     // VOXEL_BENCH: per-section frame timing, printed once a second.
     bool bench = false;
