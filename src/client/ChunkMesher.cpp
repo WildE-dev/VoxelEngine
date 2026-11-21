@@ -96,11 +96,13 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
     // the light of the open cells among the same four (front, both edges, diagonal).
     // A partial block's faces lie inside its own cell (a slope's surface, a quarter's
     // top): where the cell in front is solid (a block placed on top), they're lit by
-    // the open space in their own cell instead, not by the inside of that block (dark,
-    // and until the server's new light arrives, still lit as the air it was).
+    // the open space in their own cell instead, not by the inside of that block (which
+    // is dark, and until the server's new light arrives still lit as the air it was),
+    // and shaded as in that block's shadow.
     auto shadeFace = [&](const glm::ivec3& pos, int face, bool withAO, bool partial = false) {
         glm::ivec3 front = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
-        if (partial && isOpaque(front)) front = pos;
+        const bool covered = partial && isOpaque(front); // under (or against) a solid block
+        if (covered) front = pos;
         const auto& tangents = kFaceTangents[kFaceAxis[face]];
         FaceShading shading;
         for (int a = 0; a < 2; a++) {
@@ -113,6 +115,8 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 const bool corner = isOpaque(front + ta + tb);
                 const bool cornerHidden = side1 && side2;
                 if (withAO) shading.ao[a][b] = cornerHidden ? 0 : static_cast<uint8_t>(3 - (side1 + side2 + corner));
+                // Covered: in the block's shadow, as dark as a corner between blocks.
+                if (withAO && covered) shading.ao[a][b] = std::min<uint8_t>(shading.ao[a][b], 1);
 
                 int blockSum = blockLightAt(front), skySum = skyLightAt(front), count = 1;
                 auto addCell = [&](const glm::ivec3& c) { blockSum += blockLightAt(c); skySum += skyLightAt(c); count++; };
@@ -273,41 +277,6 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
         }
     };
 
-    // --- Joining slopes across rows ---
-    // A column's ground is one sloped block, its corners clipped to that block's row.
-    // Where the slope goes on up past the top of the block, the column next to it holds
-    // the rest in the row above, and the clipped corner would leave a notch between
-    // them. So a corner at the top of its block is drawn as high as that next slope's
-    // corner, joining the two. (Drawing only: walking uses the block's own shape.)
-    constexpr int kEdgeAt[2][2] = { { 2, 0 }, { 1, 3 } }; // EdgeData index of corner [x][z]
-    auto natural = [](const Block& b) { return !b.IsAir() && !b.IsPlant() && !b.IsLiquid() && !b.IsStepped(); };
-    // Only toward slopes: next to a full block there's no notch to hide, just a step
-    // (and joining up to blocks placed on the ground would stretch a slope beside them
-    // up to nearly two blocks). Nor under anything sitting on the slope itself.
-    auto JoinSlope = [&](const glm::ivec3& pos, const Block& block) {
-        Block drawn = block;
-        if (inGrid(pos + glm::ivec3(0, 1, 0))) {
-            const Block& onTop = cellAt(pos + glm::ivec3(0, 1, 0));
-            if (!onTop.IsAir() && !onTop.IsPlant() && !onTop.IsLiquid()) return drawn;
-        }
-        for (int cx = 0; cx < 2; cx++)
-            for (int cz = 0; cz < 2; cz++) {
-                const int e = kEdgeAt[cx][cz];
-                if (block.edgeData.GetTopY(e) != 8) continue;
-                int lift = 0;
-                // The four columns around this corner, one row up.
-                for (int i = 0; i < 2; i++)
-                    for (int j = 0; j < 2; j++) {
-                        const glm::ivec3 q = pos + glm::ivec3(cx - 1 + i, 1, cz - 1 + j);
-                        if (!inGrid(q)) continue;
-                        const Block& above = cellAt(q);
-                        if (!natural(above) || above.IsFullBlock()) continue;
-                        lift = std::max(lift, static_cast<int>(above.edgeData.GetTopY(kEdgeAt[1 - i][1 - j])));
-                    }
-                if (lift > 0) drawn.edgeData.SetTopYForDrawing(e, static_cast<uint8_t>(8 + std::min(lift, 7)));
-            }
-        return drawn;
-    };
 
     for (int x = 0; x < CHUNK_SIZE; ++x) {
         for (int y = 0; y < CHUNK_SIZE; ++y) {
@@ -328,7 +297,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
 
                 const bool full = block.IsFullBlock();
                 const bool stepped = !full && block.IsStepped(); // quarters, not a slope
-                const Block drawn = full || stepped ? block : JoinSlope(pos, block);
+                const Block& drawn = block; // (every block is drawn inside its own cell)
                 for (int face = 0; face < kFaceCount; ++face) {
                     const glm::ivec3 front = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
                     if (stepped) {

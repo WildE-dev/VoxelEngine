@@ -250,8 +250,8 @@ int main() {
 
         // A slope climbing more than its block: the column at x=4 rises from 4.5 at x=4
         // to a true 5.25 at x=5, clipped to the top of its block (5.0); the column at
-        // x=5 holds the rest in row 5, from 5.25 up. Unjoined, the first column's top
-        // stops at 5.0 and leaves a notch under the second's.
+        // x=5 holds the rest in row 5, from 5.25 up. Every block is drawn inside its own
+        // cell: the first column's top stops at 5.0, not reaching up to meet the next.
         Chunk::Blocks slope{};
         for (int x = 0; x < 16; x++)
             for (int z = 0; z < 16; z++)
@@ -276,8 +276,15 @@ int main() {
             }
             if (lo == 4.0f && hi == 5.0f && ylo >= 4.4f) firstTop = std::max(firstTop, yhi);
         }
-        Check(firstTop == 5.25f, "where a slope climbs past the top of its block, it's drawn up to meet the slope above (no notch; top at " +
-                                     std::to_string(firstTop) + ")");
+        Check(firstTop == 5.0f, "a slope climbing past the top of its block stops at the top of its cell (top at " + std::to_string(firstTop) + ")");
+        bool confined = true;
+        for (size_t f = 0; f + 6 <= verts.size(); f += 6) {
+            glm::vec3 lo(1e9f), hi(-1e9f);
+            for (size_t k = f; k < f + 6; k++) lo = glm::min(lo, verts[k]), hi = glm::max(hi, verts[k]);
+            const glm::vec3 cell = glm::floor(lo + glm::vec3(1e-4f));
+            confined &= glm::all(glm::lessThanEqual(hi, cell + glm::vec3(1.0f + 1e-4f)));
+        }
+        Check(confined, "every face of the terrain's blocks lies inside its own block's cell");
 
         // A pool's top layer: a thin 3x3 patch on full water, empty all round it.
         Chunk::Blocks pool{};

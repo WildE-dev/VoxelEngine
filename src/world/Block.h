@@ -50,13 +50,6 @@ struct EdgeData {
         edges[edgeIndex] = (edges[edgeIndex] & 0x0F) | ((value & 0x0F) << 4);
     }
 
-    // For drawing only: a top height above the cell (up to 15 eighths), where a slope
-    // carries on into the cell above (see ChunkMesher). Not a valid block shape.
-    void SetTopYForDrawing(int edgeIndex, uint8_t value) {
-        if (edgeIndex < 0 || edgeIndex >= 4 || value > 15) return;
-        edges[edgeIndex] = (edges[edgeIndex] & 0x0F) | static_cast<uint8_t>(value << 4);
-    }
-
     uint8_t GetBottomY(int edgeIndex) const {
         if (edgeIndex < 0 || edgeIndex >= 4) return 0;
         return edges[edgeIndex] & 0x0F;

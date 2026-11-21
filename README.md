@@ -419,10 +419,10 @@ slope's corners weighted like its two triangles. So a notch carved down to the f
 in one quarter takes water from a pool beside it, even though the block as a whole
 stands higher than the pool's surface.
 
-Where a slope climbs past the top of its block (its corner clipped at the block's
-top), the column next to it holds the rest of the slope in the row above. The mesher
-draws the clipped corner up to meet that slope, so the terrain has no notches where a
-slope crosses from one row into the next. (Walking still uses each block's own shape.)
+Every block is drawn inside its own cell: where a slope climbs past the top of its
+block, its corner is clipped at the block's top and the column beside it carries on
+in the row above. The top of a slope or slab with a block sitting on it is shaded as
+in that block's shadow, lit by the open space in its own cell.
 
 The outline around the block you're looking at follows its shape (a slope's corners
 and fold, a stepped block's quarters, a pressure plate's slab), and blocks in front of
