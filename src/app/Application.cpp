@@ -68,15 +68,6 @@ std::string FormatBlocks(uint32_t units) {
     return s;
 }
 
-const char* HeightName(int eighths) {
-    switch (eighths) {
-    case 2: return "1/4";
-    case 4: return "1/2";
-    case 6: return "3/4";
-    default: return "full";
-    }
-}
-
 // The tools the inventory offers, and the icon (atlas tile) for one.
 constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel };
 int ToolTile(const TextureAtlas& atlas, Tool tool) {
@@ -889,30 +880,14 @@ void Application::DrawHotbar() {
                                    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
                                    ImGuiWindowFlags_NoBringToFrontOnFocus;
     if (ImGui::Begin("Hotbar", nullptr, flags)) {
-        // Name of the selected block, centred above the slots, with the height it's
-        // placed at (V) and, in survival, what that costs.
+        // Just the selected item's name, centred above the slots (reddish if it can't
+        // be used: a tool not made yet, or a block we haven't enough of).
         const BlockType selected = SelectedBlock();
         const Tool selectedTool = SelectedTool();
         const bool survival = !client->IsCreative();
-        std::string label = BlockName(selected);
-        bool affordable = true;
-        if (selectedTool != Tool::None) {
-            label = std::string(Mining::ToolName(selectedTool)) + " - " + ToolHint(selectedTool);
-            if (!client->HasTool(selectedTool)) {
-                label += " (not made yet: see crafting, I)";
-                affordable = false;
-            }
-        }
-        else {
-        const int height = Block::CanShape(selected) ? placeHeight : 8;
-        if (Block::CanShape(selected)) label += std::string(" - ") + HeightName(height) + (height < 8 ? " height" : " block") + " (V)";
-        affordable = client->CanAfford(selected, height);
-        if (survival) {
-            if (Block::Placed(selected, height).IsLiquid()) label += " - can't be placed in survival";
-            else label += " - costs " + FormatBlocks(static_cast<uint32_t>(Block::Placed(selected, height).ResourceUnits())) + ", have " +
-                          FormatBlocks(client->GetResources(selected));
-        }
-        }
+        const std::string label = selectedTool != Tool::None ? Mining::ToolName(selectedTool) : BlockName(selected);
+        const bool affordable = selectedTool != Tool::None ? client->HasTool(selectedTool)
+                                                           : client->CanAfford(selected, Block::CanShape(selected) ? placeHeight : 8);
         const bool affordableShown = affordable;
         const float nameWidth = ImGui::CalcTextSize(label.c_str()).x;
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (barWidth - nameWidth) * 0.5f));
