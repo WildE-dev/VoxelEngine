@@ -1028,6 +1028,9 @@ in and out over ten seconds. Rain greys and dims the sky, falls as streaks aroun
 the player (not under a roof or underwater), and tops up lakes and pools (see
 [Water](#water)).
 
+While a daytime shower is light (starting or clearing), a **rainbow** stands in the
+sky opposite the sun, highest when the sun is low.
+
 Where it's cold (snow, snowy grass, ice or pines underfoot), it falls as **snow**:
 white flakes drifting slowly down and swaying, instead of rain.
 

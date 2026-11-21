@@ -708,6 +708,8 @@ void Application::UpdateSky(float deltaTime, FrameParams& params) {
     const float ease = std::min(1.0f, deltaTime * 4.0f);
     rainHere += (target - rainHere) * ease;
     params.rain = rainHere;
+    // A rainbow while a daytime shower is light (fading in or out), the sun well up.
+    params.rainbow = (rain > 0.05f && rain < 0.6f && !client->IsStorm()) ? std::min(1.0f, (0.6f - rain) * 3.0f) * std::clamp(day * 2.0f - 0.5f, 0.0f, 1.0f) : 0.0f;
     // A thunderstorm is darker still; a lightning flash lights everything up.
     const float storm = client->IsStorm() ? rain : 0.0f;
     params.overcast = std::min(1.0f, rain + 0.3f * storm);
