@@ -1238,6 +1238,8 @@ front (`.` is anything):
 | **Oil derrick** | `FFF / ADL / FFF`, then corner frames two high, then `.F. / FFF / .F.`, then one frame on top. F steel frame, D oil derrick, A its air pipe, L its crude pipe | pumps crude oil from the shale under its whole footprint, down to 160 blocks, into the fluid pipe at L: three times what a derrick block alone used to (48 units every half second, for 3 air) |
 | **Refinery** | `CAC / IRO / CCC`, then `TCT / CCC / TCT`, then `.C. / CCC / .C.`. C machine casing, T fluid tank, R refinery, A its air pipe, I crude in, O fuel out | crude oil in at I, fuel out at O, up to 96 units each update (three times as much), for 4 air |
 | **Blast furnace** | `BAB / BBB / BBB`, then `BHB / BSB / BBB`, then `BBB / B.B / BBB`. B fire bricks, S smelter (inside), A its air pipe, H its item pipe | smelts from the chests along its item pipe, a block every half second (four times a smelter), for 3 air |
+| **Coke oven** | `SSS / HXA / SSS`, then `SSS / SSS / SSS`, then `... / .S. / ...` (its chimney). S stone bricks, X smelter (inside), H its item pipe, A its air pipe | bakes 2 coal into a coke every 3 seconds, from the chests along its item pipe, for 3 air |
+| **Diesel compressor** | `MAM / FEM / MMM`, then `TMT / MMM / TMT`. M machine casing, T fluid tank, E engine, A its air pipe, F its fuel pipe | burns 32 fuel a second from the fluid pipes at F and puts 72 air a second into the air network at A: three times an engine's air for twice its fuel |
 
 An oil derrick or refinery block on its own does nothing now: it's the heart of its
 structure. (A smelter still works alone; the blast furnace is its upgrade.) Their
@@ -1246,14 +1248,27 @@ models are in `Resources/Data/structures.json`, in the same format as creatures 
 only while it works (the refinery's flare, the furnace's glowing mouth), and its
 motions (the derrick's rocking beam) only move then.
 
+**Coke** makes steel for a quarter of a block's worth instead of half a coal's, so a
+smelter or blast furnace with coke in its chests uses it first.
+
 Recipes: 4 steel frames from a steel ingot and an iron ingot; 2 machine casings from
 half a steel ingot and 2 stone; 2 fire bricks from 2 stone bricks and a quarter of a
 coal. The patterns are in `src/world/Multiblocks.cpp`, and the server's side in
 `src/server/Multiblocks.cpp`. `FactoryTest` checks the hammer names the missing block
 of an unfinished blast furnace, forms the finished one (its pipes kept as ports), that
 it smelts four sand in well under the time a smelter takes, that breaking a part takes
-it apart, and that derrick and refinery structures pump crude and refine it into fuel
-for an engine.
+it apart, that derrick and refinery structures pump crude and refine it into fuel
+for an engine, that a coke oven bakes coal into coke, and that a diesel compressor
+fills its air network once its tank has fuel (`/fluid x y z fuel`, operators, fills
+a fluid pipe or tank with water, crude or fuel).
+
+### The crusher
+
+A **crusher** (a steel ingot and 2 stone bricks) is an air machine like the smelter:
+from the chests joined to it, every 2 seconds for 4 air, it grinds an **iron ore into
+two crushed iron**, or a stone into sand. Crushed iron smelts to two iron ingots like
+ore, so ore through a crusher makes four ingots instead of two. `FactoryTest` checks
+both.
 
 ## Signals
 
@@ -1470,7 +1485,7 @@ Survival players earn achievements for milestones, once each: breaking a first b
 making a tool, bringing down a deer, defeating a hostile dwarf, cooking venison, eating,
 harvesting wheat, baking bread, digging out iron ore, the iron upgrade, a full set of
 armour, opening a dungeon chest, sleeping through a night, and taking something down
-with an arrow, catching a fish, and taming a wolf (sixteen in all). Earning one shows a banner under the compass for a
+with an arrow, catching a fish, taming a wolf, and defeating a Dwarf King (seventeen in all). Earning one shows a banner under the compass for a
 few seconds (with a chime) and tells everyone else. They're saved with you.
 `/achievements` lists what you've earned and what's still to do. `FoodTest` checks
 the ones it passes on the way, that `/achievements` answers, and that each is earned

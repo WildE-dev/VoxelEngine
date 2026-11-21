@@ -123,6 +123,7 @@ inline float DefaultHardness(BlockType type) {
     case BlockType::FILTER_PIPE:
     case BlockType::CRAFTER:
     case BlockType::HARVESTER:
+    case BlockType::CRUSHER:
     case BlockType::SLUICE: return 3.0f;
     case BlockType::WATER_SENSOR:
     case BlockType::DAYLIGHT_SENSOR:
@@ -209,6 +210,7 @@ inline Tool DefaultBestTool(BlockType type) {
     case BlockType::FILTER_PIPE:
     case BlockType::CRAFTER:
     case BlockType::HARVESTER:
+    case BlockType::CRUSHER:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE: return Tool::Pickaxe;
     case BlockType::WATER_WHEEL:

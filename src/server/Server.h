@@ -489,6 +489,7 @@ private:
     bool Extract(const glm::ivec3& pos, const Block& extractor, Worker& w);
     bool CraftAt(const glm::ivec3& pos, const Block& crafter, Worker& w);
     bool Harvest(const glm::ivec3& pos, Worker& w);
+    bool Crush(const glm::ivec3& pos, Worker& w);
     // A smelter's turn (it has the air): smelts a block in a chest joined to it.
     // Returns whether it did.
     bool Smelt(const glm::ivec3& pos, Smelter& smelter);

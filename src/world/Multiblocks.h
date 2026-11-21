@@ -18,6 +18,13 @@
 //    Crude oil in at one fluid port, fuel out of the other, three times as fast.
 //  - Blast furnace: fire bricks round a smelter. It smelts from the chests joined to its
 //    item port, four times as fast as a smelter, for less air a block.
+//  - Diesel compressor: machine casings and fluid tanks round an engine. It burns fuel
+//    from the fluid pipes at its fuel port (kDieselFuel a second) and puts
+//    kDieselAir a second into the air network at its air port: three times an
+//    engine's air for twice its fuel.
+//  - Coke oven: stone bricks round a smelter, with a chimney. It bakes two coal into a
+//    coke every kCokeInterval, from the chests joined to its item port, for air. Coke
+//    makes steel for half the coal (world/Smelting.h).
 // The server runs them (Server::UpdatePower); patterns are below, models in the data.
 #include <array>
 #include <cstdint>
@@ -30,7 +37,10 @@
 
 namespace Multiblocks {
 
-enum class Kind : uint8_t { OilDerrick, Refinery, BlastFurnace, Count };
+enum class Kind : uint8_t { OilDerrick, Refinery, BlastFurnace, DieselCompressor, CokeOven, Count };
+constexpr float kDieselFuel = 32.0f;     // fuel units a second a diesel compressor burns
+constexpr float kDieselAir = 72.0f;      // air a second it makes
+constexpr double kCokeInterval = 3.0;    // seconds per coke
 
 enum class Role : uint8_t { Ignore, Part, Core, AirPort, FluidIn, FluidOut, ItemPort };
 

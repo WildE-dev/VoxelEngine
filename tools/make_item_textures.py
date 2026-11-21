@@ -1791,6 +1791,82 @@ iiiiiiiiiiiiiiii
 """
 OUTLET_COLOURS = {"i": (60, 62, 68), "I": (120, 124, 132), "w": (80, 84, 92), "b": (40, 70, 140), "B": (90, 150, 230)}
 
+CRUSHER_SIDE = """
+kkkkkkkkkkkkkkkk
+kmmmmmmmmmmmmmmk
+kmMMMMMMMMMMMMmk
+kmMkkkkkkkkkkMmk
+kmMkyyyyyyyykMmk
+kmMkkkkkkkkkkMmk
+kmMMMMMMMMMMMMmk
+kmmmmmmmmmmmmmmk
+kmiiiiiiiiiiiimk
+kmiIiIiIiIiIiimk
+kmiiiiiiiiiiiimk
+kmiIiIiIiIiIiimk
+kmiiiiiiiiiiiimk
+kmmmmmmmmmmmmmmk
+kmmrmmmmmmmmrmmk
+kkkkkkkkkkkkkkkk
+"""
+CRUSHER_TOP = """
+kkkkkkkkkkkkkkkk
+kmmmmmmmmmmmmmmk
+kmkkkkkkkkkkkkmk
+kmkIiIiIiIiIikmk
+kmkiIiIiIiIiIkmk
+kmkIiIiIiIiIikmk
+kmkkkkkkkkkkkkmk
+kmkkkkkkkkkkkkmk
+kmkIiIiIiIiIikmk
+kmkiIiIiIiIiIkmk
+kmkIiIiIiIiIikmk
+kmkkkkkkkkkkkkmk
+kmmmmmmmmmmmmmmk
+kmMMMMMMMMMMMMmk
+kmmmmmmmmmmmmmmk
+kkkkkkkkkkkkkkkk
+"""
+CRUSHER_COLOURS = {"k": (34, 36, 40), "m": (96, 100, 108), "M": (128, 132, 140), "i": (70, 72, 78), "I": (160, 164, 172), "y": (210, 170, 40), "r": (150, 50, 40)}
+CRUSHED_IRON = """
+................
+................
+................
+.......oo.......
+.....ooIoo......
+....oIiioIo.....
+...oiIoiIioo....
+..oIiooIiioIo...
+.oiiIoiioIiiIo..
+.oIoiiIoiIoiio..
+oiiIoiIiiIoIiIo.
+oIoiiIoiIoiiIio.
+.oooooooooooooo.
+................
+................
+................
+"""
+CRUSHED_IRON_COLOURS = {"o": (60, 52, 48), "i": (150, 128, 112), "I": (196, 180, 168)}
+COKE = """
+................
+................
+.....ooooo......
+...ookkKkkoo....
+..okkKkkkKkko...
+..okKkgkkkKko...
+.okkkkkKkgkkko..
+.okKkgkkkkkKko..
+.okkkkKkkgkkko..
+.okgkkkkKkkkko..
+..okkKkkgkkKko..
+..okkkkKkkkko...
+...ookkkkkoo....
+.....ooooo......
+................
+................
+"""
+COKE_COLOURS = {"o": (20, 20, 22), "k": (52, 52, 56), "K": (84, 84, 90), "g": (130, 126, 112)}
+
 MINING_POST_SIDE = """
 wwwwwwwwwwwwwwww
 wWWWWWWWWWWWWWWw
@@ -2021,6 +2097,10 @@ def main():
     draw("mining_post_top", MINING_POST_TOP, MINING_POST_COLOURS, jitter=4, seed=120)
     draw("steel_frame", STEEL_FRAME, STEEL_FRAME_COLOURS, jitter=4, seed=121)
     draw("machine_casing", MACHINE_CASING, MACHINE_CASING_COLOURS, jitter=4, seed=122)
+    draw("crusher_side", CRUSHER_SIDE, CRUSHER_COLOURS, jitter=4, seed=131)
+    draw("crusher_top", CRUSHER_TOP, CRUSHER_COLOURS, jitter=4, seed=132)
+    draw("crushed_iron", CRUSHED_IRON, CRUSHED_IRON_COLOURS, jitter=6, seed=135)
+    draw("coke", COKE, COKE_COLOURS, jitter=5, seed=136)
     draw("fire_brick", FIRE_BRICK, FIRE_BRICK_COLOURS, jitter=6, seed=123)
     draw("hammer", HAMMER, HAMMER_COLOURS, jitter=3, seed=124)
 

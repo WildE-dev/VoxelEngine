@@ -1,5 +1,6 @@
 // Multiblock structures' models (world/Multiblocks.h), by structure: oil_derrick,
-// refinery, blast_furnace. Same format as creatures.json, in the structure's own frame:
+// refinery, blast_furnace,
+// diesel_compressor, coke_oven. Same format as creatures.json, in the structure's own frame:
 // x and z run 0 to 3 across its 3 x 3 footprint (as its pattern's cells, before it's
 // turned to face the way it was built), y up from the ground under it. Parts with
 // "when": "working" are drawn only while it works ("idle": only while it doesn't), and
@@ -822,6 +823,417 @@
         ],
         "color": "soot",
         "when": "idle"
+      }
+    ]
+  },
+  "diesel_compressor": {
+    "colors": {
+      "tank": "#7d8a6a",
+      "pipe": "#3a3e44",
+      "flywheel": "#2c2f34",
+      "exhaust": "#55504a",
+      "smoke": "#8a8a8a",
+      "glow": "#ffb040"
+    },
+    "parts": [
+      {
+        "box": [
+          2,
+          0.5,
+          2
+        ],
+        "size": [
+          2,
+          1,
+          2
+        ],
+        "texture": "machine_casing",
+        "tile": true,
+        "color": "#ffffff"
+      },
+      {
+        "box": [
+          0.5,
+          0.5,
+          2.5
+        ],
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "texture": "machine_casing",
+        "tile": true,
+        "color": "#ffffff"
+      },
+      {
+        "box": [
+          2.5,
+          0.5,
+          0.5
+        ],
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "texture": "machine_casing",
+        "tile": true,
+        "color": "#ffffff"
+      },
+      {
+        "box": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "texture": "machine_casing",
+        "tile": true,
+        "color": "#ffffff"
+      },
+      {
+        "box": [
+          1.5,
+          1.4,
+          1.5
+        ],
+        "size": [
+          2.2,
+          0.8,
+          2.2
+        ],
+        "texture": "machine_casing",
+        "tile": true,
+        "color": "#ffffff"
+      },
+      {
+        "box": [
+          0.45,
+          1.5,
+          0.45
+        ],
+        "size": [
+          0.8,
+          1,
+          0.8
+        ],
+        "color": "tank"
+      },
+      {
+        "box": [
+          2.55,
+          1.5,
+          0.45
+        ],
+        "size": [
+          0.8,
+          1,
+          0.8
+        ],
+        "color": "tank"
+      },
+      {
+        "box": [
+          0.45,
+          1.5,
+          2.55
+        ],
+        "size": [
+          0.8,
+          1,
+          0.8
+        ],
+        "color": "tank"
+      },
+      {
+        "box": [
+          2.55,
+          1.5,
+          2.55
+        ],
+        "size": [
+          0.8,
+          1,
+          0.8
+        ],
+        "color": "tank"
+      },
+      {
+        "box": [
+          2.3,
+          2.3,
+          2.3
+        ],
+        "size": [
+          0.25,
+          1.2,
+          0.25
+        ],
+        "color": "exhaust"
+      },
+      {
+        "name": "smoke",
+        "when": "working",
+        "at": [
+          2.3,
+          3.0,
+          2.3
+        ],
+        "flap": {
+          "axis": "y",
+          "speed": 3,
+          "amount": 3.14
+        },
+        "box": [
+          0,
+          0,
+          0
+        ],
+        "size": [
+          0.35,
+          0.3,
+          0.35
+        ],
+        "color": "smoke"
+      },
+      {
+        "name": "flywheel",
+        "at": [
+          3.05,
+          0.55,
+          1.5
+        ],
+        "flap": {
+          "axis": "x",
+          "speed": 12,
+          "amount": 3.14
+        },
+        "box": [
+          0,
+          0,
+          0
+        ],
+        "size": [
+          0.1,
+          0.8,
+          0.8
+        ],
+        "color": "flywheel",
+        "parts": [
+          {
+            "box": [
+              0.06,
+              0,
+              0
+            ],
+            "size": [
+              0.04,
+              0.7,
+              0.12
+            ],
+            "color": "#b8bec8"
+          }
+        ]
+      },
+      {
+        "name": "lamp",
+        "when": "working",
+        "box": [
+          1.5,
+          1.86,
+          1.5
+        ],
+        "size": [
+          0.2,
+          0.08,
+          0.2
+        ],
+        "color": "glow",
+        "glow": true
+      },
+      {
+        "name": "lamp off",
+        "when": "idle",
+        "box": [
+          1.5,
+          1.86,
+          1.5
+        ],
+        "size": [
+          0.2,
+          0.08,
+          0.2
+        ],
+        "color": "#4a3a20"
+      }
+    ]
+  },
+  "coke_oven": {
+    "colors": {
+      "soot": "#1e1c1a",
+      "fire": "#ff8a2a",
+      "iron": "#4a4e56"
+    },
+    "parts": [
+      {
+        "box": [
+          1.5,
+          0.5,
+          0.5
+        ],
+        "size": [
+          3,
+          1,
+          1
+        ],
+        "texture": "stone_brick",
+        "tile": true,
+        "color": "#ffffff"
+      },
+      {
+        "box": [
+          1.5,
+          0.5,
+          2.5
+        ],
+        "size": [
+          3,
+          1,
+          1
+        ],
+        "texture": "stone_brick",
+        "tile": true,
+        "color": "#ffffff"
+      },
+      {
+        "box": [
+          1.5,
+          0.5,
+          1.5
+        ],
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "texture": "stone_brick",
+        "tile": true,
+        "color": "#ffffff"
+      },
+      {
+        "box": [
+          1.5,
+          1.5,
+          1.5
+        ],
+        "size": [
+          3,
+          1,
+          3
+        ],
+        "texture": "stone_brick",
+        "tile": true,
+        "color": "#ffffff"
+      },
+      {
+        "box": [
+          1.5,
+          2.6,
+          1.5
+        ],
+        "size": [
+          0.9,
+          1.2,
+          0.9
+        ],
+        "texture": "stone_brick",
+        "tile": true,
+        "color": "#ffffff"
+      },
+      {
+        "box": [
+          1.5,
+          3.22,
+          1.5
+        ],
+        "size": [
+          1.0,
+          0.06,
+          1.0
+        ],
+        "color": "iron"
+      },
+      {
+        "name": "fire",
+        "when": "working",
+        "box": [
+          1.5,
+          3.15,
+          1.5
+        ],
+        "size": [
+          0.6,
+          0.08,
+          0.6
+        ],
+        "color": "fire",
+        "glow": true
+      },
+      {
+        "name": "smoke",
+        "when": "working",
+        "at": [
+          1.5,
+          3.6,
+          1.5
+        ],
+        "flap": {
+          "axis": "y",
+          "speed": 2,
+          "amount": 3.14
+        },
+        "box": [
+          0,
+          0,
+          0
+        ],
+        "size": [
+          0.5,
+          0.4,
+          0.5
+        ],
+        "color": "#6a6a6a"
+      },
+      {
+        "box": [
+          1.5,
+          1.02,
+          0.0
+        ],
+        "size": [
+          1.2,
+          0.04,
+          0.04
+        ],
+        "color": "soot"
+      },
+      {
+        "box": [
+          1.5,
+          1.02,
+          3.0
+        ],
+        "size": [
+          1.2,
+          0.04,
+          0.04
+        ],
+        "color": "soot"
       }
     ]
   }

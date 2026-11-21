@@ -25,12 +25,15 @@ constexpr uint32_t kBlock = Block::kUnitsPerBlock;
 inline const std::vector<SmeltRecipe>& Recipes() {
     static const std::vector<SmeltRecipe> recipes = {
         { BlockType::IRON_ORE, kBlock, BlockType::AIR, 0, BlockType::IRON_INGOT, 2 * kBlock },
+        { BlockType::CRUSHED_IRON, kBlock, BlockType::AIR, 0, BlockType::IRON_INGOT, 2 * kBlock }, // (an ore crushed makes two)
         { BlockType::RAW_VENISON, kBlock, BlockType::AIR, 0, BlockType::COOKED_VENISON, kBlock },
         { BlockType::RAW_FISH, kBlock, BlockType::AIR, 0, BlockType::COOKED_FISH, kBlock },
         { BlockType::SAND, kBlock, BlockType::AIR, 0, BlockType::GLASS, kBlock },
         { BlockType::LOG, kBlock, BlockType::AIR, 0, BlockType::COAL, kBlock / 2 }, // charcoal
         // Last, so ore becomes iron first (and iron you want to keep is best kept in a
         // chest the smelter can't reach).
+        // Coke (a coke oven's) makes steel for half the coal's worth.
+        { BlockType::IRON_INGOT, kBlock, BlockType::COKE, kBlock / 4, BlockType::STEEL_INGOT, kBlock },
         { BlockType::IRON_INGOT, kBlock, BlockType::COAL, kBlock / 2, BlockType::STEEL_INGOT, kBlock },
     };
     return recipes;

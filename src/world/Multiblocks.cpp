@@ -43,6 +43,16 @@ const std::vector<Pattern>& All() {
               { { "BAB", "BBB", "BBB" }, { "BHB", "BSB", "BBB" }, { "BBB", "B.B", "BBB" } },
               { { 'B', BlockType::FIRE_BRICK, Role::Part }, { 'S', BlockType::SMELTER, Role::Core },
                 { 'A', BlockType::AIR_PIPE, Role::AirPort }, { 'H', BlockType::ITEM_PIPE, Role::ItemPort } }),
+        // M machine casing, T fluid tank, E the engine, A air out, F fuel in.
+        Build(Kind::DieselCompressor, "diesel_compressor", "Diesel compressor",
+              { { "MAM", "FEM", "MMM" }, { "TMT", "MMM", "TMT" } },
+              { { 'M', BlockType::MACHINE_CASING, Role::Part }, { 'T', BlockType::FLUID_TANK, Role::Part }, { 'E', BlockType::ENGINE, Role::Core },
+                { 'A', BlockType::AIR_PIPE, Role::AirPort }, { 'F', BlockType::FLUID_PIPE, Role::FluidIn } }),
+        // S stone bricks, X the smelter (inside), A air, H the item pipe to its chests.
+        Build(Kind::CokeOven, "coke_oven", "Coke oven",
+              { { "SSS", "HXA", "SSS" }, { "SSS", "SSS", "SSS" }, { "...", ".S.", "..." } },
+              { { 'S', BlockType::STONE_BRICK, Role::Part }, { 'X', BlockType::SMELTER, Role::Core },
+                { 'A', BlockType::AIR_PIPE, Role::AirPort }, { 'H', BlockType::ITEM_PIPE, Role::ItemPort } }),
     };
     return patterns;
 }

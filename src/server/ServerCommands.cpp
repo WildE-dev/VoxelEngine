@@ -124,7 +124,7 @@ constexpr HelpLine kHelp[] = {
 Level RequiredLevel(const std::string& command, size_t argumentCount) {
     if (command == "stop") return Level::Console;
     if (command == "tp" || command == "teleport" || command == "save" || command == "kick" || command == "op" || command == "deop" ||
-        command == "noclip" || command == "give" || command == "fill" || command == "pressurise" || command == "locate" || command == "form" || command == "summon" || command == "creatures")
+        command == "noclip" || command == "give" || command == "fill" || command == "pressurise" || command == "fluid" || command == "locate" || command == "form" || command == "summon" || command == "creatures")
         return Level::Operator;
     if ((command == "time" || command == "weather" || command == "gamemode" || command == "pvp" || command == "food" || command == "horde") && argumentCount > 0)
         return Level::Operator;
@@ -403,6 +403,24 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
             air[p] = Power::CapacityOf(b.type);
         }
         reply(Kind::Info, "Filled " + std::to_string(parts.size()) + " air parts");
+    }
+    else if (command == "fluid") {
+        // A fluid pipe or tank filled with water, crude or fuel (its network shares it).
+        double v[3];
+        const char* use = "/fluid <x y z> <water|crude|fuel>";
+        if (words.size() != 5) return usage(use);
+        for (int i = 0; i < 3; i++)
+            if (!ParseNumber(words[1 + i], v[i]) || std::abs(v[i]) > 1e7) return usage(use);
+        const std::string what = Lower(words[4]);
+        const Fluids::Kind kind = what == "water" ? Fluids::Kind::Water : what == "crude" ? Fluids::Kind::Crude : what == "fuel" ? Fluids::Kind::Fuel : Fluids::Kind::None;
+        if (kind == Fluids::Kind::None) return usage(use);
+        const glm::ivec3 at(glm::floor(glm::dvec3(v[0], v[1], v[2])));
+        std::lock_guard<std::recursive_mutex> edit(world->GetEditMutex());
+        Block b;
+        if (!world->GetBlock(at.x, at.y, at.z, b) || !Fluids::IsPart(b.type)) return reply(Kind::Error, "There's no fluid pipe or tank there");
+        fluidHeld[at] = Fluids::CapacityOf(b.type);
+        fluidKind[at] = kind;
+        reply(Kind::Info, std::string("Filled it with ") + Fluids::Name(kind));
     }
     else if (command == "horde") {
         if (words.size() == 1) return reply(Kind::Info, creatures.Horde() ? "Tonight is a horde night" : "No horde tonight");

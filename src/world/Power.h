@@ -104,6 +104,8 @@ constexpr double kCraftInterval = 2.0;        // seconds per thing made
 constexpr float kHarvestAir = 3.0f;           // air for each crop a harvester reaps
 constexpr double kHarvestInterval = 1.5;      // seconds per crop
 constexpr int kHarvestReach = 4;              // blocks round a harvester it reaps (and one up or down)
+constexpr float kCrushAir = 4.0f;             // air for each block a crusher grinds
+constexpr double kCrushInterval = 2.0;        // seconds per block ground
 
 // Parts of an air network (wheels and shafts aren't: they turn compressors).
 // (A valve is part of the network only while it's open: shut, it divides it.)
@@ -111,12 +113,12 @@ inline bool IsAirPart(BlockType t) {
     return t == BlockType::AIR_PIPE || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
            t == BlockType::VALVE_OPEN || t == BlockType::PISTON || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
            t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::ENGINE || t == BlockType::OIL_DERRICK ||
-           t == BlockType::REFINERY;
+           t == BlockType::REFINERY || t == BlockType::CRUSHER;
 }
 // What item pipes join: each other, chests, and the machines that fill or empty them.
 inline bool IsItemPart(BlockType t) {
     return t == BlockType::ITEM_PIPE || t == BlockType::FILTER_PIPE || IsStorageType(t) || t == BlockType::DRILL || t == BlockType::SMELTER ||
-           t == BlockType::SMELTER_LIT || t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER;
+           t == BlockType::SMELTER_LIT || t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::CRUSHER;
 }
 // How much air a part holds when full.
 inline float CapacityOf(BlockType t) { return t == BlockType::AIR_TANK ? kAirPerTank : kAirPerCell; }
@@ -131,7 +133,8 @@ inline bool IsMachine(BlockType t) {
     return t == BlockType::WATER_WHEEL || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
            t == BlockType::PISTON || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
            t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::PRESSURE_GAUGE ||
-           t == BlockType::FLUID_TANK || Fluids::IsMachine(t) || t == BlockType::MINING_POST || t == BlockType::MULTIBLOCK;
+           t == BlockType::FLUID_TANK || Fluids::IsMachine(t) || t == BlockType::MINING_POST || t == BlockType::MULTIBLOCK ||
+           t == BlockType::CRUSHER;
 }
 
 // Whether a pipe (drawn as a thin tube) reaches across to this neighbour: water pipes

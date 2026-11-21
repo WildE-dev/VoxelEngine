@@ -258,7 +258,7 @@ int main() {
               Has(a, "Baker: bake bread"),
           "eating, hunting, cooking, farming and baking each earn an achievement");
     a.client.SendChat("/achievements");
-    Check(Pump(a, 20.0, [&] { return Has(a, " of 16 achievements") && Has(a, "Still to do:"); }), "/achievements lists the earned ones and what's still to do");
+    Check(Pump(a, 20.0, [&] { return Has(a, " of 17 achievements") && Has(a, "Still to do:"); }), "/achievements lists the earned ones and what's still to do");
     size_t meals = 0;
     for (const auto& line : a.client.GetChat()) meals += line.text.find("First Meal: eat") != std::string::npos;
     Check(meals == 1, "each is earned only once (" + std::to_string(meals) + " first meals, after three)");

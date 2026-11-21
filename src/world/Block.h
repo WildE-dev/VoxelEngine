@@ -261,6 +261,12 @@ enum class BlockType : uint8_t {
     HAMMER,
     MULTIBLOCK,
     MULTIBLOCK_PART,
+    // A crusher (an air machine) grinds ore from the chests joined to it: an iron ore
+    // into two crushed iron (each smelting to two ingots), stone into sand. Crushed
+    // iron and coke (baked from coal in a coke oven: see world/Multiblocks.h) are items.
+    CRUSHER,
+    CRUSHED_IRON,
+    COKE,
     COUNT
 };
 // Blocks that hold things like a chest (opened, filled, emptied, broken open).
@@ -289,7 +295,7 @@ inline bool IsItemType(BlockType type) {
     return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE || type == BlockType::COAL ||
            type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD ||
            type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH || type == BlockType::BOAT ||
-           type == BlockType::STEEL_INGOT || type == BlockType::HAMMER;
+           type == BlockType::STEEL_INGOT || type == BlockType::HAMMER || type == BlockType::CRUSHED_IRON || type == BlockType::COKE;
 }
 
 inline bool IsPlantType(BlockType type) {

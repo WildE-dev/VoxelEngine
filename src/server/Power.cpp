@@ -171,7 +171,26 @@ void Server::UpdatePower() {
         for (const auto& m : members) {
             auto a = air.find(m);
             if (a != air.end()) net.air += a->second;
-            if (auto st = structureAtAir.find(m); st != structureAtAir.end()) netStructures.push_back(st->second);
+            if (auto st = structureAtAir.find(m); st != structureAtAir.end()) {
+                Block core;
+                world->GetBlock(st->second.x, st->second.y, st->second.z, core);
+                if (Multiblocks::KindOf(core) == Multiblocks::Kind::DieselCompressor) {
+                    // A diesel compressor makes air (while it has fuel), like an engine.
+                    net.compressors++;
+                    Worker& w = workers[st->second];
+                    glm::ivec3 port;
+                    FluidNet* fuel = Multiblocks::PortOf(st->second, core, Multiblocks::Role::FluidIn, port) ? FluidNetAt(port) : nullptr;
+                    const int burn = static_cast<int>(Multiblocks::kDieselFuel * Power::kInterval);
+                    if (fuel && fuel->kind == Fluids::Kind::Fuel && fuel->amount >= burn) {
+                        fuel->amount -= burn;
+                        net.supply += Multiblocks::kDieselAir;
+                        w.state = Power::DrillState::Working;
+                        w.last = now;
+                    }
+                    else w.state = Power::DrillState::Idle;
+                }
+                else netStructures.push_back(st->second);
+            }
             switch (blockAt(m).type) {
             case BlockType::AIR_PIPE: net.pipes++; break;
             case BlockType::AIR_TANK: net.tanks++; break;
@@ -207,6 +226,7 @@ void Server::UpdatePower() {
             case BlockType::CRAFTER:
             case BlockType::HARVESTER:
             case BlockType::OIL_DERRICK:
+            case BlockType::CRUSHER:
             case BlockType::REFINERY: netWorkers.push_back(m); break;
             default: break;
             }
@@ -291,6 +311,7 @@ void Server::UpdatePower() {
             case BlockType::CRAFTER: interval = Power::kCraftInterval, cost = Power::kCraftAir; break;
             case BlockType::OIL_DERRICK: interval = Fluids::kDerrickInterval, cost = Fluids::kDerrickAir; break;
             case BlockType::REFINERY: interval = Power::kInterval * 0.9, cost = Fluids::kRefineAir; break;
+            case BlockType::CRUSHER: interval = Power::kCrushInterval, cost = Power::kCrushAir; break;
             default: break;
             }
             auto work = [&] {
@@ -299,6 +320,7 @@ void Server::UpdatePower() {
                 case BlockType::CRAFTER: return CraftAt(p, b, w);
                 case BlockType::OIL_DERRICK: return PumpOil(p, w);
                 case BlockType::REFINERY: return Refine(p, b, w);
+                case BlockType::CRUSHER: return Crush(p, w);
                 default: return Harvest(p, w);
                 }
             };
@@ -320,7 +342,10 @@ void Server::UpdatePower() {
             Worker& w = workers[core];
             const Block b = blockAt(core);
             const Multiblocks::Kind kind = Multiblocks::KindOf(b);
-            const double interval = kind == Multiblocks::Kind::Refinery ? Power::kInterval * 0.9 : kind == Multiblocks::Kind::OilDerrick ? Fluids::kDerrickInterval : kFurnaceInterval;
+            const double interval = kind == Multiblocks::Kind::Refinery     ? Power::kInterval * 0.9
+                                    : kind == Multiblocks::Kind::OilDerrick ? Fluids::kDerrickInterval
+                                    : kind == Multiblocks::Kind::CokeOven   ? Multiblocks::kCokeInterval
+                                                                            : kFurnaceInterval;
             const float cost = kind == Multiblocks::Kind::Refinery ? 4.0f : 3.0f;
             if (now >= w.next) {
                 if (net.Pressure() < Power::kMinPressure || net.air < cost) w.state = Power::DrillState::NoPressure;
@@ -380,6 +405,31 @@ void Server::UpdatePower() {
     SendMachines();
 }
 
+bool Server::Crush(const glm::ivec3& pos, Worker& w) {
+    const auto joined = ChestsJoined(pos);
+    if (joined.empty()) {
+        w.state = Power::DrillState::NoChest;
+        return false;
+    }
+    // Iron ore first (into twice as much crushed iron), then stone (into sand).
+    const std::pair<BlockType, std::pair<BlockType, uint32_t>> grinds[] = {
+        { BlockType::IRON_ORE, { BlockType::CRUSHED_IRON, 2 * Block::kUnitsPerBlock } },
+        { BlockType::STONE, { BlockType::SAND, Block::kUnitsPerBlock } },
+    };
+    for (const auto& [from, to] : grinds)
+        for (const auto& c : joined) {
+            ChestItems& chest = ChestAt(c);
+            if (chest[static_cast<size_t>(from)] < Block::kUnitsPerBlock) continue;
+            chest[static_cast<size_t>(from)] -= Block::kUnitsPerBlock;
+            chest[static_cast<size_t>(to.first)] += to.second;
+            SendChestToViewers(c);
+            w.state = Power::DrillState::Working;
+            return true;
+        }
+    w.state = Power::DrillState::Idle;
+    return false;
+}
+
 std::vector<glm::ivec3> Server::ChestsJoined(const glm::ivec3& pos, BlockType type, const glm::ivec3* face) const {
     std::vector<glm::ivec3> chestsFound, pipes{ pos };
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> seen{ pos };
@@ -405,8 +455,8 @@ bool Server::Extract(const glm::ivec3& pos, const Block& extractor, Worker& w) {
         return false;
     }
     ChestItems& held = ChestAt(from);
-    // Through what the chest has in turn, the first thing somewhere will take.
     constexpr size_t kTypes = static_cast<size_t>(BlockType::COUNT);
+    // Through what the chest has in turn, the first thing somewhere will take.
     for (size_t k = 1; k <= kTypes; k++) {
         const size_t t = (w.cursor + k) % kTypes;
         if (held[t] == 0) continue;
@@ -938,6 +988,13 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
             text += sm.state == Power::DrillState::Working ? "Smelter: smelting. " : sm.state == Power::DrillState::NoPressure ? "Smelter: waiting for air pressure. "
                   : sm.state == Power::DrillState::NoChest ? "Smelter: needs a chest touching it or joined by item pipes. " : "Smelter: nothing to smelt in its chests. ";
             text += std::to_string(chestCount) + (chestCount == 1 ? " chest joined. " : " chests joined. ");
+        }
+        else if (b.type == BlockType::CRUSHER) {
+            const Worker w = workers.count(pos) ? workers[pos] : Worker{};
+            text += w.state == Power::DrillState::Working      ? "Crusher: grinding. "
+                    : w.state == Power::DrillState::NoPressure ? "Crusher: waiting for air pressure. "
+                    : w.state == Power::DrillState::NoChest    ? "Crusher: needs a chest touching it or joined by item pipes. "
+                                                               : "Crusher: no iron ore or stone in its chests. ";
         }
         else if (b.type == BlockType::EXTRACTOR || b.type == BlockType::CRAFTER || b.type == BlockType::HARVESTER) {
             const Worker w = workers.count(pos) ? workers[pos] : Worker{};

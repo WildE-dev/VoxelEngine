@@ -473,6 +473,80 @@ int main() {
         }
         Check(pumped, "it pumps crude oil from the shale under it into the tank");
 
+        std::cout << "Crushing, coke and diesel" << std::endl;
+        // A crusher on a chest of iron ore and stone, air piped to it.
+        server.QueueConsoleCommand("tp Builder 81.5 0 51.5");
+        pump(10.0, [&] { return a.feet.x > 81.0f; });
+        fill({ 80, 0, 50 }, { 80, 0, 50 }, "chest");
+        fill({ 80, 1, 50 }, { 80, 1, 50 }, "crusher");
+        fill({ 80, 2, 50 }, { 80, 2, 50 }, "air_pipe");
+        pump(10.0, [&] { return blockAt({ 80, 2, 50 }) == BlockType::AIR_PIPE && blockAt({ 80, 1, 50 }) == BlockType::CRUSHER; });
+        server.QueueConsoleCommand("give iron_ore 1 Builder");
+        server.QueueConsoleCommand("give stone 1 Builder");
+        server.QueueConsoleCommand("give coal 4 Builder");
+        pump(5.0, [&] { return a.client.GetResources(BlockType::IRON_ORE) >= Crafting::kBlock && a.client.GetResources(BlockType::COAL) >= 4 * Crafting::kBlock; });
+        a.client.OpenChest({ 80, 0, 50 });
+        pump(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(80, 0, 50); });
+        a.client.MoveChestItems(BlockType::IRON_ORE, Crafting::kBlock, true);
+        a.client.MoveChestItems(BlockType::STONE, Crafting::kBlock, true);
+        bool crushed = false;
+        for (int i = 0; i < 12 && !crushed; i++) {
+            server.QueueConsoleCommand("pressurise 80 2 50");
+            crushed = pump(1.0, [&] { return a.client.GetChestUnits(BlockType::CRUSHED_IRON) == 2 * Crafting::kBlock && a.client.GetChestUnits(BlockType::SAND) == Crafting::kBlock; });
+        }
+        Check(crushed && a.client.GetChestUnits(BlockType::IRON_ORE) == 0, "a crusher grinds an iron ore into two crushed iron, and stone into sand");
+
+        // A coke oven: stone bricks round a smelter, a chimney on top, its item pipe to a
+        // chest of coal and an air pipe.
+        server.QueueConsoleCommand("fill 84 0 50 86 1 52 stone_brick");
+        fill({ 85, 2, 51 }, { 85, 2, 51 }, "stone_brick");
+        fill({ 84, 0, 51 }, { 84, 0, 51 }, "item_pipe");
+        fill({ 83, 0, 51 }, { 83, 0, 51 }, "chest");
+        fill({ 85, 0, 51 }, { 85, 0, 51 }, "smelter");
+        fill({ 86, 0, 51 }, { 87, 0, 51 }, "air_pipe");
+        pump(10.0, [&] { return blockAt({ 87, 0, 51 }) == BlockType::AIR_PIPE && blockAt({ 85, 0, 51 }) == BlockType::SMELTER && blockAt({ 83, 0, 51 }) == BlockType::CHEST; });
+        a.held = BlockType::HAMMER;
+        wait(0.3);
+        a.client.UseBed({ 85, 1, 51 });
+        Check(pump(5.0, [&] { return Has(a.client, "Formed a Coke oven"); }), "a coke oven forms");
+        a.held = BlockType::AIR;
+        a.client.OpenChest({ 83, 0, 51 });
+        pump(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(83, 0, 51); });
+        a.client.MoveChestItems(BlockType::COAL, 4 * Crafting::kBlock, true);
+        bool coke = false;
+        for (int i = 0; i < 15 && !coke; i++) {
+            server.QueueConsoleCommand("pressurise 87 0 51");
+            coke = pump(1.0, [&] { return a.client.GetChestUnits(BlockType::COKE) == 2 * Crafting::kBlock; });
+        }
+        Check(coke && a.client.GetChestUnits(BlockType::COAL) == 0, "with air it bakes the 4 coal into 2 coke");
+
+        // A diesel compressor: machine casings and tanks round an engine, its fuel port
+        // piped to a tank of fuel, its air port to a pipe.
+        server.QueueConsoleCommand("tp Builder 93.5 0 47.5");
+        pump(10.0, [&] { return a.feet.x > 93.0f; });
+        server.QueueConsoleCommand("fill 90 0 50 92 1 52 machine_casing");
+        for (const glm::ivec3 c : { glm::ivec3(90, 1, 50), glm::ivec3(92, 1, 50), glm::ivec3(90, 1, 52), glm::ivec3(92, 1, 52) }) fill(c, c, "fluid_tank");
+        fill({ 91, 0, 50 }, { 91, 0, 49 }, "air_pipe");
+        fill({ 90, 0, 51 }, { 90, 0, 51 }, "fluid_pipe");
+        fill({ 89, 0, 51 }, { 89, 0, 51 }, "fluid_tank");
+        fill({ 91, 0, 51 }, { 91, 0, 51 }, "engine");
+        pump(10.0, [&] { return blockAt({ 91, 0, 51 }) == BlockType::ENGINE && blockAt({ 89, 0, 51 }) == BlockType::FLUID_TANK && blockAt({ 92, 1, 52 }) == BlockType::FLUID_TANK; });
+        a.held = BlockType::HAMMER;
+        wait(0.3);
+        a.client.UseBed({ 92, 0, 52 });
+        Check(pump(5.0, [&] { return Has(a.client, "Formed a Diesel compressor"); }), "a diesel compressor forms");
+        a.held = BlockType::AIR;
+        a.client.Inspect({ 91, 0, 49 });
+        Check(pump(5.0, [&] { return Has(a.client, "Air pressure 0%"); }), "without fuel its air pipes stay empty");
+        server.QueueConsoleCommand("fluid 89 0 51 fuel");
+        bool filled = false;
+        for (int i = 0; i < 15 && !filled; i++) {
+            pump(1.0, [] { return false; });
+            a.client.Inspect({ 91, 0, 49 });
+            filled = pump(1.0, [&] { return Has(a.client, "Air pressure 100%"); });
+        }
+        Check(filled, "with fuel it fills its air network");
+
         a.client.Disconnect();
         Pump(a, 0.3, [] { return false; });
         server.Stop();

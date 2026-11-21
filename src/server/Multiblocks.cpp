@@ -194,6 +194,25 @@ bool Server::RunStructure(const glm::ivec3& core, const Block& block, Worker& w)
         w.state = Power::DrillState::Idle;
         return false;
     }
+    case Kind::CokeOven: {
+        if (!PortOf(core, block, Role::ItemPort, port)) return false;
+        const auto joined = ChestsJoined(port);
+        if (joined.empty()) {
+            w.state = Power::DrillState::NoChest;
+            return false;
+        }
+        for (const auto& c : joined) {
+            ChestItems& chest = ChestAt(c);
+            if (chest[static_cast<size_t>(BlockType::COAL)] < 2 * Block::kUnitsPerBlock) continue;
+            chest[static_cast<size_t>(BlockType::COAL)] -= 2 * Block::kUnitsPerBlock;
+            chest[static_cast<size_t>(BlockType::COKE)] += Block::kUnitsPerBlock;
+            SendChestToViewers(c);
+            w.state = Power::DrillState::Working;
+            return true;
+        }
+        w.state = Power::DrillState::Idle;
+        return false;
+    }
     default: return false;
     }
 }
