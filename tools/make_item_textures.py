@@ -421,6 +421,44 @@ LADDER = """
 """
 LADDER_COLOURS = {"r": (120, 82, 42), "R": (146, 104, 58), "w": (150, 108, 60), "W": (110, 76, 38)}
 
+DOOR = """
+dddddddddddddddd
+dwwwwwwwwwwwwwwd
+dwWwwwwddwwwwWwd
+dwwwwwwddwwwwwwd
+dwwwWwwddwwwwwwd
+dwwwwwwddwwWwwwd
+dwwwwwwddwwwwwwd
+dwWwwwwddwwwwkkd
+dwwwwwwddwwwwkkd
+dwwwwWwddwwwwwwd
+dwwwwwwddwwwwwwd
+dwwwwwwddwWwwwwd
+dwWwwwwddwwwwwwd
+dwwwwwwddwwwwWwd
+dwwwwwwwwwwwwwwd
+dddddddddddddddd
+"""
+DOOR_OPEN = """
+dddddddddddddddd
+dd............dd
+d..............d
+d..............d
+d..............d
+d..............d
+d..............d
+d..............d
+d..............d
+d..............d
+d..............d
+d..............d
+d..............d
+d..............d
+dd............dd
+dddddddddddddddd
+"""
+DOOR_COLOURS = {"d": (90, 58, 28), "w": (160, 114, 64), "W": (180, 132, 78), "k": (60, 60, 66)}
+
 
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
@@ -444,6 +482,8 @@ def main():
     draw("wheat", WHEAT_BUNDLE, WHEAT_COLOURS, jitter=8, seed=29)
     draw("bread", BREAD, BREAD_COLOURS, jitter=6, seed=30)
     draw("ladder", LADDER, LADDER_COLOURS, jitter=6, seed=31)
+    draw("door", DOOR, DOOR_COLOURS, jitter=6, seed=32)
+    draw("door_open", DOOR_OPEN, DOOR_COLOURS, jitter=6, seed=33)
 
 
 if __name__ == "__main__":

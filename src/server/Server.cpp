@@ -673,6 +673,15 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
     world->SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
     if (block.type == BlockType::CHEST) RemoveChest(pos, &client);
     if (block.type == BlockType::CROP) crops.erase(pos);
+    // A door goes as a whole: the other half too (its worth is counted once, below).
+    if (block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN)
+        for (const int dy : { 1, -1 }) {
+            Block other;
+            if (world->GetBlock(pos.x, pos.y + dy, pos.z, other) && other.type == block.type) {
+                world->SetBlock(pos.x, pos.y + dy, pos.z, Block());
+                break;
+            }
+        }
     if (!Creative(client)) {
         // Ripe wheat also gives seeds (one or two); tall grass now and then a seed.
         const float roll = Noise::Random01(pos.x, pos.y, pos.z, static_cast<uint32_t>(tickCount));
@@ -699,6 +708,14 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
         return Echo(client, pos);
     }
 
+    // A door needs room for its upper half too.
+    if (type == BlockType::DOOR) {
+        Block upper;
+        if (!world->GetBlock(pos.x, pos.y + 1, pos.z, upper) || !upper.IsPassable() || upper.type == BlockType::DOOR_OPEN) {
+            if (!Creative(client)) SendResources(client);
+            return Echo(client, pos);
+        }
+    }
     // Seeds are planted on dirt or grass.
     if (type == BlockType::CROP) {
         Block soil;
@@ -728,6 +745,7 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
     world->SetBlock(pos.x, pos.y, pos.z, placed);
     if (type == BlockType::CHEST) chests[pos] = ChestItems{}; // a new chest is empty
     if (type == BlockType::CROP) crops.insert(pos);
+    if (type == BlockType::DOOR) world->SetBlock(pos.x, pos.y + 1, pos.z, Block(BlockType::DOOR)); // its upper half (part of the one door)
     if (!Creative(client)) {
         held -= cost;
         SendResources(client);
@@ -905,7 +923,9 @@ void Server::DropOnDeath(ClientState& client) {
 
 void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     Block block;
-    if (!InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block) || block.type != BlockType::BED) return;
+    if (!InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block)) return;
+    if (block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN) return ToggleDoor(pos, block.type == BlockType::DOOR);
+    if (block.type != BlockType::BED) return;
     if (client.bed != pos) {
         client.bed = pos;
         SendChat(client, net::ChatMessage::Kind::Info, "You'll respawn at this bed");
@@ -929,6 +949,30 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     for (auto& [peer, other] : clients) other.sleptAt = -1000.0;
     Broadcast(net::ChatMessage::Kind::Info, everyone > 1 ? "Everyone slept: it's morning" : "You slept: it's morning");
     Log("night skipped by sleeping");
+}
+
+void Server::ToggleDoor(const glm::ivec3& pos, bool open) {
+    // This half and the one above or below it.
+    const BlockType from = open ? BlockType::DOOR : BlockType::DOOR_OPEN, to = open ? BlockType::DOOR_OPEN : BlockType::DOOR;
+    std::vector<glm::ivec3> halves{ pos };
+    for (const int dy : { 1, -1 }) {
+        Block other;
+        if (world->GetBlock(pos.x, pos.y + dy, pos.z, other) && other.type == from) {
+            halves.push_back(pos + glm::ivec3(0, dy, 0));
+            break;
+        }
+    }
+    // It won't close on anyone standing in it.
+    if (!open)
+        for (const auto& [peer, other] : clients) {
+            if (!other.welcomed || !other.hasState) continue;
+            const Collision::AABB body = BodyAt(other.feet, 0.0f, (other.flags & net::kFlagCrouching) != 0);
+            for (const auto& h : halves) {
+                const glm::vec3 lo(h), hi = lo + glm::vec3(1.0f);
+                if (glm::all(glm::lessThan(lo, body.max)) && glm::all(glm::greaterThan(hi, body.min))) return;
+            }
+        }
+    for (const auto& h : halves) world->SetBlock(h.x, h.y, h.z, Block::Placed(to));
 }
 
 glm::vec3 Server::RespawnPoint(const ClientState& client, std::string& why) const {

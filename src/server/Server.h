@@ -294,7 +294,9 @@ private:
     void SendChestToViewers(const glm::ivec3& pos);
     void RemoveChest(const glm::ivec3& pos, ClientState* breaker); // gone: contents to whoever broke it
     void DropOnDeath(ClientState& client); // half of what they carry, into a chest where they died
+    // Right-clicked a block that does something: a bed (respawn, sleep) or a door.
     void HandleUseBed(ClientState& client, const glm::ivec3& pos);
+    void ToggleDoor(const glm::ivec3& pos, bool open); // both halves (not shut on anyone)
     // Fall damage, from each accepted position: landing far below the highest point
     // since last on the ground hurts. `reset`: start counting from here (teleports,
     // the first position, flying).

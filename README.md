@@ -710,6 +710,15 @@ damage on one), water doesn't wash it away, and it's fastest to break with an ax
 Stack them up a shaft or against a wall. `ShapeTest` checks climbing, holding on and
 sliding.
 
+## Doors
+
+A **door** (2 planks) stands two blocks tall: placing one needs room above for its
+upper half, and costs one door. Right-click either half (within 6 blocks) to open
+it, which turns both halves into an open frame you can walk through, and again to
+shut it. It won't shut on someone standing in the doorway. Breaking either half takes
+the whole door, and gives it back. `BedTest` checks placing, opening, not shutting on
+someone, closing from the other half, and breaking.
+
 ## Chests
 
 A **chest** (crafted from 2 planks) stores things. Right-click one within 6 blocks
@@ -804,6 +813,7 @@ makes four.
 | Sword | 0.5 planks + 2 stone |
 | Chest | 2 planks |
 | 3 ladders | 1 planks |
+| Door | 2 planks |
 | Bed | 3 planks + 1 hide |
 | Iron ingot | 1 iron ore + 0.25 coal |
 | Lamp (with coal) | 0.5 glass + 0.25 coal |
