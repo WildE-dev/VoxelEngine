@@ -1,4 +1,5 @@
 #include "client/ChunkMesher.h"
+#include "world/Power.h"
 
 #include <algorithm>
 #include <memory>
@@ -407,6 +408,31 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 }
 
                 if (block.IsModel()) continue; // (drawn as a model: Renderer)
+                if (block.IsPipe()) {
+                    // A thin tube: a core in the middle of the cell, and an arm out to each
+                    // neighbour it joins (another pipe, a pump, a compressor, a machine).
+                    // Lit by the light in its own cell (pipes let light through).
+                    const uint8_t bl = static_cast<uint8_t>(blockLightAt(pos)), sl = static_cast<uint8_t>(skyLightAt(pos));
+                    constexpr int kLo = 2, kHi = 6; // eighths: half a block across
+                    unsigned joined = 0;
+                    for (int face = 0; face < kFaceCount; ++face) {
+                        const glm::ivec3 n = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
+                        if (Power::PipeJoins(block.type, cellAt(n).type)) joined |= 1u << face;
+                    }
+                    block.AddBoxVertices(vertices, x, y, z, glm::ivec3(kLo), glm::ivec3(kHi), joined, bl, sl);
+                    for (int face = 0; face < kFaceCount; ++face) {
+                        if (!(joined & (1u << face))) continue;
+                        const int axis = kFaceAxis[face];
+                        const bool positive = kFaceOffsets[face][axis] > 0;
+                        glm::ivec3 lo(kLo), hi(kHi);
+                        lo[axis] = positive ? kHi : 0;
+                        hi[axis] = positive ? 8 : kLo;
+                        // (Neither end shows: one meets the core, the other the neighbour.)
+                        const unsigned ends = (1u << face) | (1u << (face ^ 1));
+                        block.AddBoxVertices(vertices, x, y, z, lo, hi, ends, bl, sl);
+                    }
+                    continue;
+                }
                 if (block.IsShell()) {
                     // A see-through cube of rungs: its faces, both ways round (seen from
                     // inside while climbing too), except where a solid block hides them.

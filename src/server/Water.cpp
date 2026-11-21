@@ -101,6 +101,8 @@ void WaterSimulation::AddPump(const glm::ivec3& pos) {
 
 void WaterSimulation::RemovePump(const glm::ivec3& pos) {
     pumps.erase(pos);
+    pumpBudget.erase(pos);
+    pumpUse.erase(pos);
     pumpCount.store(pumps.size(), std::memory_order_relaxed);
 }
 
@@ -120,7 +122,10 @@ void WaterSimulation::RunPumps(ServerWorld& world) {
         if (limited && !NearCenter(pos, distance)) continue;
         RunPump(world, pos);
     }
-    for (const auto& pos : gone) pumps.erase(pos);
+    for (const auto& pos : gone) {
+        pumps.erase(pos);
+        pumpBudget.erase(pos);
+    }
     pumpCount.store(pumps.size(), std::memory_order_relaxed);
 }
 
@@ -182,6 +187,17 @@ void WaterSimulation::RunPump(ServerWorld& world, const glm::ivec3& pump) {
     for (const auto& c : outlets) room += c.block.WaterCapacity() - c.block.WaterVolume();
     int amount = std::min({ kPumpRate, available, room });
     if (amount <= 0) return;
+    // As much as its air allows: each unit costs its lift.
+    int top = outlets.front().pos.y;
+    for (const auto& c : outlets) top = std::max(top, c.pos.y);
+    const int lift = std::max(1, top - pump.y);
+    PumpUse& use = pumpUse[pump];
+    use.wanted = true;
+    float& budget = pumpBudget[pump];
+    amount = std::min(amount, static_cast<int>(budget / static_cast<float>(lift)));
+    if (amount <= 0) return;
+    budget -= static_cast<float>(amount * lift);
+    use.lifted += static_cast<float>(amount * lift);
 
     // Take it from the highest water first (drawing down the surface).
     std::sort(intake.begin(), intake.end(), [](const Cell& a, const Cell& b) { return a.block.WaterLevel() > b.block.WaterLevel(); });

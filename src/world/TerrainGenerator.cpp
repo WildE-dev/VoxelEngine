@@ -125,7 +125,7 @@ TerrainGenerator::Climate TerrainGenerator::BaseClimate(int x, int z) const {
 TerrainGenerator::Climate TerrainGenerator::ClimateAt(int wx, int wz, int surfaceRow) const {
     if (type == Type::Empty) return { 0.0f, -0.6f }; // plains
     Climate c = BaseClimate(wx, wz);
-    c.temperature -= std::max(0, surfaceRow - 12) / 120.0f; // colder higher up (snow on the high peaks)
+    c.temperature -= std::max(0, surfaceRow - 12) / 160.0f; // colder higher up (snow on the high peaks)
     return c;
 }
 
@@ -224,7 +224,7 @@ float TerrainGenerator::GetMountainHeight(int x, int z) const {
     // Where the ranges run: a very large-scale field, high in over a third of the
     // world, fading in over a few hundred blocks so ranges rise out of the hills.
     const float range = Noise::Perlin2(x / 900.0f + 31.7f, z / 900.0f - 77.3f);
-    const float mask = glm::smoothstep(-0.02f, 0.3f, range);
+    const float mask = glm::smoothstep(-0.14f, 0.44f, range);
     if (mask <= 0.0f) return 0.0f;
     // Ridges inside them: crests where the noise crosses zero, valleys between, with
     // smaller ridges on the flanks. The crests are rounded (smoothstep, not |n|) and the

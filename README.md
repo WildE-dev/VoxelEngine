@@ -310,7 +310,7 @@ repeats one once it has used them all:
 | Vault | clean bricks, lamps set into the floor around a lit pedestal (ringed by a trap) |
 | Collapsed room | heaps of stone, dirt and sand |
 | Cistern | a deep pit of water with pillars, a ledge all round |
-| Pump room | a working pump lifting water from a sunken basin up a pipe into a raised tub |
+| Pump room | a pump in a sunken basin with a pipe up into a raised tub (it stands idle until someone brings it air) |
 | Shrine | a lamp on a plinth, pews facing it |
 | Flood chamber | a pressure plate in the floor opens sluice gates in the ceiling, and the reservoir above pours in |
 
@@ -335,8 +335,8 @@ part and neighbouring chunks agree at their borders. Stamping runs in three pass
 brick shells, then the open space (so a corridor opens a doorway where it meets a
 room), then furnishings, which never read neighbouring blocks (they might be in a
 chunk that isn't generated). Raised furniture keeps out of corridors (one can run
-straight through a room), water sits in sealed basins, and a pump room's pump starts
-working once a player is near. It costs little: chunks still generate in about
+straight through a room), water sits in sealed basins, and a pump room's pump is
+ready to work once someone runs an air pipe to it (see [Air power](#air-power)). It costs little: chunks still generate in about
 0.15 ms. New blocks: stone bricks and mossy bricks (on the hotbar after 0; pick them
 with the mouse wheel). Empty worlds (`--empty-world`) have no dungeons.
 
@@ -382,16 +382,20 @@ tick leaves room for big floods), and only near something that changed. It holds
 lock in short slices and steps aside for waiting edits, so player edits never
 wait more than a couple of milliseconds. Place a full block of water with 8.
 
-**Pumps and pipes** (hotbar 9 and 0) move water anywhere, including uphill. Each
-tick a pump takes 5/8 of a block of water (2.5 blocks a second) from the cells
-touching it and sends it through the pipes joined to it, face to face, out of the
+**Pumps and pipes** (hotbar 9 and 0) move water anywhere, including uphill, but
+pumps run on compressed air (see [Air power](#air-power)): without air pressure a
+pump stands still. Each tick a powered pump takes up to 5/8 of a block of water (2.5
+blocks a second) from the cells touching it and sends it through the pipes joined to it, face to face, out of the
 network's open ends: the open cells beside any pipe that joins only one other pipe
 or the pump. The ends share the water equally, and the pump only takes what they
 have room for, so water is still never created or lost. A pump draws only from the
 cells it touches, so put it at the bottom of a pool to empty it. Pumps run within
 the water simulation distance, like flowing water, and keep running after a save
-and reload. `PumpTest` checks the rate, that water is conserved, that pumps stop
-when the pipe is cut or the outlet is full, and that saved pumps carry on.
+and reload. Pipes are drawn as thin tubes, with an arm out to each pipe or pump they
+join (they still stop you like a whole block). `PumpTest` checks that a pump without
+air moves nothing and a little air lifts a little, the rate, that water is conserved,
+that pumps stop when the pipe is cut or the outlet is full, and that saved pumps
+carry on.
 
 **Water on water** (a lake's top layer, or a pool topped up) comes right down to the
 water below wherever it meets an empty column over that water, so a thin layer thins
@@ -847,50 +851,76 @@ The client is only told what's in a chest while it has it open. `ChestTest` chec
 
 ## Air power
 
-Machines run on **compressed air**, and **water wheels** make it. A wheel turns
-when water flows past it: the server measures the water the simulation moves in and
-out of the six cells around each wheel, so still water does nothing, while a
-stream, a waterfall or a lake draining past it turns it, faster the more water goes
-by (full speed at about 2 blocks of water a second). It's drawn as a turning wheel
-standing edge on to the water beside it.
+Machines run on **compressed air**. A **compressor** makes it, turned by **water
+wheels** through **shafts**:
 
-**Air pipes** join face to face, and to wheels and machines; everything joined is
-one network sharing one store of air. Every pipe, wheel and machine holds a little
-(16 units), and the network's **pressure** is how full it is. A wheel at full speed
-pumps 8 units a second until the network is full, so long pipe runs store more but
-take longer to fill. Breaking a pipe lets out what it held, and the two halves of a
-network keep their pressure. Machines run above 25% pressure.
+- **Water wheels** are 3 x 3 blocks standing on edge around their hub (the block you
+  place), drawn as a big wooden wheel with spokes and paddles. The axle is level,
+  pointing the way you face when you place it. The eight cells around the hub in the
+  wheel's plane are its paddles: they must be clear (air, water or plants), or the
+  wheel is jammed. A wheel turns when water flows down **one side** of it: the server
+  measures the water the simulation moves through the three paddle cells on each
+  side, and the wheel turns with the difference, faster the more water goes by (full
+  speed at 2 blocks of water a second). Water pouring past one side drives it; water
+  through the middle, underneath, or down both sides alike doesn't, and still water
+  never does.
+- **Shafts** lie end to end along the same axis as the wheels' axles, through any
+  number of wheels' hubs; shafts and wheels on a line turn together, drawn as a
+  turning wooden rod. A **compressor** at either end of the line takes the power of
+  every wheel on it: 8 units of air a second from each wheel at full speed.
+- **Air pipes** join face to face to each other, to compressors, and to machines;
+  everything joined is one network sharing one store of air. Every pipe, compressor
+  and machine holds a little (16 units), and the network's **pressure** is how full
+  it is, so long pipe runs store more but take longer to fill. Breaking a pipe lets
+  out what it held, and the two halves of a network keep their pressure. Pipes are
+  drawn as thin tubes, joined to what they connect to (they still stop you like a
+  whole block). Machines run above 25% pressure.
 
-The first machine is the **drill**. It digs straight down from under itself, one
-block every 1.5 seconds for 12 units of air (one wheel at full speed keeps one drill
-going), up to 32 blocks deep, and puts what it digs into a **chest touching it**.
-It stops at water (the shaft would flood), at chests, beds, doors, signs, TNT,
-pumps and other machinery, and waits without a chest or without pressure. A working
-drill throws up dust where it digs.
+The machines:
 
-Look at a wheel or a drill to see how it's doing under the crosshair, and
-right-click any part of a network (wheel, pipe or drill) for the details in chat:
-how fast the wheel turns and how much water passes it, the network's pressure, how
-many pipes it has, and how many wheels and drills are working.
+- The **drill** digs straight down from under itself, one block every 1.5 seconds for
+  12 units of air, up to 32 blocks deep, and puts what it digs into a **chest
+  touching it**. It stops at water (the shaft would flood), at chests, beds, doors,
+  signs, TNT, pumps and other machinery, and waits without a chest or without
+  pressure. A working drill throws up dust where it digs.
+- The **pump** (see [Water](#water)) lifts water on air: a unit of air for every 64
+  units of water raised a block (anything on the level or downhill counts as a
+  block). That's half as much again as wheels can win back from the same water
+  falling the same height, so a pump feeding its own wheels always runs down: power
+  has to come from water running downhill by itself, like a lake drained past a wheel
+  (see [Lakes](#lakes)) or a rain-fed pond. Pumps take only the air above the running
+  pressure that the drills on their network don't need for their next block.
 
-Recipes: a water wheel from 4 planks and a log; 4 air pipes from a stone and a
-quarter of an iron ingot; a drill from 2 iron ingots and 2 stone. For now the steady
-way to keep a wheel turning is a pump lifting water from a pool and dropping it back
-in past the wheel (pumps need no power).
+Look at a wheel, compressor, pump or drill to see how it's doing under the
+crosshair, and right-click any part (wheel, shaft, compressor, pipe, pump or drill)
+for the details in chat: how fast a wheel turns and how much water passes it, whether
+it reaches a compressor, the wheels on a compressor's shafts, and the network's
+pressure, pipes and working machines.
 
-The server runs the networks four times a second (`Server::UpdatePower`,
-`src/server/Power.cpp`; the rules and numbers are in `src/world/Power.h`) and tells
-players within 96 blocks how each wheel and machine is doing (`Machines`, protocol
-34). `PowerTest` builds a pump-fed mill in an empty world and checks:
+Recipes: a water wheel from 6 planks and a log; 3 shafts from a log; a compressor
+from an iron ingot and 2 stone; 4 air pipes from a stone and a quarter of an iron
+ingot; a drill from 2 iron ingots and 2 stone.
 
-- a wheel with no water flowing past stands still, with no air, and the drill waits;
-- the falling water turns the wheel and fills the network with air;
-- the drill digs into the ground and what it digs lands in the chest, and it reports
-  how deep it is;
-- right-clicking the wheel and a pipe describes them and the network;
-- without a chest the drill waits, and starts again with a new one;
-- cutting the air pipe starves the drill while the wheel's side keeps its pressure;
-- breaking the pump lets the water settle and the wheel stop.
+The server runs it all four times a second (`Server::UpdatePower`,
+`src/server/Power.cpp`; the rules and numbers are in `src/world/Power.h`): the water
+simulation's changes are counted in each wheel's paddle cells as they happen
+(`ServerWorld`), and pumps get an allowance of lift for the next tick
+(`WaterSimulation::SetPumpBudget`) and report what they used. Players within 96
+blocks are told how each wheel and machine is doing (`Machines`, protocol 34).
+`PowerTest` builds a mill in an empty world (a raised reservoir pouring through two
+holes down one side of two wheels on one shaft, into a pit; a compressor; air pipes
+to a drill and a pump) and checks:
+
+- wheels with no water flowing stand still, with no air, and the drill and the pump
+  wait for pressure;
+- a block in a wheel's paddles jams it, and clearing it frees it;
+- water pouring down one side turns the wheels, both wheels on the shaft turn the
+  compressor, and the network fills with air;
+- the pump runs on the air, and the drill digs into the ground with what it digs in
+  the chest;
+- right-clicking the compressor and a wheel describes them;
+- cutting the air pipe starves the drill;
+- stopping the water brings the wheels to a stop.
 
 ## Beds
 

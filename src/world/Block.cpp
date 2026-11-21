@@ -287,6 +287,8 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* WATER_WHEEL */ {{ "water_wheel", "water_wheel", "water_wheel", "water_wheel", "water_wheel", "water_wheel" }}, // icon (drawn as a model)
     /* AIR_PIPE    */ {{ "air_pipe_end", "air_pipe_end", "air_pipe", "air_pipe", "air_pipe", "air_pipe" }},
     /* DRILL       */ {{ "drill_top", "drill_bottom", "drill_side", "drill_side", "drill_side", "drill_side" }},
+    /* SHAFT       */ {{ "shaft", "shaft", "shaft", "shaft", "shaft", "shaft" }}, // icon (drawn as a model)
+    /* COMPRESSOR  */ {{ "compressor_top", "compressor_top", "compressor_side", "compressor_side", "compressor_side", "compressor_side" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -318,7 +320,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "air", "grass", "dirt", "stone", "lamp", "log", "leaves", "tall_grass", "flower_red", "flower_yellow", "sand", "water", "pump", "pipe",
     "stone_brick", "mossy_brick", "spikes", "crumbling_brick", "pressure_plate", "sluice", "snow", "dry_grass", "lush_grass", "snowy_grass",
     "pine_leaves", "cactus", "dead_bush", "ice", "pebbles", "planks", "glass", "raw_venison", "cooked_venison", "hide", "chest", "bed", "coal_ore", "iron_ore", "coal", "iron_ingot", "seeds", "crop", "ripe_wheat", "wheat", "bread", "ladder", "door", "door_open", "arrow", "raw_fish", "cooked_fish", "campfire", "sign", "tnt", "tnt_lit", "boat", "sapling", "pine_sapling",
-    "water_wheel", "air_pipe", "drill",
+    "water_wheel", "air_pipe", "drill", "shaft", "compressor",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");
@@ -460,6 +462,50 @@ void Block::AddSteppedFaces(std::vector<uint32_t>& vertices, Face face, int x, i
             }
             }
         }
+}
+
+void Block::AddBoxVertices(std::vector<uint32_t>& vertices, int x, int y, int z, const glm::ivec3& lo, const glm::ivec3& hi, unsigned skip, uint8_t blockLight,
+                           uint8_t skyLight) const {
+    const TextureData textures = GetTextureData(type);
+    const glm::vec3 origin(x, y, z);
+    const float x0 = lo.x, x1 = hi.x, y0 = lo.y, y1 = hi.y, z0 = lo.z, z1 = hi.z;
+    for (int f = 0; f < kFaceCount; f++) {
+        if (skip & (1u << f)) continue;
+        const Face face = static_cast<Face>(f);
+        const int texture = face == Face::Top ? textures.top : face == Face::Bottom ? textures.bottom : face == Face::Right ? textures.right
+                          : face == Face::Left ? textures.left : face == Face::Back ? textures.back : textures.front;
+        const glm::vec3 normal(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]);
+        // Corners as seen from outside: bottom left, bottom right, top left, top right.
+        glm::vec3 c[4];
+        switch (face) {
+        case Face::Top: c[0] = { x0, y1, z1 }, c[1] = { x1, y1, z1 }, c[2] = { x0, y1, z0 }, c[3] = { x1, y1, z0 }; break;
+        case Face::Bottom: c[0] = { x0, y0, z0 }, c[1] = { x1, y0, z0 }, c[2] = { x0, y0, z1 }, c[3] = { x1, y0, z1 }; break;
+        case Face::Right: c[0] = { x1, y0, z1 }, c[1] = { x1, y0, z0 }, c[2] = { x1, y1, z1 }, c[3] = { x1, y1, z0 }; break;
+        case Face::Left: c[0] = { x0, y0, z0 }, c[1] = { x0, y0, z1 }, c[2] = { x0, y1, z0 }, c[3] = { x0, y1, z1 }; break;
+        case Face::Back: c[0] = { x0, y0, z1 }, c[1] = { x1, y0, z1 }, c[2] = { x0, y1, z1 }, c[3] = { x1, y1, z1 }; break;
+        default: c[0] = { x1, y0, z0 }, c[1] = { x0, y0, z0 }, c[2] = { x1, y1, z0 }, c[3] = { x0, y1, z0 }; break;
+        }
+        VertexData v[4];
+        for (int i = 0; i < 4; i++) {
+            const glm::vec3 p = c[i] / 8.0f;
+            glm::vec2 uv;
+            switch (face) {
+            case Face::Right: uv = { 1.0f - p.z, 1.0f - p.y }; break;
+            case Face::Left: uv = { p.z, 1.0f - p.y }; break;
+            case Face::Back: uv = { p.x, 1.0f - p.y }; break;
+            case Face::Front: uv = { 1.0f - p.x, 1.0f - p.y }; break;
+            default: uv = { p.x, p.z }; break;
+            }
+            v[i] = VertexData(origin + p, uv, texture, normal);
+            v[i].ao = 3;
+            v[i].light = blockLight;
+            v[i].sky = skyLight;
+        }
+        for (const VertexData& p : { v[0], v[2], v[1], v[1], v[2], v[3] }) {
+            vertices.push_back(p.PackPosition());
+            vertices.push_back(p.PackShading());
+        }
+    }
 }
 
 void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading) const {
@@ -739,6 +785,8 @@ bool Block::CanChisel() const {
     case BlockType::WATER_WHEEL:
     case BlockType::AIR_PIPE:
     case BlockType::DRILL:
+    case BlockType::SHAFT:
+    case BlockType::COMPRESSOR:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
     case BlockType::GLASS:

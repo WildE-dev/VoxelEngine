@@ -345,7 +345,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         double v[6];
         for (int i = 0; i < 6; i++)
             if (!ParseNumber(words[1 + i], v[i]) || std::abs(v[i]) > 1e7) return usage("/fill <x1 y1 z1> <x2 y2 z2> <block>");
-        const BlockType type = BlockFromId(Lower(words[7]));
+        const BlockType type = Lower(words[7]) == "air" ? BlockType::AIR : BlockFromId(Lower(words[7]));
         if (type == BlockType::COUNT) return reply(Kind::Error, "No block called " + words[7]);
         const glm::ivec3 a(glm::floor(glm::dvec3(v[0], v[1], v[2]))), b(glm::floor(glm::dvec3(v[3], v[4], v[5])));
         const glm::ivec3 lo = glm::min(a, b), hi = glm::max(a, b), size = hi - lo + 1;

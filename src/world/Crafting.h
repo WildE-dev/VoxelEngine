@@ -74,7 +74,9 @@ inline const std::vector<Recipe>& Recipes() {
         // Smelting, and what iron is for.
         { "iron_ingot", "Iron ingot", { { BlockType::IRON_ORE, kBlock }, { BlockType::COAL, kBlock / 4 } }, BlockType::IRON_INGOT, kBlock },
         // Air power (world/Power.h).
-        { "water_wheel", "Water wheel", { { BlockType::PLANKS, 4 * kBlock }, { BlockType::LOG, kBlock } }, BlockType::WATER_WHEEL, kBlock },
+        { "water_wheel", "Water wheel", { { BlockType::PLANKS, 6 * kBlock }, { BlockType::LOG, kBlock } }, BlockType::WATER_WHEEL, kBlock },
+        { "shaft", "3 shafts", { { BlockType::LOG, kBlock } }, BlockType::SHAFT, 3 * kBlock },
+        { "compressor", "Compressor", { { BlockType::IRON_INGOT, kBlock }, { BlockType::STONE, 2 * kBlock }, }, BlockType::COMPRESSOR, kBlock },
         { "air_pipe", "4 air pipes", { { BlockType::STONE, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::AIR_PIPE, 4 * kBlock },
         { "drill", "Drill", { { BlockType::IRON_INGOT, 2 * kBlock }, { BlockType::STONE, 2 * kBlock } }, BlockType::DRILL, kBlock },
         { "coal_lamp", "Lamp (with coal)", { { BlockType::GLASS, kBlock / 2 }, { BlockType::COAL, kBlock / 4 } }, BlockType::LAMP, kBlock },

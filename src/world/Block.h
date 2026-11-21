@@ -163,14 +163,22 @@ enum class BlockType : uint8_t {
     // Saplings (plants, from leaves): planted on soil, they grow into a tree.
     SAPLING,
     PINE_SAPLING,
-    // Air power (see world/Power.h): a water wheel turned by flowing water beside it
-    // pumps air into the air pipes joined to it; machines on the pipes run on the
-    // pressure. The wheel is drawn as a turning model, not a cube.
+    // Air power (see world/Power.h): a water wheel (3 x 3, around its hub block) turned
+    // by water flowing down one side turns the shaft on its axle; a compressor at the
+    // shaft's end pumps air into the air pipes joined to it; machines on the pipes run
+    // on the pressure. Wheels and shafts are drawn as turning models, not cubes.
     WATER_WHEEL,
     AIR_PIPE,
     DRILL, // a machine: digs straight down, into a chest beside it
+    SHAFT,      // carries a wheel's turning along its axle (drawn as a turning rod)
+    COMPRESSOR, // turned by a shaft, pumps air into the air pipes joined to it
     COUNT
 };
+
+// Solid blocks drawn by a model of their own (turning wheels and shafts), and pipes
+// drawn as thin tubes: neither hides what's beside it or blocks light.
+inline bool IsModelType(BlockType type) { return type == BlockType::WATER_WHEEL || type == BlockType::SHAFT; }
+inline bool IsPipeType(BlockType type) { return type == BlockType::PIPE || type == BlockType::AIR_PIPE; }
 
 // Things held in the inventory that aren't blocks: they can't be placed.
 inline bool IsItemType(BlockType type) {
@@ -312,7 +320,7 @@ struct Block {
     // ends face that way and its grain runs along it. Always kUpright for others.
     uint8_t axis = 0;
     static constexpr uint8_t kUpright = 0, kAlongX = 1, kAlongZ = 2;
-    static bool IsOrientable(BlockType t) { return t == BlockType::LOG; }
+    static bool IsOrientable(BlockType t) { return t == BlockType::LOG || t == BlockType::WATER_WHEEL || t == BlockType::SHAFT; }
     // The axis in kFaceAxis terms (0 x, 1 y, 2 z), and the orientation for one.
     int GrainAxis() const { return axis == kAlongX ? 0 : axis == kAlongZ ? 2 : 1; }
     static uint8_t AxisFor(int faceAxis) { return faceAxis == 0 ? kAlongX : faceAxis == 2 ? kAlongZ : kUpright; }
@@ -320,6 +328,8 @@ struct Block {
     Block Turned(int faceAxis) const {
         Block b = *this;
         b.axis = IsOrientable(type) ? AxisFor(faceAxis) : kUpright;
+        // Axles are level: along x unless placed along z.
+        if ((type == BlockType::WATER_WHEEL || type == BlockType::SHAFT) && b.axis == kUpright) b.axis = kAlongX;
         return b;
     }
 
@@ -444,16 +454,18 @@ struct Block {
     bool IsFullBlock() const { return type != BlockType::AIR && !IsPlant() && !IsLiquid() && edgeData.IsFull(); }
     // Light passes through air, partial blocks, plants, leaves and water (water also
     // absorbs some; see LightPropagator).
-    bool BlocksLight() const { return IsFullBlock() && !IsLeavesType(type) && type != BlockType::ICE && type != BlockType::GLASS && type != BlockType::WATER_WHEEL; }
+    bool BlocksLight() const { return IsFullBlock() && !IsLeavesType(type) && type != BlockType::ICE && type != BlockType::GLASS && !IsModelType(type) && !IsPipeType(type); }
     // A full block that hides the faces of the blocks it touches (not glass).
-    bool HidesNeighbours() const { return IsFullBlock() && type != BlockType::GLASS && type != BlockType::WATER_WHEEL; }
+    bool HidesNeighbours() const { return IsFullBlock() && type != BlockType::GLASS && !IsModelType(type) && !IsPipeType(type); }
     // Air, a plant or water: nothing to stand on or bump into.
     bool IsPassable() const { return IsAir() || IsPlant() || IsLiquid(); }
     // Water may flow into this cell (washing away any plant).
     bool IsReplaceableByWater() const { return IsAir() || (IsPlant() && type != BlockType::LADDER && type != BlockType::DOOR_OPEN); }
     // Drawn as a see-through cube shell (a ladder's rungs, an open door's frame).
     // Solid, but drawn by a model of its own (a turning wheel), not by the chunk mesh.
-    bool IsModel() const { return type == BlockType::WATER_WHEEL; }
+    bool IsModel() const { return IsModelType(type); }
+    // Drawn as a thin tube joining its neighbours (still solid as a whole block).
+    bool IsPipe() const { return IsPipeType(type); }
     bool IsShell() const { return type == BlockType::LADDER || type == BlockType::DOOR_OPEN; }
     uint8_t GetLightEmission() const { return ::GetLightEmission(type); }
 
@@ -465,6 +477,11 @@ struct Block {
     // Appends a plant's crossed sprite (two double-sided diagonal quads), lit by the
     // light in its own cell.
     void AddPlantVertices(std::vector<uint32_t>& vertices, int x, int y, int z, uint8_t blockLight, uint8_t skyLight) const;
+    // A box inside the cell, from `lo` to `hi` in eighths of a block, with this block's
+    // textures (each face showing its part of them), lit evenly. Faces whose bit (1 <<
+    // Face) is set in `skip` are left out.
+    void AddBoxVertices(std::vector<uint32_t>& vertices, int x, int y, int z, const glm::ivec3& lo, const glm::ivec3& hi, unsigned skip, uint8_t blockLight,
+                        uint8_t skyLight) const;
     void AddPebbleVertices(std::vector<uint32_t>& vertices, int x, int y, int z, uint8_t blockLight, uint8_t skyLight) const;
 
     // The edges of the block's shape (pairs of points, block-local), for the outline

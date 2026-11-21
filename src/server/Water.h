@@ -5,6 +5,7 @@
 #include <mutex>
 #include <thread>
 #include <random>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -59,7 +60,11 @@ class ServerWorld;
 // face), out of the network's open ends: the open cells beside a pipe that joins only
 // one other pipe or pump. Ends get equal shares. A pump only takes what the ends have
 // room for, so water is still only ever moved; it can lift water any height. Pumps
-// run within the simulation area like flowing water.
+// run within the simulation area like flowing water. They run on compressed air
+// (world/Power.h): each has an allowance the server sets (SetPumpBudget), in units of
+// water raised a block (the lift: from the pump up to its highest open end, at least
+// one), and moves no more than that allows; the server takes what was used
+// (TakePumpUse) out of the pump's air network. Without an allowance a pump stands.
 //
 // The server limits simulation to an area around the players (SetSimulationArea),
 // smaller than the area it loads: active cells outside it are parked, untouched, and
@@ -97,6 +102,22 @@ public:
     void AddPump(const glm::ivec3& pos);
     void RemovePump(const glm::ivec3& pos);
     size_t GetPumpCount() const { return pumpCount.load(std::memory_order_relaxed); }
+    // Air power: how much a pump may lift from now on (units of water times blocks
+    // raised; replaces what was left), and what it has lifted since the last call and
+    // whether it had anything to pump (water beside it and room at its ends). Caller
+    // holds the world's edit mutex.
+    void SetPumpBudget(const glm::ivec3& pos, float liftUnits) { pumpBudget[pos] = liftUnits; }
+    struct PumpUse {
+        float lifted = 0.0f; // units times blocks
+        bool wanted = false;
+    };
+    PumpUse TakePumpUse(const glm::ivec3& pos) {
+        auto it = pumpUse.find(pos);
+        if (it == pumpUse.end()) return {};
+        const PumpUse u = it->second;
+        pumpUse.erase(it);
+        return u;
+    }
 
     size_t GetActiveCount() const { return activeCount.load(std::memory_order_relaxed); }
     // Rain on or off (the server's weather). Any thread.
@@ -156,6 +177,8 @@ private:
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> parked;
     std::atomic<size_t> parkedCount{0};
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> pumps; // guarded by the edit mutex
+    std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> pumpBudget; // (edit mutex)
+    std::unordered_map<glm::ivec3, PumpUse, Coords::IVec3Hash> pumpUse;  // (edit mutex)
     std::atomic<size_t> pumpCount{0};
 
     std::mt19937 random{0x5EED}; // ticking thread only (fixed seed: tests repeat)

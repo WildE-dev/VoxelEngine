@@ -104,7 +104,7 @@ int main() {
                                    std::abs(a.humidity - b.humidity), std::abs(a.humidity - c.humidity) });
         }
     Check(worstJump < 0.02f, "climate changes smoothly (largest step between neighbours " + std::to_string(worstJump) + ")");
-    Check(t.ClimateAt(100, 100, 120).temperature < t.ClimateAt(100, 100, 0).temperature - 0.8f, "and gets colder higher up");
+    Check(t.ClimateAt(100, 100, 150).temperature < t.ClimateAt(100, 100, 0).temperature - 0.8f, "and gets colder higher up");
 
     std::cout << "Biomes on the ground" << std::endl;
     auto expectedTop = [](Biome b) {

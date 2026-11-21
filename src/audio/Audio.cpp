@@ -32,6 +32,7 @@ const char* Audio::Material(BlockType type) {
     case BlockType::PIPE:
     case BlockType::AIR_PIPE:
     case BlockType::DRILL:
+    case BlockType::COMPRESSOR:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
     case BlockType::SPIKES:
@@ -44,6 +45,7 @@ const char* Audio::Material(BlockType type) {
     case BlockType::LOG:
     case BlockType::PLANKS:
     case BlockType::WATER_WHEEL:
+    case BlockType::SHAFT:
     case BlockType::CHEST:
     case BlockType::BED:
     case BlockType::LADDER:

@@ -59,13 +59,15 @@ struct GlowModel {
 
 // A lightning bolt: a jagged line of points from the sky down to where it struck,
 // drawn glowing, fading with `brightness` (0..1).
-// A water wheel (world/Power.h), filling its cell: a hub on an axle along x or z, with
-// paddles turned `angle` radians round it.
+// A water wheel (world/Power.h), 3 x 3 blocks round its hub: an axle along x or z,
+// with spokes, rims and paddles turned `angle` radians round it. Or a shaft: a square
+// rod along its axle, turned the same way.
 struct WheelModel {
     glm::vec3 centre{0.0f};
     bool alongX = true; // the axle's direction
     float angle = 0.0f;
     glm::vec2 light{ 15.0f, 0.0f };
+    bool shaft = false;
 };
 
 struct BoltModel {

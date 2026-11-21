@@ -84,8 +84,17 @@ void Build(ServerWorld& world, bool withPipe) {
     Set(world, kPipeEnd, Block(BlockType::PIPE));
 }
 
+// Pumps run on air (world/Power.h); the server grants it. Here every tick gives the
+// pump all it could want, unless `powered` is off.
+bool powered = true;
 void Tick(ServerWorld& world, int n) {
-    for (int i = 0; i < n; i++) world.GetWater().Tick(world);
+    for (int i = 0; i < n; i++) {
+        {
+            std::lock_guard<std::recursive_mutex> lock(world.GetEditMutex());
+            world.GetWater().SetPumpBudget(kPump, powered ? 1e9f : 0.0f);
+        }
+        world.GetWater().Tick(world);
+    }
 }
 
 } // namespace
@@ -108,6 +117,32 @@ int main() {
 
         for (int y = kPump.y + 1; y <= kPipeTop; y++) Set(world, { kPump.x, y, kPump.z }, Block(BlockType::PIPE));
         Set(world, kPipeEnd, Block(BlockType::PIPE));
+        powered = false;
+        Tick(world, 3);
+        WaterSimulation::PumpUse use;
+        {
+            std::lock_guard<std::recursive_mutex> lock(world.GetEditMutex());
+            use = world.GetWater().TakePumpUse(kPump);
+        }
+        Check(WaterAt(world, kSource) == kFull && use.wanted && use.lifted == 0.0f, "without air it moves nothing (though it has work to do)");
+        // Air for just 10 units lifted the 6 blocks up to the destination: 10 go.
+        const int lift = kDest.y - kPump.y;
+        {
+            std::lock_guard<std::recursive_mutex> lock(world.GetEditMutex());
+            world.GetWater().SetPumpBudget(kPump, 10.0f * lift);
+        }
+        world.GetWater().Tick(world);
+        {
+            std::lock_guard<std::recursive_mutex> lock(world.GetEditMutex());
+            use = world.GetWater().TakePumpUse(kPump);
+        }
+        const int moved = kFull - WaterAt(world, kSource);
+        Check(moved == 10 && use.lifted == 10.0f * lift, "air for 10 units lifted 6 blocks moves just those (" + std::to_string(moved) + " units, " +
+                                                             std::to_string(static_cast<int>(use.lifted)) + " unit-blocks)");
+        // Put it back as it was, then power it fully.
+        Set(world, kSource, Block::Water(kFull));
+        Set(world, kDest, Block::Water(0));
+        powered = true;
         Tick(world, 1);
         Check(WaterAt(world, kSource) == kFull - kRate && WaterAt(world, kDest) == kRate,
               "with a pipe it moves " + std::to_string(kRate) + " units a tick, up 6 blocks (source " +

@@ -94,14 +94,13 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
     chunk->MarkUnsaved();
     if (previous.type == BlockType::PUMP && block.type != BlockType::PUMP) water.RemovePump({ x, y, z });
     if (block.type == BlockType::PUMP) water.AddPump({ x, y, z });
-    if (Power::IsMachine(previous.type) && previous.type != block.type) {
-        machines.erase({ x, y, z });
-        wheelFlow.erase({ x, y, z });
-    }
+    if (Power::IsMachine(previous.type) && previous.type != block.type) machines.erase({ x, y, z });
     if (Power::IsMachine(block.type)) machines.insert({ x, y, z });
-    if (block.type == BlockType::WATER_WHEEL) wheelFlow.try_emplace({ x, y, z }, 0.0f);
-    // Water moving past a wheel turns it.
-    if (previous.water != block.water && !wheelFlow.empty()) NoteWaterMoved({ x, y, z }, std::abs(int(block.water) - int(previous.water)));
+    const bool wasWheel = previous.type == BlockType::WATER_WHEEL, isWheel = block.type == BlockType::WATER_WHEEL;
+    if (wasWheel && (!isWheel || previous.axis != block.axis)) WatchWheel({ x, y, z }, previous, false);
+    if (isWheel && (!wasWheel || previous.axis != block.axis)) WatchWheel({ x, y, z }, block, true);
+    // Water moving through a wheel's paddles turns it.
+    if (previous.water != block.water && !wheelWatch.empty()) NoteWaterMoved({ x, y, z }, std::abs(int(block.water) - int(previous.water)));
 
     // Water around the change may need to flow (or settle).
     water.Activate({ x, y, z });
@@ -326,21 +325,44 @@ void ServerWorld::WorkerLoop() {
         if (!savedWater.empty() || !savedPumps.empty() || !savedMachines.empty()) {
             std::lock_guard<std::recursive_mutex> edit(editMutex);
             for (const auto& pos : savedWater) water.Activate(pos);
-            for (const auto& pos : savedPumps) water.AddPump(pos);
-            for (const auto& pos : savedMachines) machines.insert(pos);
+            for (const auto& pos : savedPumps) {
+                water.AddPump(pos);
+                machines.insert(pos); // (pumps run on air)
+            }
+            for (const auto& pos : savedMachines) {
+                Block b;
+                if (!GetBlock(pos.x, pos.y, pos.z, b) || !Power::IsMachine(b.type)) continue;
+                if (machines.insert(pos).second && b.type == BlockType::WATER_WHEEL) WatchWheel(pos, b, true);
+            }
         }
     }
 }
 
+void ServerWorld::WatchWheel(const glm::ivec3& pos, const Block& wheel, bool watch) {
+    // The paddle cells on each side: the column of three across the wheel each way.
+    const glm::ivec3 across = Power::AcrossOf(wheel);
+    for (int side = 0; side < 2; side++)
+        for (int dy = -1; dy <= 1; dy++) {
+            const glm::ivec3 cell = pos + across * (side == 0 ? 1 : -1) + glm::ivec3(0, dy, 0);
+            auto& list = wheelWatch[cell];
+            list.erase(std::remove(list.begin(), list.end(), std::make_pair(pos, side)), list.end());
+            if (watch) list.emplace_back(pos, side);
+            if (list.empty()) wheelWatch.erase(cell);
+        }
+    if (watch) wheelFlow.try_emplace(pos, glm::vec2(0.0f));
+    else wheelFlow.erase(pos);
+}
+
 void ServerWorld::NoteWaterMoved(const glm::ivec3& pos, int units) {
-    static const glm::ivec3 kFaces[6] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
-    for (const auto& d : kFaces) {
-        auto it = wheelFlow.find(pos + d);
-        if (it != wheelFlow.end()) it->second += static_cast<float>(units);
+    auto it = wheelWatch.find(pos);
+    if (it == wheelWatch.end()) return;
+    for (const auto& [wheel, side] : it->second) {
+        auto f = wheelFlow.find(wheel);
+        if (f != wheelFlow.end()) f->second[side] += static_cast<float>(units);
     }
 }
 
-void ServerWorld::TakePower(std::vector<glm::ivec3>& machinesOut, std::unordered_map<glm::ivec3, float, Coords::IVec3Hash>& flow) {
+void ServerWorld::TakePower(std::vector<glm::ivec3>& machinesOut, std::unordered_map<glm::ivec3, glm::vec2, Coords::IVec3Hash>& flow) {
     std::lock_guard<std::recursive_mutex> edit(editMutex);
     machinesOut.clear();
     flow.clear();
@@ -348,15 +370,17 @@ void ServerWorld::TakePower(std::vector<glm::ivec3>& machinesOut, std::unordered
     for (auto it = machines.begin(); it != machines.end();) {
         Block b;
         if (!GetBlock(it->x, it->y, it->z, b) || !Power::IsMachine(b.type)) {
-            wheelFlow.erase(*it);
+            if (wheelFlow.count(*it)) {
+                Block wheel(BlockType::WATER_WHEEL);
+                for (const uint8_t axis : { Block::kAlongX, Block::kAlongZ }) { wheel.axis = axis; WatchWheel(*it, wheel, false); }
+            }
             it = machines.erase(it);
             continue;
         }
         machinesOut.push_back(*it);
-        if (b.type == BlockType::WATER_WHEEL) {
-            float& f = wheelFlow[*it]; // (starts counting a wheel the first time it's seen)
-            flow[*it] = f;
-            f = 0.0f;
+        if (auto f = wheelFlow.find(*it); f != wheelFlow.end()) {
+            flow[*it] = f->second;
+            f->second = glm::vec2(0.0f);
         }
         ++it;
     }

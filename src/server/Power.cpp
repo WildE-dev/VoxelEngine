@@ -39,37 +39,86 @@ bool StopsDrill(const Block& b) {
 
 } // namespace
 
+bool Server::WheelClear(const glm::ivec3& pos, const Block& wheel) const {
+    const glm::ivec3 across = Power::AcrossOf(wheel);
+    for (int i = -1; i <= 1; i++)
+        for (int j = -1; j <= 1; j++) {
+            if (i == 0 && j == 0) continue;
+            const glm::ivec3 p = pos + across * i + glm::ivec3(0, j, 0);
+            Block b;
+            if (!world->GetBlock(p.x, p.y, p.z, b)) return false;
+            if (!b.IsAir() && !b.IsLiquid() && !b.IsPlant()) return false;
+        }
+    return true;
+}
+
 void Server::UpdatePower() {
     const double now = Now();
     if (now < nextPowerUpdate) return;
     nextPowerUpdate = now + Power::kInterval;
 
     world->TakePower(machineList, wheelFlow);
-    auto typeAt = [&](const glm::ivec3& p) {
+    // (Held throughout: pumps' allowances live with the water simulation, and this
+    // keeps the blocks still while networks are traced.)
+    std::lock_guard<std::recursive_mutex> edit(world->GetEditMutex());
+    WaterSimulation& water = world->GetWater();
+    auto blockAt = [&](const glm::ivec3& p) {
         Block b;
-        return world->GetBlock(p.x, p.y, p.z, b) ? b.type : BlockType::COUNT;
+        if (!world->GetBlock(p.x, p.y, p.z, b)) b.type = BlockType::COUNT;
+        return b;
     };
 
-    // Wheels: how fast the water past them is going (each unit that moves is counted
-    // leaving one cell and arriving in another: half of it is flow).
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> present(machineList.begin(), machineList.end());
-    for (auto it = wheels.begin(); it != wheels.end();) it = present.count(it->first) ? std::next(it) : wheels.erase(it);
-    for (auto it = drills.begin(); it != drills.end();) it = present.count(it->first) ? std::next(it) : drills.erase(it);
+    auto prune = [&](auto& map) {
+        for (auto it = map.begin(); it != map.end();) it = present.count(it->first) ? std::next(it) : map.erase(it);
+    };
+    prune(wheels);
+    prune(drills);
+    prune(compressors);
+    prune(pumpStates);
+
+    // Wheels: the water through one side against the other. Each unit that moves is
+    // counted leaving one cell and arriving in another, over a side's three cells:
+    // a stream of F units a second down one side reads F.
     for (const auto& [pos, moved] : wheelFlow) {
         Wheel& w = wheels[pos];
-        const float reading = moved * 0.5f / static_cast<float>(Power::kInterval);
+        const float reading = std::abs(moved.x - moved.y) * 0.5f / 3.0f / static_cast<float>(Power::kInterval);
         w.flow += (reading - w.flow) * Power::kWheelSmoothing;
         if (w.flow < 0.5f) w.flow = 0.0f;
-        w.speed = Power::WheelSpeed(w.flow);
+        w.jammed = !WheelClear(pos, blockAt(pos));
+        w.speed = w.jammed ? 0.0f : Power::WheelSpeed(w.flow);
+        w.driving = false;
     }
 
-    // Networks: everything joined to each wheel or machine.
+    // Compressors: the wheels on the shaft lines running into them (each wheel turns
+    // only one compressor, the first to find it).
+    static const glm::ivec3 kLevel[4] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+    for (const auto& pos : machineList) {
+        if (blockAt(pos).type != BlockType::COMPRESSOR) continue;
+        Compressor& c = compressors[pos];
+        c = Compressor{};
+        for (const auto& d : kLevel)
+            for (int k = 1; k <= Power::kMaxShaft; k++) {
+                const glm::ivec3 p = pos + d * k;
+                const Block b = blockAt(p);
+                if ((b.type != BlockType::SHAFT && b.type != BlockType::WATER_WHEEL) || Power::AxleOf(b) != glm::abs(d)) break;
+                if (b.type != BlockType::WATER_WHEEL) continue;
+                Wheel& w = wheels[p];
+                if (w.driving) continue;
+                w.driving = true;
+                c.wheels++;
+                if (w.speed > 0.0f) c.turning++;
+                c.power += w.speed;
+            }
+    }
+
+    // Air networks: everything joined to each compressor and machine.
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> newAir;
     networks.clear();
     networkOf.clear();
     std::vector<glm::ivec3> members;
     for (const auto& start : machineList) {
-        if (networkOf.count(start)) continue;
+        if (networkOf.count(start) || !Power::IsAirPart(blockAt(start).type)) continue;
         const int index = static_cast<int>(networks.size());
         networks.emplace_back();
         AirNetwork& net = networks.back();
@@ -78,32 +127,46 @@ void Server::UpdatePower() {
         for (size_t i = 0; i < members.size() && members.size() < static_cast<size_t>(Power::kMaxNetwork); i++)
             for (const auto& d : kFaces) {
                 const glm::ivec3 n = members[i] + d;
-                if (networkOf.count(n) || !Power::IsPart(typeAt(n))) continue;
+                if (networkOf.count(n) || !Power::IsAirPart(blockAt(n).type)) continue;
                 networkOf[n] = index;
                 members.push_back(n);
             }
 
         std::vector<std::pair<glm::ivec3, Drill*>> netDrills;
+        std::vector<glm::ivec3> netPumps;
         for (const auto& m : members) {
             auto a = air.find(m);
             if (a != air.end()) net.air += a->second;
-            const BlockType t = typeAt(m);
-            if (t == BlockType::AIR_PIPE) net.pipes++;
-            else if (t == BlockType::WATER_WHEEL) {
-                net.wheels++;
-                const float speed = wheels.count(m) ? wheels[m].speed : 0.0f;
-                if (speed > 0.0f) net.turning++;
-                net.supply += speed * Power::kWheelMaxAir;
-            }
-            else if (t == BlockType::DRILL) {
+            switch (blockAt(m).type) {
+            case BlockType::AIR_PIPE: net.pipes++; break;
+            case BlockType::COMPRESSOR:
+                net.compressors++;
+                net.supply += compressors[m].power * Power::kWheelMaxAir;
+                break;
+            case BlockType::DRILL:
                 net.drills++;
                 netDrills.emplace_back(m, &drills[m]);
+                break;
+            case BlockType::PUMP:
+                net.pumps++;
+                netPumps.push_back(m);
+                break;
+            default: break;
             }
         }
         net.capacity = static_cast<float>(members.size()) * Power::kAirPerCell;
         net.air = std::min(net.capacity, net.air + net.supply * static_cast<float>(Power::kInterval));
 
-        // Machines take their turn: whichever has waited longest goes first.
+        // Pumps: the air for what they lifted since the last update.
+        for (const auto& p : netPumps) {
+            const WaterSimulation::PumpUse use = water.TakePumpUse(p);
+            net.air = std::max(0.0f, net.air - use.lifted * Power::kPumpAir);
+            Power::DrillState& state = pumpStates[p];
+            state = !use.wanted ? Power::DrillState::Idle : use.lifted > 0.0f ? Power::DrillState::Working : Power::DrillState::NoPressure;
+            if (state == Power::DrillState::Working) net.pumping++;
+        }
+
+        // Drills take their turn: whichever has waited longest goes first.
         std::sort(netDrills.begin(), netDrills.end(), [](const auto& a, const auto& b) { return a.second->nextDig < b.second->nextDig; });
         for (auto& [pos, drill] : netDrills) {
             if (now >= drill->nextDig) {
@@ -117,6 +180,14 @@ void Server::UpdatePower() {
             if (now - drill->lastDug < Power::kDrillInterval * 1.5) drill->state = Power::DrillState::Working;
             if (drill->state == Power::DrillState::Working) net.working++;
         }
+
+        // What the pumps may lift until the next update: the air above the running
+        // pressure, less what the drills need for their next blocks (they come first),
+        // shared between them (none below it).
+        const float reserve = Power::kMinPressure * net.capacity + Power::kDrillAir * static_cast<float>(netDrills.size());
+        const float spare = std::max(0.0f, net.air - reserve);
+        for (const auto& p : netPumps)
+            water.SetPumpBudget(p, net.Pressure() >= Power::kMinPressure ? spare / static_cast<float>(netPumps.size()) / Power::kPumpAir : 0.0f);
 
         const float share = net.air / static_cast<float>(members.size());
         for (const auto& m : members) newAir[m] = share;
@@ -176,11 +247,24 @@ void Server::SendMachines() {
             if (auto w = wheels.find(pos); w != wheels.end()) {
                 info.type = static_cast<uint8_t>(BlockType::WATER_WHEEL);
                 info.speed = ToByte(w->second.speed);
+                info.state = static_cast<uint8_t>(w->second.jammed ? Power::DrillState::Blocked
+                                                  : w->second.speed > 0.0f ? Power::DrillState::Working : Power::DrillState::Idle);
             }
             else if (auto d = drills.find(pos); d != drills.end()) {
                 info.type = static_cast<uint8_t>(BlockType::DRILL);
                 info.state = static_cast<uint8_t>(d->second.state);
                 info.depth = static_cast<uint8_t>(std::clamp(d->second.depth, 0, 255));
+            }
+            else if (auto c = compressors.find(pos); c != compressors.end()) {
+                // speed: air a second, in quarters; depth: wheels on its shafts.
+                info.type = static_cast<uint8_t>(BlockType::COMPRESSOR);
+                info.speed = static_cast<uint8_t>(std::clamp(std::lround(c->second.power * Power::kWheelMaxAir * 4.0f), 0L, 255L));
+                info.depth = static_cast<uint8_t>(std::clamp(c->second.wheels, 0, 255));
+                info.state = static_cast<uint8_t>(c->second.turning ? Power::DrillState::Working : Power::DrillState::Idle);
+            }
+            else if (auto p = pumpStates.find(pos); p != pumpStates.end()) {
+                info.type = static_cast<uint8_t>(BlockType::PUMP);
+                info.state = static_cast<uint8_t>(p->second);
             }
             else continue;
             m.machines.push_back(info);
@@ -198,25 +282,38 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
     std::string text;
     if (b.type == BlockType::WATER_WHEEL) {
         const Wheel w = wheels.count(pos) ? wheels[pos] : Wheel{};
-        if (w.speed > 0.0f) std::snprintf(line, sizeof line, "Water wheel: turning at %d%% (%.0f water a second past it). ", int(std::lround(w.speed * 100)), w.flow);
-        else std::snprintf(line, sizeof line, "Water wheel: still (it needs water flowing past it). ");
+        if (w.jammed) std::snprintf(line, sizeof line, "Water wheel: jammed (its paddles need the 8 cells around its hub clear). ");
+        else if (w.speed > 0.0f) std::snprintf(line, sizeof line, "Water wheel: turning at %d%% (%.0f water a second down one side). ", int(std::lround(w.speed * 100)), w.flow);
+        else std::snprintf(line, sizeof line, "Water wheel: still (it needs water flowing down one side). ");
         text += line;
+        text += w.driving ? "It turns a compressor." : "Its shaft doesn't reach a compressor.";
     }
-    else if (b.type == BlockType::DRILL) {
-        const Drill d = drills.count(pos) ? drills[pos] : Drill{};
-        std::snprintf(line, sizeof line, "Drill: %s%s. ", Power::Describe(d.state),
-                      d.depth > 0 ? (", " + std::to_string(d.depth) + " deep").c_str() : "");
-        text += line;
-    }
-    auto n = networkOf.find(pos);
-    if (n == networkOf.end()) {
-        text += "Not joined to a water wheel or machine.";
+    else if (b.type == BlockType::SHAFT) {
+        text += "Shaft: carries wheels' turning along its axle to a compressor at the end of the line.";
     }
     else {
-        const AirNetwork& net = networks[n->second];
-        std::snprintf(line, sizeof line, "Air pressure %d%% (%d pipes; wheels turning: %d of %d, +%.1f air/s; drills working: %d of %d)",
-                      int(std::lround(net.Pressure() * 100)), net.pipes, net.turning, net.wheels, net.supply, net.working, net.drills);
-        text += line;
+        if (b.type == BlockType::DRILL) {
+            const Drill d = drills.count(pos) ? drills[pos] : Drill{};
+            std::snprintf(line, sizeof line, "Drill: %s%s. ", Power::Describe(d.state), d.depth > 0 ? (", " + std::to_string(d.depth) + " deep").c_str() : "");
+            text += line;
+        }
+        else if (b.type == BlockType::COMPRESSOR) {
+            const Compressor c = compressors.count(pos) ? compressors[pos] : Compressor{};
+            std::snprintf(line, sizeof line, "Compressor: wheels turning %d of %d on its shafts, +%.1f air/s. ", c.turning, c.wheels, c.power * Power::kWheelMaxAir);
+            text += line;
+        }
+        else if (b.type == BlockType::PUMP) {
+            const Power::DrillState st = pumpStates.count(pos) ? pumpStates[pos] : Power::DrillState::Idle;
+            text += st == Power::DrillState::Working ? "Pump: pumping. " : st == Power::DrillState::NoPressure ? "Pump: waiting for air pressure. " : "Pump: nothing to pump. ";
+        }
+        auto n = networkOf.find(pos);
+        if (n == networkOf.end()) text += "Not joined to a compressor or machine.";
+        else {
+            const AirNetwork& net = networks[n->second];
+            std::snprintf(line, sizeof line, "Air pressure %d%% (%d pipes; compressors: %d, +%.1f air/s; drills working: %d of %d; pumps working: %d of %d)",
+                          int(std::lround(net.Pressure() * 100)), net.pipes, net.compressors, net.supply, net.working, net.drills, net.pumping, net.pumps);
+            text += line;
+        }
     }
     SendChat(client, net::ChatMessage::Kind::Info, text);
 }

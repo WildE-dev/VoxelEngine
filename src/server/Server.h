@@ -382,8 +382,10 @@ private:
 
     // Air power (world/Power.h; the code is in Power.cpp).
     struct Wheel {
-        float flow = 0.0f;  // water units a second past it (smoothed)
+        float flow = 0.0f;  // water units a second down one side more than the other (smoothed)
         float speed = 0.0f; // 0..1
+        bool jammed = false;
+        bool driving = false; // on a shaft line into a compressor
     };
     struct Drill {
         double nextDig = 0.0;
@@ -391,20 +393,28 @@ private:
         int depth = 0; // how deep the last block it dug was
         Power::DrillState state = Power::DrillState::Idle;
     };
+    struct Compressor {
+        float power = 0.0f; // the speeds of the wheels on its shaft lines, added up
+        int wheels = 0, turning = 0;
+    };
     struct AirNetwork {
-        int pipes = 0, wheels = 0, turning = 0, drills = 0, working = 0;
-        float air = 0.0f, capacity = 0.0f, supply = 0.0f; // supply: air a second from its wheels
+        int pipes = 0, compressors = 0, drills = 0, working = 0, pumps = 0, pumping = 0;
+        float air = 0.0f, capacity = 0.0f, supply = 0.0f; // supply: air a second from its compressors
         float Pressure() const { return capacity > 0.0f ? air / capacity : 0.0f; }
     };
     std::unordered_map<glm::ivec3, Wheel, Coords::IVec3Hash> wheels;
     std::unordered_map<glm::ivec3, Drill, Coords::IVec3Hash> drills;
+    std::unordered_map<glm::ivec3, Compressor, Coords::IVec3Hash> compressors;
+    std::unordered_map<glm::ivec3, Power::DrillState, Coords::IVec3Hash> pumpStates;
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> air; // air held in each part of a network
     std::vector<AirNetwork> networks;                             // as of the last update
     std::unordered_map<glm::ivec3, int, Coords::IVec3Hash> networkOf; // each part's network, as of the last update
     std::vector<glm::ivec3> machineList;                          // (update scratch)
-    std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> wheelFlow; // (update scratch)
+    std::unordered_map<glm::ivec3, glm::vec2, Coords::IVec3Hash> wheelFlow; // (update scratch)
     double nextPowerUpdate = 0.0;
     void UpdatePower();
+    // Whether a wheel's paddle cells are clear.
+    bool WheelClear(const glm::ivec3& pos, const Block& wheel) const;
     // A drill's turn to dig (it has the air): digs the next block under it into a chest
     // beside it. Returns whether it dug.
     bool DrillDig(const glm::ivec3& pos, Drill& drill);

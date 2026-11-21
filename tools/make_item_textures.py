@@ -813,6 +813,65 @@ iiiiiiiiiiiiiiii
 DRILL_COLOURS = {"i": (60, 60, 66), "I": (118, 118, 126), "r": (180, 180, 186), "g": (40, 40, 44), "y": (210, 170, 60),
                  "k": (36, 36, 40), "c": (184, 120, 64), "s": (150, 150, 158), "S": (196, 196, 204)}
 
+SHAFT_ICON = """
+..............ii
+.............iwi
+............iwwi
+...........iwwi.
+..........iwwi..
+.........iwwi...
+........iiii....
+.......iwwi.....
+......iwwi......
+.....iiii.......
+....iwwi........
+...iwwi.........
+..iwwi..........
+.iwwi...........
+iwwi............
+iii.............
+"""
+SHAFT_COLOURS = {"i": (90, 90, 96), "w": (150, 106, 58)}
+
+COMPRESSOR_SIDE = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIrIIIIIIIIIIrIi
+iIIIIwwwwwwIIIIi
+iIIIwWWWWWWwIIIi
+iIIwWWWWWWkWwIIi
+iIIwWWWWWkWWwIIi
+iIIwWWWWkWWWwIIi
+iIIwWWWkWWWWwIIi
+iIIwWWWWWWWWwIIi
+iIIIwWWWWWWwIIIi
+iIIIIwwwwwwIIIIi
+iIIIIIIIIIIIIIIi
+iIrIIIIIIIIIIrIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+COMPRESSOR_TOP = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIgggIgggIgggIIi
+iIgggIgggIgggIIi
+iIIIIIIIIIIIIIIi
+iIgggIgggIgggIIi
+iIgggIgggIgggIIi
+iIIIIIIIIIIIIIIi
+iIgggIgggIgggIIi
+iIgggIgggIgggIIi
+iIIIIIIIIIIIIIIi
+iIgggIgggIgggIIi
+iIgggIgggIgggIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+COMPRESSOR_COLOURS = {"i": (70, 52, 36), "I": (176, 116, 62), "r": (220, 170, 110), "w": (60, 60, 64), "W": (230, 228, 214),
+                      "k": (200, 40, 36), "g": (50, 36, 26)}
+
 
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
@@ -859,6 +918,9 @@ def main():
     draw("drill_side", DRILL_SIDE, DRILL_COLOURS, jitter=5, seed=52)
     draw("drill_top", DRILL_TOP, DRILL_COLOURS, jitter=5, seed=53)
     draw("drill_bottom", DRILL_BOTTOM, DRILL_COLOURS, jitter=5, seed=54)
+    draw("shaft", SHAFT_ICON, SHAFT_COLOURS, jitter=5, seed=55)
+    draw("compressor_side", COMPRESSOR_SIDE, COMPRESSOR_COLOURS, jitter=5, seed=56)
+    draw("compressor_top", COMPRESSOR_TOP, COMPRESSOR_COLOURS, jitter=5, seed=57)
 
 
 if __name__ == "__main__":

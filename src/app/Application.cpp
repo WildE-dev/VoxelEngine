@@ -55,7 +55,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
-    BlockType::WATER_WHEEL, BlockType::AIR_PIPE, BlockType::DRILL, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
+    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::DRILL, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
     BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
@@ -123,6 +123,8 @@ const char* BlockName(BlockType type) {
     case BlockType::WATER_WHEEL: return "Water wheel";
     case BlockType::AIR_PIPE: return "Air pipe";
     case BlockType::DRILL: return "Drill";
+    case BlockType::SHAFT: return "Shaft";
+    case BlockType::COMPRESSOR: return "Compressor";
     case BlockType::STONE_BRICK: return "Stone bricks";
     case BlockType::MOSSY_BRICK: return "Mossy bricks";
     case BlockType::SPIKES: return "Spikes";
@@ -805,10 +807,15 @@ void Application::DrawCrosshair() {
             if (m.pos != at->block) continue;
             char text[128];
             const int pressure = static_cast<int>(std::lround(m.pressure / 2.55f));
-            if (target.type == BlockType::WATER_WHEEL && m.speed)
-                std::snprintf(text, sizeof text, "Water wheel: turning (%d%%) - air %d%%", int(std::lround(m.speed / 2.55f)), pressure);
-            else if (target.type == BlockType::WATER_WHEEL) std::snprintf(text, sizeof text, "Water wheel: still - air %d%%", pressure);
-            else std::snprintf(text, sizeof text, "Drill: %s - air %d%%", Power::Describe(static_cast<Power::DrillState>(m.state)), pressure);
+            const auto state = static_cast<Power::DrillState>(m.state);
+            if (target.type == BlockType::WATER_WHEEL)
+                std::snprintf(text, sizeof text, state == Power::DrillState::Blocked ? "Water wheel: jammed" : m.speed ? "Water wheel: turning (%d%%)" : "Water wheel: still",
+                              int(std::lround(m.speed / 2.55f)));
+            else if (target.type == BlockType::COMPRESSOR)
+                std::snprintf(text, sizeof text, "Compressor: +%.1f air/s from %d wheel%s - air %d%%", m.speed / 4.0f, m.depth, m.depth == 1 ? "" : "s", pressure);
+            else if (target.type == BlockType::PUMP)
+                std::snprintf(text, sizeof text, "Pump: %s - air %d%%", state == Power::DrillState::Working ? "pumping" : state == Power::DrillState::NoPressure ? "needs air pressure" : "nothing to pump", pressure);
+            else std::snprintf(text, sizeof text, "Drill: %s - air %d%%", Power::Describe(state), pressure);
             const ImVec2 size = ImGui::CalcTextSize(text);
             const ImVec2 p(c.x - size.x * 0.5f, c.y + 22.0f);
             draw->AddRectFilled(ImVec2(p.x - 6, p.y - 3), ImVec2(p.x + size.x + 6, p.y + size.y + 3), IM_COL32(0, 0, 0, 140), 4.0f);
@@ -819,14 +826,13 @@ void Application::DrawCrosshair() {
 }
 
 void Application::UpdateMachines(FrameParams& params, const std::function<glm::vec2(const glm::vec3&)>& lightAt) {
-    // Each wheel turns at the speed the server last gave it (still if it said nothing).
     const double now = Client::Now();
     const float dt = static_cast<float>(std::min(0.1, now - lastMachinesTime));
     lastMachinesTime = now;
     std::unordered_map<glm::ivec3, uint8_t, Coords::IVec3Hash> speeds;
     for (const auto& m : client->GetMachines()) {
         if (m.type == static_cast<uint8_t>(BlockType::WATER_WHEEL)) speeds[m.pos] = m.speed;
-        // A working drill throws up dust where it's digging, and hisses now and then.
+        // A working drill throws up dust where it's digging, and grinds now and then.
         else if (m.type == static_cast<uint8_t>(BlockType::DRILL) && m.state == static_cast<uint8_t>(Power::DrillState::Working)) {
             float& due = drillDust[m.pos];
             due -= dt;
@@ -841,27 +847,37 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
         }
     }
     if (drillDust.size() > 256) drillDust.clear();
+
+    // Wheels and shafts in lines along their axles turn together, as fast as the
+    // fastest wheel on the line (still if the server said nothing). Each line keeps its
+    // angle under the position of its first block.
+    const std::vector<glm::ivec3> models = world->GetModelBlocks();
+    std::unordered_map<glm::ivec3, Block, Coords::IVec3Hash> blocks;
+    for (const auto& pos : models) {
+        Block b;
+        if (world->GetBlock(pos.x, pos.y, pos.z, b) && b.IsModel()) blocks[pos] = b;
+    }
+    auto sameLine = [&](const glm::ivec3& p, const glm::ivec3& axle) {
+        auto it = blocks.find(p);
+        return it != blocks.end() && Power::AxleOf(it->second) == axle;
+    };
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> angles;
-    for (const auto& pos : world->GetModelBlocks()) {
-        auto s = speeds.find(pos);
-        const float speed = s != speeds.end() ? s->second / 255.0f : 0.0f;
+    for (const auto& [pos, block] : blocks) {
+        const glm::ivec3 axle = Power::AxleOf(block);
+        if (sameLine(pos - axle, axle)) continue; // (not the first of its line)
+        float speed = 0.0f;
+        std::vector<glm::ivec3> line;
+        for (glm::ivec3 p = pos; sameLine(p, axle) && line.size() < 256; p += axle) {
+            line.push_back(p);
+            if (auto s = speeds.find(p); s != speeds.end()) speed = std::max(speed, s->second / 255.0f);
+        }
         float angle = wheelAngles.count(pos) ? wheelAngles[pos] : 0.0f;
-        angle = std::fmod(angle + speed * dt * 3.0f, 6.2831853f); // up to about half a turn a second
+        angle = std::fmod(angle + speed * dt * 2.0f, 6.2831853f); // up to a third of a turn a second
         angles[pos] = angle;
-        // The wheel stands edge on to the water beside it, so its paddles dip in: water
-        // to its north or south puts the axle east-west, and the other way round. With no
-        // water beside it, the axle points at whatever it's mounted on; along x if nothing.
-        auto at = [&](int dx, int dz, bool water) {
-            Block b;
-            if (!world->GetBlock(pos.x + dx, pos.y, pos.z + dz, b) && !world->GetBlock(pos.x + dx, pos.y - 1, pos.z + dz, b)) return false;
-            Block below;
-            if (water) return b.HasWater() || (world->GetBlock(pos.x + dx, pos.y - 1, pos.z + dz, below) && below.HasWater());
-            return !b.IsAir() && !b.IsLiquid() && !b.IsPlant();
-        };
-        const bool waterX = at(1, 0, true) || at(-1, 0, true), waterZ = at(0, 1, true) || at(0, -1, true);
-        const bool alongX = waterZ != waterX ? waterZ : at(1, 0, false) || at(-1, 0, false) || !(at(0, 1, false) || at(0, -1, false));
-        const glm::vec3 centre = glm::vec3(pos) + 0.5f;
-        params.wheels.push_back({ centre, alongX, angle, lightAt(centre) });
+        for (const auto& p : line) {
+            const glm::vec3 centre = glm::vec3(p) + 0.5f;
+            params.wheels.push_back({ centre, axle.x != 0, angle, lightAt(glm::vec3(p)), blocks[p].type == BlockType::SHAFT });
+        }
     }
     wheelAngles.swap(angles);
 }
@@ -2117,8 +2133,13 @@ void Application::OnMouseButton(int button, int action) {
             const glm::vec3 lo(place), hi = lo + glm::vec3(1.0f);
             if (glm::all(glm::lessThan(lo, body.max)) && glm::all(glm::greaterThan(hi, body.min))) return;
         }
-        // Logs lie along the axis of the face they're placed against.
-        const int faceAxis = hit->normal.x != 0 ? 0 : hit->normal.z != 0 ? 2 : 1;
+        // Logs lie along the axis of the face they're placed against; a wheel's or a
+        // shaft's axle lies the way you're facing.
+        int faceAxis = hit->normal.x != 0 ? 0 : hit->normal.z != 0 ? 2 : 1;
+        if (placeBlock == BlockType::WATER_WHEEL || placeBlock == BlockType::SHAFT) {
+            const glm::vec3 look = camera.GetDirection();
+            faceAxis = std::abs(look.x) >= std::abs(look.z) ? 0 : 2;
+        }
         client->PlaceBlock(place, placeBlock, height, faceAxis);
         PlayAt("place", place, 0.8f);
         if (placeBlock == BlockType::SIGN) OpenSign(place); // and write on it

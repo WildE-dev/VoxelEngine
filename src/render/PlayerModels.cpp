@@ -179,27 +179,33 @@ void PlayerModels::DrawWheels(Shader& shader, const glm::mat4& view, const glm::
     const glm::vec3 kWood(0.56f, 0.39f, 0.21f), kDark(0.36f, 0.24f, 0.13f), kIron(0.42f, 0.42f, 0.45f);
     for (const auto& w : wheels) {
         shader.SetUniform("lightLevels", w.light);
-        // Frame: x along the axle.
+        // Frame: x along the axle, turned about it.
         glm::mat4 frame = glm::translate(glm::mat4(1.0f), w.centre);
-        if (!w.alongX) frame = glm::rotate(frame, glm::radians(90.0f), glm::vec3(0, 1, 0));
+        if (!w.alongX) frame = glm::rotate(frame, glm::radians(-90.0f), glm::vec3(0, 1, 0));
+        const glm::mat4 spun = glm::rotate(frame, w.angle, glm::vec3(1, 0, 0));
         auto part = [&](const glm::mat4& f, const glm::vec3& centre, const glm::vec3& size, const glm::vec3& color) {
             shader.SetUniform("model", glm::scale(glm::translate(f, centre), size));
             shader.SetUniform("color", color);
             glDrawArrays(GL_TRIANGLES, 0, 36);
         };
-        part(frame, glm::vec3(0.0f), { 1.0f, 0.1f, 0.1f }, kIron); // axle, end to end
-        // Two supports at the ends, standing on the cell's floor.
-        for (const float x : { -0.46f, 0.46f }) part(frame, { x, -0.25f, 0.0f }, { 0.08f, 0.5f, 0.14f }, kDark);
-        const glm::mat4 spun = glm::rotate(frame, w.angle, glm::vec3(1, 0, 0));
-        part(spun, glm::vec3(0.0f), { 0.5f, 0.22f, 0.22f }, kDark); // hub
-        // Two rims (as eight short planks each) and eight paddles between them.
-        for (int i = 0; i < 8; i++) {
-            const glm::mat4 r = glm::rotate(spun, i * glm::radians(45.0f), glm::vec3(1, 0, 0));
-            for (const float x : { -0.3f, 0.3f }) {
-                part(r, { x, 0.38f, 0.0f }, { 0.05f, 0.05f, 0.32f }, kDark); // rim
-                part(r, { x, 0.2f, 0.0f }, { 0.04f, 0.36f, 0.04f }, kDark);  // spoke
+        if (w.shaft) {
+            part(spun, glm::vec3(0.0f), { 1.0f, 0.22f, 0.22f }, kWood);                 // the rod, end to end
+            part(spun, glm::vec3(0.0f), { 0.12f, 0.3f, 0.3f }, kIron);                  // an iron band
+            continue;
+        }
+        part(spun, glm::vec3(0.0f), { 1.0f, 0.24f, 0.24f }, kIron); // axle through the hub
+        part(spun, glm::vec3(0.0f), { 0.7f, 0.5f, 0.5f }, kDark);   // hub
+        // Two rims of twelve planks each, spokes out to them, and twelve paddles
+        // between the rims, reaching just inside the 3 x 3 square.
+        constexpr int kSpokes = 12;
+        constexpr float kRim = 1.25f;
+        for (int i = 0; i < kSpokes; i++) {
+            const glm::mat4 r = glm::rotate(spun, i * glm::radians(360.0f / kSpokes), glm::vec3(1, 0, 0));
+            for (const float x : { -0.38f, 0.38f }) {
+                part(r, { x, kRim, 0.0f }, { 0.08f, 0.1f, 0.68f }, kDark);           // rim
+                if (i % 2 == 0) part(r, { x, kRim * 0.5f, 0.0f }, { 0.07f, kRim, 0.08f }, kDark); // spoke
             }
-            part(r, { 0.0f, 0.38f, 0.0f }, { 0.62f, 0.2f, 0.04f }, kWood); // paddle
+            part(r, { 0.0f, kRim + 0.05f, 0.0f }, { 0.9f, 0.4f, 0.06f }, kWood); // paddle
         }
     }
 }
