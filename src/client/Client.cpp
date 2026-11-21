@@ -199,6 +199,11 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         creatures = std::move(next); // gone from the snapshot: gone (or out of range)
         break;
     }
+    case net::MsgType::Knockback: {
+        net::Knockback m;
+        if ((ok = net::Decode(in, m))) pendingKnockback += m.velocity;
+        break;
+    }
     case net::MsgType::Correction: {
         net::Correction m;
         if (!(ok = net::Decode(in, m))) break;

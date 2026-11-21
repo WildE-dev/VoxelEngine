@@ -491,7 +491,15 @@ void Server::HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool)
         const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
         const glm::vec3 lo = target.feet - glm::vec3(0.3f, 0.0f, 0.3f), hi = target.feet + glm::vec3(0.3f, 1.8f, 0.3f);
         if (glm::distance(eye, glm::clamp(eye, lo, hi)) > Combat::kReach + 0.5f) return;
+        // Knocked back, away from the hitter and a little up (as creatures are). The
+        // target moves itself, so it's told to; a slain player respawns instead.
+        const double before = target.invulnerableUntil;
         Hurt(target, Combat::Damage(tool), "was slain by " + client.name);
+        if (target.health > 0 && target.lastHurt >= now && target.invulnerableUntil == before) {
+            glm::vec2 away(target.feet.x - client.feet.x, target.feet.z - client.feet.z);
+            away = glm::length(away) > 1e-3f ? glm::normalize(away) : glm::vec2(1.0f, 0.0f);
+            net.Send(target.peer, net::kChannelReliable, net::Encode(net::Knockback{ glm::vec3(away.x * 7.0f, 5.5f, away.y * 7.0f) }));
+        }
         return;
     }
 }

@@ -438,6 +438,13 @@ std::vector<uint8_t> Encode(const Correction& m) {
     return std::move(w.data);
 }
 
+std::vector<uint8_t> Encode(const Knockback& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Knockback);
+    w.Vec3(m.velocity);
+    return std::move(w.data);
+}
+
 // --- Decoding ---------------------------------------------------------------------
 
 namespace {
@@ -552,6 +559,10 @@ bool Decode(ByteReader& in, PlayerSnapshot& m) {
     for (auto& p : m.players)
         if (!in.U16(p.id) || !in.Vec3(p.feet) || !in.F32(p.yaw) || !in.F32(p.pitch) || !in.U8(p.flags)) return false;
     return in.F32(m.timeOfDay) && in.U8(m.rain) && std::isfinite(m.timeOfDay) && m.timeOfDay >= 0.0f && m.timeOfDay < 1.0f;
+}
+
+bool Decode(ByteReader& in, Knockback& m) {
+    return in.Vec3(m.velocity) && Finite(m.velocity) && glm::length(m.velocity) <= kMaxKnockback && in.AtEnd();
 }
 
 bool Decode(ByteReader& in, Correction& m) {

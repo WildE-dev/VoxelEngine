@@ -619,6 +619,8 @@ void Application::UpdateNetwork() {
             startCommands.clear();
         }
     }
+    const glm::vec3 knockback = client->TakeKnockback();
+    if (glm::length(knockback) > 0.0f && !player.IsFlying()) player.Push(knockback);
     if (auto correction = client->TakeCorrection()) {
         player.Teleport(*correction);
         // Corrected into terrain (e.g. back to the spawn point): climb out onto it.

@@ -61,6 +61,8 @@ public:
 
     // A position correction from the server, once.
     std::optional<glm::vec3> TakeCorrection();
+    // Pushes from being hit since the last call (add to the player's velocity).
+    glm::vec3 TakeKnockback() { const glm::vec3 k = pendingKnockback; pendingKnockback = glm::vec3(0.0f); return k; }
 
     // Sent at most kStateRate times a second; extra calls are ignored.
     void SendPlayerState(const glm::vec3& feet, const glm::vec3& velocity, float yaw, float pitch, uint8_t flags);
@@ -174,6 +176,7 @@ private:
 
     uint32_t stateSequence = 0;
     uint16_t correctionId = 0;
+    glm::vec3 pendingKnockback{ 0.0f };
     std::optional<glm::vec3> pendingCorrection;
     double lastStateSent = 0.0;
 

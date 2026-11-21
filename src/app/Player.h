@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 
 #include <glm/glm.hpp>
 
@@ -44,6 +45,14 @@ public:
 
     // Moves the player (a server correction or the spawn point) and stops it.
     void Teleport(const glm::vec3& feetPosition) { feet = feetPosition; velocity = glm::vec3(0.0f); accumulator = 0.0f; }
+    // Knocked back (hit): adds the push to the velocity; an upward push lifts the
+    // player off the ground, so the sideways part carries through the air.
+    void Push(const glm::vec3& push) {
+        velocity.x += push.x;
+        velocity.z += push.z;
+        velocity.y = std::max(velocity.y, push.y);
+        if (push.y > 0.0f) onGround = false;
+    }
     // Forget the spawn so Spawn drops the player onto the terrain under it again.
     void ResetSpawn() { spawned = false; resumeHere = false; }
     // Spawn exactly here instead (rejoining a saved world): Spawn waits for the terrain

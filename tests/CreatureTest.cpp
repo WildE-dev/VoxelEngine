@@ -9,7 +9,7 @@
 //  - /creatures counts and clears them,
 //  - in a normal world, deer turn up by themselves on grass, and ghouls come out at
 //    night,
-//  - PvP: players hit each other in reach (flashing red for others), can be slain,
+//  - PvP: players hit each other in reach (flashing red for others, knocked back), can be slain,
 //    and /pvp off stops it.
 #include <chrono>
 #include <cstdlib>
@@ -206,6 +206,9 @@ int main() {
         a.client.AttackPlayer(rival, Tool::None);
         Check(both(20.0, [&] { return b.client.GetHealth() == 18; }), "a bare-handed hit in reach takes a heart");
         Check(both(5.0, rivalSeenHurt), "and the hitter sees them flash red");
+        glm::vec3 push(0.0f);
+        both(5.0, [&] { push += b.client.TakeKnockback(); return push.x > 0.0f; });
+        Check(push.x > 3.0f && push.y > 0.0f && std::abs(push.z) < 0.1f, "and they're knocked back, away from the hitter and up");
         server.QueueConsoleCommand("pvp off");
         wait(1.0);
         a.client.AttackPlayer(rival, Tool::None);

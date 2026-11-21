@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 19;
+constexpr uint32_t kProtocolVersion = 20;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -64,6 +64,7 @@ enum class MsgType : uint8_t {
     GameModeIs,    // you're in creative or survival
     Resources,     // what you hold (survival): units of each block type
     CreatureSnapshot, // the creatures near you
+    Knockback,     // you were hit: a push to add to your velocity
 };
 
 // ---------------------------------------------------------------------------------
@@ -334,6 +335,12 @@ struct Correction {
     glm::vec3 feet{0.0f};
 };
 
+// Hit by another player: the client adds this to its velocity (it moves itself).
+struct Knockback {
+    glm::vec3 velocity{0.0f};
+};
+constexpr float kMaxKnockback = 20.0f; // blocks a second; anything faster is refused
+
 std::vector<uint8_t> Encode(const Hello& m);
 std::vector<uint8_t> Encode(const Welcome& m);
 std::vector<uint8_t> Encode(const Kick& m);
@@ -367,6 +374,7 @@ std::vector<uint8_t> EncodeLightData(const glm::ivec3& coords, const ChunkLight&
 std::vector<uint8_t> Encode(const BlockDeltas& m);
 std::vector<uint8_t> Encode(const PlayerSnapshot& m);
 std::vector<uint8_t> Encode(const Correction& m);
+std::vector<uint8_t> Encode(const Knockback& m);
 
 bool Decode(ByteReader& in, Hello& m);
 bool Decode(ByteReader& in, Welcome& m);
@@ -386,5 +394,6 @@ bool DecodeLightData(ByteReader& in, glm::ivec3& coords, ChunkLight& light);
 bool Decode(ByteReader& in, BlockDeltas& m);
 bool Decode(ByteReader& in, PlayerSnapshot& m);
 bool Decode(ByteReader& in, Correction& m);
+bool Decode(ByteReader& in, Knockback& m);
 
 } // namespace net
