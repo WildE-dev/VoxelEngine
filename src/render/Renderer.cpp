@@ -267,7 +267,7 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
 
     DrawWater(world, params);
 
-    rain.Draw(rainShader, params.view, params.projection, params.cameraPosition, params.time, params.rain, 0.25f + 0.75f * params.sunBrightness);
+    rain.Draw(rainShader, params.view, params.projection, params.cameraPosition, params.time, params.snow, params.rain, 0.25f + 0.75f * params.sunBrightness);
 
     // --- Composite to the default framebuffer ---
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

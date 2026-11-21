@@ -25,6 +25,7 @@ struct FrameParams {
     glm::vec3 sunDirection{0.35f, 0.75f, 0.55f}; // towards the sun, normalised
     glm::vec3 skyTint{1.0f};    // colour of the sky (warm at dawn and dusk)
     float rain = 0.0f;          // 0..1: how hard it rains here (0 when sheltered)
+    bool snow = false;          // it falls as snow here (cold ground around)
     float overcast = 0.0f;      // 0..1: how grey the sky is
     glm::vec3 cameraPosition{0.0f};
     bool underwater = false;    // camera is inside water: tint the screen

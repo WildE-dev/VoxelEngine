@@ -998,6 +998,9 @@ in and out over ten seconds. Rain greys and dims the sky, falls as streaks aroun
 the player (not under a roof or underwater), and tops up lakes and pools (see
 [Water](#water)).
 
+Where it's cold (snow, snowy grass, ice or pines underfoot), it falls as **snow**:
+white flakes drifting slowly down and swaying, instead of rain.
+
 Three showers in ten are **thunderstorms**: the sky goes darker still, and every 3
 to 12 seconds lightning strikes the ground somewhere within 40 blocks of a player. A
 strike is a jagged glowing bolt from high in the sky, with a flash that lights up the

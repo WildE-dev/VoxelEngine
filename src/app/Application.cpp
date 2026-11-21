@@ -688,6 +688,19 @@ void Application::UpdateSky(float deltaTime, FrameParams& params) {
         Block block;
         if (world->GetBlock(eye.x, y, eye.z, block) && !block.IsAir() && !block.IsPlant()) sheltered = true;
     }
+    // Snow where it's cold: the ground under the open sky here is snowy (snow, snowy
+    // grass, ice or a pine's needles).
+    {
+        bool snowy = false;
+        for (int y = eye.y + 2; y >= eye.y - 24; y--) {
+            Block block;
+            if (!world->GetBlock(eye.x, y, eye.z, block)) break;
+            if (block.IsAir() || block.IsPlant()) continue;
+            snowy = block.type == BlockType::SNOW || block.type == BlockType::SNOWY_GRASS || block.type == BlockType::ICE || block.type == BlockType::PINE_LEAVES;
+            break;
+        }
+        params.snow = snowy;
+    }
     const float target = (sheltered || params.underwater) ? 0.0f : rain;
     const float ease = std::min(1.0f, deltaTime * 4.0f);
     rainHere += (target - rainHere) * ease;

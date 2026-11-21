@@ -19,7 +19,8 @@ public:
     Rain& operator=(const Rain&) = delete;
 
     // Into the current framebuffer, depth tested against the scene, blended.
-    void Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPosition, float time,
+    // `snow`: slow drifting flakes instead of streaks.
+    void Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPosition, float time, bool snow,
               float intensity, float brightness);
 
 private:
