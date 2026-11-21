@@ -862,13 +862,13 @@ wheels** through **shafts**:
   wheel is jammed. A wheel turns when water flows down **one side** of it: the server
   measures the water the simulation moves through the three paddle cells on each
   side, and the wheel turns with the difference, faster the more water goes by (full
-  speed at 2 blocks of water a second). Water pouring past one side drives it; water
+  speed at a block of water a second). Water pouring past one side drives it; water
   through the middle, underneath, or down both sides alike doesn't, and still water
   never does.
 - **Shafts** lie end to end along the same axis as the wheels' axles, through any
   number of wheels' hubs; shafts and wheels on a line turn together, drawn as a
   turning wooden rod. A **compressor** at either end of the line takes the power of
-  every wheel on it: 8 units of air a second from each wheel at full speed.
+  every wheel on it: 16 units of air a second from each wheel at full speed.
 - **Air pipes** join face to face to each other, to compressors, machines, air tanks
   and valves; everything joined is one network sharing one store of air. Every pipe,
   compressor and machine holds a little (16 units), and the network's **pressure** is
@@ -890,13 +890,13 @@ The machines:
   touching it**. It stops at water (the shaft would flood), at chests, beds, doors,
   signs, TNT, pumps and other machinery, and waits without a chest or without
   pressure. A working drill throws up dust where it digs.
-- The **pump** (see [Water](#water)) lifts water on air: a unit of air for every 64
-  units of water raised a block (anything on the level or downhill counts as a
-  block). That's half as much again as wheels can win back from the same water
-  falling the same height, so a pump feeding its own wheels always runs down: power
-  has to come from water running downhill by itself, like a lake drained past a wheel
-  (see [Lakes](#lakes)) or a rain-fed pond. Pumps take only the air above the running
-  pressure that the drills on their network don't need for their next block.
+- The **pump** (see [Water](#water)) lifts water on air, cheaply: the air a wheel
+  makes from water pouring past it lifts three times that water as high as the wheel
+  (3 blocks); anything on the level or downhill counts as a block. One wheel at full
+  speed keeps one pump going flat out (2.5 blocks of water a second) lifting 3 blocks,
+  so a pump can keep its own wheels turning and lift plenty more besides. Pumps take
+  only the air above the running pressure that the drills on their network don't need
+  for their next block.
 
 Look at a wheel, compressor, pump or drill to see how it's doing under the
 crosshair, and right-click any part (wheel, shaft, compressor, pipe, pump or drill)

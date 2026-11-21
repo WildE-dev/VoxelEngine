@@ -258,9 +258,9 @@ void Server::SendMachines() {
                 info.depth = static_cast<uint8_t>(std::clamp(d->second.depth, 0, 255));
             }
             else if (auto c = compressors.find(pos); c != compressors.end()) {
-                // speed: air a second, in quarters; depth: wheels on its shafts.
+                // speed: air a second, in halves; depth: wheels on its shafts.
                 info.type = static_cast<uint8_t>(BlockType::COMPRESSOR);
-                info.speed = static_cast<uint8_t>(std::clamp(std::lround(c->second.power * Power::kWheelMaxAir * 4.0f), 0L, 255L));
+                info.speed = static_cast<uint8_t>(std::clamp(std::lround(c->second.power * Power::kWheelMaxAir * 2.0f), 0L, 255L));
                 info.depth = static_cast<uint8_t>(std::clamp(c->second.wheels, 0, 255));
                 info.state = static_cast<uint8_t>(c->second.turning ? Power::DrillState::Working : Power::DrillState::Idle);
             }

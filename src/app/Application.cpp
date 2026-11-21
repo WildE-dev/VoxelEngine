@@ -854,7 +854,7 @@ void Application::DrawCrosshair() {
                 std::snprintf(text, sizeof text, state == Power::DrillState::Blocked ? "Water wheel: jammed" : m.speed ? "Water wheel: turning (%d%%)" : "Water wheel: still",
                               int(std::lround(m.speed / 2.55f)));
             else if (target.type == BlockType::COMPRESSOR)
-                std::snprintf(text, sizeof text, "Compressor: +%.1f air/s from %d wheel%s - air %d%%", m.speed / 4.0f, m.depth, m.depth == 1 ? "" : "s", pressure);
+                std::snprintf(text, sizeof text, "Compressor: +%.1f air/s from %d wheel%s - air %d%%", m.speed / 2.0f, m.depth, m.depth == 1 ? "" : "s", pressure);
             else if (target.type == BlockType::AIR_TANK) std::snprintf(text, sizeof text, "Air tank - air %d%%", pressure);
             else if (target.type == BlockType::PUMP)
                 std::snprintf(text, sizeof text, "Pump: %s - air %d%%", state == Power::DrillState::Working ? "pumping" : state == Power::DrillState::NoPressure ? "needs air pressure" : "nothing to pump", pressure);
@@ -915,7 +915,7 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
             if (auto s = speeds.find(p); s != speeds.end()) speed = std::max(speed, s->second / 255.0f);
         }
         float angle = wheelAngles.count(pos) ? wheelAngles[pos] : 0.0f;
-        angle = std::fmod(angle + speed * dt * 2.0f, 6.2831853f); // up to a third of a turn a second
+        angle = std::fmod(angle + speed * dt * 4.0f, 6.2831853f); // up to two thirds of a turn a second
         angles[pos] = angle;
         for (const auto& p : line) {
             const glm::vec3 centre = glm::vec3(p) + 0.5f;

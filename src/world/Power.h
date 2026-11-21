@@ -29,9 +29,10 @@
 //       digs into a chest touching it. It stops at water, at a chest or a machine,
 //       and at anything it can't dig.
 //     . A pump (see Water.h) lifts water: kPumpAir for every unit of water raised a
-//       block (at least a block, even on the level). Lifting water costs half as much
-//       again as wheels can win back from it falling the same height, so a pump
-//       feeding its own wheels always runs down.
+//       block (at least a block, even on the level). It's cheap: the air a wheel
+//       makes from water pouring past it lifts kPumpGain times that water as high as
+//       the wheel (3 blocks), so a pump can keep its own wheels turning and lift
+//       plenty more besides.
 // The server runs it all (Server::UpdatePower, every kInterval seconds), and tells
 // players near each wheel and machine how it's doing (net::Machines), to draw wheels
 // and shafts turning and drills working. Right-clicking any part shows its state.
@@ -44,9 +45,9 @@ namespace Power {
 constexpr double kInterval = 0.25;            // seconds between updates
 constexpr float kAirPerCell = 16.0f;          // air each pipe, compressor or machine holds
 constexpr float kAirPerTank = 256.0f;         // air an air tank holds
-constexpr float kWheelMaxAir = 8.0f;          // air a second from a wheel at full speed
-constexpr float kWheelFullFlow = 256.0f;      // water units a second down one side for full speed
-constexpr float kWheelMinFlow = 8.0f;         // less than this and it stands still
+constexpr float kWheelMaxAir = 16.0f;         // air a second from a wheel at full speed
+constexpr float kWheelFullFlow = 128.0f;      // water units a second down one side for full speed (a block)
+constexpr float kWheelMinFlow = 4.0f;         // less than this and it stands still
 constexpr float kWheelSmoothing = 0.35f;      // how much of a new reading counts each update
 constexpr int kMaxShaft = 64;                 // shafts and wheels in a line, at most
 constexpr float kMinPressure = 0.25f;         // machines run above this
@@ -55,8 +56,10 @@ constexpr double kDrillInterval = 1.5;        // seconds per block dug
 constexpr int kDrillDepth = 32;               // blocks below the drill it reaches
 // Air per unit of water a pump raises one block. A wheel at full speed makes
 // kWheelMaxAir a second from kWheelFullFlow units a second falling past its 3-block
-// side: 8 / (256 * 3) per unit-block. This is 1.5 times that.
-constexpr float kPumpAir = 1.5f * kWheelMaxAir / (kWheelFullFlow * 3.0f);
+// side; that air lifts kPumpGain times the water those same 3 blocks. (One wheel at
+// full speed keeps one pump going flat out, lifting 3 blocks.)
+constexpr float kPumpGain = 3.0f;
+constexpr float kPumpAir = kWheelMaxAir / (kWheelFullFlow * 3.0f * kPumpGain);
 constexpr int kMaxNetwork = 4096;             // pipes and machines in one network, at most
 
 // Parts of an air network (wheels and shafts aren't: they turn compressors).
