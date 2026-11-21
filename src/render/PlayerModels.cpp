@@ -268,6 +268,21 @@ void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const gl
             }
             box(base, { -0.58f, 0.98f, 0.0f }, { 0.08f, 0.14f, 0.12f }, pale);         // tail
         }
+        else if (c.type == 2) { // Skeleton: thin bone-white limbs, a skull with dark sockets, a bow
+            const glm::vec3 bone(0.86f, 0.84f, 0.76f), dark(0.12f, 0.1f, 0.1f);
+            for (float z : { -0.1f, 0.1f })
+                limb({ 0.0f, 0.82f, z }, z < 0.0f ? swing : -swing, { 0.1f, 0.82f, 0.1f }, bone); // legs
+            box(base, { 0.0f, 1.12f, 0.0f }, { 0.18f, 0.6f, 0.42f }, bone);           // ribs
+            for (float y : { 0.95f, 1.1f, 1.25f }) box(base, { 0.0f, y, 0.0f }, { 0.2f, 0.03f, 0.46f }, glm::vec3(0.7f, 0.68f, 0.6f));
+            box(base, { 0.02f, 1.62f, 0.0f }, { 0.38f, 0.38f, 0.38f }, bone);         // skull
+            for (float z : { -0.08f, 0.08f }) box(base, { 0.2f, 1.66f, z }, { 0.02f, 0.08f, 0.08f }, dark); // sockets
+            for (float z : { -0.3f, 0.3f }) {
+                // Arms held out, the left with a bow.
+                const glm::mat4 arm = glm::translate(base, { 0.0f, 1.36f, z });
+                box(arm, { 0.28f, 0.0f, 0.0f }, { 0.56f, 0.08f, 0.08f }, bone);
+            }
+            box(base, { 0.58f, 1.36f, -0.3f }, { 0.05f, 0.7f, 0.05f }, glm::vec3(0.5f, 0.34f, 0.18f)); // the bow
+        }
         else { // Ghoul
             const glm::vec3 skin(0.46f, 0.56f, 0.42f), rags(0.28f, 0.26f, 0.30f), eyes(1.0f, 0.85f, 0.2f);
             for (float z : { -0.12f, 0.12f })

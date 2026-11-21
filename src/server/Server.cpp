@@ -54,6 +54,7 @@ constexpr float kSafeFall = 3.0f;
 constexpr float kArrowSpeed = 32.0f, kArrowGravity = 18.0f;
 constexpr int kArrowDamage = 5;
 constexpr double kShotInterval = 0.6;
+constexpr uint16_t kCreatureShooter = 0xFFFF; // an arrow a skeleton shot
 
 // A player's body; a crouching player's is shorter (net::kFlagCrouching).
 constexpr float kCrouchHeight = 1.45f; // as Player::kCrouchHeight
@@ -143,6 +144,9 @@ bool Server::Start(const Options& opts) {
     defaultMode = storage ? static_cast<net::GameMode>(storage->GetDefaultMode()) : options.defaultMode;
     LoadOperators();
     for (const auto& name : options.operators) SetOperator(name, true);
+    creatures.SetShooter([this](const glm::vec3& from, const glm::vec3& dir) {
+        arrows.push_back({ from, dir * kArrowSpeed * 0.8f, kCreatureShooter, Now() });
+    });
     if (storage) {
         for (const auto& [pos, held] : storage->GetChests()) chests[pos] = held;
         for (const auto& pos : storage->GetCrops()) crops.insert(pos);
@@ -602,8 +606,14 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
             SendResources(client);
             spoils = " (+" + std::to_string(venison) + " raw venison, +1 hide)";
         }
+        // A skeleton leaves some of its arrows.
+        if (type == CreatureType::Skeleton) {
+            client.resources[static_cast<size_t>(BlockType::ARROW)] += 2 * Block::kUnitsPerBlock;
+            SendResources(client);
+            spoils = " (+2 arrows)";
+        }
         SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id + spoils);
-        Award(client, type == CreatureType::Deer ? Achievement::Hunter : Achievement::GhoulSlayer);
+        if (type != CreatureType::Skeleton) Award(client, type == CreatureType::Deer ? Achievement::Hunter : Achievement::GhoulSlayer);
     }
 }
 
@@ -1319,7 +1329,7 @@ void Server::UpdateArrows() {
                         if (shooter.id == a.shooter) {
                             SendChat(shooter, net::ChatMessage::Kind::Info, std::string("You shot a ") + SpecOf(type).id);
                             Award(shooter, Achievement::Marksman);
-                            Award(shooter, type == CreatureType::Deer ? Achievement::Hunter : Achievement::GhoulSlayer);
+                            if (type != CreatureType::Skeleton) Award(shooter, type == CreatureType::Deer ? Achievement::Hunter : Achievement::GhoulSlayer);
                         }
                 gone = true;
                 break;
@@ -1330,8 +1340,8 @@ void Server::UpdateArrows() {
                 if (!target.welcomed || !target.hasState || (target.noclip && (target.flags & net::kFlagFlying))) continue;
                 if (target.id == a.shooter && now - a.born < 0.3) continue;
                 if (!inside(BodyAt(target.feet, 0.0f, (target.flags & net::kFlagCrouching) != 0))) continue;
-                if (options.pvp || target.id == a.shooter) {
-                    std::string by = "someone";
+                if (options.pvp || target.id == a.shooter || a.shooter == kCreatureShooter) {
+                    std::string by = a.shooter == kCreatureShooter ? "a skeleton" : "someone";
                     for (const auto& [p2, s] : clients)
                         if (s.id == a.shooter) by = s.name;
                     const double before = target.invulnerableUntil;

@@ -158,6 +158,25 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
         return;
     }
     glm::vec2 to(target->feet.x - c.feet.x, target->feet.z - c.feet.z);
+    if (c.type == CreatureType::Skeleton) {
+        // Keeps 7 to 14 blocks off, edging sideways, and shoots every couple of seconds.
+        const float d = glm::length(to);
+        const glm::vec2 toward = d > 1e-3f ? to / d : glm::vec2(1.0f, 0.0f);
+        if (d < 7.0f) move = -toward, speed = spec.runSpeed;
+        else if (d > 14.0f) move = toward, speed = spec.runSpeed;
+        else move = glm::vec2(-toward.y, toward.x) * (std::sin(static_cast<float>(now) * 0.7f + c.id) > 0.0f ? 1.0f : -1.0f), speed = spec.walkSpeed * 0.5f;
+        c.yaw = glm::degrees(std::atan2(toward.y, toward.x)); // (faces its target even backing off)
+        if (d > 3.0f && d < 20.0f && now >= c.nextAttack && shooter) {
+            c.nextAttack = now + 2.2 + unit(rng);
+            const glm::vec3 eye = c.feet + glm::vec3(0.0f, 1.55f, 0.0f);
+            // Aimed high by as much as the arrow will drop on the way (its speed and
+            // gravity are the server's: 25.6 and 18 blocks a second).
+            const float flight = d / 25.6f;
+            const glm::vec3 aim = target->feet + glm::vec3(0.0f, 1.0f + 0.5f * 18.0f * flight * flight, 0.0f);
+            shooter(eye + glm::normalize(aim - eye) * 0.6f, glm::normalize(aim - eye));
+        }
+        return;
+    }
     const float reach = spec.halfWidth + 0.3f + spec.attackReach; // to the player's box edge, plus its reach
     if (glm::length(to) > 0.6f) move = glm::normalize(to);
     speed = glm::length(to) > reach * 0.7f ? spec.runSpeed : 0.0f;
@@ -276,7 +295,7 @@ void CreatureSystem::SpawnNaturally(ServerWorld& world, const std::vector<Player
                 const float light = std::max(static_cast<float>(block), sky * (daylight > 0.5f ? 1.0f : 0.25f));
                 const glm::vec3 at(x + 0.5f, static_cast<float>(y), z + 0.5f);
                 if (light <= 4.0f && farFromPlayers(at)) {
-                    Spawn(CreatureType::Ghoul, at);
+                    Spawn(unit(rng) < 0.3f ? CreatureType::Skeleton : CreatureType::Ghoul, at); // three in ten are skeletons
                     hostiles++;
                 }
                 break;

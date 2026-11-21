@@ -617,6 +617,13 @@ Left click a creature in front of you (within 4.5 blocks) to hit it. A hand does
 times a second, and the server checks the reach. A deer has 4 hearts and a ghoul 6.
 Aiming at a creature doesn't mine the block behind it.
 
+**Skeletons** come out in the dark like ghouls (three in ten of the night's hostile
+creatures) and burn in daylight too, but they keep their distance: 7 to 14 blocks off,
+backing away if you close in, edging sideways, and shooting an arrow every couple of
+seconds, aimed high enough to allow for its drop. Their arrows hurt whatever they hit
+(PvP or not). A skeleton has 5 hearts, and killing one leaves you two arrows.
+`/summon skeleton` brings one.
+
 In normal worlds they spawn by themselves around each player:
 
 - deer on open grass 20 to 48 blocks away, up to 6 nearby;

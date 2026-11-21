@@ -166,6 +166,22 @@ int main() {
         server.QueueConsoleCommand("time noon");
         Check(both(20.0, [&] { return a.Find(CreatureType::Ghoul) == nullptr; }), "at noon under the open sky the ghoul burns up");
 
+        std::cout << "Skeletons" << std::endl;
+        server.QueueConsoleCommand("time midnight");
+        server.QueueConsoleCommand("gamemode survival Hunter");
+        server.QueueConsoleCommand("food 20 Hunter");
+        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+        server.QueueConsoleCommand("summon skeleton 20.5 0 8.5");
+        Check(both(20.0, [&] { return a.Find(CreatureType::Skeleton) != nullptr && !a.client.IsCreative(); }), "a skeleton is summoned 12 blocks from the hunter");
+        both(4.0, [&] { return a.client.GetHealth() == 20; });
+        const int beforeVolley = a.client.GetHealth();
+        Check(both(20.0, [&] { return a.client.GetHealth() < beforeVolley; }), "it shoots the hunter from a distance");
+        const auto* skeleton = a.Find(CreatureType::Skeleton);
+        Check(skeleton && glm::distance(glm::vec2(skeleton->feet.x, skeleton->feet.z), glm::vec2(8.5f)) > 5.0f, "and keeps its distance");
+        server.QueueConsoleCommand("creatures clear");
+        server.QueueConsoleCommand("gamemode creative Hunter");
+        both(20.0, [&] { return a.client.GetCreatures().empty() && a.client.IsCreative(); });
+
         server.QueueConsoleCommand("time midnight");
         server.QueueConsoleCommand("summon ghoul 20 0 20");
         server.QueueConsoleCommand("summon deer 22 0 20");

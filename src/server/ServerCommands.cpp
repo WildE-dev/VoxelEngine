@@ -100,7 +100,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Everyone, "/gamemode - show your game mode" },
     { Level::Operator, "/gamemode <creative|survival> [player] - creative: anything, unhurt; survival: collect what you build with" },
     { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64), or /give <tool|cap|tunic|boots> [player]" },
-    { Level::Operator, "/summon <deer|ghoul> [x y z] - bring a creature (default: a few blocks ahead of you)" },
+    { Level::Operator, "/summon <deer|ghoul|skeleton> [x y z] - bring a creature (default: a few blocks ahead of you)" },
     { Level::Operator, "/creatures [clear] - count the creatures, or remove them all" },
     { Level::Everyone, "/food - how hungry you are" },
     { Level::Everyone, "/achievements - the milestones you've reached, and those still to come" },
@@ -341,7 +341,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
     }
     else if (command == "summon") {
         const CreatureType type = words.size() > 1 ? CreatureFromId(Lower(words[1])) : CreatureType::Count;
-        if (type == CreatureType::Count) return usage("/summon <deer|ghoul> [x y z]");
+        if (type == CreatureType::Count) return usage("/summon <deer|ghoul|skeleton> [x y z]");
         glm::vec3 at;
         if (words.size() >= 5) {
             const glm::vec3 base = sender ? sender->feet : glm::vec3(0.0f);
@@ -350,7 +350,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
                 const std::string& w = words[2 + a];
                 const bool relative = !w.empty() && w[0] == '~';
                 if ((relative && w.size() > 1 && !ParseNumber(w.substr(1), v)) || (!relative && !ParseNumber(w, v)))
-                    return usage("/summon <deer|ghoul> [x y z]");
+                    return usage("/summon <deer|ghoul|skeleton> [x y z]");
                 at[a] = static_cast<float>(relative ? base[a] + v : v);
             }
         }
@@ -358,7 +358,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
             const float yaw = glm::radians(sender->yaw);
             at = sender->feet + glm::vec3(std::cos(yaw), 0.0f, std::sin(yaw)) * 4.0f + glm::vec3(0.0f, 0.5f, 0.0f);
         }
-        else return usage("summon <deer|ghoul> <x> <y> <z>");
+        else return usage("summon <deer|ghoul|skeleton> <x> <y> <z>");
         if (!creatures.Spawn(type, at)) return reply(Kind::Error, "Too many creatures already");
         char where[64];
         std::snprintf(where, sizeof where, "%.1f, %.1f, %.1f", at.x, at.y, at.z);

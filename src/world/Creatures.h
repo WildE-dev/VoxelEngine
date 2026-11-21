@@ -5,12 +5,14 @@
 //  - Deer wander grassland in herds and run from whoever hits them.
 //  - Ghouls come out in the dark (caves, dungeons, the surface at night) and go for
 //    survival players nearby. Daylight burns them.
+//  - Skeletons come out in the dark too, but keep their distance and shoot arrows.
+//    Daylight burns them as well.
 #include <cstdint>
 #include <string>
 
 #include "world/Mining.h"
 
-enum class CreatureType : uint8_t { Deer, Ghoul, Count };
+enum class CreatureType : uint8_t { Deer, Ghoul, Skeleton, Count };
 
 struct CreatureSpec {
     const char* name;  // "Deer"
@@ -29,6 +31,7 @@ inline const CreatureSpec& SpecOf(CreatureType type) {
     static const CreatureSpec specs[] = {
         { "Deer", "deer", 0.45f, 1.3f, 8, 1.6f, 5.5f, false, 0, 0.0f },
         { "Ghoul", "ghoul", 0.3f, 1.8f, 12, 1.2f, 3.4f, true, 3, 0.9f },
+        { "Skeleton", "skeleton", 0.3f, 1.8f, 10, 1.2f, 3.0f, true, 0, 0.0f }, // (shoots instead)
     };
     const int t = static_cast<int>(type);
     return specs[t >= 0 && t < static_cast<int>(CreatureType::Count) ? t : 0];

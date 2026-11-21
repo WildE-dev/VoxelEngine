@@ -48,6 +48,9 @@ public:
     };
     // A ghoul hit a player for `damage` half hearts.
     using HurtPlayer = std::function<void(uint16_t playerId, int damage, const char* deathMessage)>;
+    // Skeletons shoot: an arrow from here, this way (the server flies it).
+    using ShootArrow = std::function<void(const glm::vec3& from, const glm::vec3& direction)>;
+    void SetShooter(ShootArrow shoot) { shooter = std::move(shoot); }
 
     static constexpr size_t kMaxCreatures = 80;
     static constexpr float kDespawnDistance = 96.0f;
@@ -87,4 +90,5 @@ private:
     bool naturalSpawning = true;
     double nextSpawnCheck = 0.0;
     double clock = 0.0;
+    ShootArrow shooter;
 };
