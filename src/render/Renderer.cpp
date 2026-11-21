@@ -396,6 +396,9 @@ void Renderer::DrawSkybox(const FrameParams& params) {
     skyboxShader.SetUniform("brightness", 0.05f + 0.95f * params.sunBrightness);
     skyboxShader.SetUniform("tint", params.skyTint);
     skyboxShader.SetUniform("overcast", params.overcast);
+    skyboxShader.SetUniform("sunDirection", params.sunDirection);
+    skyboxShader.SetUniform("night", std::clamp(1.0f - params.sunBrightness * 2.5f, 0.0f, 1.0f));
+    skyboxShader.SetUniform("time", params.time);
 
     glBindVertexArray(skyboxVAO);
     glActiveTexture(GL_TEXTURE0);

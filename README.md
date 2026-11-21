@@ -953,6 +953,10 @@ east, crosses the sky (lighting the terrain, the water's glint and players from 
 current direction), and the sky turns warm around sunrise and sunset and dark at
 night. The time of day is saved with the world.
 
+The sun is a bright disc with a glow in its direction, and the moon a pale disc
+opposite it. As night falls the stars come out and twinkle. Clouds (rain) hide all
+three.
+
 Now and then it rains: clear spells last 10 to 25 minutes and showers 2 to 5, fading
 in and out over ten seconds. Rain greys and dims the sky, falls as streaks around
 the player (not under a roof or underwater), and tops up lakes and pools (see
