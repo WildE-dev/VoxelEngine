@@ -222,6 +222,17 @@ bool WorldStorage::ReadWorldFile() {
         }
         signalBlocks.push_back(sig);
     }
+    // Fluids (format 12 on).
+    uint32_t fluidCount = 0;
+    if (version >= 12 && !r.VarU32(fluidCount)) fluidCount = 0;
+    for (uint32_t i = 0; i < fluidCount; i++) {
+        SavedFluid f;
+        if (!r.IVec3(f.pos) || !r.U8(f.kind) || !r.VarU32(f.units)) {
+            std::cerr << "[storage] " << path.string() << " is truncated (fluids)" << std::endl;
+            return false;
+        }
+        fluids.push_back(f);
+    }
     return true;
 }
 
@@ -380,6 +391,17 @@ void WorldStorage::SetSignals(std::vector<SavedSignal> s) {
     playersDirty = true;
 }
 
+std::vector<WorldStorage::SavedFluid> WorldStorage::GetFluids() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return fluids;
+}
+
+void WorldStorage::SetFluids(std::vector<SavedFluid> f) {
+    std::lock_guard<std::mutex> lock(mutex);
+    fluids = std::move(f);
+    playersDirty = true;
+}
+
 void WorldStorage::SetSigns(Signs s) {
     std::lock_guard<std::mutex> lock(mutex);
     signs = std::move(s);
@@ -482,6 +504,12 @@ bool WorldStorage::Flush() {
             for (const auto& sig : signalBlocks) {
                 w.IVec3(sig.pos);
                 for (const uint8_t v : { sig.kind, sig.mode, sig.a, sig.b, sig.out, sig.on }) w.U8(v);
+            }
+            w.VarU32(static_cast<uint32_t>(fluids.size()));
+            for (const auto& f : fluids) {
+                w.IVec3(f.pos);
+                w.U8(f.kind);
+                w.VarU32(f.units);
             }
             files.emplace_back(directory / "world.dat", std::move(w.data));
             writePlayers = true;

@@ -221,16 +221,28 @@ int main() {
             Set(world, drain + d, Block(BlockType::STONE));
         Cup(world, cup, drain);
         Set(world, cup, Block::Water(kFull));
-        Set(world, drain, Block(BlockType::DRAIN));
+        Set(world, drain, Block(BlockType::SINKHOLE));
         Tick(world, 1);
         Check(world.GetWater().GetPumpCount() == pumpsBefore + 1 && WaterAt(world, cup) == kFull - kDrain,
-              "a drain takes " + std::to_string(kDrain) + " units a tick from the cell above (" + std::to_string(WaterAt(world, cup)) + " left)");
+              "a sinkhole (a natural drain) takes " + std::to_string(kDrain) + " units a tick from the cell above (" + std::to_string(WaterAt(world, cup)) + " left)");
         Tick(world, 2);
         Check(WaterAt(world, cup) == 0, "until it's empty");
-        Set(world, drain, Block(BlockType::SINKHOLE));
+        // A player's drain only takes what its pipes have room for (the server says).
+        Set(world, drain, Block(BlockType::DRAIN));
         Set(world, cup, Block::Water(kFull));
-        Tick(world, 1);
-        Check(world.GetWater().GetPumpCount() == pumpsBefore + 1 && WaterAt(world, cup) == kFull - kDrain, "a sinkhole (a natural drain) does the same");
+        Tick(world, 2);
+        Check(WaterAt(world, cup) == kFull, "a player's drain with no room in pipes takes nothing (none is lost)");
+        int used = 0;
+        {
+            std::lock_guard<std::recursive_mutex> lock(world.GetEditMutex());
+            world.GetWater().SetDrainBudget(drain, 40);
+        }
+        Tick(world, 2);
+        {
+            std::lock_guard<std::recursive_mutex> lock(world.GetEditMutex());
+            used = world.GetWater().TakeDrainUse(drain);
+        }
+        Check(WaterAt(world, cup) == kFull - 40 && used == 40, "with room for 40 units it takes just those, and says so");
     }
 
     std::cout << "Saved pumps" << std::endl;

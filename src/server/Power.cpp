@@ -81,6 +81,8 @@ void Server::UpdatePower() {
     prune(pistonStates);
     prune(smelters);
     prune(workers);
+    prune(engines);
+    BuildFluidNets();
 
     // A piston's head with no piston behind it (broken, or turned) goes too.
     for (const auto& pos : machineList) {
@@ -158,6 +160,19 @@ void Server::UpdatePower() {
                 net.compressors++;
                 net.supply += compressors[m].power * Power::kWheelMaxAir;
                 break;
+            case BlockType::ENGINE: {
+                // An engine runs while it has fuel to burn, making air like a compressor.
+                net.compressors++;
+                const int burn = static_cast<int>(Fluids::kEngineFuel * Power::kInterval);
+                FluidNet* fuel = FluidNetBeside(m, Fluids::Kind::Fuel, true);
+                const bool running = fuel && fuel->amount >= burn;
+                if (running) {
+                    fuel->amount -= burn;
+                    net.supply += Fluids::kEngineAir;
+                }
+                engines[m] = running;
+                break;
+            }
             case BlockType::DRILL:
                 net.drills++;
                 netDrills.emplace_back(m, &drills[m]);
@@ -171,7 +186,9 @@ void Server::UpdatePower() {
             case BlockType::SMELTER_LIT: netSmelters.push_back(m); break;
             case BlockType::EXTRACTOR:
             case BlockType::CRAFTER:
-            case BlockType::HARVESTER: netWorkers.push_back(m); break;
+            case BlockType::HARVESTER:
+            case BlockType::OIL_DERRICK:
+            case BlockType::REFINERY: netWorkers.push_back(m); break;
             default: break;
             }
         }
@@ -248,11 +265,27 @@ void Server::UpdatePower() {
         for (const auto& p : netWorkers) {
             Worker& w = workers[p];
             const Block b = blockAt(p);
-            const double interval = b.type == BlockType::EXTRACTOR ? Power::kExtractInterval : b.type == BlockType::CRAFTER ? Power::kCraftInterval : Power::kHarvestInterval;
-            const float cost = b.type == BlockType::EXTRACTOR ? Power::kExtractAir : b.type == BlockType::CRAFTER ? Power::kCraftAir : Power::kHarvestAir;
+            double interval = Power::kHarvestInterval;
+            float cost = Power::kHarvestAir;
+            switch (b.type) {
+            case BlockType::EXTRACTOR: interval = Power::kExtractInterval, cost = Power::kExtractAir; break;
+            case BlockType::CRAFTER: interval = Power::kCraftInterval, cost = Power::kCraftAir; break;
+            case BlockType::OIL_DERRICK: interval = Fluids::kDerrickInterval, cost = Fluids::kDerrickAir; break;
+            case BlockType::REFINERY: interval = Power::kInterval * 0.9, cost = Fluids::kRefineAir; break;
+            default: break;
+            }
+            auto work = [&] {
+                switch (b.type) {
+                case BlockType::EXTRACTOR: return Extract(p, b, w);
+                case BlockType::CRAFTER: return CraftAt(p, b, w);
+                case BlockType::OIL_DERRICK: return PumpOil(p, w);
+                case BlockType::REFINERY: return Refine(p, b, w);
+                default: return Harvest(p, w);
+                }
+            };
             if (now >= w.next) {
                 if (net.Pressure() < Power::kMinPressure || net.air < cost) w.state = Power::DrillState::NoPressure;
-                else if (b.type == BlockType::EXTRACTOR ? Extract(p, b, w) : b.type == BlockType::CRAFTER ? CraftAt(p, b, w) : Harvest(p, w)) {
+                else if (work()) {
                     net.air -= cost;
                     w.next = now + interval;
                     w.last = now;
@@ -277,6 +310,34 @@ void Server::UpdatePower() {
         for (const auto& m : members) newAir[m] = fill * Power::CapacityOf(blockAt(m).type);
     }
     air.swap(newAir); // (parts in no network lose their air)
+
+    // Drains and fluid outlets: the water they traded since the last update into or out
+    // of their pipes, and what they may trade until the next.
+    for (const auto& pos : machineList) {
+        const BlockType t = blockAt(pos).type;
+        if (t == BlockType::DRAIN) {
+            if (FluidNet* in = FluidNetBeside(pos, Fluids::Kind::Water, false)) {
+                in->amount = std::min(in->capacity, in->amount + water.TakeDrainUse(pos));
+                if (in->amount > 0) in->kind = Fluids::Kind::Water;
+                water.SetDrainBudget(pos, in->Room());
+            }
+            else {
+                water.TakeDrainUse(pos);
+                water.SetDrainBudget(pos, 0);
+            }
+        }
+        else if (t == BlockType::FLUID_OUTLET) {
+            if (FluidNet* from = FluidNetBeside(pos, Fluids::Kind::Water, true)) {
+                from->amount = std::max(0, from->amount - water.TakeDrainUse(pos));
+                water.SetDrainBudget(pos, from->amount);
+            }
+            else {
+                water.TakeDrainUse(pos);
+                water.SetDrainBudget(pos, 0);
+            }
+        }
+    }
+    StoreFluids();
     SendMachines();
 }
 
@@ -459,6 +520,138 @@ bool Server::DrillDig(const glm::ivec3& pos, Drill& drill) {
     return false;
 }
 
+void Server::BuildFluidNets() {
+    fluidNets.clear();
+    fluidNetOf.clear();
+    auto blockAt = [&](const glm::ivec3& p) {
+        Block b;
+        if (!world->GetBlock(p.x, p.y, p.z, b)) b.type = BlockType::COUNT;
+        return b;
+    };
+    auto trace = [&](const glm::ivec3& start) {
+        if (fluidNetOf.count(start) || !Fluids::IsPart(blockAt(start).type)) return;
+        const int index = static_cast<int>(fluidNets.size());
+        fluidNets.emplace_back();
+        FluidNet& net = fluidNets.back();
+        net.members.push_back(start);
+        fluidNetOf[start] = index;
+        for (size_t i = 0; i < net.members.size() && net.members.size() < static_cast<size_t>(Power::kMaxNetwork); i++)
+            for (const auto& d : kFaces) {
+                const glm::ivec3 n = net.members[i] + d;
+                if (fluidNetOf.count(n) || !Fluids::IsPart(blockAt(n).type)) continue;
+                fluidNetOf[n] = index;
+                net.members.push_back(n);
+            }
+        for (const auto& m : net.members) {
+            net.capacity += Fluids::CapacityOf(blockAt(m).type);
+            auto h = fluidHeld.find(m);
+            if (h == fluidHeld.end() || h->second <= 0) continue;
+            net.amount += h->second;
+            if (net.kind == Fluids::Kind::None) net.kind = fluidKind[m];
+        }
+        net.amount = std::min(net.amount, net.capacity);
+    };
+    for (const auto& pos : machineList) {
+        const BlockType t = blockAt(pos).type;
+        if (t == BlockType::FLUID_TANK) trace(pos);
+        else if (Fluids::IsMachine(t))
+            for (const auto& d : kFaces) trace(pos + d);
+    }
+}
+
+Server::FluidNet* Server::FluidNetAt(const glm::ivec3& pos) {
+    auto it = fluidNetOf.find(pos);
+    return it == fluidNetOf.end() ? nullptr : &fluidNets[it->second];
+}
+
+Server::FluidNet* Server::FluidNetBeside(const glm::ivec3& pos, Fluids::Kind kind, bool have) {
+    for (const auto& d : kFaces) {
+        FluidNet* net = FluidNetAt(pos + d);
+        if (!net) continue;
+        if (have ? (net->kind == kind && net->amount > 0) : (net->Takes(kind) && net->Room() > 0)) return net;
+    }
+    return nullptr;
+}
+
+void Server::StoreFluids() {
+    // Parts no longer there lose what they held; networks share theirs out by size.
+    for (auto it = fluidHeld.begin(); it != fluidHeld.end();) {
+        Block b;
+        if (world->GetBlock(it->first.x, it->first.y, it->first.z, b) && !Fluids::IsPart(b.type)) {
+            fluidKind.erase(it->first);
+            it = fluidHeld.erase(it);
+        }
+        else ++it;
+    }
+    for (FluidNet& net : fluidNets) {
+        if (net.amount <= 0) net.kind = Fluids::Kind::None, net.amount = 0;
+        int left = net.amount;
+        for (size_t i = 0; i < net.members.size(); i++) {
+            const glm::ivec3& m = net.members[i];
+            Block b;
+            world->GetBlock(m.x, m.y, m.z, b);
+            const int cap = Fluids::CapacityOf(b.type);
+            int share = net.capacity > 0 ? static_cast<int>(static_cast<int64_t>(net.amount) * cap / net.capacity) : 0;
+            if (i + 1 == net.members.size()) share = left; // (what rounding left over)
+            share = std::min(share, std::max(0, left));
+            left -= share;
+            if (share > 0) {
+                fluidHeld[m] = share;
+                fluidKind[m] = net.kind;
+            }
+            else {
+                fluidHeld.erase(m);
+                fluidKind.erase(m);
+            }
+        }
+    }
+}
+
+bool Server::PumpOil(const glm::ivec3& pos, Worker& w) {
+    FluidNet* out = FluidNetBeside(pos, Fluids::Kind::Crude, false);
+    if (!out || out->Room() < Fluids::kDerrickUnits) {
+        w.state = Power::DrillState::NoChest; // (nowhere to put it)
+        return false;
+    }
+    // The nearest shale under it, in a 3 x 3 column down to its well's depth.
+    for (int depth = 1; depth <= Fluids::kWellDepth; depth++)
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = -1; dz <= 1; dz++) {
+                const glm::ivec3 p = pos + glm::ivec3(dx, -depth, dz);
+                Block b;
+                if (!world->GetBlock(p.x, p.y, p.z, b) || b.type != BlockType::OIL_SHALE) continue;
+                Block drawn = b;
+                if (drawn.axis >= 254) drawn = Block(BlockType::STONE); // spent
+                else drawn.axis++;
+                world->SetBlock(p.x, p.y, p.z, drawn);
+                out->amount += Fluids::kDerrickUnits;
+                out->kind = Fluids::Kind::Crude;
+                w.state = Power::DrillState::Working;
+                return true;
+            }
+    w.state = Power::DrillState::Done; // (no oil under it)
+    return false;
+}
+
+bool Server::Refine(const glm::ivec3& pos, const Block& refinery, Worker& w) {
+    FluidNet* in = FluidNetAt(pos - refinery.Facing());
+    FluidNet* out = FluidNetAt(pos + refinery.Facing());
+    if (!in || !out || in == out) {
+        w.state = Power::DrillState::NoChest; // (needs pipes at its back and its front)
+        return false;
+    }
+    if (in->kind != Fluids::Kind::Crude || in->amount <= 0 || !out->Takes(Fluids::Kind::Fuel) || out->Room() <= 0) {
+        w.state = Power::DrillState::Idle;
+        return false;
+    }
+    const int units = std::min({ Fluids::kRefineUnits, in->amount, out->Room() });
+    in->amount -= units;
+    out->amount += units;
+    out->kind = Fluids::Kind::Fuel;
+    w.state = Power::DrillState::Working;
+    return true;
+}
+
 bool Server::Movable(const glm::ivec3& pos, const Block& b) const {
     if (b.IsAir() || b.IsLiquid() || b.type == BlockType::COUNT) return false;
     if (signalBlocks.count(pos) || Signals::KindOf(b.type) != Signals::Kind::None) return false;
@@ -560,6 +753,24 @@ void Server::SendMachines() {
                 info.type = static_cast<uint8_t>(BlockType::PRESSURE_GAUGE);
                 auto on = networkOf.find(pos - g.Facing());
                 info.pressure = on != networkOf.end() ? ToByte(networks[on->second].Pressure()) : 0;
+                // (On a fluid pipe or tank: how full it is, and of what.)
+                if (auto f = fluidNetOf.find(pos - g.Facing()); f != fluidNetOf.end()) {
+                    const FluidNet& fn = fluidNets[f->second];
+                    info.pressure = fn.capacity > 0 ? ToByte(static_cast<float>(fn.amount) / fn.capacity) : 0;
+                    info.depth = static_cast<uint8_t>(fn.kind);
+                }
+            }
+            else if (Block ft; world->GetBlock(pos.x, pos.y, pos.z, ft) && ft.type == BlockType::FLUID_TANK) {
+                // pressure: how full; depth: of what.
+                info.type = static_cast<uint8_t>(BlockType::FLUID_TANK);
+                if (const FluidNet* fn = FluidNetAt(pos)) {
+                    info.pressure = fn->capacity > 0 ? ToByte(static_cast<float>(fn->amount) / fn->capacity) : 0;
+                    info.depth = static_cast<uint8_t>(fn->kind);
+                }
+            }
+            else if (auto e = engines.find(pos); e != engines.end()) {
+                info.type = static_cast<uint8_t>(BlockType::ENGINE);
+                info.state = static_cast<uint8_t>(e->second ? Power::DrillState::Working : Power::DrillState::Idle);
             }
             else if (Block t; world->GetBlock(pos.x, pos.y, pos.z, t) && t.type == BlockType::AIR_TANK) {
                 info.type = static_cast<uint8_t>(BlockType::AIR_TANK);
@@ -582,6 +793,24 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
     if (!InReach(client, pos, 8.0f) || !world->GetBlock(pos.x, pos.y, pos.z, b) || !Power::IsPart(b.type)) return;
     char line[256];
     std::string text;
+    auto describeFluid = [&](const FluidNet* net) {
+        if (!net) return std::string("Not joined to any fluid pipes.");
+        std::snprintf(line, sizeof line, "Its pipes hold %d of %d units%s%s.", net->amount, net->capacity, net->amount > 0 ? " of " : "",
+                      net->amount > 0 ? Fluids::Name(net->kind) : " (empty)");
+        return std::string(line);
+    };
+    if (Fluids::IsPart(b.type)) {
+        text = std::string(b.type == BlockType::FLUID_TANK ? "Fluid tank. " : "Fluid pipe. ") + describeFluid(FluidNetAt(pos));
+        return SendChat(client, net::ChatMessage::Kind::Info, text);
+    }
+    if (b.type == BlockType::DRAIN || b.type == BlockType::FLUID_OUTLET) {
+        const FluidNet* net = nullptr;
+        for (const auto& d : kFaces)
+            if ((net = FluidNetAt(pos + d))) break;
+        text = b.type == BlockType::DRAIN ? "Drain: takes water into the fluid pipes beside it, as much as they have room for. "
+                                          : "Fluid outlet: lets water from the fluid pipes beside it out of its face. ";
+        return SendChat(client, net::ChatMessage::Kind::Info, text + describeFluid(net));
+    }
     if (b.type == BlockType::WATER_WHEEL) {
         const Wheel w = wheels.count(pos) ? wheels[pos] : Wheel{};
         if (w.jammed) std::snprintf(line, sizeof line, "Water wheel: jammed (its paddles need the 8 cells around its hub clear). ");
@@ -651,6 +880,21 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
         }
         else if (b.type == BlockType::PRESSURE_GAUGE) {
             text += "Pressure gauge. ";
+            if (const FluidNet* fn = FluidNetAt(pos - b.Facing())) return SendChat(client, net::ChatMessage::Kind::Info, text + describeFluid(fn));
+        }
+        else if (b.type == BlockType::OIL_DERRICK || b.type == BlockType::REFINERY) {
+            const Worker w = workers.count(pos) ? workers[pos] : Worker{};
+            if (b.type == BlockType::OIL_DERRICK)
+                text += w.state == Power::DrillState::Working ? "Oil derrick: pumping crude oil. " : w.state == Power::DrillState::NoPressure ? "Oil derrick: waiting for air pressure. "
+                      : w.state == Power::DrillState::NoChest ? "Oil derrick: needs fluid pipes beside it with room for crude oil. "
+                      : w.state == Power::DrillState::Done ? "Oil derrick: no oil shale under it. " : "Oil derrick: idle. ";
+            else
+                text += w.state == Power::DrillState::Working ? "Refinery: making fuel. " : w.state == Power::DrillState::NoPressure ? "Refinery: waiting for air pressure. "
+                      : w.state == Power::DrillState::NoChest ? "Refinery: needs fluid pipes at its back (crude in) and in front (fuel out). "
+                      : "Refinery: no crude oil behind it, or no room for fuel in front. ";
+        }
+        else if (b.type == BlockType::ENGINE) {
+            text += engines.count(pos) && engines[pos] ? "Engine: running (burning fuel). " : "Engine: stopped (it needs fluid pipes beside it with fuel). ";
         }
         else if (b.type == BlockType::PUMP) {
             const Power::DrillState st = pumpStates.count(pos) ? pumpStates[pos] : Power::DrillState::Idle;

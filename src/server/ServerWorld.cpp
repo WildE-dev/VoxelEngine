@@ -93,8 +93,8 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
     chunk->SetBlock(local.x, local.y, local.z, block);
     chunk->MarkUnsaved();
     // (Springs and drains run with the pumps.)
-    const bool wasPump = previous.type == BlockType::PUMP || previous.type == BlockType::SPRING || IsDrainType(previous.type);
-    const bool isPump = block.type == BlockType::PUMP || block.type == BlockType::SPRING || IsDrainType(block.type);
+    const bool wasPump = previous.type == BlockType::PUMP || previous.type == BlockType::SPRING || IsDrainType(previous.type) || previous.type == BlockType::FLUID_OUTLET;
+    const bool isPump = block.type == BlockType::PUMP || block.type == BlockType::SPRING || IsDrainType(block.type) || block.type == BlockType::FLUID_OUTLET;
     if (wasPump && previous.type != block.type) water.RemovePump({ x, y, z });
     if (isPump) water.AddPump({ x, y, z });
     if (Power::IsMachine(previous.type) && previous.type != block.type) machines.erase({ x, y, z });
@@ -312,7 +312,7 @@ void ServerWorld::WorkerLoop() {
             // chunk may have been moving when it was saved. Generated water is at rest.
             for (int i = 0; i < Chunk::VOLUME; i++) {
                 const Block& b = (*generatedBlocks)[i];
-                const bool pump = b.type == BlockType::PUMP || b.type == BlockType::SPRING || IsDrainType(b.type);
+                const bool pump = b.type == BlockType::PUMP || b.type == BlockType::SPRING || IsDrainType(b.type) || b.type == BlockType::FLUID_OUTLET;
                 const bool machine = Power::IsMachine(b.type);
                 if (!pump && !machine && !(saved && b.HasWater())) continue;
                 const glm::ivec3 pos = c * S + glm::ivec3(i % S, (i / S) % S, i / (S * S));
@@ -331,7 +331,7 @@ void ServerWorld::WorkerLoop() {
             for (const auto& pos : savedPumps) {
                 water.AddPump(pos);
                 Block b;
-                if (GetBlock(pos.x, pos.y, pos.z, b) && b.type == BlockType::PUMP) machines.insert(pos); // (pumps run on air; springs don't)
+                if (GetBlock(pos.x, pos.y, pos.z, b) && (b.type == BlockType::PUMP || Power::IsMachine(b.type))) machines.insert(pos); // (pumps run on air; drains and outlets trade with fluid pipes; springs neither)
             }
             for (const auto& pos : savedMachines) {
                 Block b;

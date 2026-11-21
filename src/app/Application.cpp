@@ -56,8 +56,8 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP, BlockType::PIPE,
-    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::PRESSURE_GAUGE, BlockType::DRILL, BlockType::SMELTER, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::STEEL_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
+    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::DRILL, BlockType::SMELTER, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::OIL_SHALE, BlockType::TAR, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::STEEL_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -147,6 +147,14 @@ const char* BlockName(BlockType type) {
     case BlockType::DRAIN: return "Drain";
     case BlockType::SINKHOLE: return "Sinkhole";
     case BlockType::PRESSURE_GAUGE: return "Pressure gauge";
+    case BlockType::OIL_SHALE: return "Oil shale";
+    case BlockType::TAR: return "Tar";
+    case BlockType::FLUID_PIPE: return "Fluid pipe";
+    case BlockType::FLUID_TANK: return "Fluid tank";
+    case BlockType::OIL_DERRICK: return "Oil derrick";
+    case BlockType::REFINERY: return "Refinery";
+    case BlockType::ENGINE: return "Engine";
+    case BlockType::FLUID_OUTLET: return "Fluid outlet";
     case BlockType::STEEL_INGOT: return "Steel ingot";
     case BlockType::EXTRACTOR: return "Extractor";
     case BlockType::FILTER_PIPE: return "Filter pipe";
@@ -909,7 +917,25 @@ void Application::DrawCrosshair() {
                               state == Power::DrillState::Working ? ("making " + std::string(m.depth < static_cast<uint8_t>(BlockType::COUNT) ? BlockName(static_cast<BlockType>(m.depth)) : "?")).c_str()
                               : state == Power::DrillState::NoPressure ? "needs air pressure" : state == Power::DrillState::NoChest ? "needs a chest" : "nothing to smelt",
                               pressure);
-            else if (target.type == BlockType::PRESSURE_GAUGE) std::snprintf(text, sizeof text, "Pressure gauge - air %d%%", pressure);
+            else if (target.type == BlockType::PRESSURE_GAUGE || target.type == BlockType::FLUID_TANK) {
+                // On fluid pipes, or a tank: how full, of what.
+                Block on;
+                const glm::ivec3 behind = target.type == BlockType::FLUID_TANK ? m.pos : m.pos - target.Facing();
+                const bool fluid = world->GetBlock(behind.x, behind.y, behind.z, on) && Fluids::IsPart(on.type);
+                const char* what = Fluids::Name(static_cast<Fluids::Kind>(std::min<uint8_t>(m.depth, static_cast<uint8_t>(Fluids::Kind::Count) - 1)));
+                if (fluid) std::snprintf(text, sizeof text, "%s - %d%% full%s%s", target.type == BlockType::FLUID_TANK ? "Fluid tank" : "Gauge", pressure,
+                                         pressure > 0 ? " of " : "", pressure > 0 ? what : "");
+                else std::snprintf(text, sizeof text, "Pressure gauge - air %d%%", pressure);
+            }
+            else if (target.type == BlockType::ENGINE)
+                std::snprintf(text, sizeof text, "Engine: %s - air %d%%", state == Power::DrillState::Working ? "running" : "stopped (no fuel)", pressure);
+            else if (target.type == BlockType::OIL_DERRICK || target.type == BlockType::REFINERY) {
+                const bool derrick = target.type == BlockType::OIL_DERRICK;
+                const char* doing = state == Power::DrillState::Working ? (derrick ? "pumping oil" : "making fuel") : state == Power::DrillState::NoPressure ? "needs air pressure"
+                                  : state == Power::DrillState::NoChest ? (derrick ? "needs fluid pipes" : "needs pipes in and out")
+                                  : state == Power::DrillState::Done ? "no oil under it" : "idle";
+                std::snprintf(text, sizeof text, "%s: %s - air %d%%", derrick ? "Oil derrick" : "Refinery", doing, pressure);
+            }
             else if (target.type == BlockType::EXTRACTOR || target.type == BlockType::CRAFTER || target.type == BlockType::HARVESTER) {
                 const char* name = target.type == BlockType::EXTRACTOR ? "Extractor" : target.type == BlockType::CRAFTER ? "Crafter" : "Harvester";
                 std::string what;
@@ -2299,7 +2325,7 @@ void Application::OnMouseButton(int button, int action) {
             const glm::vec3 look = camera.GetDirection(), a = glm::abs(look);
             faceAxis = a.y >= a.x && a.y >= a.z ? (look.y > 0 ? 2 : 3) : a.x >= a.z ? (look.x > 0 ? 0 : 1) : (look.z > 0 ? 4 : 5);
         }
-        if (placeBlock == BlockType::PRESSURE_GAUGE)
+        if (placeBlock == BlockType::PRESSURE_GAUGE || placeBlock == BlockType::FLUID_OUTLET)
             for (int f = 0; f < kFaceCount; f++)
                 if (glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]) == hit->normal) faceAxis = f;
         client->PlaceBlock(place, placeBlock, height, faceAxis);

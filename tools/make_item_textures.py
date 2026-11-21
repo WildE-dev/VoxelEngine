@@ -1565,6 +1565,232 @@ GAUGE_ICON = """
 """
 GAUGE_ICON_COLOURS = {"k": (60, 60, 66), "w": (236, 230, 205), "r": (200, 30, 25), "g": (60, 160, 70), "i": (110, 112, 118)}
 
+OIL_SHALE = """
+sSsssSSssskksSss
+sskksSssssskksss
+sSkkksSsSssssSss
+ssskssssskkssSss
+sSsssSsskkkkssss
+ssSsssssskksSsss
+skksSssSssssssss
+skkkssssssSsskks
+ssksSssskkssskkk
+sSsssSsskkksssks
+sssSssssskssSsss
+sSssskksssssSsss
+ssSskkkssSssskks
+sSssskssssssskkk
+ssSssssSskksssks
+sSssSssssskksSss
+"""
+OIL_SHALE_COLOURS = {"s": (70, 66, 62), "S": (88, 84, 78), "k": (20, 18, 18)}
+TAR = """
+kkkKkkkkkKkkkkkk
+kKkkkkkkkkkkKkkk
+kkkkkkKkkkkkkkkk
+kkkkkkkkkkkkkkKk
+kkKkkkkkkKkkkkkk
+kkkkkkkkkkkkkkkk
+kkkkkKkkkkkkKkkk
+kKkkkkkkkkkkkkkk
+kkkkkkkkKkkkkkkk
+kkkkkkkkkkkkkkkk
+kkkKkkkkkkkKkkkk
+kkkkkkkkkkkkkkkk
+kkkkkkKkkkkkkkKk
+kKkkkkkkkkkkkkkk
+kkkkkkkkkkKkkkkk
+kkkkKkkkkkkkkkkk
+"""
+TAR_SIDE = """
+kkkKkkkkkKkkkkkk
+kKkkkkkkkkkkKkkk
+kkkkkkKkkkkkkkkk
+dddkkdddddkkdddd
+dDddddddDdddddDd
+ddddDdddddddDddd
+dddddddDdddddddd
+dDddddddddddddDd
+ddddddDddddDdddd
+ddDddddddddddddd
+ddddddddDddddDdd
+dDdddDdddddddddd
+dddddddddddDdddd
+ddddDdddDddddddd
+dDdddddddddddddd
+ddddddDddddDdddd
+"""
+TAR_COLOURS = {"k": (22, 20, 22), "K": (60, 58, 70), "d": (110, 80, 52), "D": (130, 96, 64)}
+FLUID_PIPE_COLOURS = {"o": (20, 30, 40), "O": (40, 60, 70), "w": (90, 96, 104), "W": (130, 136, 146), "i": (60, 62, 68)}
+FLUID_TANK_SIDE = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIggggggggggggIi
+iIgGGGGGGGGGGgIi
+iIgGGGGGGGGGGgIi
+iIgGGGGGGGGGGgIi
+iIgGGGGGGGGGGgIi
+iIgbbbbbbbbbbgIi
+iIgbBbbbbbBbbgIi
+iIgbbbbBbbbbbgIi
+iIgbbbbbbbbBbgIi
+iIgbBbbbbbbbbgIi
+iIggggggggggggIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+FLUID_TANK_TOP = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIIIIiiiiiiIIIIi
+iIIIiIIIIIIiIIIi
+iIIiIIIIIIIIiIIi
+iIiIIIIIIIIIIiIi
+iIiIIIIkkIIIIiIi
+iIiIIIIkkIIIIiIi
+iIiIIIIIIIIIIiIi
+iIiIIIIIIIIIIiIi
+iIIiIIIIIIIIiIIi
+iIIIiIIIIIIiIIIi
+iIIIIiiiiiiIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+FLUID_TANK_COLOURS = {"i": (60, 62, 68), "I": (120, 124, 132), "g": (90, 110, 120), "G": (170, 200, 210), "b": (40, 40, 44), "B": (70, 70, 80), "k": (20, 20, 22)}
+DERRICK_SIDE = """
+kkkkkkkkkkkkkkkk
+kyyyyyyyyyyyyyyk
+kykkkkkkkkkkkkyk
+kykyyyyyyyyyykyk
+kykykkkkkkkkykyk
+kykykyyyyyykykyk
+kykykykkkkykykyk
+kykykyk..kykykyk
+kykykyk..kykykyk
+kykykykkkkykykyk
+kykykyyyyyykykyk
+kykykkkkkkkkykyk
+kykyyyyyyyyyykyk
+kykkkkkkkkkkkkyk
+kyyyyyyyyyyyyyyk
+kkkkkkkkkkkkkkkk
+"""
+DERRICK_TOP = """
+kkkkkkkkkkkkkkkk
+kIIIIIIIIIIIIIIk
+kIiiiiiiiiiiiiIk
+kIiIIIIIIIIIIiIk
+kIiIyyyyyyyyIiIk
+kIiIykkkkkkyIiIk
+kIiIykIIIIkyIiIk
+kIiIykIkkIkyIiIk
+kIiIykIkkIkyIiIk
+kIiIykIIIIkyIiIk
+kIiIykkkkkkyIiIk
+kIiIyyyyyyyyIiIk
+kIiIIIIIIIIIIiIk
+kIiiiiiiiiiiiiIk
+kIIIIIIIIIIIIIIk
+kkkkkkkkkkkkkkkk
+"""
+DERRICK_COLOURS = {"k": (30, 30, 34), "y": (200, 160, 40), "I": (130, 132, 140), "i": (70, 72, 78), ".": (0, 0, 0)}
+REFINERY_SIDE = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIrrrIIIIIIrrrIi
+iIrRrIIIIIIrRrIi
+iIrRrIIIIIIrRrIi
+iIrRrIIkkIIrRrIi
+iIrRrIkookIrRrIi
+iIrRrIkookIrRrIi
+iIrRrIIkkIIrRrIi
+iIrRrIIIIIIrRrIi
+iIrRrIIIIIIrRrIi
+iIrrrIIIIIIrrrIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+REFINERY_IN = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIIIIIkkkkIIIIIi
+iIIIIkddddkIIIIi
+iIIIkddddddkIIIi
+iIIkddddddddkIIi
+iIIkddddddddkIIi
+iIIkddddddddkIIi
+iIIkddddddddkIIi
+iIIIkddddddkIIIi
+iIIIIkddddkIIIIi
+iIIIIIkkkkIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+REFINERY_COLOURS = {"i": (60, 62, 68), "I": (140, 142, 150), "r": (150, 60, 40), "R": (200, 90, 50), "k": (24, 24, 28), "o": (230, 170, 50), "d": (40, 30, 26)}
+REFINERY_OUT_COLOURS = dict(REFINERY_COLOURS, d=(220, 180, 60))
+ENGINE_SIDE = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIkkkkkkkkkkkkIi
+iIkrrrrrrrrrrkIi
+iIkrRRRRRRRRrkIi
+iIkrRkkkkkkRrkIi
+iIkrRkIIIIkRrkIi
+iIkrRkIkkIkRrkIi
+iIkrRkIkkIkRrkIi
+iIkrRkIIIIkRrkIi
+iIkrRkkkkkkRrkIi
+iIkrRRRRRRRRrkIi
+iIkrrrrrrrrrrkIi
+iIkkkkkkkkkkkkIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+ENGINE_TOP = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIIIIIIIIIIIIIIi
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIIIIIIIIIIIIIIi
+iIIIIIkkkkIIIIIi
+iIIIIkkookkIIIIi
+iIIIIkkookkIIIIi
+iIIIIIkkkkIIIIIi
+iIIIIIIIIIIIIIIi
+iIkIkIkIkIkIkIIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+ENGINE_COLOURS = {"i": (50, 50, 56), "I": (110, 112, 120), "k": (24, 24, 28), "r": (120, 40, 30), "R": (170, 60, 40), "o": (230, 140, 40)}
+OUTLET_FACE = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIwwwwwwIIIIi
+iIIIwbbbbbbwIIIi
+iIIwbbBbbbbbwIIi
+iIIwbbbbbBbbwIIi
+iIIwbbbbbbbbwIIi
+iIIwbBbbbbbbwIIi
+iIIwbbbbbbBbwIIi
+iIIIwbbbbbbwIIIi
+iIIIIwwwwwwIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+OUTLET_COLOURS = {"i": (60, 62, 68), "I": (120, 124, 132), "w": (80, 84, 92), "b": (40, 70, 140), "B": (90, 150, 230)}
+
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
     draw("cooked_venison", VENISON, COOKED, seed=12)
@@ -1658,6 +1884,24 @@ def main():
     draw("sinkhole", SINKHOLE_TOP, SINKHOLE_COLOURS, jitter=5, seed=98)
     draw("sinkhole_side", SINKHOLE_SIDE, SINKHOLE_COLOURS, jitter=5, seed=99)
     draw("pressure_gauge", GAUGE_ICON, GAUGE_ICON_COLOURS, jitter=3, seed=100)
+    draw("oil_shale", OIL_SHALE, OIL_SHALE_COLOURS, jitter=6, seed=101)
+    draw("tar", TAR, TAR_COLOURS, jitter=4, seed=102)
+    draw("tar_side", TAR_SIDE, TAR_COLOURS, jitter=5, seed=103)
+    draw("fluid_pipe", ITEM_PIPE, FLUID_PIPE_COLOURS, jitter=4, seed=104)
+    draw("fluid_pipe_end", ITEM_PIPE_END, FLUID_PIPE_COLOURS, jitter=4, seed=105)
+    draw("fluid_tank_side", FLUID_TANK_SIDE, FLUID_TANK_COLOURS, jitter=4, seed=106)
+    draw("fluid_tank_top", FLUID_TANK_TOP, FLUID_TANK_COLOURS, jitter=4, seed=107)
+    draw("derrick_side", DERRICK_SIDE.replace(".", "k"), DERRICK_COLOURS, jitter=4, seed=108)
+    draw("derrick_top", DERRICK_TOP, DERRICK_COLOURS, jitter=4, seed=109)
+    draw("derrick_bottom", DERRICK_TOP, DERRICK_COLOURS, jitter=4, seed=110)
+    draw("refinery_side", REFINERY_SIDE, REFINERY_COLOURS, jitter=4, seed=111)
+    draw("refinery_in", REFINERY_IN, REFINERY_COLOURS, jitter=4, seed=112)
+    draw("refinery_out", REFINERY_IN, REFINERY_OUT_COLOURS, jitter=4, seed=113)
+    draw("engine_side", ENGINE_SIDE, ENGINE_COLOURS, jitter=4, seed=114)
+    draw("engine_top", ENGINE_TOP, ENGINE_COLOURS, jitter=4, seed=115)
+    draw("outlet_face", OUTLET_FACE, OUTLET_COLOURS, jitter=4, seed=116)
+    draw("outlet_back", FLUID_TANK_TOP, FLUID_TANK_COLOURS, jitter=4, seed=117)
+    draw("outlet_side", FLUID_TANK_TOP, OUTLET_COLOURS | {"k": (30, 30, 34)}, jitter=4, seed=118)
 
 
 if __name__ == "__main__":

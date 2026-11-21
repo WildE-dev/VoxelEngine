@@ -11,7 +11,10 @@
 //    rest out,
 //  - a crafter, set the same way, makes stone bricks from stone in its chest,
 //  - a harvester reaps ripe wheat into its chest and replants it,
-//  - a pressure gauge fixed to an air pipe reads its network's pressure.
+//  - a pressure gauge fixed to an air pipe reads its network's pressure,
+//  - an oil derrick pumps crude from oil shale into a tank, a refinery makes it fuel,
+//    and an engine burns the fuel to fill its own air network,
+//  - a drain takes water into fluid pipes, and an outlet lets it out elsewhere.
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -25,6 +28,8 @@
 #include "client/ClientWorld.h"
 #include "server/Server.h"
 #include "world/Crafting.h"
+#include "world/Fluids.h"
+#include "world/Power.h"
 
 namespace fs = std::filesystem;
 
@@ -256,6 +261,84 @@ int main() {
         Check(reading(loose) == 0, "one fixed to nothing reads nothing");
         a.client.Inspect(gauge);
         Check(pump(5.0, [&] { return Has(a.client, "Pressure gauge. Air pressure"); }), "right-clicking it describes the network");
+
+        std::cout << "Oil" << std::endl;
+        // Oil shale under a derrick; fluid pipes to a tank (crude); a refinery (facing
+        // +x) from that tank into another (fuel); an engine on that, with an air
+        // network of its own and a gauge on it. The derrick and refinery share air.
+        server.QueueConsoleCommand("tp Builder 34.5 0 28.5");
+        pump(10.0, [&] { return a.feet.z < 29.0f; });
+        const glm::ivec3 derrick{ 31, 0, 31 }, crude{ 34, 0, 31 }, refinery{ 35, 0, 31 }, fuel{ 36, 0, 31 }, engine{ 37, 0, 31 }, engineGauge{ 37, 2, 31 };
+        fill({ 30, -12, 30 }, { 32, -10, 32 }, "oil_shale");
+        fill(derrick, derrick, "oil_derrick");
+        fill({ 32, 0, 31 }, { 33, 0, 31 }, "fluid_pipe");
+        fill(crude, crude, "fluid_tank");
+        a.client.PlaceBlock(refinery, BlockType::REFINERY, 8, 0);
+        fill(fuel, fuel, "fluid_tank");
+        fill(engine, engine, "engine");
+        fill({ 31, 1, 31 }, { 35, 1, 31 }, "air_pipe");
+        fill({ 37, 1, 31 }, { 37, 1, 31 }, "air_pipe");
+        a.client.PlaceBlock(engineGauge, BlockType::PRESSURE_GAUGE, 8, 2);
+        Check(pump(10.0, [&] { return blockAt(engine) == BlockType::ENGINE && blockAt(refinery) == BlockType::REFINERY && blockAt(engineGauge) == BlockType::PRESSURE_GAUGE; }),
+              "a derrick over oil shale, pipes to a crude tank, a refinery into a fuel tank, an engine with its own air pipe and gauge");
+        auto machine = [&](const glm::ivec3& p) -> const net::MachineInfo* {
+            for (const auto& m : a.client.GetMachines())
+                if (m.pos == p) return &m;
+            return nullptr;
+        };
+        bool crudeIn = false, fuelIn = false, engineRan = false;
+        for (int i = 0; i < 30 && !(crudeIn && fuelIn && engineRan); i++) {
+            server.QueueConsoleCommand("pressurise 31 1 31");
+            pump(1.0, [&] {
+                const auto* c = machine(crude);
+                const auto* f = machine(fuel);
+                const auto* e = machine(engine);
+                if (c && c->depth == static_cast<uint8_t>(Fluids::Kind::Crude) && c->pressure > 0) crudeIn = true;
+                if (f && f->depth == static_cast<uint8_t>(Fluids::Kind::Fuel) && f->pressure > 0) fuelIn = true;
+                if (e && e->state == static_cast<uint8_t>(Power::DrillState::Working)) engineRan = true;
+                return crudeIn && fuelIn && engineRan;
+            });
+        }
+        Check(crudeIn, "the derrick pumps crude oil into the first tank");
+        Check(fuelIn, "the refinery turns it into fuel in the second");
+        Check(engineRan, "the engine runs on the fuel");
+        const auto* g = machine(engineGauge);
+        Check(pump(5.0, [&] { g = machine(engineGauge); return g && g->pressure > 0; }), "and fills its own air network (its gauge reads " + std::to_string(g ? g->pressure : 0) + "/255)");
+        Block shale;
+        bool drawn = false;
+        for (int x = 30; x <= 32 && !drawn; x++)
+            for (int z = 30; z <= 32 && !drawn; z++)
+                if (a.world.GetBlock(x, -10, z, shale) && shale.type == BlockType::OIL_SHALE && shale.axis > 0) drawn = true;
+        Check(drawn, "the shale it draws from records what's been taken");
+
+        std::cout << "Drains and outlets" << std::endl;
+        // A drain under a walled cup of water, a fluid pipe to a tank, a pipe on to an
+        // outlet facing +x.
+        server.QueueConsoleCommand("tp Builder 42.5 0 37.5");
+        pump(10.0, [&] { return a.feet.z < 38.0f; });
+        const glm::ivec3 drain{ 40, 0, 40 }, cup{ 40, 1, 40 }, outlet{ 44, 0, 40 }, out{ 45, 0, 40 };
+        server.QueueConsoleCommand("fill 39 1 39 41 2 41 stone");
+        fill(drain, drain, "drain");
+        fill({ 41, 0, 40 }, { 41, 0, 40 }, "fluid_pipe");
+        fill({ 42, 0, 40 }, { 42, 0, 40 }, "fluid_tank");
+        fill({ 43, 0, 40 }, { 43, 0, 40 }, "fluid_pipe");
+        a.client.PlaceBlock(outlet, BlockType::FLUID_OUTLET, 8, 0);
+        fill({ 40, 2, 40 }, { 40, 2, 40 }, "air");
+        fill(cup, cup, "water");
+        Check(pump(10.0, [&] { return blockAt(outlet) == BlockType::FLUID_OUTLET; }), "a drain under a cup of water, piped through a tank to an outlet");
+        auto waterAt = [&](const glm::ivec3& p) {
+            Block b;
+            return a.world.GetBlock(p.x, p.y, p.z, b) ? static_cast<int>(b.WaterVolume()) : -1;
+        };
+        Check(pump(10.0, [&] { return waterAt(cup) == 0; }), "the drain takes the water out of the cup");
+        int around = 0;
+        Check(pump(10.0, [&] {
+                  around = 0;
+                  for (int x = 45; x <= 52; x++)
+                      for (int z = 33; z <= 47; z++) around += std::max(0, waterAt({ x, 0, z }));
+                  return around > 64;
+              }),
+              "and it comes out of the outlet (" + std::to_string(around) + " units out there)");
 
         a.client.Disconnect();
         Pump(a, 0.3, [] { return false; });

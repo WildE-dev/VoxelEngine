@@ -311,8 +311,8 @@ running from spring to drain without flooding the land beyond. Rivers make ready
 mill sites: a water wheel with one side in one turns for as long as the spring runs.
 Springs look like wet rock and sinkholes like a dark hole in it; breaking either
 gives stone and stops it. For your own builds, a **drain** (an iron grate, crafted from
-half an iron ingot and a stone) does what a sinkhole does, and can be picked up and
-moved. `/locate spring` and `/locate sinkhole` (operators) say where the nearest is.
+half an iron ingot and a stone) takes water like a sinkhole, but sends it into fluid
+pipes instead of destroying it (see [Oil and fluids](#oil-and-fluids)). `/locate spring` and `/locate sinkhole` (operators) say where the nearest is.
 
 ### Dungeons
 
@@ -451,12 +451,14 @@ or in a puddle on dry ground. Puddles don't evaporate while it rains.
 
 **Springs** add water: each one puts up to 48 units a tick (three eighths of a block)
 into the open cells above and beside it that have room, shared between them, for as
-long as it's within the simulation area. **Drains** and sinkholes take it away: up
-to 96 units a tick from the cells above and beside them. Water that reaches the open sea goes: random
+long as it's within the simulation area. Sinkholes take it away: up to 96 units a
+tick from the cells above and beside them. A player's drain takes the same way but
+only as much as its fluid pipes have room for, into them; a fluid outlet lets the
+pipes' water out (see [Oil and fluids](#oil-and-fluids)). Water that reaches the open sea goes: random
 ticks take any water lying above the sea's surface on the open sea, so streams don't
 slowly raise it. `PumpTest` checks that a spring fills the cell above it at that rate
 and stops when it's full, keeps the water coming once there's somewhere for it to
-go, and stops when broken, and that a drain, or a sinkhole, empties a cup at its rate; `BiomeTest`
+go, and stops when broken, and that a sinkhole empties a cup at its rate; `BiomeTest`
 that lakes overflow from springs, each in the ground, open above and below a lake's
 level, that rivers end in sinkholes in their beds, and that their pools have sand
 beds with water over them.
@@ -1070,6 +1072,59 @@ reaps two ripe crops of wheat into it and replants them. Last, a pressure gauge 
 on top of an air pipe reads the network's pressure, one on bare ground reads nothing,
 and right-clicking the gauge describes the network.
 
+## Oil and fluids
+
+**Oil** lies deep underground, in pockets of **oil shale** (dark rock streaked with
+crude) between 30 and 80 blocks below sea level, in broad oil fields that cover part of
+the world. Over a field, here and there a block of the ground is a black **tar seep**:
+the sign to drill. `/locate oil` (operators) says where the nearest is.
+
+**Fluid pipes** (thin grey tubes) join face to face and to **fluid tanks**; everything
+joined is one network holding one fluid at a time: water, crude oil or fuel (it takes
+the kind of the first fluid put in, and nothing else until it's empty). A pipe holds 64
+units and a tank 2,048 (a block of water is 128). Machines join a network from beside
+it; they aren't part of it, so they don't join what's on either side of them:
+
+- An **oil derrick** (an air machine) pumps crude oil up out of the shale under it (a
+  3 by 3 column, down to 110 blocks), 16 units every half second for 2 units of air,
+  into fluid pipes beside it with room for it. The well is the derrick's own: there's
+  no need to dig down. Each shale block gives about 4,000 units, then it's spent
+  (stone).
+- A **refinery** (an air machine) faces the way you look when you place it: it takes
+  crude oil from the pipes at its back and puts the same amount of **fuel** into the
+  pipes in front of it, up to 128 units a second, for 2 units of air each update.
+- An **engine** is part of an air network, like a compressor: it burns 16 units of
+  fuel a second from the pipes beside it and adds 24 units of air a second to its
+  network (more than a water wheel), so oil powers machines anywhere, no river needed.
+  One derrick keeps two engines going.
+- A **drain** (the iron grate you craft) takes water from the cells above and beside it
+  into the fluid pipes beside it, only as much as they have room for, so none is lost
+  (a natural sinkhole, where a river ends, still takes it out of the world).
+- A **fluid outlet** faces out from what you place it on, and lets water from the pipes
+  beside it out into the cell in front of it, as much as there's room for. So a drain,
+  pipes and an outlet move water anywhere, uphill or down.
+
+A pressure gauge fixed to a fluid pipe or tank shows how full its network is, and
+looking at a tank or a gauge says of what. Right-clicking any of them (empty-handed)
+describes the network. What pipes and tanks hold is saved with the world (format 12).
+
+Recipes: 4 fluid pipes from a quarter of an iron ingot and a quarter of a glass; a
+fluid tank from 2 iron ingots and a glass; a fluid outlet (or a drain) from half an
+iron ingot and a stone; an oil derrick from 2 steel ingots, 2 iron ingots and 2 planks;
+a refinery from 2 steel ingots, 4 stone bricks and an iron ingot; an engine from a
+steel ingot and 2 iron ingots.
+
+The rules are in `src/world/Fluids.h`; the server runs it with the air
+(`Server::UpdatePower`, `src/server/Power.cpp`), and drains and outlets trade with the
+water simulation through allowances, like pumps (`WaterSimulation::SetDrainBudget`).
+`FactoryTest` builds a derrick over oil shale, pipes to a tank, a refinery into another
+tank and an engine on that with an air network of its own, and checks crude oil
+reaches the first tank, fuel the second, the engine runs and fills its network, and the
+shale records what's been drawn; then a drain under a cup of water, piped through a
+tank to an outlet, and checks the cup empties and the water comes out of the outlet.
+`SaveTest` checks what pipes and tanks hold is saved. `PumpTest` checks a drain with no
+room in its pipes takes nothing, and with room for 40 units takes just those.
+
 ## Signals
 
 Signals are wireless, on numbered **channels** (1 to 255). Anything sending on a
@@ -1106,7 +1161,7 @@ sensor) and a quarter of an iron ingot, with a quarter of sand (water), glass
 The server runs it ten times a second (`Server::UpdateSignals`,
 `src/server/Signals.cpp`; the rules are in `src/world/Signals.h`), keeps every
 block's channels and saves them with the world (world format 11), and tells everyone
-about each block's channels and state as they change (`SignalInfo`, protocol 44).
+about each block's channels and state as they change (`SignalInfo`, protocol 45).
 `SignalTest` checks:
 
 - a lamp lights and goes out with a lever on its channel, and one on another channel
@@ -1320,7 +1375,7 @@ ones you're allowed to use:
 | `/give <block> [count] [player]`, `/give <tool> [player]` | operators | give survival blocks (`count` in blocks, default 64) or a tool |
 | `/fill <x1 y1 z1> <x2 y2 z2> <block>` | operators | fill a box with a block (`air` clears it; up to 32768 cells) |
 | `/pressurise <x y z>` | operators | fill the air network with a pipe or machine there with air |
-| `/locate <spring\|sinkhole>` | operators | where the nearest spring (a lake's overflow) or sinkhole (where its river ends) is |
+| `/locate <spring\|sinkhole\|oil>` | operators | where the nearest spring (a lake's overflow), sinkhole (where its river ends) or oil is |
 | `/horde [on\|off]` | anyone to ask; operators to set | whether tonight is a horde night, or start or end one |
 | `/summon <deer\|ghoul> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
 | `/creatures [clear]` | operators | count the creatures, or remove them all |
@@ -1558,7 +1613,7 @@ src/
             Textures, DebugDraw
   world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
             Features, Dungeons, Noise, Lighting, Collision, Raycast, Mining,
-            Breathing, Creatures, Crafting, Hunger, Armour, Power, Signals, Smelting
+            Breathing, Creatures, Crafting, Hunger, Armour, Power, Signals, Smelting, Fluids
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
             BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest, ChestTest, BedTest,

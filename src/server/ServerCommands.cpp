@@ -105,7 +105,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64), or /give <tool|cap|tunic|boots> [player]" },
     { Level::Operator, "/fill <x1 y1 z1> <x2 y2 z2> <block> - fill a box with a block (air clears it; up to 32768 cells)" },
     { Level::Operator, "/summon <deer|ghoul|skeleton> [x y z] - bring a creature (default: a few blocks ahead of you)" },
-    { Level::Operator, "/locate <spring|sinkhole> - where the nearest spring (a lake's overflow) or sinkhole (where its river ends) is" },
+    { Level::Operator, "/locate <spring|sinkhole|oil> - where the nearest spring (a lake's overflow), sinkhole (where its river ends) or oil is" },
     { Level::Everyone, "/horde - whether tonight is a horde night" },
     { Level::Operator, "/horde <on|off> - start or end a horde night" },
     { Level::Operator, "/creatures [clear] - count the creatures, or remove them all" },
@@ -404,7 +404,15 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
     }
     else if (command == "locate") {
         const std::string what = words.size() == 2 ? Lower(words[1]) : "";
-        if (what != "spring" && what != "sinkhole") return usage("/locate <spring|sinkhole>");
+        if (what != "spring" && what != "sinkhole" && what != "oil") return usage("/locate <spring|sinkhole|oil>");
+        if (what == "oil") {
+            const glm::vec3 at = sender ? sender->feet : glm::vec3(0.0f);
+            const auto oil = world->GetTerrain().OilNear(static_cast<int>(std::floor(at.x)), static_cast<int>(std::floor(at.z)), 600);
+            if (!oil) return reply(Kind::Info, "No oil within 600 blocks");
+            return reply(Kind::Info, "There's oil shale under " + std::to_string(oil->x) + " " + std::to_string(oil->y) + " (between " +
+                                         std::to_string(TerrainGenerator::kOilBottom) + " and " + std::to_string(TerrainGenerator::kOilTop) + "), " +
+                                         std::to_string(static_cast<int>(glm::distance(glm::vec2(at.x, at.z), glm::vec2(*oil)))) + " blocks away");
+        }
         const glm::vec3 from = sender ? sender->feet : glm::vec3(0.0f);
         const glm::ivec3 c = Coords::ChunkOf(glm::ivec3(glm::floor(from)));
         const TerrainGenerator& terrain = world->GetTerrain();

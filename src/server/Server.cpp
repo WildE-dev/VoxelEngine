@@ -163,6 +163,11 @@ bool Server::Start(const Options& opts) {
             b.config.out = sig.out;
             b.on = sig.on != 0;
         }
+        for (const auto& f : storage->GetFluids()) {
+            if (f.units == 0 || f.kind == 0 || f.kind >= static_cast<uint8_t>(Fluids::Kind::Count)) continue;
+            fluidHeld[f.pos] = static_cast<int>(f.units);
+            fluidKind[f.pos] = static_cast<Fluids::Kind>(f.kind);
+        }
     }
     weatherSeed ^= static_cast<uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
     weatherMode = options.weather;
@@ -264,6 +269,10 @@ void Server::Save(bool shuttingDown) {
         savedSignals.push_back({ pos, static_cast<uint8_t>(b.config.kind), static_cast<uint8_t>(b.config.mode), b.config.a, b.config.b, b.config.out,
                                  static_cast<uint8_t>(b.on ? 1 : 0) });
     storage->SetSignals(std::move(savedSignals));
+    std::vector<WorldStorage::SavedFluid> savedFluids;
+    for (const auto& [pos, units] : fluidHeld)
+        if (units > 0) savedFluids.push_back({ pos, static_cast<uint8_t>(fluidKind[pos]), static_cast<uint32_t>(units) });
+    storage->SetFluids(std::move(savedFluids));
     const size_t saved = world->SaveAll();
     const bool ok = storage->Flush();
     lastSaveTime = Now();

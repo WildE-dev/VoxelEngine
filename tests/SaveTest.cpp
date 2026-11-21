@@ -154,6 +154,7 @@ int main() {
         world.SetBlock(kWaterPos.x, kWaterPos.y, kWaterPos.z, kWater);
         Check(world.SaveAll() == 1, "SaveAll stores exactly the one edited chunk");
         Check(world.SaveAll() == 0, "a second SaveAll has nothing new to store");
+        storage.SetFluids({ { glm::ivec3(4, 5, 6), 2, 1500 }, { glm::ivec3(-7, 8, 9), 3, 64 } });
         Check(storage.Flush(), "flush writes the save");
     }
     Check(fs::exists(dir / "world.dat") && fs::exists(dir / "regions" / "r.0.0.0.vxr"), "world.dat and the region file exist");
@@ -165,6 +166,10 @@ int main() {
         WorldStorage storage(dir);
         Check(storage.Open(), "the saved world opens again");
         Check(storage.GetStoredChunkCount() == 1, "only the edited chunk is stored");
+        const auto fluids = storage.GetFluids();
+        Check(fluids.size() == 2 && fluids[0].pos == glm::ivec3(4, 5, 6) && fluids[0].kind == 2 && fluids[0].units == 1500 && fluids[1].kind == 3 &&
+                  fluids[1].units == 64,
+              "what fluid pipes and tanks hold is saved with the world");
 
         WorldStorage::ColumnMask mask;
         storage.SkyBlockedAbove({ 0, 0, 0 }, mask);

@@ -230,6 +230,23 @@ enum class BlockType : uint8_t {
     // part of an air network), facing away from it, that shows the network's pressure.
     // A facing block (its axis: the way the dial faces), drawn as a model.
     PRESSURE_GAUGE,
+    // Oil (see world/Fluids.h). Oil shale: rock soaked in crude oil, in pockets deep
+    // underground; an oil derrick above pumps it out (its `axis` counts how much has
+    // been taken: spent, it's stone). Tar: a dark seep on the ground over a pocket.
+    OIL_SHALE,
+    TAR,
+    // Fluid pipes (drawn as thin tubes) and tanks carry and hold one fluid at a time:
+    // water, crude oil or fuel. The machines join them from beside: an oil derrick
+    // (pumps crude up out of the shale under it), a refinery (crude in at its back,
+    // fuel out of its front), an engine (burns fuel to make compressed air, like a
+    // compressor), and a fluid outlet (lets water out of its face). A drain sends the
+    // water it takes into the pipes.
+    FLUID_PIPE,
+    FLUID_TANK,
+    OIL_DERRICK,
+    REFINERY,
+    ENGINE,
+    FLUID_OUTLET,
     COUNT
 };
 
@@ -237,14 +254,15 @@ enum class BlockType : uint8_t {
 // drawn as thin tubes: neither hides what's beside it or blocks light.
 inline bool IsModelType(BlockType type) { return type == BlockType::WATER_WHEEL || type == BlockType::SHAFT || type == BlockType::PRESSURE_GAUGE; }
 inline bool IsPipeType(BlockType type) {
-    return type == BlockType::PIPE || type == BlockType::AIR_PIPE || type == BlockType::ITEM_PIPE || type == BlockType::FILTER_PIPE;
+    return type == BlockType::PIPE || type == BlockType::AIR_PIPE || type == BlockType::ITEM_PIPE || type == BlockType::FILTER_PIPE || type == BlockType::FLUID_PIPE;
 }
 // Blocks that face one of six ways (their `axis` holds the Face they point to): a
 // piston and its head.
 // Water goes down these and is gone (see Water.h).
 inline bool IsDrainType(BlockType type) { return type == BlockType::DRAIN || type == BlockType::SINKHOLE; }
 inline bool IsFacingType(BlockType type) {
-    return type == BlockType::PISTON || type == BlockType::PISTON_HEAD || type == BlockType::EXTRACTOR || type == BlockType::PRESSURE_GAUGE;
+    return type == BlockType::PISTON || type == BlockType::PISTON_HEAD || type == BlockType::EXTRACTOR || type == BlockType::PRESSURE_GAUGE ||
+           type == BlockType::REFINERY || type == BlockType::FLUID_OUTLET;
 }
 
 // Things held in the inventory that aren't blocks: they can't be placed.
@@ -280,7 +298,8 @@ inline BlockType ResourceTypeOf(BlockType type) {
     case BlockType::PISTON_HEAD: return BlockType::AIR; // (part of the piston: gives nothing)
     case BlockType::SMELTER_LIT: return BlockType::SMELTER;
     case BlockType::SPRING:
-    case BlockType::SINKHOLE: return BlockType::STONE;
+    case BlockType::SINKHOLE:
+    case BlockType::OIL_SHALE: return BlockType::STONE;
     default: return type;
     }
 }
@@ -307,6 +326,7 @@ inline ShapeStyle StyleOf(BlockType type) {
     case BlockType::GRASS:
     case BlockType::DIRT:
     case BlockType::SAND:
+    case BlockType::TAR:
     case BlockType::STONE:
     case BlockType::SNOW:
     case BlockType::DRY_GRASS:

@@ -417,6 +417,31 @@ private:
         size_t cursor = 0;                                 // an extractor's place in its chest
     };
     std::unordered_map<glm::ivec3, Worker, Coords::IVec3Hash> workers;
+    // Fluids (world/Fluids.h): what each pipe and tank holds (saved), and the networks
+    // as of the last update.
+    std::unordered_map<glm::ivec3, int, Coords::IVec3Hash> fluidHeld;
+    std::unordered_map<glm::ivec3, Fluids::Kind, Coords::IVec3Hash> fluidKind;
+    struct FluidNet {
+        Fluids::Kind kind = Fluids::Kind::None;
+        int amount = 0, capacity = 0;
+        std::vector<glm::ivec3> members;
+        int Room() const { return capacity - amount; }
+        bool Takes(Fluids::Kind k) const { return kind == Fluids::Kind::None || kind == k || amount == 0; }
+    };
+    std::vector<FluidNet> fluidNets;
+    std::unordered_map<glm::ivec3, int, Coords::IVec3Hash> fluidNetOf;
+    std::unordered_map<glm::ivec3, bool, Coords::IVec3Hash> engines; // running (had fuel) at the last update
+    // Works out the fluid networks (from every tank and every machine's neighbours).
+    void BuildFluidNets();
+    // The network on that side of a position (nullptr: none).
+    FluidNet* FluidNetAt(const glm::ivec3& pos);
+    // The first network beside a machine that will take this kind with room for some,
+    // or (have = true) that holds some of it.
+    FluidNet* FluidNetBeside(const glm::ivec3& pos, Fluids::Kind kind, bool have);
+    // Puts each network's fluid back into its parts (shared by size).
+    void StoreFluids();
+    bool PumpOil(const glm::ivec3& pos, Worker& w);
+    bool Refine(const glm::ivec3& pos, const Block& refinery, Worker& w);
     std::unordered_map<glm::ivec3, Compressor, Coords::IVec3Hash> compressors;
     std::unordered_map<glm::ivec3, Power::DrillState, Coords::IVec3Hash> pumpStates;
     std::unordered_map<glm::ivec3, Power::DrillState, Coords::IVec3Hash> pistonStates; // Idle (in), Working (out), NoPressure, Blocked

@@ -37,7 +37,7 @@ public:
     static constexpr int kRegionSize = 8;      // chunks per region along each axis
     // 2: world type; 3: time of day; 4: game modes and resources; 5: block axes (logs);
     // 6: tools players have made
-    static constexpr uint32_t kFormatVersion = 11;
+    static constexpr uint32_t kFormatVersion = 12;
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
@@ -75,6 +75,14 @@ public:
     };
     std::vector<SavedSignal> GetSignals() const;
     void SetSignals(std::vector<SavedSignal> s);
+    // What fluid pipes and tanks hold (world/Fluids.h), by position (format 12 on).
+    struct SavedFluid {
+        glm::ivec3 pos{0};
+        uint8_t kind = 0;
+        uint32_t units = 0;
+    };
+    std::vector<SavedFluid> GetFluids() const;
+    void SetFluids(std::vector<SavedFluid> f);
 
     // One bit per block column of a chunk (index x * CHUNK_SIZE + z).
     using ColumnMask = std::array<uint64_t, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE / 64>;
@@ -160,4 +168,5 @@ private:
     std::vector<glm::ivec3> crops;
     Signs signs;
     std::vector<SavedSignal> signalBlocks;
+    std::vector<SavedFluid> fluids;
 };

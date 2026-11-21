@@ -116,18 +116,20 @@ void WaterSimulation::RunPumps(ServerWorld& world) {
             gone.push_back(pos);
             continue;
         }
-        if (block.type != BlockType::PUMP && block.type != BlockType::SPRING && !IsDrainType(block.type)) {
+        if (block.type != BlockType::PUMP && block.type != BlockType::SPRING && !IsDrainType(block.type) && block.type != BlockType::FLUID_OUTLET) {
             gone.push_back(pos);
             continue;
         }
         if (limited && !NearCenter(pos, distance)) continue;
         if (block.type == BlockType::SPRING) RunSpring(world, pos);
-        else if (IsDrainType(block.type)) RunDrain(world, pos);
+        else if (IsDrainType(block.type)) RunDrain(world, pos, block.type == BlockType::SINKHOLE);
+        else if (block.type == BlockType::FLUID_OUTLET) RunOutlet(world, pos);
         else RunPump(world, pos);
     }
     for (const auto& pos : gone) {
         pumps.erase(pos);
         pumpBudget.erase(pos);
+        drainBudget.erase(pos);
     }
     pumpCount.store(pumps.size(), std::memory_order_relaxed);
 }
@@ -165,9 +167,12 @@ void WaterSimulation::RunSpring(ServerWorld& world, const glm::ivec3& spring) {
         if (given[i] > 0) SetWater(world, cells[i].pos, cells[i].block, cells[i].block.WaterVolume() + given[i]);
 }
 
-void WaterSimulation::RunDrain(ServerWorld& world, const glm::ivec3& drain) {
-    // Above first, then the sides, until it has taken its fill for the tick.
-    int left = kDrainRate;
+void WaterSimulation::RunDrain(ServerWorld& world, const glm::ivec3& drain, bool natural) {
+    // Above first, then the sides, until it has taken its fill for the tick. (A
+    // player's drain only as much as its pipes have room for.)
+    int& budget = drainBudget[drain];
+    int left = natural ? kDrainRate : std::min(kDrainRate, budget);
+    const int start = left;
     for (const glm::ivec3 d : { glm::ivec3(0, 1, 0), glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0), glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1) }) {
         if (left <= 0) break;
         const glm::ivec3 p = drain + d;
@@ -177,6 +182,23 @@ void WaterSimulation::RunDrain(ServerWorld& world, const glm::ivec3& drain) {
         SetWater(world, p, b, b.WaterVolume() - take);
         left -= take;
     }
+    if (!natural) {
+        budget -= start - left;
+        drainUse[drain] += start - left;
+    }
+}
+
+void WaterSimulation::RunOutlet(ServerWorld& world, const glm::ivec3& outlet) {
+    Block self, front;
+    if (!world.GetBlock(outlet.x, outlet.y, outlet.z, self)) return;
+    const glm::ivec3 p = outlet + self.Facing();
+    if (!world.GetBlock(p.x, p.y, p.z, front) || !front.CanHoldWater()) return;
+    int& budget = drainBudget[outlet];
+    const int give = std::min({ kDrainRate, budget, front.WaterCapacity() - static_cast<int>(front.WaterVolume()) });
+    if (give <= 0) return;
+    SetWater(world, p, front, front.WaterVolume() + give);
+    budget -= give;
+    drainUse[outlet] += give;
 }
 
 bool WaterSimulation::IsAboveSea(const ServerWorld& world, const glm::ivec3& pos) {

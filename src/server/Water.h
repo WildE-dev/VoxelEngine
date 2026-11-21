@@ -60,7 +60,9 @@ class ServerWorld;
 // from it for as long as there's somewhere for the water to go. Drains are the other
 // end: each tick a drain takes up to kDrainRate units (twice a spring's) out of the
 // cells above and beside it, and that water is gone, so a river runs from its spring
-// to its drain without flooding what's beyond. They're kept with the
+// to its drain without flooding what's beyond. (A player's drain only takes what the
+// fluid pipes beside it have room for, and sends it into them; a fluid outlet lets
+// water from its pipes out into the cell in front of it: SetDrainBudget, both.) They're kept with the
 // pumps (AddPump), and like them only run in the simulation area. Where water ends up
 // in the sea it goes: in a world with a sea, random ticks take any water lying above
 // the sea's surface on top of the open sea (as rain never adds any there), so streams
@@ -118,6 +120,18 @@ public:
     // whether it had anything to pump (water beside it and room at its ends). Caller
     // holds the world's edit mutex.
     void SetPumpBudget(const glm::ivec3& pos, float liftUnits) { pumpBudget[pos] = liftUnits; }
+    // Player drains and fluid outlets trade water with fluid pipes (world/Fluids.h):
+    // how much a drain may take, or an outlet let out, from now on (units; the server
+    // sets it from its pipes' room or water), and what it did since last asked.
+    // Caller holds the edit mutex.
+    void SetDrainBudget(const glm::ivec3& pos, int units) { drainBudget[pos] = units; }
+    int TakeDrainUse(const glm::ivec3& pos) {
+        auto it = drainUse.find(pos);
+        if (it == drainUse.end()) return 0;
+        const int u = it->second;
+        drainUse.erase(it);
+        return u;
+    }
     struct PumpUse {
         float lifted = 0.0f; // units times blocks
         bool wanted = false;
@@ -187,7 +201,8 @@ private:
     void RainOn(ServerWorld& world, const glm::ivec3& pos);
     void RunPump(ServerWorld& world, const glm::ivec3& pump);
     void RunSpring(ServerWorld& world, const glm::ivec3& spring);
-    void RunDrain(ServerWorld& world, const glm::ivec3& drain);
+    void RunDrain(ServerWorld& world, const glm::ivec3& drain, bool natural);
+    void RunOutlet(ServerWorld& world, const glm::ivec3& outlet);
     // Water lying above the sea on top of the open sea (taken by random ticks).
     static bool IsAboveSea(const ServerWorld& world, const glm::ivec3& pos);
     // Whether a cell is within `range` chunks of a simulation centre. Edit mutex held.
@@ -208,6 +223,7 @@ private:
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> pumps; // guarded by the edit mutex
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> pumpBudget; // (edit mutex)
     std::unordered_map<glm::ivec3, PumpUse, Coords::IVec3Hash> pumpUse;  // (edit mutex)
+    std::unordered_map<glm::ivec3, int, Coords::IVec3Hash> drainBudget, drainUse; // drains' and outlets' (edit mutex)
     std::atomic<size_t> pumpCount{0};
 
     std::mt19937 random{0x5EED}; // ticking thread only (fixed seed: tests repeat)

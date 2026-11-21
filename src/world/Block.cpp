@@ -316,6 +316,14 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* DRAIN       */ {{ "drain", "drain_side", "drain_side", "drain_side", "drain_side", "drain_side" }},
     /* SINKHOLE    */ {{ "sinkhole", "sinkhole_side", "sinkhole_side", "sinkhole_side", "sinkhole_side", "sinkhole_side" }},
     /* PRESSURE_GAUGE */ {{ "pressure_gauge", "pressure_gauge", "pressure_gauge", "pressure_gauge", "pressure_gauge", "pressure_gauge" }}, // icon (drawn as a model)
+    /* OIL_SHALE   */ {{ "oil_shale", "oil_shale", "oil_shale", "oil_shale", "oil_shale", "oil_shale" }},
+    /* TAR         */ {{ "tar", "dirt", "tar_side", "tar_side", "tar_side", "tar_side" }},
+    /* FLUID_PIPE  */ {{ "fluid_pipe_end", "fluid_pipe_end", "fluid_pipe", "fluid_pipe", "fluid_pipe", "fluid_pipe" }},
+    /* FLUID_TANK  */ {{ "fluid_tank_top", "fluid_tank_top", "fluid_tank_side", "fluid_tank_side", "fluid_tank_side", "fluid_tank_side" }},
+    /* OIL_DERRICK */ {{ "derrick_top", "derrick_bottom", "derrick_side", "derrick_side", "derrick_side", "derrick_side" }},
+    /* REFINERY    */ {{ "refinery_out", "refinery_in", "refinery_side", "refinery_side", "refinery_side", "refinery_side" }},
+    /* ENGINE      */ {{ "engine_top", "engine_top", "engine_side", "engine_side", "engine_side", "engine_side" }},
+    /* FLUID_OUTLET */ {{ "outlet_face", "outlet_back", "outlet_side", "outlet_side", "outlet_side", "outlet_side" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -351,6 +359,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "piston", "piston_head", "water_sensor", "pressure_sensor", "daylight_sensor", "player_sensor",
     "item_pipe", "smelter", "smelter_lit", "spring", "steel_ingot",
     "extractor", "filter_pipe", "crafter", "harvester", "drain", "sinkhole", "pressure_gauge",
+    "oil_shale", "tar", "fluid_pipe", "fluid_tank", "oil_derrick", "refinery", "engine", "fluid_outlet",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");
@@ -845,6 +854,12 @@ bool Block::CanChisel() const {
     case BlockType::CRAFTER:
     case BlockType::HARVESTER:
     case BlockType::PRESSURE_GAUGE:
+    case BlockType::FLUID_PIPE:
+    case BlockType::FLUID_TANK:
+    case BlockType::OIL_DERRICK:
+    case BlockType::REFINERY:
+    case BlockType::ENGINE:
+    case BlockType::FLUID_OUTLET:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
     case BlockType::GLASS:

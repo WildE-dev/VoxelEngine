@@ -94,6 +94,13 @@ inline const std::vector<Recipe>& Recipes() {
         { "air_pipe", "4 air pipes", { { BlockType::STONE, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::AIR_PIPE, 4 * kBlock },
         { "smelter", "Smelter", { { BlockType::STONE_BRICK, 4 * kBlock }, { BlockType::IRON_INGOT, kBlock } }, BlockType::SMELTER, kBlock },
         { "item_pipe", "4 item pipes", { { BlockType::PLANKS, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::ITEM_PIPE, 4 * kBlock },
+        // Oil and fluids (world/Fluids.h).
+        { "fluid_pipe", "4 fluid pipes", { { BlockType::IRON_INGOT, kBlock / 4 }, { BlockType::GLASS, kBlock / 4 } }, BlockType::FLUID_PIPE, 4 * kBlock },
+        { "fluid_tank", "Fluid tank", { { BlockType::IRON_INGOT, 2 * kBlock }, { BlockType::GLASS, kBlock } }, BlockType::FLUID_TANK, kBlock },
+        { "fluid_outlet", "Fluid outlet", { { BlockType::IRON_INGOT, kBlock / 2 }, { BlockType::STONE, kBlock } }, BlockType::FLUID_OUTLET, kBlock },
+        { "oil_derrick", "Oil derrick", { { BlockType::STEEL_INGOT, 2 * kBlock }, { BlockType::IRON_INGOT, 2 * kBlock }, { BlockType::PLANKS, 2 * kBlock } }, BlockType::OIL_DERRICK, kBlock },
+        { "refinery", "Refinery", { { BlockType::STEEL_INGOT, 2 * kBlock }, { BlockType::STONE_BRICK, 4 * kBlock }, { BlockType::IRON_INGOT, kBlock } }, BlockType::REFINERY, kBlock },
+        { "engine", "Engine", { { BlockType::STEEL_INGOT, kBlock }, { BlockType::IRON_INGOT, 2 * kBlock } }, BlockType::ENGINE, kBlock },
         // Automation.
         { "extractor", "Extractor", { { BlockType::IRON_INGOT, kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::EXTRACTOR, kBlock },
         { "filter_pipe", "Filter pipe", { { BlockType::ITEM_PIPE, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::FILTER_PIPE, kBlock },

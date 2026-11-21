@@ -134,7 +134,15 @@ inline float Hardness(BlockType type) {
     case BlockType::WATER_WHEEL: return 2.0f;
     case BlockType::STONE:
     case BlockType::SPRING:
-    case BlockType::SINKHOLE: return 4.0f;
+    case BlockType::SINKHOLE:
+    case BlockType::OIL_SHALE: return 4.0f;
+    case BlockType::TAR: return 1.0f;
+    case BlockType::FLUID_PIPE:
+    case BlockType::FLUID_TANK:
+    case BlockType::OIL_DERRICK:
+    case BlockType::REFINERY:
+    case BlockType::ENGINE:
+    case BlockType::FLUID_OUTLET: return 3.0f;
     case BlockType::DRAIN: return 3.0f;
     case BlockType::COAL_ORE: return 4.5f;
     case BlockType::IRON_ORE: return 6.0f;
@@ -151,6 +159,13 @@ inline Tool BestTool(BlockType type) {
     case BlockType::SPRING:
     case BlockType::DRAIN:
     case BlockType::SINKHOLE:
+    case BlockType::OIL_SHALE:
+    case BlockType::FLUID_PIPE:
+    case BlockType::FLUID_TANK:
+    case BlockType::OIL_DERRICK:
+    case BlockType::REFINERY:
+    case BlockType::ENGINE:
+    case BlockType::FLUID_OUTLET:
     case BlockType::COAL_ORE:
     case BlockType::IRON_ORE:
     case BlockType::STONE_BRICK:

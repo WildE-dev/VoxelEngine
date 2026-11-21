@@ -13,6 +13,7 @@ namespace {
 // Stone, or ore in veins through it: blobs of 3D noise, coal from 8 blocks down,
 // iron (rarer, in smaller veins) from 24 down. A function of position, so chunks agree.
 BlockType OreAt(int x, int y, int z, int depth) {
+    if (TerrainGenerator::OilAt(x, y, z)) return BlockType::OIL_SHALE;
     if (depth >= 8) {
         const float coal = Noise::Perlin3(x * 0.18f, y * 0.18f, z * 0.18f, 0xC0A1u);
         if (coal > 0.48f) return BlockType::COAL_ORE;
@@ -336,6 +337,41 @@ std::vector<glm::ivec2> TerrainGenerator::DrainsIn(int chunkX, int chunkZ) const
     return out;
 }
 
+bool TerrainGenerator::OilAt(int x, int y, int z) {
+    if (y > kOilTop || y < kOilBottom) return false;
+    // Broad fields (most of the world has none), and pockets in them, flattened.
+    const float field = Noise::Perlin2(x / 700.0f + 41.3f, z / 700.0f - 19.7f);
+    if (field < 0.18f) return false;
+    const float pocket = Noise::Perlin3(x / 28.0f, y / 9.0f, z / 28.0f, 0x0111u);
+    const float edge = std::min(y - kOilBottom, kOilTop - y) / 6.0f; // (fading out at the top and bottom of the band)
+    return pocket > 0.5f - 0.25f * std::min(1.0f, (field - 0.18f) * 4.0f) + 0.3f * std::max(0.0f, 1.0f - edge);
+}
+
+bool TerrainGenerator::TarSeepAt(int x, int z) const {
+    if (type != Type::Normal || Noise::Random01(x, 7, z, 0x7A2u) > 1.0f / 40.0f) return false;
+    if (LakeLevelAt(x, z) != INT_MIN || InRiver(x, z, 2.0f)) return false;
+    for (int d = kOilTop; d >= kOilBottom; d -= 4)
+        if (OilAt(x, d, z)) return true;
+    return false;
+}
+
+std::optional<glm::ivec2> TerrainGenerator::OilNear(int x, int z, int range) const {
+    std::optional<glm::ivec2> best;
+    float bestDistance = 1e9f;
+    for (int dx = -range; dx <= range; dx += 4)
+        for (int dz = -range; dz <= range; dz += 4) {
+            const float d = std::sqrt(static_cast<float>(dx * dx + dz * dz));
+            if (d >= bestDistance) continue;
+            for (int y = kOilTop; y >= kOilBottom; y -= 3)
+                if (OilAt(x + dx, y, z + dz)) {
+                    best = glm::ivec2(x + dx, z + dz);
+                    bestDistance = d;
+                    break;
+                }
+        }
+    return best;
+}
+
 float TerrainGenerator::GetHeight(int x, int z) const {
     const float h = GetLakeHeight(x, z);
     if (type == Type::Empty) return h;
@@ -544,6 +580,21 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
 
     Features::Place(*this, coords, rows, out);
     PlacePlants(coords, heights, rows, out);
+    // Tar seeps: here and there on open ground over an oil pocket, the top block is tar.
+    for (int x = 0; x < S; x++)
+        for (int z = 0; z < S; z++) {
+            const int wx = coords.x * S + x, wz = coords.z * S + z;
+            const int m = rows[x * S + z];
+            const Column column = ColumnFrom(heights, x, z);
+            const int top = column.HasSlopedTop() ? m : m - 1;
+            const int y = top - coords.y * S;
+            if (y < 0 || y >= S || waterLevels[x * S + z] > m || !TarSeepAt(wx, wz)) continue;
+            Block& cell = out[Index(x, y, z)];
+            if (cell.IsAir() || cell.IsLiquid()) continue;
+            cell = column.HasSlopedTop() ? Block(BlockType::TAR, column.EdgesAt(m)) : Block(BlockType::TAR);
+            if (y + 1 < S && out[Index(x, y + 1, z)].IsPlant()) out[Index(x, y + 1, z)] = Block(); // (nothing grows on tar)
+        }
+
     // Springs where lakes overflow, and drains where their rivers end: the column's top
     // solid block (under a sloped top, the slope itself), with nothing growing on it.
     std::vector<std::pair<glm::ivec2, BlockType>> wells;
@@ -592,6 +643,7 @@ void TerrainGenerator::PlacePlants(const glm::ivec3& coords, const ColumnHeights
             const bool pebbles = (IsGrassType(ground) || rocky || ground == BlockType::DIRT) &&
                                  Noise::Random01(wx, 1, wz, kPlantSeed) < (rocky ? 0.035f : 0.008f);
             if (!IsGrassType(ground) && !desert && !pebbles) continue;
+            if (TarSeepAt(wx, wz)) continue; // (nothing grows on tar)
 
             // The plant stands in the first air cell above the ground. On a sloped top
             // that's the cell above the slope, lowered so it sits on the surface.
