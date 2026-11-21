@@ -153,6 +153,10 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
     // -1000 if the column has no water to connect with near this row.
     constexpr int kNoSurface = -1000;
     auto columnSurface = [&](const glm::ivec3& q) -> int {
+        // Water in a partial block stands flat at its own level, held in by the block:
+        // the water around doesn't slope to meet it (a pool beside a carved block that's
+        // still filling stays level up to it, its side showing down to the lower water).
+        if (hasWater(q) && cellAt(q).IsPartial()) return kNoSurface;
         if (hasWater(q)) {
             if (!hasWater(q + up)) return cellAt(q).WaterShownLevel();
             if (!hasWater(q + up + up)) return kFullUnits + cellAt(q + up).WaterShownLevel();

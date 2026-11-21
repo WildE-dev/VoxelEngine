@@ -307,6 +307,39 @@ int main() {
         }
         Check(highest > 5.1f && lowest == 5.0f && walls == 0,
               "a thin layer of water on water thins out to nothing at its edges, with no walls (" + std::to_string(walls) + " wall vertices)");
+
+        // A pool beside a carved brick still filling: its notch (the quarter toward the
+        // pool) holds a little water, lower than the pool. The pool's surface stays level
+        // up to the brick (not dipping toward the low water), and its side shows down to
+        // that water, so there's no gap between them.
+        Chunk::Blocks filling{};
+        for (int x = 0; x <= 8; x++)
+            for (int z = 0; z <= 8; z++) {
+                filling[Chunk::Index(x, 3, z)] = Block(BlockType::STONE);
+                const bool rim = x == 0 || x == 8 || z == 0 || z == 8 || x == 6;
+                filling[Chunk::Index(x, 4, z)] = rim ? Block(BlockType::STONE) : Block::Water(Block::kMaxWaterVolume);
+            }
+        for (int z = 1; z <= 7; z++) filling[Chunk::Index(5, 4, z)] = Block(BlockType::STONE_BRICK).Chiselled(2, -8).WithWater(16);
+        v.clear();
+        w.clear();
+        Mesh(filling, v, w);
+        const auto fv = Positions(w, true);
+        float edgeLow = 10.0f;
+        int sideVerts = 0;
+        for (size_t f = 0; f + 6 <= fv.size(); f += 6) {
+            float lo = 99.0f, hi = -99.0f;
+            for (size_t k = f; k < f + 6; k++) lo = std::min(lo, fv[k].x), hi = std::max(hi, fv[k].x);
+            if (lo != 4.0f && !(lo == 5.0f && hi == 5.0f)) continue; // the pool cell beside the brick (x 4..5), or a face on x=5
+            for (size_t i = f; i < f + 6; i++) {
+                const auto& p = fv[i];
+                const float nx = ((w[i * 2 + 1] >> 28) & 0xFu) / 7.5f - 1.0f, ny = ((w[i * 2 + 1] >> 24) & 0xFu) / 7.5f - 1.0f;
+                if (p.z < 2.0f || p.z > 6.0f) continue;
+                if (ny > 0.5f && lo == 4.0f && p.x == 5.0f) edgeLow = std::min(edgeLow, p.y); // its top along the brick
+                if (nx > 0.5f && p.x == 5.0f && p.y > 4.6f) sideVerts++;                     // its side facing the brick, above the brick's water
+            }
+        }
+        Check(edgeLow >= 4.9f, "a pool beside a carved block still filling stays level up to it (edge at " + std::to_string(edgeLow) + ")");
+        Check(sideVerts > 0, "and its side shows above the carved block's lower water (no gap)");
     }
 
     std::cout << "Aiming and outlines" << std::endl;
