@@ -265,36 +265,72 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 shape.edgeData.SetTopY(e, top[e]);
                 shape.edgeData.SetBottomY(e, bottom[e]);
             }
+            // Adds the face as shaped; with `half` set (0 or 1), only the half of the
+            // side by corner edges.ours[half]: the other corner is pulled in to the
+            // middle of the side.
+            auto addFace = [&](const Block& faceShape, int keepCorner, int dropCorner) {
+                const size_t first = waterVertices.size();
+                faceShape.AddFaceVertices(waterVertices, static_cast<Face>(face), here.x, here.y, here.z, shadeFace(here, face, false));
+                // Fine height: vertices on a corner's top edge get the 32nds that corner
+                // sits below its rounded-up top (in the AO bits, 18-19); all others get
+                // none. A bottom vertex never matches: a visible corner's top is above
+                // its bottom.
+                const int tangent = (face == static_cast<int>(Face::Right) || face == static_cast<int>(Face::Left)) ? 2 : 0;
+                for (size_t i = first; i < waterVertices.size(); i += 2) {
+                    uint32_t position = waterVertices[i];
+                    const int cx = static_cast<int>((position >> 24) & 0xFF) - here.x * 8; // 0 or 8
+                    const int cz = static_cast<int>((position >> 8) & 0xFF) - here.z * 8;
+                    const int y = static_cast<int>((position >> 16) & 0xFF) - 8 - here.y * 8; // eighths within the cell
+                    const int e = cx == 0 ? (cz == 0 ? 2 : 0) : (cz == 0 ? 1 : 3);
+                    const uint32_t extra = y == top[e] ? fine[e] : 0u;
+                    waterVertices[i + 1] = (waterVertices[i + 1] & ~(0x3u << 18)) | (extra << 18);
+                    // Half a side: the far corner's vertices move to the middle.
+                    if (dropCorner >= 0 && e == dropCorner) {
+                        const int shift = tangent == 0 ? 24 : 8;
+                        const int at = static_cast<int>((position >> shift) & 0xFF) + (((tangent == 0 ? cx : cz) == 0) ? 4 : -4);
+                        position = (position & ~(0xFFu << shift)) | (static_cast<uint32_t>(at & 0xFF) << shift);
+                        waterVertices[i] = position;
+                    }
+                    (void)keepCorner;
+                }
+            };
             if (face != static_cast<int>(Face::Top) && face != static_cast<int>(Face::Bottom)) {
                 // Against a dry slope, only the part above its surface on the shared
-                // edge is exposed (below that is the slope's own solid face).
+                // edge is exposed (below that is the slope's own solid face), and
+                // against water standing lower, only the part above that water.
                 const SideEdges edges = sideEdges(face);
-                bool exposed = false;
-                for (int k = 0; k < 2; k++) {
+                auto exposedFrom = [&](int k) {
                     const int e = edges.ours[k];
                     uint8_t from = bottom[e];
                     if (neighbour.IsPartial()) from = std::max(from, std::min(neighbour.edgeData.GetTopY(edges.theirs[k]), top[e]));
                     if (theirWater32 >= 0) from = std::max(from, static_cast<uint8_t>(std::min(theirWater32 / 4, static_cast<int>(top[e]))));
-                    shape.edgeData.SetBottomY(e, from);
-                    exposed |= top32[e] > std::max(from * 4, theirWater32); // (none where both stand level)
+                    return from;
+                };
+                // A stepped block on either side has a step in the middle of the side: two
+                // halves, each with its own flat bottom (a straight edge between the two
+                // corners would cut across the step and leave a hole).
+                const bool steps = (neighbour.IsPartial() && neighbour.IsStepped()) || (self.IsPartial() && self.IsStepped());
+                if (steps) {
+                    for (int k = 0; k < 2; k++) {
+                        const uint8_t from = exposedFrom(k);
+                        Block halfShape = shape;
+                        halfShape.edgeData.SetBottomY(edges.ours[0], from);
+                        halfShape.edgeData.SetBottomY(edges.ours[1], from);
+                        bool exposed = false;
+                        for (int j = 0; j < 2; j++) exposed |= top32[edges.ours[j]] > std::max(from * 4, theirWater32);
+                        if (exposed) addFace(halfShape, edges.ours[k], edges.ours[1 - k]);
+                    }
+                    continue;
+                }
+                bool exposed = false;
+                for (int k = 0; k < 2; k++) {
+                    const uint8_t from = exposedFrom(k);
+                    shape.edgeData.SetBottomY(edges.ours[k], from);
+                    exposed |= top32[edges.ours[k]] > std::max(from * 4, theirWater32); // (none where both stand level)
                 }
                 if (!exposed) continue;
             }
-            const size_t first = waterVertices.size();
-            shape.AddFaceVertices(waterVertices, static_cast<Face>(face), here.x, here.y, here.z, shadeFace(here, face, false));
-
-            // Fine height: vertices on a corner's top edge get the 32nds that corner sits
-            // below its rounded-up top (in the AO bits, 18-19); all others get none. A
-            // bottom vertex never matches: a visible corner's top is above its bottom.
-            for (size_t i = first; i < waterVertices.size(); i += 2) {
-                const uint32_t position = waterVertices[i];
-                const int cx = static_cast<int>((position >> 24) & 0xFF) - here.x * 8; // 0 or 8
-                const int cz = static_cast<int>((position >> 8) & 0xFF) - here.z * 8;
-                const int y = static_cast<int>((position >> 16) & 0xFF) - 8 - here.y * 8; // eighths within the cell
-                const int e = cx == 0 ? (cz == 0 ? 2 : 0) : (cz == 0 ? 1 : 3);
-                const uint32_t extra = y == top[e] ? fine[e] : 0u;
-                waterVertices[i + 1] = (waterVertices[i + 1] & ~(0x3u << 18)) | (extra << 18);
-            }
+            addFace(shape, -1, -1);
         }
     };
 

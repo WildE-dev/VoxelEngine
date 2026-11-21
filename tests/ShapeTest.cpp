@@ -340,6 +340,24 @@ int main() {
         }
         Check(edgeLow >= 4.9f, "a pool beside a carved block still filling stays level up to it (edge at " + std::to_string(edgeLow) + ")");
         Check(sideVerts > 0, "and its side shows above the carved block's lower water (no gap)");
+
+        // The same brick still dry: the pool's side facing it shows over the notch half
+        // right down to the notch's floor, flat along the bottom, as a half-width face (a
+        // straight edge from the notch's corner up to the other quarter's would leave a
+        // triangle open).
+        for (int z = 1; z <= 7; z++) filling[Chunk::Index(5, 4, z)] = Block(BlockType::STONE_BRICK).Chiselled(2, -8);
+        v.clear();
+        w.clear();
+        Mesh(filling, v, w);
+        const auto dv = Positions(w, true);
+        bool halfFace = false;
+        for (size_t f = 0; f + 6 <= dv.size(); f += 6) {
+            glm::vec3 lo(99.0f), hi(-99.0f);
+            for (size_t k = f; k < f + 6; k++) lo = glm::min(lo, dv[k]), hi = glm::max(hi, dv[k]);
+            const float nx = ((w[f * 2 + 1] >> 28) & 0xFu) / 7.5f - 1.0f;
+            if (nx > 0.5f && lo.x == 5.0f && hi.x == 5.0f && lo.z == 3.0f && hi.z == 3.5f && lo.y == 4.0f) halfFace = true;
+        }
+        Check(halfFace, "beside a dry carved brick, the pool's side covers the notch right down, a half-width face with a flat bottom");
     }
 
     std::cout << "Aiming and outlines" << std::endl;
