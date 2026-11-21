@@ -59,6 +59,15 @@ struct GlowModel {
 
 // A lightning bolt: a jagged line of points from the sky down to where it struck,
 // drawn glowing, fading with `brightness` (0..1).
+// A water wheel (world/Power.h), filling its cell: a hub on an axle along x or z, with
+// paddles turned `angle` radians round it.
+struct WheelModel {
+    glm::vec3 centre{0.0f};
+    bool alongX = true; // the axle's direction
+    float angle = 0.0f;
+    glm::vec2 light{ 15.0f, 0.0f };
+};
+
 struct BoltModel {
     std::vector<glm::vec3> points;
     float brightness = 1.0f;
@@ -79,6 +88,7 @@ public:
     // Creatures, from boxes too: a deer, a ghoul. `time` swings their legs.
     void DrawArrows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ArrowModel>& arrows);
     void DrawGlows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GlowModel>& glows);
+    void DrawWheels(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<WheelModel>& wheels);
     void DrawBolts(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<BoltModel>& bolts);
     // Bits of broken blocks (tiny textured cubes).
     void DrawParticles(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ParticleModel>& particles);

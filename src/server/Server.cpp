@@ -317,6 +317,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
         if ((ok = net::Decode(in, m))) HandleAttack(client, m.creature, m.tool);
         break;
     }
+    case net::MsgType::Inspect: {
+        net::Inspect m;
+        if ((ok = net::Decode(in, m))) HandleInspect(client, m.pos);
+        break;
+    }
     case net::MsgType::Interact: {
         net::Interact m;
         if ((ok = net::Decode(in, m))) HandleInteract(client, m.creature);
@@ -1682,6 +1687,7 @@ void Server::Tick() {
     UpdateArrows();
     UpdateFishing();
     UpdateTnt();
+    UpdatePower();
     if (storage && options.autosaveSeconds > 0.0f && Now() - lastSaveTime >= options.autosaveSeconds) Save(false);
 
     std::vector<glm::ivec3> centers;

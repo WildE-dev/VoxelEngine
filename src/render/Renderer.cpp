@@ -258,6 +258,7 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
     playerModels.DrawParticles(playerShader, params.view, params.projection, params.particles);
     playerModels.DrawBolts(playerShader, params.view, params.projection, params.bolts);
     playerModels.DrawArrows(playerShader, params.view, params.projection, params.arrows);
+    playerModels.DrawWheels(playerShader, params.view, params.projection, params.wheels);
     playerModels.DrawGlows(playerShader, params.view, params.projection, params.glows);
 
     DrawSkybox(params);

@@ -284,6 +284,9 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* BOAT        */ {{ "boat", "boat", "boat", "boat", "boat", "boat" }},
     /* SAPLING     */ {{ "sapling", nullptr, nullptr, nullptr, nullptr, nullptr }},
     /* PINE_SAPLING */ {{ "pine_sapling", nullptr, nullptr, nullptr, nullptr, nullptr }},
+    /* WATER_WHEEL */ {{ "water_wheel", "water_wheel", "water_wheel", "water_wheel", "water_wheel", "water_wheel" }}, // icon (drawn as a model)
+    /* AIR_PIPE    */ {{ "air_pipe_end", "air_pipe_end", "air_pipe", "air_pipe", "air_pipe", "air_pipe" }},
+    /* DRILL       */ {{ "drill_top", "drill_bottom", "drill_side", "drill_side", "drill_side", "drill_side" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -315,7 +318,10 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "air", "grass", "dirt", "stone", "lamp", "log", "leaves", "tall_grass", "flower_red", "flower_yellow", "sand", "water", "pump", "pipe",
     "stone_brick", "mossy_brick", "spikes", "crumbling_brick", "pressure_plate", "sluice", "snow", "dry_grass", "lush_grass", "snowy_grass",
     "pine_leaves", "cactus", "dead_bush", "ice", "pebbles", "planks", "glass", "raw_venison", "cooked_venison", "hide", "chest", "bed", "coal_ore", "iron_ore", "coal", "iron_ingot", "seeds", "crop", "ripe_wheat", "wheat", "bread", "ladder", "door", "door_open", "arrow", "raw_fish", "cooked_fish", "campfire", "sign", "tnt", "tnt_lit", "boat", "sapling", "pine_sapling",
+    "water_wheel", "air_pipe", "drill",
 };
+// Every type needs its id: a missing one would read past the table's end.
+static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");
 } // namespace
 
 const char* BlockId(BlockType type) {
@@ -730,6 +736,9 @@ bool Block::CanChisel() const {
     switch (type) {
     case BlockType::PUMP:
     case BlockType::PIPE:
+    case BlockType::WATER_WHEEL:
+    case BlockType::AIR_PIPE:
+    case BlockType::DRILL:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
     case BlockType::GLASS:

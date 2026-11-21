@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 33;
+constexpr uint32_t kProtocolVersion = 34;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -56,6 +56,7 @@ enum class MsgType : uint8_t {
     Cast,          // cast the fishing rod into the water here (or reel in)
     WriteSign,     // set the text on a sign
     Interact,      // right-clicked a creature (feeding a wolf tames it)
+    Inspect,       // right-clicked part of an air network: tell me how it's doing
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -80,6 +81,7 @@ enum class MsgType : uint8_t {
     SignText,      // a sign's text (empty: gone)
     Explosion,     // something blew up here (for the sound and the debris)
     Knockback,     // you were hit: a push to add to your velocity
+    Machines,      // the water wheels and machines near you and how they're doing
 };
 
 // ---------------------------------------------------------------------------------
@@ -369,6 +371,26 @@ constexpr uint8_t kCreatureTame = 1 << 1; // a wolf with an owner (wears a colla
 struct Interact {
     uint16_t creature = 0;
 };
+// Right-clicked a pipe, wheel or machine (world/Power.h): the server answers in chat.
+struct Inspect {
+    glm::ivec3 pos{0};
+};
+// A water wheel or machine near you: what it is, and how it's doing. For a wheel,
+// `speed` is how fast it turns (0..255 for 0..1); for a drill, `state` is a
+// Power::DrillState and `depth` the depth it's digging at. `pressure` is its
+// network's (0..255 for 0..1).
+struct MachineInfo {
+    glm::ivec3 pos{0};
+    uint8_t type = 0; // a BlockType
+    uint8_t speed = 0;
+    uint8_t pressure = 0;
+    uint8_t state = 0;
+    uint8_t depth = 0;
+};
+struct Machines {
+    std::vector<MachineInfo> machines;
+};
+constexpr size_t kMaxMachinesSent = 512;
 struct CreatureInfo {
     uint16_t id = 0;
     CreatureType type = CreatureType::Deer;
@@ -462,6 +484,8 @@ std::vector<uint8_t> Encode(const EditBreak& m);
 std::vector<uint8_t> Encode(const MineStart& m);
 std::vector<uint8_t> Encode(const Attack& m);
 std::vector<uint8_t> Encode(const Interact& m);
+std::vector<uint8_t> Encode(const Inspect& m);
+std::vector<uint8_t> Encode(const Machines& m);
 std::vector<uint8_t> Encode(const AttackPlayer& m);
 std::vector<uint8_t> Encode(const Eat& m);
 std::vector<uint8_t> Encode(const OpenChest& m);
@@ -511,6 +535,8 @@ bool Decode(ByteReader& in, EditBreak& m);
 bool Decode(ByteReader& in, MineStart& m);
 bool Decode(ByteReader& in, Attack& m);
 bool Decode(ByteReader& in, Interact& m);
+bool Decode(ByteReader& in, Inspect& m);
+bool Decode(ByteReader& in, Machines& m);
 bool Decode(ByteReader& in, AttackPlayer& m);
 bool Decode(ByteReader& in, Eat& m);
 bool Decode(ByteReader& in, OpenChest& m);

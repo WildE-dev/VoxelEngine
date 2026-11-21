@@ -274,6 +274,45 @@ bool Decode(ByteReader& in, Arrows& m) {
     return in.AtEnd();
 }
 
+std::vector<uint8_t> Encode(const Inspect& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Inspect);
+    w.IVec3(m.pos);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Inspect& m) {
+    return in.IVec3(m.pos) && in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const Machines& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Machines);
+    const size_t n = std::min(m.machines.size(), kMaxMachinesSent);
+    w.VarU32(static_cast<uint32_t>(n));
+    for (size_t i = 0; i < n; i++) {
+        const auto& x = m.machines[i];
+        w.IVec3(x.pos);
+        w.U8(x.type);
+        w.U8(x.speed);
+        w.U8(x.pressure);
+        w.U8(x.state);
+        w.U8(x.depth);
+    }
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Machines& m) {
+    uint32_t n;
+    if (!in.VarU32(n) || n > kMaxMachinesSent) return false;
+    m.machines.resize(n);
+    for (auto& x : m.machines)
+        if (!in.IVec3(x.pos) || !in.U8(x.type) || !in.U8(x.speed) || !in.U8(x.pressure) || !in.U8(x.state) || !in.U8(x.depth) ||
+            x.type >= static_cast<uint8_t>(BlockType::COUNT))
+            return false;
+    return in.AtEnd();
+}
+
 std::vector<uint8_t> Encode(const Explosion& m) {
     ByteWriter w;
     Begin(w, MsgType::Explosion);

@@ -78,6 +78,10 @@ public:
 
     void RebuildAllChunks();
 
+    // Blocks drawn as models (Block::IsModel: water wheels) in the loaded chunks.
+    // Main thread.
+    std::vector<glm::ivec3> GetModelBlocks() const;
+
     size_t GetChunkCount() const { return chunks.size(); }
     size_t GetLoadedChunkCount() const { return loadedCount; }
 
@@ -113,6 +117,8 @@ private:
     std::thread worker;
 
     std::vector<int> changedCells; // ApplyLight scratch
+    // Model blocks by chunk (main thread: kept up to date as chunks and edits arrive).
+    std::unordered_map<glm::ivec3, std::vector<glm::ivec3>, Coords::IVec3Hash> modelBlocks;
 
     // Chunks the worker has new meshes for, waiting for the main thread to upload them.
     std::mutex uploadMutex;

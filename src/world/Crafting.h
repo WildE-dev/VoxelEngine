@@ -73,6 +73,10 @@ inline const std::vector<Recipe>& Recipes() {
         { "boots", "Hide boots", { { BlockType::HIDE, 2 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Boots },
         // Smelting, and what iron is for.
         { "iron_ingot", "Iron ingot", { { BlockType::IRON_ORE, kBlock }, { BlockType::COAL, kBlock / 4 } }, BlockType::IRON_INGOT, kBlock },
+        // Air power (world/Power.h).
+        { "water_wheel", "Water wheel", { { BlockType::PLANKS, 4 * kBlock }, { BlockType::LOG, kBlock } }, BlockType::WATER_WHEEL, kBlock },
+        { "air_pipe", "4 air pipes", { { BlockType::STONE, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::AIR_PIPE, 4 * kBlock },
+        { "drill", "Drill", { { BlockType::IRON_INGOT, 2 * kBlock }, { BlockType::STONE, 2 * kBlock } }, BlockType::DRILL, kBlock },
         { "coal_lamp", "Lamp (with coal)", { { BlockType::GLASS, kBlock / 2 }, { BlockType::COAL, kBlock / 4 } }, BlockType::LAMP, kBlock },
         { "iron_tools", "Iron upgrade (all tools)", { { BlockType::IRON_INGOT, 3 * kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::AIR, 0, Tool::None,
           ArmourPiece::Count, true },

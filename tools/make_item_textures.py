@@ -698,6 +698,122 @@ SAPLING_COLOURS = {"l": (60, 140, 50), "L": (90, 170, 70), "t": (110, 76, 40)}
 PINE_SAPLING_COLOURS = {"l": (40, 96, 50), "L": (60, 120, 66), "t": (90, 60, 34)}
 
 
+WHEEL_ICON = """
+.......dd.......
+...d...pp...d...
+....d..pp..d....
+.....d.dd.d.....
+..d...dddd...d..
+.pp..dd..dd..pp.
+.ppddd.hh.dddpp.
+ddddd.hhhh.ddddd
+ddddd.hhhh.ddddd
+.ppddd.hh.dddpp.
+.pp..dd..dd..pp.
+..d...dddd...d..
+.....d.dd.d.....
+....d..pp..d....
+...d...pp...d...
+.......dd.......
+"""
+WHEEL_COLOURS = {"d": (92, 62, 34), "p": (160, 114, 62), "h": (110, 110, 116)}
+
+AIR_PIPE = """
+oooooooooooooooo
+cCCCCCCCCCCCCCCc
+cCcccCCCCCCcccCc
+ccCCcccccccCCccc
+cccccccccccccccc
+bccccccccccccccb
+cccccccccccccccc
+cccccccccccccccc
+cccccccccccccccc
+cccccccccccccccc
+bccccccccccccccb
+cccccccccccccccc
+cccccccccccccccc
+dddddddddddddddd
+cCCCCCCCCCCCCCCc
+oooooooooooooooo
+"""
+AIR_PIPE_END = """
+oooooooooooooooo
+occcccccccccccco
+occCCCCCCCCCccco
+ocCkkkkkkkkkkCco
+ocCkkkkkkkkkkCco
+ocCkkkkkkkkkkCco
+ocCkkkkkkkkkkCco
+ocCkkkkkkkkkkCco
+ocCkkkkkkkkkkCco
+ocCkkkkkkkkkkCco
+ocCkkkkkkkkkkCco
+ocCkkkkkkkkkkCco
+occCCCCCCCCCCcco
+occcccccccccccco
+occcbccccccbccco
+oooooooooooooooo
+"""
+AIR_PIPE_COLOURS = {"o": (96, 60, 30), "c": (184, 120, 64), "C": (220, 162, 96), "b": (120, 76, 40), "d": (150, 96, 50), "k": (40, 30, 24)}
+
+DRILL_SIDE = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIrIIIIIIIIIIrIi
+iIIIIIIIIIIIIIIi
+iIIggggggggggIIi
+iIIgyyyyyyyygIIi
+iIIgyyyyyyyygIIi
+iIIggggggggggIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+gssssssssssssssg
+ggssSSSSSSSSssgg
+gggsssSSSSsssggg
+ggggssSSSSssgggg
+ggggggssssgggggg
+"""
+DRILL_TOP = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIrIIIIIIIIIIrIi
+iIIIIkkkkkkIIIIi
+iIIIkIIIIIIkIIIi
+iIIkIkkkkkkIkIIi
+iIIkIkIIIIkIkIIi
+iIIkIkIccIkIkIIi
+iIIkIkIccIkIkIIi
+iIIkIkIIIIkIkIIi
+iIIkIkkkkkkIkIIi
+iIIIkIIIIIIkIIIi
+iIIIIkkkkkkIIIIi
+iIrIIIIIIIIIIrIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+DRILL_BOTTOM = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIIssssssssssIIi
+iIssSSSSSSSSssIi
+iIsSSssssssSSsIi
+iIsSsSSSSSSsSsIi
+iIsSsSsssSSsSsIi
+iIsSsSskkSsSsSIi
+iIsSsSskkSsSsSIi
+iIsSsSSssSSsSsIi
+iIsSsSSSSSSsSsIi
+iIsSSssssssSSsIi
+iIssSSSSSSSSssIi
+iIIssssssssssIIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+DRILL_COLOURS = {"i": (60, 60, 66), "I": (118, 118, 126), "r": (180, 180, 186), "g": (40, 40, 44), "y": (210, 170, 60),
+                 "k": (36, 36, 40), "c": (184, 120, 64), "s": (150, 150, 158), "S": (196, 196, 204)}
+
+
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
     draw("cooked_venison", VENISON, COOKED, seed=12)
@@ -737,6 +853,12 @@ def main():
     draw("boat", BOAT_ICON, BOAT_COLOURS, jitter=5, seed=46)
     draw("sapling", SAPLING, SAPLING_COLOURS, jitter=8, seed=47)
     draw("pine_sapling", SAPLING, PINE_SAPLING_COLOURS, jitter=8, seed=48)
+    draw("water_wheel", WHEEL_ICON, WHEEL_COLOURS, jitter=6, seed=49)
+    draw("air_pipe", AIR_PIPE, AIR_PIPE_COLOURS, jitter=5, seed=50)
+    draw("air_pipe_end", AIR_PIPE_END, AIR_PIPE_COLOURS, jitter=5, seed=51)
+    draw("drill_side", DRILL_SIDE, DRILL_COLOURS, jitter=5, seed=52)
+    draw("drill_top", DRILL_TOP, DRILL_COLOURS, jitter=5, seed=53)
+    draw("drill_bottom", DRILL_BOTTOM, DRILL_COLOURS, jitter=5, seed=54)
 
 
 if __name__ == "__main__":

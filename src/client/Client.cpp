@@ -222,6 +222,11 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         arrowsAt = Now();
         break;
     }
+    case net::MsgType::Machines: {
+        net::Machines m;
+        if ((ok = net::Decode(in, m))) machines = std::move(m.machines);
+        break;
+    }
     case net::MsgType::Explosion: {
         net::Explosion m;
         if ((ok = net::Decode(in, m)) && explosions.size() < 32) explosions.push_back(m);
@@ -491,6 +496,10 @@ void Client::MoveChestItems(BlockType type, uint32_t units, bool intoChest) {
 void Client::Eat(BlockType item) {
     if (!welcomed) return;
     net.Send(net::kChannelReliable, net::Encode(net::Eat{ item }));
+}
+
+void Client::Inspect(const glm::ivec3& pos) {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::Inspect{ pos }));
 }
 
 void Client::Interact(uint16_t creature) {

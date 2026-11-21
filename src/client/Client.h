@@ -176,6 +176,10 @@ public:
     void AttackPlayer(uint16_t player, Tool tool);
     // Right-clicked a creature (with raw venison in hand, a wild wolf is tamed).
     void Interact(uint16_t creature);
+    // Right-clicked part of an air network: the server answers in chat.
+    void Inspect(const glm::ivec3& pos);
+    // The water wheels and machines near us, as of the server's last word.
+    const std::vector<net::MachineInfo>& GetMachines() const { return machines; }
     // Eat one of a food item held (survival; the server checks it).
     void Eat(BlockType item);
     // Chests: ask to open the one at `pos` (the server answers with its contents), close
@@ -233,6 +237,7 @@ private:
     std::vector<glm::ivec3> lightning;
     std::vector<net::Explosion> explosions;
     std::vector<net::ArrowInfo> arrows;
+    std::vector<net::MachineInfo> machines;
     std::optional<glm::ivec3> bobber;
     bool bite = false;
     std::unordered_map<glm::ivec3, std::string, Coords::IVec3Hash> signs;

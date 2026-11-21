@@ -33,8 +33,8 @@ GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
 `BreathTest` (see [Breathing](#breathing)), `CreatureTest` (see
 [Creatures](#creatures) and [PvP](#pvp)), `CraftTest` (see [Crafting](#crafting)),
 `FoodTest` (see [Food and hunger](#food-and-hunger)), `ChestTest` (see
-[Chests](#chests)), `BedTest` (see [Beds](#beds)) and `SoundTest` (see
-[Sound](#sound)).
+[Chests](#chests)), `BedTest` (see [Beds](#beds)), `PowerTest` (see
+[Air power](#air-power)) and `SoundTest` (see [Sound](#sound)).
 
 `ctest` in the build directory runs them all, and `ctest -j15` runs them all at
 once. They're written to pass even then, on a loaded machine:
@@ -830,6 +830,53 @@ The client is only told what's in a chest while it has it open. `ChestTest` chec
 - breaking it (it closes, and the contents go to the breaker);
 - the chest and its contents after a restart.
 
+## Air power
+
+Machines run on **compressed air**, and **water wheels** make it. A wheel turns
+when water flows past it: the server measures the water the simulation moves in and
+out of the six cells around each wheel, so still water does nothing, while a
+stream, a waterfall or a lake draining past it turns it, faster the more water goes
+by (full speed at about 2 blocks of water a second). It's drawn as a turning wheel
+standing edge on to the water beside it.
+
+**Air pipes** join face to face, and to wheels and machines; everything joined is
+one network sharing one store of air. Every pipe, wheel and machine holds a little
+(16 units), and the network's **pressure** is how full it is. A wheel at full speed
+pumps 8 units a second until the network is full, so long pipe runs store more but
+take longer to fill. Breaking a pipe lets out what it held, and the two halves of a
+network keep their pressure. Machines run above 25% pressure.
+
+The first machine is the **drill**. It digs straight down from under itself, one
+block every 1.5 seconds for 12 units of air (one wheel at full speed keeps one drill
+going), up to 32 blocks deep, and puts what it digs into a **chest touching it**.
+It stops at water (the shaft would flood), at chests, beds, doors, signs, TNT,
+pumps and other machinery, and waits without a chest or without pressure. A working
+drill throws up dust where it digs.
+
+Look at a wheel or a drill to see how it's doing under the crosshair, and
+right-click any part of a network (wheel, pipe or drill) for the details in chat:
+how fast the wheel turns and how much water passes it, the network's pressure, how
+many pipes it has, and how many wheels and drills are working.
+
+Recipes: a water wheel from 4 planks and a log; 4 air pipes from a stone and a
+quarter of an iron ingot; a drill from 2 iron ingots and 2 stone. For now the steady
+way to keep a wheel turning is a pump lifting water from a pool and dropping it back
+in past the wheel (pumps need no power).
+
+The server runs the networks four times a second (`Server::UpdatePower`,
+`src/server/Power.cpp`; the rules and numbers are in `src/world/Power.h`) and tells
+players within 96 blocks how each wheel and machine is doing (`Machines`, protocol
+34). `PowerTest` builds a pump-fed mill in an empty world and checks:
+
+- a wheel with no water flowing past stands still, with no air, and the drill waits;
+- the falling water turns the wheel and fills the network with air;
+- the drill digs into the ground and what it digs lands in the chest, and it reports
+  how deep it is;
+- right-clicking the wheel and a pipe describes them and the network;
+- without a chest the drill waits, and starts again with a new one;
+- cutting the air pipe starves the drill while the wheel's side keeps its pressure;
+- breaking the pump lets the water settle and the wheel stop.
+
 ## Beds
 
 A **bed** (3 planks and a hide) is half a block high. Right-click one within 6 blocks
@@ -1013,6 +1060,7 @@ ones you're allowed to use:
 | `/gamemode` | everyone | show your game mode |
 | `/gamemode <creative\|survival> [player]` | operators | change a game mode (also `/gm`, `c`/`s`) |
 | `/give <block> [count] [player]`, `/give <tool> [player]` | operators | give survival blocks (`count` in blocks, default 64) or a tool |
+| `/fill <x1 y1 z1> <x2 y2 z2> <block>` | operators | fill a box with a block (`air` clears it; up to 32768 cells) |
 | `/summon <deer\|ghoul> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
 | `/creatures [clear]` | operators | count the creatures, or remove them all |
 | `/pvp`, `/food` | everyone | whether players can hurt each other; how fed you are |
@@ -1227,6 +1275,7 @@ src/
             Breathing, Creatures, Crafting, Hunger, Armour
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
-            BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest, ChestTest, BedTest
+            BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest, ChestTest, BedTest,
+            PowerTest
 tools/      make_sounds.py (sound effects), make_item_textures.py (item icons)
 ```

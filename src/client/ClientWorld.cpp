@@ -71,7 +71,14 @@ void ClientWorld::SetBlock(int x, int y, int z, const Block& block) {
 
     const glm::ivec3 local = Coords::LocalOf({ x, y, z });
     if (chunk->GetBlock(local.x, local.y, local.z) == block) return;
+    const bool wasModel = chunk->GetBlock(local.x, local.y, local.z).IsModel();
     chunk->SetBlock(local.x, local.y, local.z, block);
+    if (wasModel != block.IsModel()) {
+        auto& list = modelBlocks[chunkCoords];
+        if (block.IsModel()) list.push_back({ x, y, z });
+        else list.erase(std::remove(list.begin(), list.end(), glm::ivec3(x, y, z)), list.end());
+        if (list.empty()) modelBlocks.erase(chunkCoords);
+    }
 
     Coords::ForEachChunkTouching({ x, y, z }, [&](const glm::ivec3& coords) {
         auto touched = coords == chunkCoords ? chunk : FindChunk(coords);
@@ -89,6 +96,12 @@ void ClientWorld::ApplyChunk(const glm::ivec3& coords, const Chunk::Blocks& bloc
     if (!chunk->IsLoaded()) loadedCount++;
     chunk->SetLightData(light);
     chunk->SetGenerated(blocks);
+    modelBlocks.erase(coords);
+    for (int i = 0; i < Chunk::VOLUME; i++)
+        if (blocks[i].IsModel()) {
+            constexpr int S = Chunk::CHUNK_SIZE;
+            modelBlocks[coords].push_back(coords * S + glm::ivec3(i % S, (i / S) % S, i / (S * S)));
+        }
     RequestRebuild(chunk);
     RequestNeighbourRebuilds(coords);
 }
@@ -117,6 +130,7 @@ void ClientWorld::UnloadChunk(const glm::ivec3& coords) {
     auto chunk = FindChunk(coords);
     if (!chunk) return;
     if (chunk->IsLoaded()) loadedCount--;
+    modelBlocks.erase(coords);
     RemoveChunk(coords);
     // Neighbours now border nothing there; they keep their meshes (unloaded chunks are
     // at the edge of the view, where the difference doesn't show).
@@ -130,6 +144,12 @@ void ClientWorld::RemoveChunk(const glm::ivec3& coords) {
     it->second->ReleaseGpu();
     chunks.erase(it);
     drawListDirty = true; // it may be in the draw list
+}
+
+std::vector<glm::ivec3> ClientWorld::GetModelBlocks() const {
+    std::vector<glm::ivec3> out;
+    for (const auto& [coords, list] : modelBlocks) out.insert(out.end(), list.begin(), list.end());
+    return out;
 }
 
 void ClientWorld::RebuildAllChunks() {

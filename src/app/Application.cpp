@@ -34,6 +34,7 @@
 #include "world/Achievements.h"
 #include "world/Breathing.h"
 #include "world/Hunger.h"
+#include "world/Power.h"
 #include "world/Chunk.h"
 #include "world/Crafting.h"
 #include "world/Raycast.h"
@@ -54,7 +55,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
-    BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
+    BlockType::WATER_WHEEL, BlockType::AIR_PIPE, BlockType::DRILL, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
     BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
@@ -119,6 +120,9 @@ const char* BlockName(BlockType type) {
     case BlockType::WATER: return "Water";
     case BlockType::PUMP:  return "Pump";
     case BlockType::PIPE:  return "Pipe";
+    case BlockType::WATER_WHEEL: return "Water wheel";
+    case BlockType::AIR_PIPE: return "Air pipe";
+    case BlockType::DRILL: return "Drill";
     case BlockType::STONE_BRICK: return "Stone bricks";
     case BlockType::MOSSY_BRICK: return "Mossy bricks";
     case BlockType::SPIKES: return "Spikes";
@@ -585,6 +589,7 @@ void Application::Run() {
             params.arrows.push_back({ a.position, dir, lightAt(a.position) });
         }
         if (arrowFacing.size() > 512) arrowFacing.clear();
+        UpdateMachines(params, lightAt);
         for (const auto& p : particles)
             params.particles.push_back({ p.position, p.size * std::min(1.0f, p.life / (0.4f * p.maxLife)), p.uv, lightAt(p.position - glm::vec3(0.0f, 0.1f, 0.0f)) });
         const TextureAtlas& atlas = renderer->GetAtlas();
@@ -792,6 +797,73 @@ void Application::DrawCrosshair() {
         draw->AddLine(ImVec2(c.x, c.y - kArm), ImVec2(c.x, c.y - kGap), color, width);
         draw->AddLine(ImVec2(c.x, c.y + kGap), ImVec2(c.x, c.y + kArm), color, width);
     }
+    // Looking at a water wheel or a machine: how it's doing, under the crosshair.
+    Block target;
+    if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
+        at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Power::IsMachine(target.type)) {
+        for (const auto& m : client->GetMachines()) {
+            if (m.pos != at->block) continue;
+            char text[128];
+            const int pressure = static_cast<int>(std::lround(m.pressure / 2.55f));
+            if (target.type == BlockType::WATER_WHEEL && m.speed)
+                std::snprintf(text, sizeof text, "Water wheel: turning (%d%%) - air %d%%", int(std::lround(m.speed / 2.55f)), pressure);
+            else if (target.type == BlockType::WATER_WHEEL) std::snprintf(text, sizeof text, "Water wheel: still - air %d%%", pressure);
+            else std::snprintf(text, sizeof text, "Drill: %s - air %d%%", Power::Describe(static_cast<Power::DrillState>(m.state)), pressure);
+            const ImVec2 size = ImGui::CalcTextSize(text);
+            const ImVec2 p(c.x - size.x * 0.5f, c.y + 22.0f);
+            draw->AddRectFilled(ImVec2(p.x - 6, p.y - 3), ImVec2(p.x + size.x + 6, p.y + size.y + 3), IM_COL32(0, 0, 0, 140), 4.0f);
+            draw->AddText(p, IM_COL32(255, 255, 255, 235), text);
+            break;
+        }
+    }
+}
+
+void Application::UpdateMachines(FrameParams& params, const std::function<glm::vec2(const glm::vec3&)>& lightAt) {
+    // Each wheel turns at the speed the server last gave it (still if it said nothing).
+    const double now = Client::Now();
+    const float dt = static_cast<float>(std::min(0.1, now - lastMachinesTime));
+    lastMachinesTime = now;
+    std::unordered_map<glm::ivec3, uint8_t, Coords::IVec3Hash> speeds;
+    for (const auto& m : client->GetMachines()) {
+        if (m.type == static_cast<uint8_t>(BlockType::WATER_WHEEL)) speeds[m.pos] = m.speed;
+        // A working drill throws up dust where it's digging, and hisses now and then.
+        else if (m.type == static_cast<uint8_t>(BlockType::DRILL) && m.state == static_cast<uint8_t>(Power::DrillState::Working)) {
+            float& due = drillDust[m.pos];
+            due -= dt;
+            if (due <= 0.0f) {
+                due = 0.35f;
+                const glm::ivec3 at = m.pos - glm::ivec3(0, std::max<int>(1, m.depth), 0);
+                Block dug;
+                const BlockType shown = world->GetBlock(at.x, at.y - 1, at.z, dug) && !dug.IsAir() ? dug.type : BlockType::STONE;
+                SpawnParticles(at, shown, 4, 1.2f);
+                if (std::fmod(now, 1.5) < 0.35) PlayAt("dig_hard", glm::vec3(m.pos) + 0.5f, 0.35f);
+            }
+        }
+    }
+    if (drillDust.size() > 256) drillDust.clear();
+    std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> angles;
+    for (const auto& pos : world->GetModelBlocks()) {
+        auto s = speeds.find(pos);
+        const float speed = s != speeds.end() ? s->second / 255.0f : 0.0f;
+        float angle = wheelAngles.count(pos) ? wheelAngles[pos] : 0.0f;
+        angle = std::fmod(angle + speed * dt * 3.0f, 6.2831853f); // up to about half a turn a second
+        angles[pos] = angle;
+        // The wheel stands edge on to the water beside it, so its paddles dip in: water
+        // to its north or south puts the axle east-west, and the other way round. With no
+        // water beside it, the axle points at whatever it's mounted on; along x if nothing.
+        auto at = [&](int dx, int dz, bool water) {
+            Block b;
+            if (!world->GetBlock(pos.x + dx, pos.y, pos.z + dz, b) && !world->GetBlock(pos.x + dx, pos.y - 1, pos.z + dz, b)) return false;
+            Block below;
+            if (water) return b.HasWater() || (world->GetBlock(pos.x + dx, pos.y - 1, pos.z + dz, below) && below.HasWater());
+            return !b.IsAir() && !b.IsLiquid() && !b.IsPlant();
+        };
+        const bool waterX = at(1, 0, true) || at(-1, 0, true), waterZ = at(0, 1, true) || at(0, -1, true);
+        const bool alongX = waterZ != waterX ? waterZ : at(1, 0, false) || at(-1, 0, false) || !(at(0, 1, false) || at(0, -1, false));
+        const glm::vec3 centre = glm::vec3(pos) + 0.5f;
+        params.wheels.push_back({ centre, alongX, angle, lightAt(centre) });
+    }
+    wheelAngles.swap(angles);
 }
 
 namespace {
@@ -1931,6 +2003,12 @@ void Application::OnMouseButton(int button, int action) {
             (target.type == BlockType::BED || target.type == BlockType::DOOR || target.type == BlockType::DOOR_OPEN || target.type == BlockType::CAMPFIRE ||
              target.type == BlockType::TNT)) {
             client->UseBed(at->block);
+            return;
+        }
+        // Part of an air network: how it's doing (the server says, in chat).
+        if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
+            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Power::IsPart(target.type)) {
+            client->Inspect(at->block);
             return;
         }
     }

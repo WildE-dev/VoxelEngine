@@ -1,6 +1,7 @@
 #include "server/ServerWorld.h"
 
 #include "server/WorldStorage.h"
+#include "world/Power.h"
 
 #include <algorithm>
 #include <cmath>
@@ -93,6 +94,14 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
     chunk->MarkUnsaved();
     if (previous.type == BlockType::PUMP && block.type != BlockType::PUMP) water.RemovePump({ x, y, z });
     if (block.type == BlockType::PUMP) water.AddPump({ x, y, z });
+    if (Power::IsMachine(previous.type) && previous.type != block.type) {
+        machines.erase({ x, y, z });
+        wheelFlow.erase({ x, y, z });
+    }
+    if (Power::IsMachine(block.type)) machines.insert({ x, y, z });
+    if (block.type == BlockType::WATER_WHEEL) wheelFlow.try_emplace({ x, y, z }, 0.0f);
+    // Water moving past a wheel turns it.
+    if (previous.water != block.water && !wheelFlow.empty()) NoteWaterMoved({ x, y, z }, std::abs(int(block.water) - int(previous.water)));
 
     // Water around the change may need to flow (or settle).
     water.Activate({ x, y, z });
@@ -268,7 +277,7 @@ void ServerWorld::PropagateLight(const std::vector<ChunkPtr>& loadedChunks, cons
 void ServerWorld::WorkerLoop() {
     std::vector<ChunkPtr> batch, generated;
     auto generatedBlocks = std::make_unique<TerrainGenerator::Blocks>(); // reused generation buffer
-    std::vector<glm::ivec3> edits, savedWater, savedPumps;
+    std::vector<glm::ivec3> edits, savedWater, savedPumps, savedMachines;
     batch.reserve(kGenerateBatchSize);
 
     while (true) {
@@ -289,6 +298,7 @@ void ServerWorld::WorkerLoop() {
         generated.clear();
         savedWater.clear();
         savedPumps.clear();
+        savedMachines.clear();
         for (auto& chunk : batch) {
             if (chunk->IsRemoved() || !chunk->TryBeginGenerate()) continue;
 
@@ -301,9 +311,10 @@ void ServerWorld::WorkerLoop() {
             for (int i = 0; i < Chunk::VOLUME; i++) {
                 const Block& b = (*generatedBlocks)[i];
                 const bool pump = b.type == BlockType::PUMP;
-                if (!pump && !(saved && b.HasWater())) continue;
+                const bool machine = Power::IsMachine(b.type);
+                if (!pump && !machine && !(saved && b.HasWater())) continue;
                 const glm::ivec3 pos = c * S + glm::ivec3(i % S, (i / S) % S, i / (S * S));
-                (pump ? savedPumps : savedWater).push_back(pos);
+                (pump ? savedPumps : machine ? savedMachines : savedWater).push_back(pos);
             }
             chunk->SetGenerated(*generatedBlocks);
             generated.push_back(chunk);
@@ -312,11 +323,42 @@ void ServerWorld::WorkerLoop() {
         if (!generated.empty() || !edits.empty()) PropagateLight(generated, edits);
 
         // Let it carry on flowing (settled water just stays put after one look).
-        if (!savedWater.empty() || !savedPumps.empty()) {
+        if (!savedWater.empty() || !savedPumps.empty() || !savedMachines.empty()) {
             std::lock_guard<std::recursive_mutex> edit(editMutex);
             for (const auto& pos : savedWater) water.Activate(pos);
             for (const auto& pos : savedPumps) water.AddPump(pos);
+            for (const auto& pos : savedMachines) machines.insert(pos);
         }
+    }
+}
+
+void ServerWorld::NoteWaterMoved(const glm::ivec3& pos, int units) {
+    static const glm::ivec3 kFaces[6] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+    for (const auto& d : kFaces) {
+        auto it = wheelFlow.find(pos + d);
+        if (it != wheelFlow.end()) it->second += static_cast<float>(units);
+    }
+}
+
+void ServerWorld::TakePower(std::vector<glm::ivec3>& machinesOut, std::unordered_map<glm::ivec3, float, Coords::IVec3Hash>& flow) {
+    std::lock_guard<std::recursive_mutex> edit(editMutex);
+    machinesOut.clear();
+    flow.clear();
+    // Machines in chunks that unloaded are dropped (they come back when it loads).
+    for (auto it = machines.begin(); it != machines.end();) {
+        Block b;
+        if (!GetBlock(it->x, it->y, it->z, b) || !Power::IsMachine(b.type)) {
+            wheelFlow.erase(*it);
+            it = machines.erase(it);
+            continue;
+        }
+        machinesOut.push_back(*it);
+        if (b.type == BlockType::WATER_WHEEL) {
+            float& f = wheelFlow[*it]; // (starts counting a wheel the first time it's seen)
+            flow[*it] = f;
+            f = 0.0f;
+        }
+        ++it;
     }
 }
 

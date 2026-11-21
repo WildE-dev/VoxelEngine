@@ -168,6 +168,42 @@ void PlayerModels::DrawArrows(Shader& shader, const glm::mat4& view, const glm::
     }
 }
 
+void PlayerModels::DrawWheels(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<WheelModel>& wheels) {
+    if (wheels.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 0.0f);
+    shader.SetUniform("textured", 0.0f);
+    glBindVertexArray(vao);
+    const glm::vec3 kWood(0.56f, 0.39f, 0.21f), kDark(0.36f, 0.24f, 0.13f), kIron(0.42f, 0.42f, 0.45f);
+    for (const auto& w : wheels) {
+        shader.SetUniform("lightLevels", w.light);
+        // Frame: x along the axle.
+        glm::mat4 frame = glm::translate(glm::mat4(1.0f), w.centre);
+        if (!w.alongX) frame = glm::rotate(frame, glm::radians(90.0f), glm::vec3(0, 1, 0));
+        auto part = [&](const glm::mat4& f, const glm::vec3& centre, const glm::vec3& size, const glm::vec3& color) {
+            shader.SetUniform("model", glm::scale(glm::translate(f, centre), size));
+            shader.SetUniform("color", color);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        };
+        part(frame, glm::vec3(0.0f), { 1.0f, 0.1f, 0.1f }, kIron); // axle, end to end
+        // Two supports at the ends, standing on the cell's floor.
+        for (const float x : { -0.46f, 0.46f }) part(frame, { x, -0.25f, 0.0f }, { 0.08f, 0.5f, 0.14f }, kDark);
+        const glm::mat4 spun = glm::rotate(frame, w.angle, glm::vec3(1, 0, 0));
+        part(spun, glm::vec3(0.0f), { 0.5f, 0.22f, 0.22f }, kDark); // hub
+        // Two rims (as eight short planks each) and eight paddles between them.
+        for (int i = 0; i < 8; i++) {
+            const glm::mat4 r = glm::rotate(spun, i * glm::radians(45.0f), glm::vec3(1, 0, 0));
+            for (const float x : { -0.3f, 0.3f }) {
+                part(r, { x, 0.38f, 0.0f }, { 0.05f, 0.05f, 0.32f }, kDark); // rim
+                part(r, { x, 0.2f, 0.0f }, { 0.04f, 0.36f, 0.04f }, kDark);  // spoke
+            }
+            part(r, { 0.0f, 0.38f, 0.0f }, { 0.62f, 0.2f, 0.04f }, kWood); // paddle
+        }
+    }
+}
+
 void PlayerModels::DrawGlows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GlowModel>& glows) {
     if (glows.empty()) return;
     shader.Use();

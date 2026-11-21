@@ -100,6 +100,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Everyone, "/gamemode - show your game mode" },
     { Level::Operator, "/gamemode <creative|survival> [player] - creative: anything, unhurt; survival: collect what you build with" },
     { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64), or /give <tool|cap|tunic|boots> [player]" },
+    { Level::Operator, "/fill <x1 y1 z1> <x2 y2 z2> <block> - fill a box with a block (air clears it; up to 32768 cells)" },
     { Level::Operator, "/summon <deer|ghoul|skeleton> [x y z] - bring a creature (default: a few blocks ahead of you)" },
     { Level::Operator, "/creatures [clear] - count the creatures, or remove them all" },
     { Level::Everyone, "/food - how hungry you are" },
@@ -115,7 +116,7 @@ constexpr HelpLine kHelp[] = {
 Level RequiredLevel(const std::string& command, size_t argumentCount) {
     if (command == "stop") return Level::Console;
     if (command == "tp" || command == "teleport" || command == "save" || command == "kick" || command == "op" || command == "deop" ||
-        command == "noclip" || command == "give" || command == "summon" || command == "creatures")
+        command == "noclip" || command == "give" || command == "fill" || command == "summon" || command == "creatures")
         return Level::Operator;
     if ((command == "time" || command == "weather" || command == "gamemode" || command == "pvp" || command == "food") && argumentCount > 0) return Level::Operator;
     return Level::Everyone;
@@ -338,6 +339,28 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         std::snprintf(amount, sizeof amount, "%g", count);
         if (target != sender) SendChat(*target, Kind::Info, who + " gave you " + amount + " " + BlockId(type));
         reply(Kind::Info, std::string("Gave ") + amount + " " + BlockId(type) + (target != sender ? " to " + target->name : ""));
+    }
+    else if (command == "fill") {
+        if (words.size() != 8) return usage("/fill <x1 y1 z1> <x2 y2 z2> <block>");
+        double v[6];
+        for (int i = 0; i < 6; i++)
+            if (!ParseNumber(words[1 + i], v[i]) || std::abs(v[i]) > 1e7) return usage("/fill <x1 y1 z1> <x2 y2 z2> <block>");
+        const BlockType type = BlockFromId(Lower(words[7]));
+        if (type == BlockType::COUNT) return reply(Kind::Error, "No block called " + words[7]);
+        const glm::ivec3 a(glm::floor(glm::dvec3(v[0], v[1], v[2]))), b(glm::floor(glm::dvec3(v[3], v[4], v[5])));
+        const glm::ivec3 lo = glm::min(a, b), hi = glm::max(a, b), size = hi - lo + 1;
+        if (static_cast<long long>(size.x) * size.y * size.z > 32768) return reply(Kind::Error, "That's too big a box (32768 cells at most)");
+        const Block block = type == BlockType::WATER ? Block::Water(Block::kMaxWaterVolume) : Block(type);
+        for (int x = lo.x; x <= hi.x; x++)
+            for (int y = lo.y; y <= hi.y; y++)
+                for (int z = lo.z; z <= hi.z; z++) {
+                    Block old;
+                    if (!world->GetBlock(x, y, z, old)) continue;
+                    if (old.type == BlockType::CHEST) RemoveChest({ x, y, z }, nullptr);
+                    world->SetBlock(x, y, z, block);
+                    if (type == BlockType::CHEST) chests[{ x, y, z }] = ChestItems{};
+                }
+        reply(Kind::Info, "Filled " + std::to_string(size.x * size.y * size.z) + " cells with " + BlockId(type));
     }
     else if (command == "summon") {
         const CreatureType type = words.size() > 1 ? CreatureFromId(Lower(words[1])) : CreatureType::Count;

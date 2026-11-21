@@ -406,6 +406,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     continue;
                 }
 
+                if (block.IsModel()) continue; // (drawn as a model: Renderer)
                 if (block.IsShell()) {
                     // A see-through cube of rungs: its faces, both ways round (seen from
                     // inside while climbing too), except where a solid block hides them.

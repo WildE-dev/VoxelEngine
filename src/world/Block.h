@@ -163,6 +163,12 @@ enum class BlockType : uint8_t {
     // Saplings (plants, from leaves): planted on soil, they grow into a tree.
     SAPLING,
     PINE_SAPLING,
+    // Air power (see world/Power.h): a water wheel turned by flowing water beside it
+    // pumps air into the air pipes joined to it; machines on the pipes run on the
+    // pressure. The wheel is drawn as a turning model, not a cube.
+    WATER_WHEEL,
+    AIR_PIPE,
+    DRILL, // a machine: digs straight down, into a chest beside it
     COUNT
 };
 
@@ -438,14 +444,16 @@ struct Block {
     bool IsFullBlock() const { return type != BlockType::AIR && !IsPlant() && !IsLiquid() && edgeData.IsFull(); }
     // Light passes through air, partial blocks, plants, leaves and water (water also
     // absorbs some; see LightPropagator).
-    bool BlocksLight() const { return IsFullBlock() && !IsLeavesType(type) && type != BlockType::ICE && type != BlockType::GLASS; }
+    bool BlocksLight() const { return IsFullBlock() && !IsLeavesType(type) && type != BlockType::ICE && type != BlockType::GLASS && type != BlockType::WATER_WHEEL; }
     // A full block that hides the faces of the blocks it touches (not glass).
-    bool HidesNeighbours() const { return IsFullBlock() && type != BlockType::GLASS; }
+    bool HidesNeighbours() const { return IsFullBlock() && type != BlockType::GLASS && type != BlockType::WATER_WHEEL; }
     // Air, a plant or water: nothing to stand on or bump into.
     bool IsPassable() const { return IsAir() || IsPlant() || IsLiquid(); }
     // Water may flow into this cell (washing away any plant).
     bool IsReplaceableByWater() const { return IsAir() || (IsPlant() && type != BlockType::LADDER && type != BlockType::DOOR_OPEN); }
     // Drawn as a see-through cube shell (a ladder's rungs, an open door's frame).
+    // Solid, but drawn by a model of its own (a turning wheel), not by the chunk mesh.
+    bool IsModel() const { return type == BlockType::WATER_WHEEL; }
     bool IsShell() const { return type == BlockType::LADDER || type == BlockType::DOOR_OPEN; }
     uint8_t GetLightEmission() const { return ::GetLightEmission(type); }
 

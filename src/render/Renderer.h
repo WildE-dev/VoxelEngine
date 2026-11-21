@@ -41,6 +41,7 @@ struct FrameParams {
     std::vector<ParticleModel> particles; // bits of broken blocks
     std::vector<BoltModel> bolts;         // lightning
     std::vector<ArrowModel> arrows;
+    std::vector<WheelModel> wheels;
     std::vector<GlowModel> glows; // fireflies
     std::vector<glm::vec4> handLights; // lights carried in hand: position, and strength (a light level)
 };

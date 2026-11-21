@@ -9,6 +9,7 @@
 #include <shared_mutex>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -99,6 +100,11 @@ public:
 
     size_t GetLoadedChunkCount() const { return chunks.size(); }
 
+    // Air power (world/Power.h). Every loaded water wheel and machine, and the water
+    // units that moved in or out of the cells around each wheel since the last call
+    // (`flow` is emptied and refilled). Any thread; takes the edit mutex.
+    void TakePower(std::vector<glm::ivec3>& machinesOut, std::unordered_map<glm::ivec3, float, Coords::IVec3Hash>& flow);
+
     // Server thread: hands every loaded chunk edited since it was last saved to the
     // storage (call WorldStorage::Flush afterwards to write it out). Takes the edit
     // mutex while copying, so the snapshot never catches flowing water halfway between
@@ -150,5 +156,10 @@ private:
     std::unordered_map<glm::ivec2, std::unique_ptr<TerrainGenerator::ColumnHeights>, IVec2Hash> columnHeights; // worker thread only
     LightPropagator light; // worker thread only
     WaterSimulation water;
+    // Air power, guarded by the edit mutex: loaded wheels and machines, and the water
+    // that has moved past each wheel since TakePower.
+    std::unordered_set<glm::ivec3, Coords::IVec3Hash> machines;
+    std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> wheelFlow;
+    void NoteWaterMoved(const glm::ivec3& pos, int units); // edit mutex held
     std::thread worker;
 };
