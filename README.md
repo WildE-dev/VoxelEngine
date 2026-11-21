@@ -345,13 +345,14 @@ the water height of neighbouring columns across rows, so flowing water slopes
 between levels, thin edges taper to the ground, and a waterfall's curtain meets
 the water pouring over its brink.
 
-The simulation runs on the server, on its own thread, up to 32,768 water cells per tick, ten
-ticks a second, and only near something that changed. It holds a world-wide edit
+The simulation runs on the server, on its own thread, up to 65,536 water cells per tick, four
+ticks a second (water spreads a cell a tick, so it flows at a calm pace, and a slow
+tick leaves room for big floods), and only near something that changed. It holds a world-wide edit
 lock in short slices and steps aside for waiting edits, so player edits never
 wait more than a couple of milliseconds. Place a full block of water with 8.
 
 **Pumps and pipes** (hotbar 9 and 0) move water anywhere, including uphill. Each
-tick a pump takes a quarter of a block of water (2.5 blocks a second) from the cells
+tick a pump takes 5/8 of a block of water (2.5 blocks a second) from the cells
 touching it and sends it through the pipes joined to it, face to face, out of the
 network's open ends: the open cells beside any pipe that joins only one other pipe
 or the pump. The ends share the water equally, and the pump only takes what they
@@ -381,10 +382,10 @@ water (hit more often) fastest, and never puts water in a dry cell, above a full
 or in a puddle on dry ground. Puddles don't evaporate while it rains.
 
 **Evaporation**: shallow puddles that have stopped flowing dry up. Every water tick,
-3 random cells of each chunk near a player are looked at (random ticks), and a resting
+8 random cells of each chunk near a player are looked at (random ticks), and a resting
 puddle among them disappears: a cell with at most a quarter of a block of water that
 isn't full, has no water above it and isn't flowing. Each cell comes up about every
-2.3 minutes on average, so a spill fades away cell by cell. This is the only way
+2.1 minutes on average, so a spill fades away cell by cell. This is the only way
 water is ever destroyed; lakes and pools are deeper than that and stay. Random ticks
 cost about 1 ms per tick for the whole simulation area. `EvaporationTest` checks that a
 spill settles into a puddle that dries up gradually, that a deep pool keeps its water,

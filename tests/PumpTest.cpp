@@ -10,6 +10,7 @@
 //  - a pump outside the simulation distance waits,
 //  - a saved pump keeps pumping after its chunk is saved and loaded again.
 #include <chrono>
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
@@ -144,7 +145,7 @@ int main() {
         Check(WaterAt(world, kDest) == before, "a pump outside the simulation distance waits");
         world.Update({ glm::ivec3(1, 0, 0) });
         Tick(world, 1);
-        Check(WaterAt(world, kDest) == before + kRate, "and resumes when a player comes close");
+        Check(WaterAt(world, kDest) == std::min(before + kRate, kFull), "and resumes when a player comes close");
     }
 
     std::cout << "Saved pumps" << std::endl;
@@ -170,7 +171,7 @@ int main() {
             Check(WaitLoaded(world), "chunks load");
             Check(world.GetWater().GetPumpCount() == 1, "the saved pump is registered again");
             Tick(world, 1);
-            Check(WaterAt(world, kDest) == 2 * kRate, "and carries on pumping");
+            Check(WaterAt(world, kDest) == std::min(2 * kRate, kFull), "and carries on pumping (as far as the source and the room allow)");
         }
         std::filesystem::remove_all(dir);
     }

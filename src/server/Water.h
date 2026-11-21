@@ -111,16 +111,19 @@ public:
     // Nothing queued and no tick in progress.
     bool IsIdle() const { return GetActiveCount() == 0 && !ticking.load(std::memory_order_acquire); }
 
-    static constexpr float kTickInterval = 0.1f;
-    static constexpr size_t kCellsPerTick = 32768;
+    // Four ticks a second: water spreads a cell per tick, which looks calmer than ten,
+    // and each tick has more time, so it can update twice as many cells (bigger floods
+    // keep up at the slower pace).
+    static constexpr float kTickInterval = 0.25f;
+    static constexpr size_t kCellsPerTick = 65536;
     // Cells updated per hold of the edit mutex; bounds how long a player edit waits.
     static constexpr size_t kCellsPerSlice = 128;
-    // Units a pump moves per tick: a quarter of a block, 2.5 blocks a second.
-    static constexpr int kPumpRate = Block::kMaxWaterVolume / 4;
-    // Puddles: up to a quarter of a block deep. With 3 random cells per chunk per tick
-    // a puddle cell lasts about 1365 ticks (2.3 minutes) on average.
+    // Units a pump moves per tick: 5/8 of a block, 2.5 blocks a second.
+    static constexpr int kPumpRate = Block::kMaxWaterVolume * 5 / 8;
+    // Puddles: up to a quarter of a block deep. With 8 random cells per chunk per tick
+    // a puddle cell lasts about 512 ticks (2.1 minutes) on average.
     static constexpr int kPuddleVolume = Block::kMaxWaterVolume / 4;
-    static constexpr int kRandomTicksPerChunk = 3;
+    static constexpr int kRandomTicksPerChunk = 8;
     // Water a raindrop hit adds to a surface cell: a 16th of a block.
     static constexpr int kRainUnits = Block::kMaxWaterVolume / 16;
     // Pipes searched per pump per tick; larger networks only reach this many.
