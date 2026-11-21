@@ -747,7 +747,8 @@ void Application::DrawChat() {
 
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     const float width = std::min(560.0f, viewport->WorkSize.x - 24.0f);
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 12.0f, viewport->WorkPos.y + viewport->WorkSize.y - 100.0f), ImGuiCond_Always,
+    // Above the hotbar and the hearts and air bubbles over it.
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 12.0f, viewport->WorkPos.y + viewport->WorkSize.y - 160.0f), ImGuiCond_Always,
                             ImVec2(0.0f, 1.0f));
     ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
     ImGui::SetNextWindowBgAlpha(chatOpen ? 0.7f : 0.55f);
@@ -781,13 +782,26 @@ void Application::DrawChat() {
     if (chatOpen) {
         if (chatOpenFrames < 2) ImGui::SetKeyboardFocusHere();
         ImGui::SetNextItemWidth(-1.0f);
-        const bool send = ImGui::InputText("##chat", chatInput, sizeof chatInput, ImGuiInputTextFlags_EnterReturnsTrue);
-        // The key that opened the chat may also arrive as a typed character: drop the
-        // 't', and keep a single '/'.
-        if (chatOpenFrames < 3) {
-            if (chatOpenedWith == 't' && (std::strcmp(chatInput, "t") == 0 || std::strcmp(chatInput, "T") == 0)) chatInput[0] = 0;
-            if (chatOpenedWith == '/' && std::strcmp(chatInput, "//") == 0) chatInput[1] = 0;
-        }
+        // Just opened: the key that opened it may also arrive as a typed character (drop
+        // the 't', keep a single '/'), and the box would select what's in it (the '/'),
+        // so the cursor goes to the end with nothing selected. Done inside the box's
+        // own edit (a callback): it keeps its own copy of the text while typing.
+        struct Opening {
+            char with;
+            int frames;
+        } opening{ chatOpenedWith, chatOpenFrames };
+        auto onEdit = [](ImGuiInputTextCallbackData* data) {
+            const auto* o = static_cast<const Opening*>(data->UserData);
+            if (o->frames >= 3) return 0;
+            const std::string text(data->Buf, data->BufTextLen);
+            if (o->with == 't' && (text == "t" || text == "T")) data->DeleteChars(0, data->BufTextLen);
+            if (o->with == '/' && text == "//") data->DeleteChars(1, 1);
+            data->ClearSelection();
+            data->CursorPos = data->BufTextLen;
+            return 0;
+        };
+        const bool send = ImGui::InputText("##chat", chatInput, sizeof chatInput, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackAlways,
+                                           onEdit, &opening);
         chatOpenFrames++;
         if (send) {
             client->SendChat(chatInput);

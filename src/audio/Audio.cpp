@@ -86,6 +86,7 @@ struct Audio::Impl {
     std::string loopName;
     std::mt19937 rng{ 7 };
     size_t next = 0;
+    float master = 1.0f, loopVolume = 0.0f;
 
     ALuint Buffer(const std::string& name) {
         auto it = sounds.find(name);
@@ -193,7 +194,12 @@ void Audio::SetListener(const glm::vec3& position, const glm::vec3& forward, con
 }
 
 void Audio::SetVolume(float volume) {
-    if (impl->context) alListenerf(AL_GAIN, std::clamp(volume, 0.0f, 1.0f));
+    // Applied to each sound as it's played (and to the loop now): a listener gain alone
+    // isn't honoured by every OpenAL.
+    const float v = std::clamp(volume, 0.0f, 1.0f);
+    if (v == impl->master) return;
+    impl->master = v;
+    if (impl->context) alSourcef(impl->loopSource, AL_GAIN, impl->loopVolume * v);
 }
 
 void Audio::Play(const std::string& name, const glm::vec3& position, float volume, float pitchSpread) {
@@ -204,7 +210,7 @@ void Audio::Play(const std::string& name, const glm::vec3& position, float volum
     alSourcei(s, AL_BUFFER, static_cast<ALint>(buffer));
     alSourcei(s, AL_SOURCE_RELATIVE, AL_FALSE);
     alSource3f(s, AL_POSITION, position.x, position.y, position.z);
-    alSourcef(s, AL_GAIN, volume);
+    alSourcef(s, AL_GAIN, volume * impl->master);
     alSourcef(s, AL_PITCH, 1.0f + std::uniform_real_distribution<float>(-pitchSpread, pitchSpread)(impl->rng));
     alSourcePlay(s);
 }
@@ -217,7 +223,7 @@ void Audio::PlayHere(const std::string& name, float volume, float pitchSpread) {
     alSourcei(s, AL_BUFFER, static_cast<ALint>(buffer));
     alSourcei(s, AL_SOURCE_RELATIVE, AL_TRUE);
     alSource3f(s, AL_POSITION, 0.0f, 0.0f, 0.0f);
-    alSourcef(s, AL_GAIN, volume);
+    alSourcef(s, AL_GAIN, volume * impl->master);
     alSourcef(s, AL_PITCH, 1.0f + std::uniform_real_distribution<float>(-pitchSpread, pitchSpread)(impl->rng));
     alSourcePlay(s);
 }
@@ -226,7 +232,7 @@ void Audio::SetLoop(const std::string& name, float volume) {
     if (!impl->context) return;
     ALint state;
     alGetSourcei(impl->loopSource, AL_SOURCE_STATE, &state);
-    if (volume <= 0.001f) {
+    if (volume <= 0.001f || impl->master <= 0.001f) {
         if (state == AL_PLAYING) alSourceStop(impl->loopSource);
         return;
     }
@@ -238,7 +244,8 @@ void Audio::SetLoop(const std::string& name, float volume) {
         alSourcePlay(impl->loopSource);
         impl->loopName = name;
     }
-    alSourcef(impl->loopSource, AL_GAIN, volume);
+    impl->loopVolume = volume;
+    alSourcef(impl->loopSource, AL_GAIN, volume * impl->master);
 }
 
 #else // no audio: everything does nothing

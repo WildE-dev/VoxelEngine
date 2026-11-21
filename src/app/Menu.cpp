@@ -254,7 +254,8 @@ void Application::DrawSettingsPage(bool inGame) {
         if (ImGui::SliderFloat("Mouse sensitivity", &settings.sensitivity, Settings::kMinSensitivity, Settings::kMaxSensitivity, "%.2f"))
             ApplySettings();
         if (ImGui::Checkbox("Vsync", &settings.vsync)) ApplySettings();
-        ImGui::SliderFloat("Volume", &settings.volume, 0.0f, 1.0f, "%.0f%%", ImGuiSliderFlags_None);
+        int volume = static_cast<int>(settings.volume * 100.0f + 0.5f);
+        if (ImGui::SliderInt("Volume", &volume, 0, 100, "%d%%")) settings.volume = volume / 100.0f;
         ImGui::Spacing();
         if (WideButton("Done")) {
             settings.Clamp();
