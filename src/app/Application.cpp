@@ -408,6 +408,10 @@ void Application::LoadBlockTextures() {
 
 void Application::Shutdown() {
     // Order matters: everything holding GL objects goes before the context.
+    if (mapTexture) {
+        glDeleteTextures(1, &mapTexture);
+        mapTexture = 0;
+    }
     audio.reset();
     if (client) client->Disconnect();
     client.reset();
@@ -562,6 +566,7 @@ void Application::Run() {
         ImGui::NewFrame();
         DrawNameTags(params.projection * params.view);
         if (showCompass) DrawCompass();
+        if (showMap) DrawMinimap();
         DrawHotbar();
         DrawStatus();
         DrawChat();
@@ -703,6 +708,117 @@ void Application::DrawCrosshair() {
         draw->AddLine(ImVec2(c.x, c.y - kArm), ImVec2(c.x, c.y - kGap), color, width);
         draw->AddLine(ImVec2(c.x, c.y + kGap), ImVec2(c.x, c.y + kArm), color, width);
     }
+}
+
+namespace {
+// The colour a block shows from above on the minimap (0xAABBGGRR).
+uint32_t MapColour(BlockType type) {
+    switch (type) {
+    case BlockType::GRASS: return 0xFF3E9A4Au;
+    case BlockType::LUSH_GRASS: return 0xFF2F8E36u;
+    case BlockType::DRY_GRASS: return 0xFF4FA7A6u;
+    case BlockType::SNOWY_GRASS:
+    case BlockType::SNOW: return 0xFFF0F0F0u;
+    case BlockType::DIRT: return 0xFF3C5A86u;
+    case BlockType::SAND: return 0xFF8CCDE0u;
+    case BlockType::STONE:
+    case BlockType::COAL_ORE:
+    case BlockType::IRON_ORE:
+    case BlockType::PEBBLES: return 0xFF808080u;
+    case BlockType::WATER: return 0xFFC07A3Cu;
+    case BlockType::ICE: return 0xFFF0D8B0u;
+    case BlockType::LEAVES: return 0xFF2A6E2Au;
+    case BlockType::PINE_LEAVES: return 0xFF2E5A2Eu;
+    case BlockType::LOG:
+    case BlockType::PLANKS:
+    case BlockType::CHEST:
+    case BlockType::DOOR:
+    case BlockType::LADDER: return 0xFF2E5C8Au;
+    case BlockType::CACTUS: return 0xFF2C8C3Cu;
+    case BlockType::STONE_BRICK:
+    case BlockType::MOSSY_BRICK:
+    case BlockType::CRUMBLING_BRICK: return 0xFF6A6A6Au;
+    case BlockType::LAMP: return 0xFF7AE0F8u;
+    case BlockType::GLASS: return 0xFFE0E0D0u;
+    case BlockType::BED: return 0xFF3030C0u;
+    case BlockType::CROP:
+    case BlockType::RIPE_WHEAT: return 0xFF46B4C8u;
+    default: return 0xFF707070u;
+    }
+}
+} // namespace
+
+void Application::DrawMinimap() {
+    if (!client->IsWelcomed()) return;
+    const glm::vec3 feet = player.GetFeetPosition();
+    const glm::ivec2 here(static_cast<int>(std::floor(feet.x)), static_cast<int>(std::floor(feet.z)));
+    if (!mapTexture) {
+        glGenTextures(1, &mapTexture);
+        glBindTexture(GL_TEXTURE_2D, mapTexture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        mapPixels.assign(kMapSize * kMapSize, 0xFF202020u);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kMapSize, kMapSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, mapPixels.data());
+        mapCentre = here;
+    }
+    // Moved far from the picture's centre: start again around here.
+    if (std::abs(here.x - mapCentre.x) > kMapSize / 6 || std::abs(here.y - mapCentre.y) > kMapSize / 6) {
+        mapCentre = here;
+        mapRow = 0;
+    }
+    // A few rows a frame: the topmost block of each column, from a little above the
+    // player down (so caves and overhangs below show the ground over them), shaded by
+    // whether the ground rises or falls toward the north.
+    const int top = static_cast<int>(feet.y) + 24, bottom = static_cast<int>(feet.y) - 40;
+    for (int rows = 0; rows < 6; rows++, mapRow = (mapRow + 1) % kMapSize) {
+        const int z = mapCentre.y - kMapSize / 2 + mapRow;
+        int previous = -100000;
+        for (int col = 0; col < kMapSize; col++) {
+            const int x = mapCentre.x - kMapSize / 2 + col;
+            uint32_t colour = 0xFF202020u;
+            int height = bottom;
+            for (int y = top; y >= bottom; y--) {
+                Block b;
+                if (!world->GetBlock(x, y, z, b)) break;
+                if (b.IsAir() || (b.IsPlant() && b.type != BlockType::CROP && b.type != BlockType::RIPE_WHEAT)) continue;
+                colour = MapColour(b.type);
+                height = y;
+                break;
+            }
+            // Relief: a column higher than the one north of it is lit, lower is shaded.
+            Block north;
+            int northHeight = height;
+            for (int y = top; y >= bottom; y--) {
+                if (!world->GetBlock(x, y, z - 1, north)) break;
+                if (!north.IsAir() && !north.IsPlant()) { northHeight = y; break; }
+            }
+            const float shade = std::clamp(1.0f + 0.12f * (height - northHeight), 0.65f, 1.3f);
+            auto channel = [&](int shift) { return static_cast<uint32_t>(std::min(255.0f, ((colour >> shift) & 0xFF) * shade)) << shift; };
+            mapPixels[mapRow * kMapSize + col] = 0xFF000000u | channel(0) | channel(8) | channel(16);
+            (void)previous;
+        }
+        glBindTexture(GL_TEXTURE_2D, mapTexture);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, mapRow, kMapSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, &mapPixels[mapRow * kMapSize]);
+    }
+    // Shown in the top-right corner, north up, with an arrow for the player.
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    constexpr float kShown = 170.0f;
+    const ImVec2 lo(viewport->WorkPos.x + viewport->WorkSize.x - kShown - 12.0f, viewport->WorkPos.y + 12.0f), hi(lo.x + kShown, lo.y + kShown);
+    draw->AddRectFilled(ImVec2(lo.x - 3.0f, lo.y - 3.0f), ImVec2(hi.x + 3.0f, hi.y + 3.0f), IM_COL32(0, 0, 0, 150), 4.0f);
+    draw->AddImage(static_cast<ImTextureID>(static_cast<uintptr_t>(mapTexture)), lo, hi);
+    const float scale = kShown / kMapSize;
+    const ImVec2 me(lo.x + (feet.x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (feet.z - (mapCentre.y - kMapSize / 2)) * scale);
+    // Other players: dots.
+    for (const auto& other : client->GetRemotePlayers()) {
+        const ImVec2 at(lo.x + (other.feet.x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (other.feet.z - (mapCentre.y - kMapSize / 2)) * scale);
+        if (at.x > lo.x && at.x < hi.x && at.y > lo.y && at.y < hi.y) draw->AddCircleFilled(at, 3.5f, IM_COL32(255, 220, 80, 255));
+    }
+    const float yaw = glm::radians(camera.GetYaw());
+    const ImVec2 f(std::cos(yaw), std::sin(yaw)), r(-f.y, f.x);
+    draw->AddTriangleFilled(ImVec2(me.x + f.x * 7.0f, me.y + f.y * 7.0f), ImVec2(me.x - f.x * 4.0f + r.x * 4.5f, me.y - f.y * 4.0f + r.y * 4.5f),
+                            ImVec2(me.x - f.x * 4.0f - r.x * 4.5f, me.y - f.y * 4.0f - r.y * 4.5f), IM_COL32(255, 255, 255, 255));
+    draw->AddText(ImVec2(lo.x + kShown * 0.5f - 4.0f, lo.y + 2.0f), IM_COL32(255, 110, 100, 255), "N");
 }
 
 void Application::DrawCompass() {
@@ -1272,6 +1388,9 @@ void Application::OnKey(int key, int action) {
         break;
     case GLFW_KEY_F4:
         showCompass = !showCompass;
+        break;
+    case GLFW_KEY_M:
+        showMap = !showMap;
         break;
     case GLFW_KEY_F12:
         screenshotRequested = true;

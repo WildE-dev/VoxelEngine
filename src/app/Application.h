@@ -230,6 +230,15 @@ private:
     bool showDebug = false;
     bool showCompass = true; // F4: the compass, coordinates and clock at the top
     void DrawCompass();
+    // The minimap (M): a top-down picture of the ground around the player, refreshed
+    // a few rows a frame into a small texture.
+    static constexpr int kMapSize = 96;
+    bool showMap = true;
+    unsigned int mapTexture = 0;
+    std::vector<uint32_t> mapPixels;
+    int mapRow = 0;
+    glm::ivec2 mapCentre{ 0 };   // the column the picture is centred on
+    void DrawMinimap();
     bool vsync = true;
     // VOXEL_BENCH: per-section frame timing, printed once a second.
     bool bench = false;
