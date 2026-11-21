@@ -742,6 +742,13 @@ damage on one), water doesn't wash it away, and it's fastest to break with an ax
 Stack them up a shaft or against a wall. `ShapeTest` checks climbing, holding on and
 sliding.
 
+## Campfires
+
+A **campfire** (a log and a quarter of stone) burns almost as bright as a lamp, with
+smoke curling up from it. Right-click it with raw venison or raw fish in your hand to
+cook one on the spot, no crafting needed. Standing in it burns (half a heart every
+0.75 s), and water puts it out. `FoodTest` checks its light and the cooking.
+
 ## Doors
 
 A **door** (2 planks) stands two blocks tall: placing one needs room above for its
@@ -852,6 +859,7 @@ makes four.
 | Chest | 2 planks |
 | 3 ladders | 1 planks |
 | Door | 2 planks |
+| Campfire | 1 log + 0.25 stone |
 | Bed | 3 planks + 1 hide |
 | Iron ingot | 1 iron ore + 0.25 coal |
 | Lamp (with coal) | 0.5 glass + 0.25 coal |

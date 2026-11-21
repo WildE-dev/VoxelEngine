@@ -1000,6 +1000,19 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     Block block;
     if (!InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block)) return;
     if (block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN) return ToggleDoor(pos, block.type == BlockType::DOOR);
+    if (block.type == BlockType::CAMPFIRE) {
+        // Cooks one of the raw food in their hand.
+        const BlockType cooked = client.heldBlock == BlockType::RAW_VENISON ? BlockType::COOKED_VENISON
+                               : client.heldBlock == BlockType::RAW_FISH    ? BlockType::COOKED_FISH
+                                                                             : BlockType::AIR;
+        uint32_t& raw = client.resources[static_cast<size_t>(client.heldBlock)];
+        if (cooked == BlockType::AIR || raw < Block::kUnitsPerBlock) return;
+        raw -= Block::kUnitsPerBlock;
+        client.resources[static_cast<size_t>(cooked)] += Block::kUnitsPerBlock;
+        SendResources(client);
+        if (cooked == BlockType::COOKED_VENISON) Award(client, Achievement::Cook);
+        return;
+    }
     if (block.type != BlockType::BED) return;
     if (client.bed != pos) {
         client.bed = pos;
@@ -1442,12 +1455,13 @@ void Server::UpdateTraps() {
                 underCells[n] = glm::ivec3(glm::floor(client.feet + glm::vec3(dx, -0.05f, dz)));
                 n++;
             }
-        bool spiked = false;
+        bool spiked = false, burning = false;
         for (int i = 0; i < 4; i++) {
             Block b;
             const glm::ivec3& f = feetCells[i];
             if (world->GetBlock(f.x, f.y, f.z, b)) {
                 if (b.type == BlockType::SPIKES) spiked = true;
+                if (b.type == BlockType::CAMPFIRE) burning = true;
                 if (b.type == BlockType::PRESSURE_PLATE) {
                     auto it = plateReady.find(f);
                     if (it == plateReady.end() || now >= it->second) {
@@ -1462,6 +1476,10 @@ void Server::UpdateTraps() {
         if (spiked && now >= client.nextSpikeHit) {
             client.nextSpikeHit = now + kSpikeInterval;
             Hurt(client, kSpikeDamage, "was impaled on spikes");
+        }
+        if (burning && now >= client.nextSpikeHit) {
+            client.nextSpikeHit = now + 0.75;
+            Hurt(client, 1, "walked into a campfire");
         }
     }
 

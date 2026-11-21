@@ -44,6 +44,7 @@ const char* Audio::Material(BlockType type) {
     case BlockType::CHEST:
     case BlockType::BED:
     case BlockType::LADDER:
+    case BlockType::CAMPFIRE:
     case BlockType::DOOR:
     case BlockType::DOOR_OPEN:
     case BlockType::CACTUS: return "wood";

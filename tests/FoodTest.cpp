@@ -42,13 +42,14 @@ struct TestClient {
     Client client{ world };
     glm::vec3 feet{ 0.0f };
     bool joined = false;
+    BlockType held = BlockType::AIR; // what others (and the server) see in hand
     void Update() {
         client.Poll();
         if (!joined && client.IsWelcomed()) joined = true, feet = client.GetSpawn();
         if (auto c = client.TakeCorrection()) feet = *c;
         if (!joined) return;
         world.Update(feet + glm::vec3(0.0f, 1.62f, 0.0f));
-        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround);
+        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround, Tool::None, held);
     }
 };
 
@@ -225,6 +226,22 @@ int main() {
     sync();
     a.client.Craft(Crafting::Find("cooked_fish"), 1);
     Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::COOKED_FISH) == Block::kUnitsPerBlock; }), "and cooks with a little wood");
+
+    std::cout << "Campfire" << std::endl;
+    server.QueueConsoleCommand("give campfire 1 Eater");
+    server.QueueConsoleCommand("give raw_venison 2 Eater");
+    sync();
+    a.client.PlaceBlock({ 6, 0, 7 }, BlockType::CAMPFIRE);
+    int blockLight = 0, skyLight = 0;
+    Check(Pump(a, 20.0, [&] { return a.world.GetLight(6, 0, 7, blockLight, skyLight) && blockLight >= 13; }), "a campfire burns bright (light " + std::to_string(blockLight) + ")");
+    a.held = BlockType::RAW_VENISON;
+    wait(0.3);
+    const uint32_t cookedBefore = a.client.GetResources(BlockType::COOKED_VENISON), rawBefore = a.client.GetResources(BlockType::RAW_VENISON);
+    a.client.UseBed({ 6, 0, 7 });
+    Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::COOKED_VENISON) == cookedBefore + Block::kUnitsPerBlock; }) &&
+              a.client.GetResources(BlockType::RAW_VENISON) == rawBefore - Block::kUnitsPerBlock,
+          "right-clicking it with raw venison in hand cooks one");
+    a.held = BlockType::AIR;
 
     std::cout << "Achievements" << std::endl;
     Check(Has(a, "First Meal: eat something") && Has(a, "Hunter: bring down a deer") && Has(a, "Cook: cook some venison") && Has(a, "Farmer: harvest ripe wheat") &&

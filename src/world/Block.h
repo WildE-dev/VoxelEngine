@@ -150,6 +150,9 @@ enum class BlockType : uint8_t {
     ARROW, // item: what a bow shoots
     RAW_FISH,    // items: caught with a fishing rod
     COOKED_FISH,
+    // A campfire: a bright light (drawn as a sprite of logs and flames, passable),
+    // smoking; right-click it with raw food in hand to cook it; standing in it burns.
+    CAMPFIRE,
     COUNT
 };
 
@@ -163,7 +166,7 @@ inline bool IsItemType(BlockType type) {
 inline bool IsPlantType(BlockType type) {
     return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW || type == BlockType::SPIKES ||
            type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES || type == BlockType::CROP || type == BlockType::RIPE_WHEAT ||
-           type == BlockType::LADDER || type == BlockType::DOOR_OPEN;
+           type == BlockType::LADDER || type == BlockType::DOOR_OPEN || type == BlockType::CAMPFIRE;
 }
 
 // The resource a block counts as in survival (see Block::ResourceUnits): its own type,
@@ -213,7 +216,7 @@ inline ShapeStyle StyleOf(BlockType type) {
 
 // Block light emitted by a block type, 0..kMaxLight.
 inline uint8_t GetLightEmission(BlockType type) {
-    return type == BlockType::LAMP ? kMaxLight : 0;
+    return type == BlockType::LAMP ? kMaxLight : type == BlockType::CAMPFIRE ? kMaxLight - 1 : 0;
 }
 
 // Indices into the texture atlas for each face of a block.

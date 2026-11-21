@@ -154,8 +154,11 @@ private:
         glm::vec3 position, velocity;
         float life, maxLife, size;
         glm::vec4 uv;
+        bool rise = false; // smoke: drifts up instead of falling
     };
     std::vector<Particle> particles;
+    std::vector<glm::ivec3> campfires; // near the player, for smoke
+    double nextFireScan = 0.0;
     double nextShot = 0.0; // the bow's next shot
     std::optional<glm::ivec3> lastBobber; // where our bobber was (for the splash when a fish bites)
     std::map<std::pair<int, int>, glm::vec3> arrowFacing; // which way arrows were going before they stuck

@@ -277,6 +277,7 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* ARROW      */ {{ "arrow", "arrow", "arrow", "arrow", "arrow", "arrow" }},
     /* RAW_FISH    */ {{ "raw_fish", "raw_fish", "raw_fish", "raw_fish", "raw_fish", "raw_fish" }},
     /* COOKED_FISH */ {{ "cooked_fish", "cooked_fish", "cooked_fish", "cooked_fish", "cooked_fish", "cooked_fish" }},
+    /* CAMPFIRE    */ {{ "campfire", nullptr, nullptr, nullptr, nullptr, nullptr }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -307,7 +308,7 @@ namespace {
 constexpr const char* kBlockIds[kBlockTypeCount] = {
     "air", "grass", "dirt", "stone", "lamp", "log", "leaves", "tall_grass", "flower_red", "flower_yellow", "sand", "water", "pump", "pipe",
     "stone_brick", "mossy_brick", "spikes", "crumbling_brick", "pressure_plate", "sluice", "snow", "dry_grass", "lush_grass", "snowy_grass",
-    "pine_leaves", "cactus", "dead_bush", "ice", "pebbles", "planks", "glass", "raw_venison", "cooked_venison", "hide", "chest", "bed", "coal_ore", "iron_ore", "coal", "iron_ingot", "seeds", "crop", "ripe_wheat", "wheat", "bread", "ladder", "door", "door_open", "arrow", "raw_fish", "cooked_fish",
+    "pine_leaves", "cactus", "dead_bush", "ice", "pebbles", "planks", "glass", "raw_venison", "cooked_venison", "hide", "chest", "bed", "coal_ore", "iron_ore", "coal", "iron_ingot", "seeds", "crop", "ripe_wheat", "wheat", "bread", "ladder", "door", "door_open", "arrow", "raw_fish", "cooked_fish", "campfire",
 };
 } // namespace
 

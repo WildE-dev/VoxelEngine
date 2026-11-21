@@ -54,7 +54,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -153,6 +153,7 @@ const char* BlockName(BlockType type) {
     case BlockType::DOOR: return "Door";
     case BlockType::DOOR_OPEN: return "Open door";
     case BlockType::ARROW: return "Arrow";
+    case BlockType::CAMPFIRE: return "Campfire";
     case BlockType::RAW_FISH: return "Raw fish";
     case BlockType::COOKED_FISH: return "Cooked fish";
     default:               return "Air";
@@ -1801,7 +1802,7 @@ void Application::OnMouseButton(int button, int action) {
         // A bed: respawn here (and sleep, at night).
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
             at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) &&
-            (target.type == BlockType::BED || target.type == BlockType::DOOR || target.type == BlockType::DOOR_OPEN)) {
+            (target.type == BlockType::BED || target.type == BlockType::DOOR || target.type == BlockType::DOOR_OPEN || target.type == BlockType::CAMPFIRE)) {
             client->UseBed(at->block);
             return;
         }
@@ -2073,9 +2074,43 @@ void Application::UpdateFireflies(float dt) {
 }
 
 void Application::UpdateParticles(float dt) {
-    // Gravity, a little air drag, and they come to rest on whatever's under them.
+    // Smoke from campfires near the player (found by a look round every second).
+    static std::mt19937 smokeRng(99);
+    std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+    const double now = Client::Now();
+    if (now >= nextFireScan) {
+        nextFireScan = now + 1.0;
+        campfires.clear();
+        const glm::ivec3 c(glm::floor(player.GetFeetPosition()));
+        for (int x = -16; x <= 16; x++)
+            for (int z = -16; z <= 16; z++)
+                for (int y = -6; y <= 6; y++) {
+                    Block b;
+                    if (world->GetBlock(c.x + x, c.y + y, c.z + z, b) && b.type == BlockType::CAMPFIRE) campfires.push_back(c + glm::ivec3(x, y, z));
+                }
+    }
+    if (!campfires.empty() && unit(smokeRng) < dt * 5.0f * std::min<size_t>(campfires.size(), 4)) {
+        const glm::ivec3 fire = campfires[static_cast<size_t>(unit(smokeRng) * campfires.size()) % campfires.size()];
+        glm::vec2 uv0, uv1;
+        renderer->GetAtlas().GetTileUV(renderer->GetAtlas().GetIndex("smoke"), uv0, uv1);
+        Particle p;
+        p.position = glm::vec3(fire) + glm::vec3(0.35f + 0.3f * unit(smokeRng), 0.6f, 0.35f + 0.3f * unit(smokeRng));
+        p.velocity = glm::vec3(0.2f * (unit(smokeRng) - 0.5f), 0.0f, 0.2f * (unit(smokeRng) - 0.5f));
+        p.maxLife = p.life = 2.5f + unit(smokeRng);
+        p.size = 0.08f + 0.07f * unit(smokeRng);
+        p.uv = glm::vec4(uv0, uv1);
+        p.rise = true;
+        if (particles.size() < 600) particles.push_back(p);
+    }
+    // Gravity, a little air drag, and they come to rest on whatever's under them
+    // (smoke rises instead, slowly).
     for (auto& p : particles) {
         p.life -= dt;
+        if (p.rise) {
+            p.velocity.y += (1.1f - p.velocity.y) * std::min(1.0f, dt * 2.0f);
+            p.position += p.velocity * dt;
+            continue;
+        }
         p.velocity.y -= 18.0f * dt;
         p.velocity *= std::exp(-1.5f * dt);
         glm::vec3 next = p.position + p.velocity * dt;
