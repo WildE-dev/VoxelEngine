@@ -9,7 +9,9 @@
 //    more trees in jungles than on plains,
 //  - frozen seas have ice over water, swamps have shallow standing water,
 //  - nothing floats: trunks and cacti stand on something, plants on their ground,
-//  - pebbles lie about on solid ground.
+//  - pebbles lie about on solid ground,
+//  - lakes overflow from springs, whose rivers run in sandy, watered channels to
+//    drains.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -215,6 +217,32 @@ int main() {
             }
     Check(springs >= 24, "lakes overflow from springs (" + std::to_string(springs) + " looked at)");
     Check(springsRight == springs, "each spring is in the ground, open above, below a lake's level nearby (" + std::to_string(springsRight) + " of " + std::to_string(springs) + ")");
+
+    // Rivers from them: drains where they end, and channels with sandy beds and water.
+    int drains = 0, drainsRight = 0, riverColumns = 0, riverRight = 0;
+    for (int cx = -40; cx <= 40 && drains < 16; cx++)
+        for (int cz = -40; cz <= 40 && drains < 16; cz++)
+            for (const glm::ivec2& d : t.DrainsIn(cx, cz)) {
+                drains++;
+                const auto col = t.ColumnAt(d.x, d.y);
+                const int row = col.HasSlopedTop() ? col.surfaceRow : col.surfaceRow - 1;
+                if (world.Get({ d.x, row, d.y }).type == BlockType::DRAIN) drainsRight++;
+                // The channel upstream of it: columns in the river nearby.
+                for (int dx = -12; dx <= 12; dx += 2)
+                    for (int dz = -12; dz <= 12; dz += 2) {
+                        const int x = d.x + dx, z = d.y + dz;
+                        if (!t.InRiver(x, z) || t.LakeLevelAt(x, z) != INT_MIN) continue;
+                        const auto c = t.ColumnAt(x, z);
+                        if (c.surfaceRow < TerrainGenerator::kSeaLevel) continue; // (out in the sea)
+                        riverColumns++;
+                        const Block& top = world.Get({ x, c.HasSlopedTop() ? c.surfaceRow : c.surfaceRow - 1, z });
+                        const Block& over = world.Get({ x, c.FirstOpenRow(), z });
+                        if ((top.type == BlockType::SAND || top.type == BlockType::DRAIN || top.type == BlockType::SPRING) && (over.HasWater() || top.HasWater())) riverRight++;
+                    }
+            }
+    Check(drains >= 16 && drainsRight == drains, "rivers end in drains in their beds (" + std::to_string(drainsRight) + " of " + std::to_string(drains) + ")");
+    Check(riverColumns > 50 && riverRight * 10 >= riverColumns * 9,
+          "river channels have sand beds with water over them (" + std::to_string(riverRight) + " of " + std::to_string(riverColumns) + " columns looked at)");
     std::cout << "        " << world.generated << " chunks generated, " << world.seconds * 1000.0 / world.generated << " ms each" << std::endl;
 
     std::cout << (failures ? "BIOME TEST FAILED (" : "ALL BIOME CHECKS PASSED (") << failures << " failures)" << std::endl;

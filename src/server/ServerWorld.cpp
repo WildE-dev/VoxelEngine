@@ -92,9 +92,9 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
 
     chunk->SetBlock(local.x, local.y, local.z, block);
     chunk->MarkUnsaved();
-    // (Springs run with the pumps.)
-    const bool wasPump = previous.type == BlockType::PUMP || previous.type == BlockType::SPRING;
-    const bool isPump = block.type == BlockType::PUMP || block.type == BlockType::SPRING;
+    // (Springs and drains run with the pumps.)
+    const bool wasPump = previous.type == BlockType::PUMP || previous.type == BlockType::SPRING || previous.type == BlockType::DRAIN;
+    const bool isPump = block.type == BlockType::PUMP || block.type == BlockType::SPRING || block.type == BlockType::DRAIN;
     if (wasPump && previous.type != block.type) water.RemovePump({ x, y, z });
     if (isPump) water.AddPump({ x, y, z });
     if (Power::IsMachine(previous.type) && previous.type != block.type) machines.erase({ x, y, z });
@@ -312,7 +312,7 @@ void ServerWorld::WorkerLoop() {
             // chunk may have been moving when it was saved. Generated water is at rest.
             for (int i = 0; i < Chunk::VOLUME; i++) {
                 const Block& b = (*generatedBlocks)[i];
-                const bool pump = b.type == BlockType::PUMP || b.type == BlockType::SPRING;
+                const bool pump = b.type == BlockType::PUMP || b.type == BlockType::SPRING || b.type == BlockType::DRAIN;
                 const bool machine = Power::IsMachine(b.type);
                 if (!pump && !machine && !(saved && b.HasWater())) continue;
                 const glm::ivec3 pos = c * S + glm::ivec3(i % S, (i / S) % S, i / (S * S));

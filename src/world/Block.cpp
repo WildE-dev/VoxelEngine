@@ -313,6 +313,7 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* FILTER_PIPE */ {{ "filter_pipe_end", "filter_pipe_end", "filter_pipe", "filter_pipe", "filter_pipe", "filter_pipe" }},
     /* CRAFTER     */ {{ "crafter_top", "crafter_bottom", "crafter_side", "crafter_side", "crafter_side", "crafter_side" }},
     /* HARVESTER   */ {{ "harvester_top", "crafter_bottom", "harvester_side", "harvester_side", "harvester_side", "harvester_side" }},
+    /* DRAIN       */ {{ "drain", "spring", "drain_side", "drain_side", "drain_side", "drain_side" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -347,7 +348,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "water_wheel", "air_pipe", "drill", "shaft", "compressor", "lever", "lever_on", "logic_gate", "signal_lamp", "signal_lamp_on", "air_tank", "valve", "valve_open",
     "piston", "piston_head", "water_sensor", "pressure_sensor", "daylight_sensor", "player_sensor",
     "item_pipe", "smelter", "smelter_lit", "spring", "steel_ingot",
-    "extractor", "filter_pipe", "crafter", "harvester",
+    "extractor", "filter_pipe", "crafter", "harvester", "drain",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");

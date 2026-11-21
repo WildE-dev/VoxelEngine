@@ -115,9 +115,21 @@ public:
     // around it. The row water fills up to (exclusive) in this column, or INT_MIN.
     int LakeLevelAt(int x, int z) const;
     // Where a lake overflows: a spring (BlockType::SPRING) in the ground just outside
-    // its rim on its lowest side, where the land falls away below its level, starting a
-    // stream that runs downhill from it. The springs in a chunk's columns, or none.
+    // its rim on its lowest side, where the land falls away below its level. The
+    // springs in a chunk's columns, or none.
     std::vector<glm::ivec2> SpringsIn(int chunkX, int chunkZ) const;
+    // Rivers: from each spring a channel runs downhill (following the land's fall,
+    // turning gently), kRiverHalfWidth either side of its line, its bed kRiverDepth
+    // below the ground and never rising, with banks easing up into the land. Its bed is
+    // sand over dirt, it's generated full of water a block deep, and it ends, after at
+    // most kMaxRiverLength blocks, where it reaches the sea or would have to cut deeper
+    // than kRiverMaxCut, at a drain (BlockType::DRAIN) in its bed that takes the
+    // water away. The drains in a chunk's columns, or none.
+    std::vector<glm::ivec2> DrainsIn(int chunkX, int chunkZ) const;
+    // Whether a column's middle is in a river's channel (within `margin` more of it).
+    bool InRiver(int x, int z, float margin = 0.0f) const;
+    static constexpr float kRiverHalfWidth = 1.6f, kRiverBanks = 2.5f, kRiverDepth = 2.0f, kRiverMaxCut = 7.0f;
+    static constexpr int kMaxRiverLength = 160;
     // Water fills open cells below this row: the sea's level, or a lake's.
     int WaterLevelAt(int x, int z) const { return std::max(static_cast<int>(kSeaLevel), LakeLevelAt(x, z)); }
     static constexpr int kLakeCell = 128;
@@ -152,11 +164,26 @@ private:
         int level = 0;
         bool hasSpring = false;
         glm::ivec2 spring{ 0 }; // the column of its spring
+        // Its river: points a block apart from the spring (x, z, and the bed's height),
+        // ending at its drain.
+        std::vector<glm::vec3> river;
+        glm::ivec2 drain{ 0 };
     };
+    // The river points near a chunk's columns (from the lakes around), worked out once
+    // and kept (any thread).
+    std::shared_ptr<const std::vector<glm::vec3>> RiverPointsNear(int chunkX, int chunkZ) const;
+    // The nearest river point's distance from (x, z) and its bed height (false: none near).
+    bool NearestRiver(float x, float z, float& distance, float& bed) const;
+    struct RiverCache {
+        std::mutex mutex;
+        std::unordered_map<int64_t, std::shared_ptr<const std::vector<glm::vec3>>> near;
+    };
+    std::shared_ptr<RiverCache> riverCache = std::make_shared<RiverCache>();
     // The lake in grid cell (cx, cz), worked out once and kept (any thread).
     const Lake& LakeIn(int cx, int cz) const;
-    // The land before lakes are carved into it.
+    // The land before lakes are carved into it, and with them (before rivers).
     float GetBaseHeight(int x, int z) const;
+    float GetLakeHeight(int x, int z) const;
     struct LakeCache {
         std::mutex mutex;
         std::unordered_map<int64_t, Lake> lakes;

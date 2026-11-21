@@ -132,7 +132,8 @@ inline float Hardness(BlockType type) {
     case BlockType::SHAFT:
     case BlockType::WATER_WHEEL: return 2.0f;
     case BlockType::STONE:
-    case BlockType::SPRING: return 4.0f;
+    case BlockType::SPRING:
+    case BlockType::DRAIN: return 4.0f;
     case BlockType::COAL_ORE: return 4.5f;
     case BlockType::IRON_ORE: return 6.0f;
     case BlockType::STONE_BRICK:
@@ -146,6 +147,7 @@ inline Tool BestTool(BlockType type) {
     switch (type) {
     case BlockType::STONE:
     case BlockType::SPRING:
+    case BlockType::DRAIN:
     case BlockType::COAL_ORE:
     case BlockType::IRON_ORE:
     case BlockType::STONE_BRICK:

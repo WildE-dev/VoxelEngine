@@ -190,6 +190,39 @@ const TerrainGenerator::Lake& TerrainGenerator::LakeIn(int cx, int cz) const {
             lake.hasSpring = h < lake.level - 1.0f && h > kSeaLevel + 1.0f;
             lake.spring = column;
         }
+        // Its river: downhill from the spring, a block at a time, turning towards the
+        // lowest ground a few blocks ahead (within 50 degrees either way, and gently).
+        if (lake.hasSpring) {
+            glm::vec2 p = glm::vec2(lake.spring) + 0.5f;
+            glm::vec2 dir = glm::normalize(p - lake.centre);
+            float bed = GetBaseHeight(lake.spring.x, lake.spring.y) - kRiverDepth;
+            for (int step = 0; step < kMaxRiverLength; step++) {
+                lake.river.emplace_back(p.x, p.y, bed);
+                const float facing = std::atan2(dir.y, dir.x);
+                glm::vec2 best = dir;
+                float lowest = 1e9f;
+                for (int k = -3; k <= 3; k++) {
+                    const float a = facing + k * glm::radians(50.0f / 3.0f);
+                    const glm::vec2 d(std::cos(a), std::sin(a)), ahead = p + d * 4.0f;
+                    // (A little in favour of keeping straight.)
+                    const float h = GetBaseHeight(static_cast<int>(std::floor(ahead.x)), static_cast<int>(std::floor(ahead.y))) + 0.15f * std::abs(k);
+                    if (h < lowest) lowest = h, best = d;
+                }
+                dir = glm::normalize(dir * 0.65f + best * 0.35f);
+                p += dir;
+                const float ground = GetBaseHeight(static_cast<int>(std::floor(p.x)), static_cast<int>(std::floor(p.y)));
+                if (ground <= kSeaLevel + 0.5f) {
+                    lake.river.emplace_back(p.x, p.y, std::min(bed, ground - kRiverDepth));
+                    break; // reached the sea
+                }
+                bed = std::min(bed, ground - kRiverDepth);
+                if (ground - bed > kRiverMaxCut) break; // it would cut too deep: it ends here
+            }
+            const glm::vec3 end = lake.river.back();
+            lake.drain = glm::ivec2(static_cast<int>(std::floor(end.x)), static_cast<int>(std::floor(end.y)));
+            // Too short to be a river: just the spring.
+            if (lake.river.size() < 12) lake.river.clear();
+        }
     }
     std::lock_guard<std::mutex> lock(lakeCache->mutex);
     if (lakeCache->lakes.size() > 65536) lakeCache->lakes.clear(); // (far away: worked out again if needed)
@@ -223,7 +256,78 @@ std::vector<glm::ivec2> TerrainGenerator::SpringsIn(int chunkX, int chunkZ) cons
     return out;
 }
 
+std::shared_ptr<const std::vector<glm::vec3>> TerrainGenerator::RiverPointsNear(int chunkX, int chunkZ) const {
+    const int64_t key = (static_cast<int64_t>(chunkX) << 32) ^ static_cast<uint32_t>(chunkZ);
+    {
+        std::lock_guard<std::mutex> lock(riverCache->mutex);
+        auto it = riverCache->near.find(key);
+        if (it != riverCache->near.end()) return it->second;
+    }
+    // Rivers reach at most their length plus the spring's distance from its lake's
+    // centre, which is in its own cell: the lakes in the cells around.
+    auto points = std::make_shared<std::vector<glm::vec3>>();
+    if (type == Type::Normal) {
+        const float margin = kRiverHalfWidth + kRiverBanks + 2.0f;
+        const float x0 = chunkX * S - margin, x1 = (chunkX + 1) * S + margin, z0 = chunkZ * S - margin, z1 = (chunkZ + 1) * S + margin;
+        const int cx = static_cast<int>(std::floor(chunkX * S / static_cast<float>(kLakeCell)));
+        const int cz = static_cast<int>(std::floor(chunkZ * S / static_cast<float>(kLakeCell)));
+        for (int dx = -3; dx <= 3; dx++)
+            for (int dz = -3; dz <= 3; dz++) {
+                const Lake& lake = LakeIn(cx + dx, cz + dz);
+                if (!lake.exists) continue;
+                for (const glm::vec3& r : lake.river)
+                    if (r.x >= x0 && r.x <= x1 && r.y >= z0 && r.y <= z1) points->push_back(r);
+            }
+    }
+    std::lock_guard<std::mutex> lock(riverCache->mutex);
+    if (riverCache->near.size() > 16384) riverCache->near.clear();
+    return riverCache->near.emplace(key, points).first->second;
+}
+
+bool TerrainGenerator::NearestRiver(float x, float z, float& distance, float& bed) const {
+    if (type != Type::Normal) return false;
+    const auto points = RiverPointsNear(static_cast<int>(std::floor(x / S)), static_cast<int>(std::floor(z / S)));
+    float best = 1e9f;
+    for (const glm::vec3& r : *points) {
+        const float d2 = (r.x - x) * (r.x - x) + (r.y - z) * (r.y - z);
+        if (d2 < best) best = d2, bed = r.z;
+    }
+    if (best > 1e8f) return false;
+    distance = std::sqrt(best);
+    return true;
+}
+
+bool TerrainGenerator::InRiver(int x, int z, float margin) const {
+    float d, bed;
+    return NearestRiver(x + 0.5f, z + 0.5f, d, bed) && d < kRiverHalfWidth + margin;
+}
+
+std::vector<glm::ivec2> TerrainGenerator::DrainsIn(int chunkX, int chunkZ) const {
+    std::vector<glm::ivec2> out;
+    if (type != Type::Normal) return out;
+    const int x0 = chunkX * S, z0 = chunkZ * S;
+    const int cx = static_cast<int>(std::floor(x0 / static_cast<float>(kLakeCell))), cz = static_cast<int>(std::floor(z0 / static_cast<float>(kLakeCell)));
+    for (int dx = -3; dx <= 3; dx++)
+        for (int dz = -3; dz <= 3; dz++) {
+            const Lake& lake = LakeIn(cx + dx, cz + dz);
+            if (!lake.exists || lake.river.empty()) continue;
+            if (lake.drain.x >= x0 && lake.drain.x < x0 + S && lake.drain.y >= z0 && lake.drain.y < z0 + S) out.push_back(lake.drain);
+        }
+    return out;
+}
+
 float TerrainGenerator::GetHeight(int x, int z) const {
+    const float h = GetLakeHeight(x, z);
+    if (type == Type::Empty) return h;
+    // Rivers: the channel cut down to its bed, the banks easing up to the land.
+    float d, bed;
+    if (!NearestRiver(static_cast<float>(x), static_cast<float>(z), d, bed) || d >= kRiverHalfWidth + kRiverBanks) return h;
+    if (d < kRiverHalfWidth) return std::min(h, bed);
+    const float t = glm::smoothstep(kRiverHalfWidth, kRiverHalfWidth + kRiverBanks, d);
+    return std::min(h, bed + (h - bed) * t);
+}
+
+float TerrainGenerator::GetLakeHeight(int x, int z) const {
     const float base = GetBaseHeight(x, z);
     if (type == Type::Empty) return base;
     const glm::vec2 p(static_cast<float>(x), static_cast<float>(z));
@@ -351,8 +455,9 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
 
     Caves::Carve(coords, rows, out);
 
-    // Lakes: their water level per column, and their beds kept whole (a cave opening
-    // under one would drain it) and sandy.
+    // Lakes and rivers: their water level per column, and their beds kept whole (a
+    // cave opening under one would drain it) and sandy. A river's water is a block
+    // deep over its bed.
     std::array<int, S * S> waterLevels;
     for (int x = 0; x < S; x++)
         for (int z = 0; z < S; z++) {
@@ -360,7 +465,9 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
             const int lake = LakeLevelAt(wx, wz);
             waterLevels[x * S + z] = std::max(static_cast<int>(kSeaLevel), lake);
             const int m = rows[x * S + z];
-            if (lake <= m) continue; // dry here (water fills from the surface row up)
+            const bool river = InRiver(wx, wz, 0.3f);
+            if (river) waterLevels[x * S + z] = std::max(waterLevels[x * S + z], ColumnFrom(heights, x, z).FirstOpenRow() + 1);
+            if (lake <= m && !river) continue; // dry here (water fills from the surface row up)
             const Column column = ColumnFrom(heights, x, z);
             for (int y = 0; y < S; y++) {
                 const int blockY = coords.y * S + y;
@@ -397,14 +504,17 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
 
     Features::Place(*this, coords, rows, out);
     PlacePlants(coords, heights, rows, out);
-    // Springs where lakes overflow: the column's top solid block (under a sloped top, the
-    // slope itself), with nothing growing on it.
-    for (const glm::ivec2& s : SpringsIn(coords.x, coords.z)) {
+    // Springs where lakes overflow, and drains where their rivers end: the column's top
+    // solid block (under a sloped top, the slope itself), with nothing growing on it.
+    std::vector<std::pair<glm::ivec2, BlockType>> wells;
+    for (const glm::ivec2& s : SpringsIn(coords.x, coords.z)) wells.emplace_back(s, BlockType::SPRING);
+    for (const glm::ivec2& d : DrainsIn(coords.x, coords.z)) wells.emplace_back(d, BlockType::DRAIN);
+    for (const auto& [s, kind] : wells) {
         const int x = s.x - coords.x * S, z = s.y - coords.z * S;
         const Column column = ColumnFrom(heights, x, z);
         const int row = column.HasSlopedTop() ? column.surfaceRow : column.surfaceRow - 1;
         const int y = row - coords.y * S;
-        if (y >= 0 && y < S) out[Index(x, y, z)] = Block(BlockType::SPRING);
+        if (y >= 0 && y < S) out[Index(x, y, z)] = Block(kind);
         // (Clear of plants and boulders over it, so the water can come out; a tree's
         // trunk is left standing.)
         if (y + 1 >= 0 && y + 1 < S) {

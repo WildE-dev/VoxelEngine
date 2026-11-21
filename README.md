@@ -289,15 +289,20 @@ want (see [Air power](#air-power)). Mountain lakes never freeze, no trees grow i
 right beside them, and caves never open under them. About one cell in six has one;
 the nearest to spawn is about 70 blocks out, towards -x -z.
 
-**Streams.** Where a lake's rim is lowest and the land beyond falls away below its
+**Rivers.** Where a lake's rim is lowest and the land beyond falls away below its
 level, it overflows: a **spring** sits in the ground just outside the rim, and water
 wells up out of it without end, a block and a half a second (see [Water](#water)).
-The water simulation does the rest: the stream runs downhill from it, along hollows
-and down slopes, filling dips into ponds on its way, until it reaches the sea or
-spreads out thin and dries up. Streams make ready-made mill sites: a water wheel with
-one side in a stream turns for as long as the spring runs. Springs look like wet
-rock; breaking one gives stone and stops it. `/locate spring` (operators) says where
-the nearest is.
+From it a river runs downhill, up to 160 blocks: a channel about three blocks wide
+cut two blocks into the land, following its fall and turning gently, its bed never
+rising (it cuts through small rises), with banks easing up to the ground either side.
+Its bed is sand over dirt, it's full of water a block deep from the start, and no
+trees grow in it or on its banks. It ends where it reaches the sea, or where it would
+have to cut more than seven blocks deep, at a **drain**: an iron grate in its bed
+that takes water away twice as fast as the spring gives it, so the river keeps
+running from spring to drain without flooding the land beyond. Rivers make ready-made
+mill sites: a water wheel with one side in one turns for as long as the spring runs.
+Springs look like wet rock and drains like grates; breaking either gives stone and
+stops it. `/locate spring` (operators) says where the nearest spring is.
 
 ### Dungeons
 
@@ -436,19 +441,22 @@ or in a puddle on dry ground. Puddles don't evaporate while it rains.
 
 **Springs** add water: each one puts up to 48 units a tick (three eighths of a block)
 into the open cells above and beside it that have room, shared between them, for as
-long as it's within the simulation area. Water that reaches the open sea goes: random
+long as it's within the simulation area. **Drains** take it away: up to 96 units a
+tick from the cells above and beside them. Water that reaches the open sea goes: random
 ticks take any water lying above the sea's surface on the open sea, so streams don't
 slowly raise it. `PumpTest` checks that a spring fills the cell above it at that rate
 and stops when it's full, keeps the water coming once there's somewhere for it to
-go, and stops when broken; `BiomeTest` that lakes overflow from springs, each in the
-ground, open above and below a lake's level.
+go, and stops when broken, and that a drain empties a cup at its rate; `BiomeTest`
+that lakes overflow from springs, each in the ground, open above and below a lake's
+level, that rivers end in drains in their beds, and that their channels have sand
+beds with water over them.
 
 **Evaporation**: shallow puddles that have stopped flowing dry up. Every water tick,
 8 random cells of each chunk near a player are looked at (random ticks), and a resting
 puddle among them disappears: a cell with at most a quarter of a block of water that
 isn't full, has no water above it and isn't flowing. Each cell comes up about every
-2.1 minutes on average, so a spill fades away cell by cell. This and the sea are the
-only ways water is ever destroyed (and springs the only way it's made); lakes and pools are deeper than that and stay. Random ticks
+2.1 minutes on average, so a spill fades away cell by cell. This, drains and the sea
+are the only ways water is ever destroyed (and springs the only way it's made); lakes and pools are deeper than that and stay. Random ticks
 cost about 1 ms per tick for the whole simulation area. `EvaporationTest` checks that a
 spill settles into a puddle that dries up gradually, that a deep pool keeps its water,
 and that nothing evaporates with no player nearby.
@@ -1082,7 +1090,7 @@ sensor) and a quarter of an iron ingot, with a quarter of sand (water), glass
 The server runs it ten times a second (`Server::UpdateSignals`,
 `src/server/Signals.cpp`; the rules are in `src/world/Signals.h`), keeps every
 block's channels and saves them with the world (world format 11), and tells everyone
-about each block's channels and state as they change (`SignalInfo`, protocol 41).
+about each block's channels and state as they change (`SignalInfo`, protocol 42).
 `SignalTest` checks:
 
 - a lamp lights and goes out with a lever on its channel, and one on another channel

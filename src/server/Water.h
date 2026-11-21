@@ -57,7 +57,10 @@ class ServerWorld;
 //
 // Springs: each tick, a spring adds up to kSpringRate units of new water to the open
 // cells above and beside it that have room (shared between them), so a stream runs
-// from it for as long as there's somewhere for the water to go. They're kept with the
+// from it for as long as there's somewhere for the water to go. Drains are the other
+// end: each tick a drain takes up to kDrainRate units (twice a spring's) out of the
+// cells above and beside it, and that water is gone, so a river runs from its spring
+// to its drain without flooding what's beyond. They're kept with the
 // pumps (AddPump), and like them only run in the simulation area. Where water ends up
 // in the sea it goes: in a world with a sea, random ticks take any water lying above
 // the sea's surface on top of the open sea (as rain never adds any there), so streams
@@ -151,6 +154,7 @@ public:
     static constexpr int kPumpRate = Block::kMaxWaterVolume * 5 / 8;
     // Units a spring adds per tick: 3/8 of a block, a block and a half a second.
     static constexpr int kSpringRate = Block::kMaxWaterVolume * 3 / 8;
+    static constexpr int kDrainRate = 2 * kSpringRate;
     // Puddles: up to a quarter of a block deep. With 8 random cells per chunk per tick
     // a puddle cell lasts about 512 ticks (2.1 minutes) on average.
     static constexpr int kPuddleVolume = Block::kMaxWaterVolume / 4;
@@ -172,6 +176,7 @@ private:
     void RainOn(ServerWorld& world, const glm::ivec3& pos);
     void RunPump(ServerWorld& world, const glm::ivec3& pump);
     void RunSpring(ServerWorld& world, const glm::ivec3& spring);
+    void RunDrain(ServerWorld& world, const glm::ivec3& drain);
     // Water lying above the sea on top of the open sea (taken by random ticks).
     static bool IsAboveSea(const ServerWorld& world, const glm::ivec3& pos);
     // Whether a cell is within `range` chunks of a simulation centre. Edit mutex held.

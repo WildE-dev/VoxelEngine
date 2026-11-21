@@ -1469,6 +1469,44 @@ wwwwwwwwwwwwwwww
 """
 HARVESTER_COLOURS = {"w": (132, 96, 56), "W": (164, 124, 76), "i": (72, 74, 80), "I": (170, 172, 180), "y": (214, 180, 70)}
 
+DRAIN_TOP = """
+iiiiiiiiiiiiiiii
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIkIkIkIkIkIkIIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+DRAIN_SIDE = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+sSsssSSsssSsssSs
+ssssSSssssssssss
+sSsssssSssssSsss
+ssSsssssssSsssss
+sssssSsssssssSss
+sSsssssssSssssss
+ssssSssssssssSss
+sSssssssSsssssss
+ssssssSsssssSsss
+sSsssssssssSssss
+ssssSsssssssssSs
+ssSsssSssssssSss
+sSssssssSsssssss
+"""
+DRAIN_COLOURS = {"i": (60, 62, 68), "I": (120, 124, 132), "k": (14, 16, 22), "s": (96, 104, 100), "S": (118, 128, 122)}
+
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
     draw("cooked_venison", VENISON, COOKED, seed=12)
@@ -1557,6 +1595,8 @@ def main():
     draw("crafter_bottom", CRAFTER_BOTTOM, CRAFTER_COLOURS, jitter=4, seed=93)
     draw("harvester_top", HARVESTER_TOP, HARVESTER_COLOURS, jitter=4, seed=94)
     draw("harvester_side", HARVESTER_SIDE, HARVESTER_COLOURS, jitter=4, seed=95)
+    draw("drain", DRAIN_TOP, DRAIN_COLOURS, jitter=4, seed=96)
+    draw("drain_side", DRAIN_SIDE, DRAIN_COLOURS, jitter=5, seed=97)
 
 
 if __name__ == "__main__":

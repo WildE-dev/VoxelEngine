@@ -220,6 +220,10 @@ enum class BlockType : uint8_t {
     FILTER_PIPE,
     CRAFTER,
     HARVESTER,
+    // A drain: an iron grate that water goes down and is gone (taking from the cells
+    // above and beside it: see Water.h). Found where rivers end. Breaking it gives
+    // stone, and the drain is gone.
+    DRAIN,
     COUNT
 };
 
@@ -265,7 +269,8 @@ inline BlockType ResourceTypeOf(BlockType type) {
     case BlockType::VALVE_OPEN: return BlockType::VALVE;
     case BlockType::PISTON_HEAD: return BlockType::AIR; // (part of the piston: gives nothing)
     case BlockType::SMELTER_LIT: return BlockType::SMELTER;
-    case BlockType::SPRING: return BlockType::STONE;
+    case BlockType::SPRING:
+    case BlockType::DRAIN: return BlockType::STONE;
     default: return type;
     }
 }

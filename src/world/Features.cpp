@@ -83,9 +83,10 @@ bool CandidateIn(const TerrainGenerator& terrain, const Grid& grid, Kind kind, i
     out.hash = Noise::Hash(out.wx, 1, out.wz, grid.seed);
     const float roll = Noise::Random01(gx, 2, gz, grid.seed);
     if (roll >= 0.95f) return false; // never more likely than this: skip the biome lookup
-    // Nothing grows in a mountain lake or right on its shore.
+    // Nothing grows in a mountain lake or a river, or right on their shores.
     for (const auto& d : { glm::ivec2(0, 0), glm::ivec2(3, 0), glm::ivec2(-3, 0), glm::ivec2(0, 3), glm::ivec2(0, -3) })
         if (terrain.LakeLevelAt(out.wx + d.x, out.wz + d.y) != INT_MIN) return false;
+    if (terrain.InRiver(out.wx, out.wz, 3.0f)) return false;
     // (One height sample for the altitude: enough for the climate, and cheap.)
     out.biome = terrain.BiomeAt(out.wx, out.wz, static_cast<int>(std::floor(terrain.GetHeight(out.wx, out.wz))));
     float chance = ChanceFor(kind, out.biome);

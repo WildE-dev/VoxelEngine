@@ -10,7 +10,7 @@
 //  - a pump outside the simulation distance waits,
 //  - a saved pump keeps pumping after its chunk is saved and loaded again,
 //  - a spring adds kSpringRate units a tick to the open cells around it while
-//    they have room, and stops when it's broken.
+//    they have room, and stops when it's broken; a drain takes kDrainRate.
 #include <chrono>
 #include <algorithm>
 #include <cstdlib>
@@ -213,6 +213,20 @@ int main() {
         Set(world, spring, Block(BlockType::STONE));
         Tick(world, 1);
         Check(world.GetWater().GetPumpCount() == pumpsBefore, "breaking it unregisters it");
+
+        // A drain under a cup of water.
+        constexpr int kDrain = WaterSimulation::kDrainRate;
+        const glm::ivec3 drain(30, 40, 20), cup = drain + glm::ivec3(0, 1, 0);
+        for (const auto& d : { glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0), glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1), glm::ivec3(0, -1, 0) })
+            Set(world, drain + d, Block(BlockType::STONE));
+        Cup(world, cup, drain);
+        Set(world, cup, Block::Water(kFull));
+        Set(world, drain, Block(BlockType::DRAIN));
+        Tick(world, 1);
+        Check(world.GetWater().GetPumpCount() == pumpsBefore + 1 && WaterAt(world, cup) == kFull - kDrain,
+              "a drain takes " + std::to_string(kDrain) + " units a tick from the cell above (" + std::to_string(WaterAt(world, cup)) + " left)");
+        Tick(world, 2);
+        Check(WaterAt(world, cup) == 0, "until it's empty");
     }
 
     std::cout << "Saved pumps" << std::endl;

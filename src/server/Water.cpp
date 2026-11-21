@@ -116,12 +116,13 @@ void WaterSimulation::RunPumps(ServerWorld& world) {
             gone.push_back(pos);
             continue;
         }
-        if (block.type != BlockType::PUMP && block.type != BlockType::SPRING) {
+        if (block.type != BlockType::PUMP && block.type != BlockType::SPRING && block.type != BlockType::DRAIN) {
             gone.push_back(pos);
             continue;
         }
         if (limited && !NearCenter(pos, distance)) continue;
         if (block.type == BlockType::SPRING) RunSpring(world, pos);
+        else if (block.type == BlockType::DRAIN) RunDrain(world, pos);
         else RunPump(world, pos);
     }
     for (const auto& pos : gone) {
@@ -162,6 +163,20 @@ void WaterSimulation::RunSpring(ServerWorld& world, const glm::ivec3& spring) {
     }
     for (size_t i = 0; i < cells.size(); i++)
         if (given[i] > 0) SetWater(world, cells[i].pos, cells[i].block, cells[i].block.WaterVolume() + given[i]);
+}
+
+void WaterSimulation::RunDrain(ServerWorld& world, const glm::ivec3& drain) {
+    // Above first, then the sides, until it has taken its fill for the tick.
+    int left = kDrainRate;
+    for (const glm::ivec3 d : { glm::ivec3(0, 1, 0), glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0), glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1) }) {
+        if (left <= 0) break;
+        const glm::ivec3 p = drain + d;
+        Block b;
+        if (!world.GetBlock(p.x, p.y, p.z, b) || !b.HasWater()) continue;
+        const int take = std::min(left, static_cast<int>(b.WaterVolume()));
+        SetWater(world, p, b, b.WaterVolume() - take);
+        left -= take;
+    }
 }
 
 bool WaterSimulation::IsAboveSea(const ServerWorld& world, const glm::ivec3& pos) {
