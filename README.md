@@ -35,7 +35,7 @@ GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
 `FoodTest` (see [Food and hunger](#food-and-hunger)), `ChestTest` (see
 [Chests](#chests)), `BedTest` (see [Beds](#beds)), `PowerTest` (see
 [Air power](#air-power)), `FactoryTest` (see [Air power](#air-power)), `SignalTest`
-(see [Signals](#signals)), `DataTest` (see [Editing blocks and creatures](#editing-blocks-and-creatures)) and `SoundTest` (see
+(see [Signals](#signals)), `ModelEditor` (see [The model editor](#the-model-editor)), `DataTest` (see [Editing blocks and creatures](#editing-blocks-and-creatures)) and `SoundTest` (see
 [Sound](#sound)).
 
 `ctest` in the build directory runs them all, and `ctest -j15` runs them all at
@@ -1587,7 +1587,10 @@ game's own details out as a fresh file.
 or a name from the model's `colors`, `glow`) and/or a frame for the parts inside it
 (`at`: its origin, a limb's pivot; `rotate`: degrees about x, y and z; `swing`: swung
 about an axis as it walks; `flap`: flapped all the time; `when: "tame"`: only on a
-tame wolf; `parts`: the parts inside it). A model may set a `scale`, and `inherits`
+tame wolf; `parts`: the parts inside it). A box can wear a block texture, tinted by its
+colour: `"texture": "planks"` for every face, or `{"top", "bottom", "side"}`; with
+`"tile": true` it repeats once a block, otherwise each face shows it once, stretched. A
+model may set a `scale`, and `inherits`
 another's colours and parts, adding its own: the dwarves all start from `dwarf_base`
 and change their colours and what they hold. The file explains itself at the top.
 
@@ -1595,9 +1598,36 @@ and change their colours and what they hold. The file explains itself at the top
 [Multiblock structures](#multiblock-structures)), in the same format. Models of blocks
 drawn specially (the water wheel, shafts, gauges, pipes) are still in the code.
 
+### The model editor
+
+`ModelEditor` (built beside the game) is a program for these two model files, so they
+needn't be edited by hand:
+
+```bash
+cd build && ./ModelEditor            # or: ./ModelEditor structures blast_furnace
+```
+
+- **Left**: creatures or structures, the models in the file (new, copy, rename,
+  delete), what a model inherits, its scale, and its named colours (changing one
+  changes every part using it).
+- **Middle**: the model as the game draws it, with the part picked flashing, over a
+  grid of whole blocks (a structure's 3 x 3 footprint in yellow; red is +x, the way a
+  creature faces). Drag to turn round it, shift-drag or middle-drag to move, scroll to
+  zoom. The View menu sets it walking or working and the light.
+- **Right**: the parts as a tree (add, add inside, copy, move up and down, delete),
+  and the picked part's frame, box, colour, texture (picked from the block textures,
+  one for every face or top, bottom and sides, repeated or stretched), glow, when it's
+  shown, and how it swings or flaps. A label names a part in the tree (the game
+  ignores it).
+
+Ctrl (Cmd) S saves to both `Resources/Data` in the source tree and the copy beside the
+game, keeping the comments at the top; press R in a running game to see it there.
+Ctrl Z and Ctrl Shift Z undo and redo, and Revert reads the file again.
+
 `DataTest` checks the JSON reader (comments, trailing commas, an error's line), that a
 blocks file overrides just what it gives and loading another puts the rest back, and
-that the shipped files read cleanly and `blocks.json` matches the game's own details.
+that the shipped files read cleanly and `blocks.json` matches the game's own details,
+and that the model files written out by the editor's writer read back the same.
 
 ## Block textures
 

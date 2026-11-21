@@ -9,6 +9,8 @@ in vec2 faceUV;
 uniform float textured;
 uniform vec4 tileRect;
 uniform sampler2D atlas;
+uniform vec3 boxRepeat; // (tiled: see player.vert)
+uniform float highlight; // the part picked in the model editor: flashes toward white
 out vec4 FragColor;
 
 uniform vec3 cameraPos;
@@ -42,7 +44,8 @@ uniform float sunBrightness;
 void main() {
     vec3 albedo = color;
     if (textured > 0.5) {
-        vec4 texel = texture(atlas, mix(tileRect.xy, tileRect.zw, clamp(faceUV, 0.02, 0.98)));
+        vec2 uv = boxRepeat.x > 0.0 ? fract(faceUV) : faceUV;
+        vec4 texel = texture(atlas, mix(tileRect.xy, tileRect.zw, clamp(uv, 0.02, 0.98)));
         if (texel.a < 0.5) discard;
         albedo *= texel.rgb;
     }
@@ -55,5 +58,6 @@ void main() {
     float shade = 0.45 + 0.55 * sunSide;
     vec3 light = vec3(0.04) + vec3(sky * sunBrightness * shade) + block * blockLightColor * (0.7 + 0.3 * shade);
     light = mix(min(light, vec3(1.0)), vec3(1.0), glow);
-    FragColor = vec4(ApplyFog(albedo * light, WorldPos), 1.0);
+    vec3 lit = mix(albedo * light, vec3(1.0, 0.95, 0.4), highlight);
+    FragColor = vec4(ApplyFog(lit, WorldPos), 1.0);
 }

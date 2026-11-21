@@ -143,6 +143,18 @@ add_executable(${PROJECT_NAME}
 target_include_directories(${PROJECT_NAME} PRIVATE ${STB_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} PRIVATE voxel_server voxel_client glfw imgui::imgui)
 
+# The model editor (src/editor/ModelEditor.cpp): its own program, for the creature and
+# structure models in Resources/Data, drawn as the game draws them.
+add_executable(ModelEditor
+    src/editor/ModelEditor.cpp
+    src/render/PlayerModels.cpp
+    src/render/Textures.cpp
+    src/render/TextureAtlas.cpp
+)
+target_include_directories(ModelEditor PRIVATE ${STB_INCLUDE_DIRS})
+target_link_libraries(ModelEditor PRIVATE voxel_client glfw imgui::imgui)
+target_compile_definitions(ModelEditor PRIVATE VOXEL_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
 # A dedicated server binary that doesn't link GL or GLFW at all.
 add_executable(VoxelServer src/server/main.cpp)
 target_link_libraries(VoxelServer PRIVATE voxel_server)
@@ -236,7 +248,7 @@ target_link_libraries(ShapeTest PRIVATE voxel_server voxel_client)
 add_executable(BiomeTest tests/BiomeTest.cpp)
 target_link_libraries(BiomeTest PRIVATE voxel_common)
 
-foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest)
+foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} ModelEditor VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W3)
     else()

@@ -4,7 +4,8 @@
 // turned to face the way it was built), y up from the ground under it. Parts with
 // "when": "working" are drawn only while it works ("idle": only while it doesn't), and
 // flaps only move while it works. Leave its ports' cells clear: they stay real pipes.
-// Press R in the game to load this file again.
+// Boxes can wear block textures ("texture", "tile"): see creatures.json. The
+// ModelEditor program edits this file. Press R in the game to load this file again.
 {
   "oil_derrick": {
     "colors": {

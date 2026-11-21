@@ -77,6 +77,27 @@ int main() {
               "Resources/Data/creatures.json reads cleanly" + (error.empty() ? "" : " (" + error + ")"));
     }
 
+    std::cout << "Writing models back (the model editor)" << std::endl;
+    for (const char* path : { "Resources/Data/creatures.json", "Resources/Data/structures.json" }) {
+        std::string error;
+        Json::Value v, again;
+        Json::ParseFile(path, v, error);
+        const std::string text = Json::LeadingComments(path) + Json::Write(v);
+        Json::Parser p(text);
+        Check(p.Parse(again, error) && Json::Write(again) == Json::Write(v), std::string(path) + " written and read back is the same");
+        Check(text.rfind("//", 0) == 0, "with its comments kept at the top");
+    }
+    {
+        Json::Value v = Json::Object();
+        Json::Member(v, "name") = Json::String("say \"hi\"\\");
+        Json::Member(v, "n") = Json::Number(0.1 + 0.2);
+        Json::Value back;
+        std::string error;
+        Json::Parser p(Json::Write(v));
+        Check(p.Parse(back, error) && back.StringOr("name", "") == "say \"hi\"\\" && Json::Write(v).find("0.3") != std::string::npos,
+              "quotes are escaped and numbers written short");
+    }
+
     std::cout << (failures ? "DATA TEST FAILED (" : "ALL DATA CHECKS PASSED (") << failures << " failures)" << std::endl;
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }

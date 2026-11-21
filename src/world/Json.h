@@ -173,4 +173,32 @@ private:
 // Reads and parses a file; false (with why, the file named) if it can't.
 bool ParseFile(const std::string& path, Value& out, std::string& error);
 
+// Writes a value as JSON for a person to read: anything that fits on a line of
+// `width` goes on one, the rest is spread over lines, indented. Numbers are written as
+// short as they'll go.
+std::string Write(const Value& v, int width = 110);
+// The comment lines at the top of a file (before its first '{'), to keep on saving.
+std::string LeadingComments(const std::string& path);
+
+// Setting up values (for the model editor).
+inline Value Number(double n) { Value v; v.type = Value::Type::Number; v.number = n; return v; }
+inline Value String(const std::string& s) { Value v; v.type = Value::Type::String; v.string = s; return v; }
+inline Value Bool(bool b) { Value v; v.type = Value::Type::Bool; v.boolean = b; return v; }
+inline Value Object() { Value v; v.type = Value::Type::Object; return v; }
+inline Value Array() { Value v; v.type = Value::Type::Array; return v; }
+// An object's member, made if missing.
+inline Value& Member(Value& object, const std::string& key) {
+    for (auto& [k, v] : object.object)
+        if (k == key) return v;
+    object.object.emplace_back(key, Value{});
+    return object.object.back().second;
+}
+inline void Remove(Value& object, const std::string& key) {
+    for (auto it = object.object.begin(); it != object.object.end(); ++it)
+        if (it->first == key) {
+            object.object.erase(it);
+            return;
+        }
+}
+
 } // namespace Json

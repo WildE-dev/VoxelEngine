@@ -8,6 +8,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "render/Shader.h"
+#include "render/TextureAtlas.h"
 #include "world/Creatures.h"
 #include "world/Json.h"
 #include "world/Armour.h"
@@ -361,7 +362,7 @@ void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const gl
 }
 
 void PlayerModels::DrawShape(Shader& shader, const glm::mat4& base, const CreatureShape& shape, float time, float swing, float motion, bool tame, bool working,
-                             bool hurt, float phase) {
+                             bool hurt, float phase, const ShapePart* highlight) {
     const glm::vec3 kRed(0.9f, 0.15f, 0.1f);
     static const glm::vec3 kAxes[3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
     std::function<void(const glm::mat4&, const ShapePart&)> draw = [&](const glm::mat4& parent, const ShapePart& p) {
@@ -374,9 +375,30 @@ void PlayerModels::DrawShape(Shader& shader, const glm::mat4& base, const Creatu
         if (p.flapAxis >= 0) f = glm::rotate(f, std::sin(time * p.flapSpeed + phase) * p.flapAmount * motion, kAxes[p.flapAxis]);
         if (p.hasBox) {
             if (p.glow) shader.SetUniform("glow", 1.0f);
+            if (highlight) shader.SetUniform("highlight", &p == highlight ? 0.35f + 0.3f * std::sin(time * 8.0f) : 0.0f);
             shader.SetUniform("model", glm::scale(glm::translate(f, p.box), p.size));
             shader.SetUniform("color", hurt ? glm::mix(p.color, kRed, 0.55f) : p.color);
-            glDrawArrays(GL_TRIANGLES, 0, 36);
+            if (!p.textured) glDrawArrays(GL_TRIANGLES, 0, 36);
+            else {
+                // The cube's faces in order: +x, -x, +y (top), -y (bottom), +z, -z.
+                shader.SetUniform("textured", 1.0f);
+                shader.SetUniform("boxRepeat", p.tiled ? p.size * shape.scale : glm::vec3(0.0f));
+                if (p.uv[0] == p.uv[2] && p.uv[1] == p.uv[2]) {
+                    shader.SetUniform("tileRect", p.uv[2]);
+                    glDrawArrays(GL_TRIANGLES, 0, 36);
+                }
+                else {
+                    shader.SetUniform("tileRect", p.uv[2]);
+                    glDrawArrays(GL_TRIANGLES, 0, 12);
+                    glDrawArrays(GL_TRIANGLES, 24, 12);
+                    shader.SetUniform("tileRect", p.uv[0]);
+                    glDrawArrays(GL_TRIANGLES, 12, 6);
+                    shader.SetUniform("tileRect", p.uv[1]);
+                    glDrawArrays(GL_TRIANGLES, 18, 6);
+                }
+                shader.SetUniform("textured", 0.0f);
+                shader.SetUniform("boxRepeat", glm::vec3(0.0f));
+            }
             if (p.glow) shader.SetUniform("glow", 0.0f);
         }
         for (const auto& child : p.parts) draw(f, child);
@@ -427,7 +449,9 @@ bool Colour(const std::string& s, const Palette& palette, glm::vec3& out) {
     return true;
 }
 
-bool ReadPart(const Json::Value& v, const Palette& palette, PlayerModels::ShapePart& p, const std::string& where, std::string& error) {
+using Resolver = std::function<bool(const std::string&, glm::vec4&)>;
+
+bool ReadPart(const Json::Value& v, const Palette& palette, const Resolver& texture, PlayerModels::ShapePart& p, const std::string& where, std::string& error) {
     p.at = Vec3(v.Find("at"));
     p.rotate = Vec3(v.Find("rotate"));
     if (const auto* sw = v.Find("swing"); sw && sw->IsObject()) {
@@ -448,13 +472,27 @@ bool ReadPart(const Json::Value& v, const Palette& palette, PlayerModels::ShapeP
             error = where + ": no colour called '" + colour + "'";
             return false;
         }
+        // A texture: one name for every face, or top, bottom and side.
+        if (const auto* tex = v.Find("texture")) {
+            std::string names[3];
+            if (tex->IsString()) names[0] = names[1] = names[2] = tex->string;
+            else if (tex->IsObject()) {
+                const std::string side = tex->StringOr("side", tex->StringOr("all", ""));
+                names[0] = tex->StringOr("top", side), names[1] = tex->StringOr("bottom", side), names[2] = side;
+            }
+            for (int f = 0; f < 3; f++)
+                if (!names[f].empty() && texture(names[f], p.uv[f])) p.textured = true;
+            for (int f = 0; f < 3; f++)
+                if (names[f].empty()) p.uv[f] = p.uv[2];
+            p.tiled = v.BoolOr("tile", false);
+        }
     }
     p.glow = v.BoolOr("glow", false);
     p.when = v.StringOr("when", "");
     if (const auto* kids = v.Find("parts"); kids && kids->IsArray())
         for (const auto& k : kids->array) {
             PlayerModels::ShapePart child;
-            if (!ReadPart(k, palette, child, where, error)) return false;
+            if (!ReadPart(k, palette, texture, child, where, error)) return false;
             p.parts.push_back(std::move(child));
         }
     return true;
@@ -466,6 +504,26 @@ bool PlayerModels::LoadShapes(const std::string& path, const std::vector<std::st
     Json::Value root;
     out.clear();
     if (!Json::ParseFile(path, root, error)) return false;
+    if (!BuildShapes(root, names, out, error)) {
+        error = path + ": " + error;
+        return false;
+    }
+    return true;
+}
+
+bool PlayerModels::BuildShapes(const Json::Value& root, const std::vector<std::string>& names, std::map<std::string, CreatureShape>& out, std::string& error) const {
+    const std::string path = "models";
+    out.clear();
+    // Textures, from the block atlas (none before there is one).
+    const Resolver texture = [&](const std::string& name, glm::vec4& uv) {
+        if (!atlas) return false;
+        const int index = atlas->GetIndex(name);
+        if (index == TextureAtlas::kMissingIndex) return false;
+        glm::vec2 a, b;
+        atlas->GetTileUV(index, a, b);
+        uv = glm::vec4(a, b);
+        return true;
+    };
     if (!root.IsObject()) {
         error = path + ": the file should be one { ... } of models";
         return false;
@@ -502,12 +560,15 @@ bool PlayerModels::LoadShapes(const std::string& path, const std::vector<std::st
         if (!gather(id, palette, partLists, scale, 0)) return false;
         CreatureShape shape;
         shape.scale = scale;
-        for (const auto* list : partLists)
+        for (const auto* list : partLists) {
+            if (list == partLists.back() && root.Find(id)->Find("parts") == list) shape.ownStart = shape.parts.size();
             for (const auto& v : list->array) {
                 ShapePart p;
-                if (!ReadPart(v, palette, p, path + ": " + id, error)) return false;
+                if (!ReadPart(v, palette, texture, p, id, error)) return false;
                 shape.parts.push_back(std::move(p));
             }
+        }
+        if (!root.Find(id)->Find("parts")) shape.ownStart = shape.parts.size();
         out[id] = std::move(shape);
     }
     return true;
@@ -530,3 +591,16 @@ bool PlayerModels::LoadCreatureModels(const std::string& path, std::string& erro
 }
 
 bool PlayerModels::LoadStructureModels(const std::string& path, std::string& error) { return LoadShapes(path, {}, structureShapes, error); }
+
+void PlayerModels::DrawPreview(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const CreatureShape& shape, const glm::mat4& base, float time,
+                               float swing, bool working, const ShapePart* highlight, const glm::vec2& light) {
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 0.0f);
+    shader.SetUniform("textured", 0.0f);
+    shader.SetUniform("lightLevels", light);
+    glBindVertexArray(vao);
+    DrawShape(shader, base, shape, time, swing, working ? 1.0f : 0.0f, true, working, false, 0.0f, highlight);
+    shader.SetUniform("highlight", 0.0f);
+}

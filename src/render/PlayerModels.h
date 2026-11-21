@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include <map>
+
+#include "world/Json.h"
 #include <string>
 #include <vector>
 
@@ -142,15 +144,29 @@ public:
         float flapSpeed = 0.0f, flapAmount = 0.0f;
         bool hasBox = false;
         glm::vec3 box{ 0.0f }, size{ 0.0f }; // a box in the frame: its centre and size
-        glm::vec3 color{ 1.0f };
+        glm::vec3 color{ 1.0f };      // (with a texture: what it's tinted)
         bool glow = false;
+        // A texture from the block atlas on the box: top, bottom and sides (atlas tile
+        // corners), and whether it repeats once a block (else one stretched per face).
+        bool textured = false, tiled = false;
+        glm::vec4 uv[3]{};
         std::string when;             // drawn only then ("tame")
         std::vector<ShapePart> parts; // inside this frame
     };
     struct CreatureShape {
         float scale = 1.0f;
         std::vector<ShapePart> parts;
+        size_t ownStart = 0;          // where its own parts start (those before are inherited)
     };
+
+    // The block atlas, for models' textures (the Renderer sets it).
+    void SetAtlas(const class TextureAtlas* a) { atlas = a; }
+    // Builds models from a data file already read (by name: all of them, if none named);
+    // false (with why) on a mistake. (The model editor builds from what it's editing.)
+    bool BuildShapes(const Json::Value& root, const std::vector<std::string>& names, std::map<std::string, CreatureShape>& out, std::string& error) const;
+    // The model editor's preview: one model in `base`, one of its parts flashing.
+    void DrawPreview(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const CreatureShape& shape, const glm::mat4& base, float time,
+                     float swing, bool working, const ShapePart* highlight, const glm::vec2& light);
 
     void DrawStructures(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<struct StructureModel>& structures, float time);
 
@@ -160,7 +176,8 @@ private:
     bool LoadShapes(const std::string& path, const std::vector<std::string>& names, std::map<std::string, CreatureShape>& out, std::string& error);
     // One model drawn in `base` (motion: how much its flaps move, 0..1; phase: offsets them).
     void DrawShape(Shader& shader, const glm::mat4& base, const CreatureShape& shape, float time, float swing, float motion, bool tame, bool working, bool hurt,
-                   float phase);
+                   float phase, const ShapePart* highlight = nullptr);
+    const class TextureAtlas* atlas = nullptr;
     std::map<std::string, CreatureShape> structureShapes;
     std::vector<CreatureShape> shapes; // by CreatureType (empty: not loaded)
     std::vector<bool> haveShape;

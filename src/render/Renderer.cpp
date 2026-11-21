@@ -98,6 +98,7 @@ bool Renderer::Init(int framebufferWidth, int framebufferHeight) {
     height = framebufferHeight;
 
     atlas.Build(kBlockTextureDirectory);
+    playerModels.SetAtlas(&atlas); // (models' textures)
     skyboxTexture = Textures::LoadCubemap({
         "Resources/Textures/right.bmp",
         "Resources/Textures/left.bmp",
