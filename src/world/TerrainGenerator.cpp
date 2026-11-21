@@ -218,6 +218,18 @@ const TerrainGenerator::Lake& TerrainGenerator::LakeIn(int cx, int cz) const {
                 bed = std::min(bed, ground - kRiverDepth);
                 if (ground - bed > kRiverMaxCut) break; // it would cut too deep: it ends here
             }
+            // Pools and drops: the bed in level steps a whole block apart (the water
+            // lies flat in each, instead of in a thin film down a slope), each with a
+            // lip half a block up just before it drops, so the water stands in a pool
+            // behind it and spills over into the next.
+            std::vector<glm::vec3>& river = lake.river;
+            std::vector<float> step(river.size());
+            for (size_t i = 0; i < river.size(); i++) step[i] = std::floor(river[i].z);
+            for (size_t i = 0; i < river.size(); i++) {
+                bool lip = false;
+                for (size_t j = i + 1; j <= i + 2 && j < river.size(); j++) lip = lip || step[j] < step[i];
+                river[i].z = step[i] + (lip ? 0.5f : 0.0f);
+            }
             const glm::vec3 end = lake.river.back();
             lake.drain = glm::ivec2(static_cast<int>(std::floor(end.x)), static_cast<int>(std::floor(end.y)));
             // Too short to be a river: just the spring.

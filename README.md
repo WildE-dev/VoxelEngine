@@ -295,6 +295,9 @@ wells up out of it without end, a block and a half a second (see [Water](#water)
 From it a river runs downhill, up to 160 blocks: a channel about three blocks wide
 cut two blocks into the land, following its fall and turning gently, its bed never
 rising (it cuts through small rises), with banks easing up to the ground either side.
+The bed goes down in level steps a whole block apart, each with a lip half a block up
+just before the drop, so the water lies flat in a pool behind each lip and spills over
+into the next, instead of spreading in a thin film down a slope.
 Its bed is sand over dirt, it's full of water a block deep from the start, and no
 trees grow in it or on its banks. It ends where it reaches the sea, or where it would
 have to cut more than seven blocks deep, at a **sinkhole**: a dark opening in wet
