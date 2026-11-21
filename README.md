@@ -983,7 +983,8 @@ night. The time of day is saved with the world.
 
 The sun is a bright disc with a glow in its direction, and the moon a pale disc
 opposite it. As night falls the stars come out and twinkle. Clouds (rain) hide all
-three.
+three. On clear nights fireflies drift and blink over grassy ground near
+you (up to 40 at a time), and go at dawn.
 
 Now and then it rains: clear spells last 10 to 25 minutes and showers 2 to 5, fading
 in and out over ten seconds. Rain greys and dims the sky, falls as streaks around

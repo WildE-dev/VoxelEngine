@@ -165,6 +165,10 @@ private:
     float lightningFlash = 0.0f;
     std::vector<std::pair<double, float>> thunder;
     void UpdateLightning(float dt);
+    // Fireflies over grass on clear nights near the player (just for show).
+    struct Firefly { glm::vec3 home, position; float phase, life; };
+    std::vector<Firefly> fireflies;
+    void UpdateFireflies(float dt);
     // Throws `count` bits of this block out of the cell at `pos` (a burst when it breaks,
     // a few while it's mined).
     void SpawnParticles(const glm::ivec3& pos, BlockType type, int count, float speed = 3.0f);

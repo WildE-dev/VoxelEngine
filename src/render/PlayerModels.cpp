@@ -159,6 +159,22 @@ void PlayerModels::DrawArrows(Shader& shader, const glm::mat4& view, const glm::
     }
 }
 
+void PlayerModels::DrawGlows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GlowModel>& glows) {
+    if (glows.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 1.0f);
+    shader.SetUniform("textured", 0.0f);
+    glBindVertexArray(vao);
+    for (const auto& g : glows) {
+        shader.SetUniform("color", glm::vec3(0.75f, 1.0f, 0.35f) * (0.25f + 0.75f * g.brightness));
+        shader.SetUniform("model", glm::scale(glm::translate(glm::mat4(1.0f), g.position), glm::vec3(g.size)));
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+    shader.SetUniform("glow", 0.0f);
+}
+
 void PlayerModels::DrawBolts(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<BoltModel>& bolts) {
     if (bolts.empty()) return;
     shader.Use();

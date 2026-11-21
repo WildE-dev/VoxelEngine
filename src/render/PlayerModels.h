@@ -48,6 +48,13 @@ struct ArrowModel {
     glm::vec2 light{ 15.0f, 0.0f };
 };
 
+// A firefly: a tiny speck that lights itself (0..1 how brightly, as it blinks).
+struct GlowModel {
+    glm::vec3 position{0.0f};
+    float size = 0.05f;
+    float brightness = 1.0f;
+};
+
 // A lightning bolt: a jagged line of points from the sky down to where it struck,
 // drawn glowing, fading with `brightness` (0..1).
 struct BoltModel {
@@ -69,6 +76,7 @@ public:
     void Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<PlayerModel>& players);
     // Creatures, from boxes too: a deer, a ghoul. `time` swings their legs.
     void DrawArrows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ArrowModel>& arrows);
+    void DrawGlows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GlowModel>& glows);
     void DrawBolts(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<BoltModel>& bolts);
     // Bits of broken blocks (tiny textured cubes).
     void DrawParticles(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ParticleModel>& particles);

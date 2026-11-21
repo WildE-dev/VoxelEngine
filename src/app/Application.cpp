@@ -480,6 +480,7 @@ void Application::Run() {
         UpdateSounds();
         UpdateParticles(static_cast<float>(deltaTime));
         UpdateLightning(static_cast<float>(deltaTime));
+        UpdateFireflies(static_cast<float>(deltaTime));
         if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
             params.highlightedBlock = hit->block;
             Block target;
@@ -514,6 +515,11 @@ void Application::Run() {
         for (const auto& c : client->GetCreatures())
             params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet) });
         for (const auto& b : bolts) params.bolts.push_back({ b.points, b.life / 0.35f });
+        for (const auto& f : fireflies) {
+            // Each blinks in its own rhythm, and fades in and out at the ends of its life.
+            const float blink = std::max(0.0f, std::sin(f.phase * 2.3f + f.home.x * 7.0f));
+            params.glows.push_back({ f.position, 0.06f, blink * std::min(1.0f, f.life * 0.5f) });
+        }
         // Our bobber, floating on the water and bobbing; a splash when a fish bites.
         if (client->TakeBite() && lastBobber) {
             SpawnParticles(*lastBobber, BlockType::WATER, 14, 2.0f);
@@ -2008,6 +2014,33 @@ void Application::UpdateLightning(float dt) {
         }
         else ++it;
     }
+}
+
+void Application::UpdateFireflies(float dt) {
+    // Out on clear nights: up to 40 at a time, each living a while over a grassy spot
+    // within 20 blocks, drifting around it and blinking.
+    static std::mt19937 rng(4242);
+    std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+    const float night = std::clamp((0.25f - std::sin(client->GetTimeOfDay() * 6.2831853f)) * 4.0f, 0.0f, 1.0f) * (1.0f - client->GetRain());
+    const int wanted = static_cast<int>(40.0f * night);
+    const glm::vec3 me = player.GetFeetPosition();
+    for (int tries = 0; tries < 3 && static_cast<int>(fireflies.size()) < wanted; tries++) {
+        const glm::ivec3 cell(glm::floor(me + glm::vec3(unit(rng) * 40.0f - 20.0f, unit(rng) * 8.0f - 3.0f, unit(rng) * 40.0f - 20.0f)));
+        Block here, below;
+        if (!world->GetBlock(cell.x, cell.y, cell.z, here) || !world->GetBlock(cell.x, cell.y - 1, cell.z, below)) continue;
+        // Air (or a plant) over grass.
+        if (!(here.IsAir() || here.IsPlant()) || !IsGrassType(below.type)) continue;
+        const glm::vec3 home = glm::vec3(cell) + glm::vec3(unit(rng), 0.3f + unit(rng) * 1.2f, unit(rng));
+        fireflies.push_back({ home, home, unit(rng) * 100.0f, 8.0f + 12.0f * unit(rng) });
+    }
+    for (auto& f : fireflies) {
+        f.life -= dt * (night > 0.05f ? 1.0f : 6.0f); // (gone soon after dawn)
+        f.phase += dt;
+        f.position = f.home + glm::vec3(std::sin(f.phase * 0.7f) * 0.8f, std::sin(f.phase * 1.3f) * 0.3f, std::cos(f.phase * 0.5f) * 0.8f);
+    }
+    fireflies.erase(std::remove_if(fireflies.begin(), fireflies.end(),
+                                   [&](const Firefly& f) { return f.life <= 0.0f || glm::distance(f.home, me) > 28.0f; }),
+                    fireflies.end());
 }
 
 void Application::UpdateParticles(float dt) {
