@@ -30,14 +30,20 @@ GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
 [Dungeons](#dungeons)), `TrapTest` (see [Health and traps](#health-and-traps)),
 `ShapeTest` (see [Block shapes](#block-shapes)), `BiomeTest` (see [Biomes](#biomes))
 `ModeTest` (see [Game modes](#game-modes)), `MiningTest` (see [Mining](#mining)),
-`BreathTest` (see [Breathing](#breathing)) and `CreatureTest` (see
-[Creatures](#creatures)).
+`BreathTest` (see [Breathing](#breathing)), `CreatureTest` (see
+[Creatures](#creatures)) and `CraftTest` (see [Crafting](#crafting)).
 
 `ctest` in the build directory runs them all, and `ctest -j15` runs them all at
-once. They're written to pass even then, on a loaded machine. They wait for things
-to happen rather than for fixed times. The network layer also rides out stalls of
-many seconds: ENet's timeout is raised from 5 s to at least 20 s, with larger socket
-buffers so bursts of chunks aren't dropped.
+once. They're written to pass even then, on a loaded machine:
+
+- They wait for things to happen rather than for fixed times.
+- Where the client shows a change before the server makes it (crafting, for
+  example), they wait for the server's answer before checking.
+- Their servers and clients use a 4-chunk view distance, about 27 times less terrain
+  than the full 12, so sixteen at once don't starve each other.
+- The network layer also rides out stalls of many seconds: ENet's timeout is raised
+  from 5 s to at least 20 s, with larger socket buffers so bursts of chunks aren't
+  dropped.
 
 ## Multiplayer
 
@@ -51,6 +57,10 @@ Host a dedicated server (no window; Ctrl+C stops it):
 ```bash
 cd build && ./VoxelEngine --server
 ```
+
+`--view-distance N` (2 to 12 chunks, default 12) sets how far around each player
+the server loads and sends terrain. Less is much lighter on a small machine.
+Players who ask for less, in their settings, get less.
 
 `./VoxelEngine --server 30000` picks another port (the default is UDP 27450), and
 `./VoxelServer [port]` does the same without any graphics libraries. Others join
@@ -523,8 +533,8 @@ spread across it until it breaks. Looking away, or switching tools, starts over.
 
 A carved block takes time in proportion to what's left of it, but never less than
 30%: a half slab takes half as long. The wrong tool is no better than a hand. The
-pickaxe, axe and shovel are in the inventory's top row (I). They're free for now,
-since there's no crafting yet. Put one in a hotbar slot to hold it. A tool places
+pickaxe, axe and shovel are in the inventory's top row (I). In survival you make them
+first (see [Crafting](#crafting)). Put one in a hotbar slot to hold it. A tool places
 nothing on a right click. In creative everything breaks at once, as before.
 
 The server times every break, so a modified client can't mine faster. The client
@@ -574,6 +584,51 @@ the server side in `src/server/Creatures.cpp`.
 - a ghoul hunting a survival player and ignoring a creative one;
 - burning at noon, and `/creatures clear`;
 - in a normal world, deer turning up by day and ghouls at night.
+
+## Crafting
+
+In survival, the inventory (I) has a crafting list below your blocks. Each recipe
+shows what it takes, and is greyed out until you have it. Make makes one, and x4
+makes four.
+
+| Makes | From |
+| --- | --- |
+| 4 planks | 1 log |
+| Stone bricks | 1 stone |
+| Glass | 1 sand |
+| Mossy bricks | 1 stone brick + 1 leaves |
+| Lamp | 1 glass + 0.5 planks |
+| 2 pipes | 1 stone |
+| Pump | 2 stone + 1 glass |
+| Sluice gate | 1 stone brick + 1 planks |
+| Pressure plate | 0.25 stone (pebbles will do) |
+| Spikes | 1 stone |
+| Pickaxe | 1 planks + 1.5 stone |
+| Axe | 1 planks + 1 stone |
+| Shovel | 1 planks + 0.5 stone |
+
+Amounts are in blocks, using the same resource units as building (a block is 64).
+Tools are made once and kept, and saved with the player. In survival you can only
+use the tools you've made: an unmade one in the hotbar is shaded over and works like
+a bare hand, for mining and for fighting. The server checks that too. Creative
+players have every tool and don't need to craft. Operators can hand out tools with
+`/give pickaxe [player]`.
+
+Two blocks are new with crafting:
+
+- **Planks** are a building block (stepped when carved), fastest with an axe.
+- **Glass** is solid, but you can see through it and light passes. Faces behind it
+  aren't hidden, and touching panes join without a face between them.
+
+The recipes are in `src/world/Crafting.h` and the server's checks in
+`Server::HandleCraft`. `CraftTest` checks:
+
+- the recipes;
+- crafting several at once;
+- that crafts you can't afford change nothing;
+- that a tool is made once and kept;
+- that creative doesn't craft;
+- that tools survive a restart.
 
 ## Breathing
 
@@ -630,7 +685,7 @@ ones you're allowed to use:
 | `/noclip [player]` | operators | fly through blocks, on or off (Space / E up, Q down) |
 | `/gamemode` | everyone | show your game mode |
 | `/gamemode <creative\|survival> [player]` | operators | change a game mode (also `/gm`, `c`/`s`) |
-| `/give <block> [count] [player]` | operators | give survival blocks (`count` in blocks, default 64) |
+| `/give <block> [count] [player]`, `/give <tool> [player]` | operators | give survival blocks (`count` in blocks, default 64) or a tool |
 | `/summon <deer\|ghoul> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
 | `/creatures [clear]` | operators | count the creatures, or remove them all |
 | `/stop` | console | shut the server down |
@@ -774,8 +829,8 @@ src/
             Textures, DebugDraw
   world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
             Features, Dungeons, Noise, Lighting, Collision, Raycast, Mining,
-            Breathing, Creatures
+            Breathing, Creatures, Crafting
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
-            BreathTest, CreatureTest
+            BreathTest, CreatureTest, CraftTest
 ```
