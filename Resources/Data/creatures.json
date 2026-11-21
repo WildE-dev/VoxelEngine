@@ -1,5 +1,6 @@
 // Creature models. Each creature (by its id: deer, wolf, bat, dwarf, crossbow_dwarf,
-// dwarf_chief, dwarf_miner, dwarf_trader, dwarf_guard) is a list of parts, drawn facing +x with its feet at 0.
+// dwarf_chief, dwarf_miner, dwarf_trader, dwarf_guard,
+// dwarf_king) is a list of parts, drawn facing +x with its feet at 0.
 // Press R in the game to load this file again, or edit it with the ModelEditor program.
 //
 // A part is a box, and/or a frame for the parts inside it:
@@ -1517,6 +1518,162 @@
         ],
         "color": "#e8c33a",
         "when": "tame"
+      }
+    ]
+  },
+  "dwarf_king": {
+    "inherits": "dwarf_base",
+    "scale": 1.45,
+    "colors": {
+      "tunic": "#5a2a7a",
+      "beard": "#e8e4dc",
+      "helmet": "#d8b040",
+      "cape": "#9a1f24",
+      "fur": "#f0ece4"
+    },
+    "parts": [
+      {
+        "name": "crown spike",
+        "box": [
+          0.02,
+          1.5,
+          0
+        ],
+        "size": [
+          0.06,
+          0.12,
+          0.06
+        ],
+        "color": "gold"
+      },
+      {
+        "name": "crown spike",
+        "box": [
+          0.02,
+          1.5,
+          -0.15
+        ],
+        "size": [
+          0.06,
+          0.1,
+          0.06
+        ],
+        "color": "gold"
+      },
+      {
+        "name": "crown spike",
+        "box": [
+          0.02,
+          1.5,
+          0.15
+        ],
+        "size": [
+          0.06,
+          0.1,
+          0.06
+        ],
+        "color": "gold"
+      },
+      {
+        "name": "crown gem",
+        "box": [
+          0.22,
+          1.4,
+          0
+        ],
+        "size": [
+          0.02,
+          0.06,
+          0.06
+        ],
+        "color": "#d0203a",
+        "glow": true
+      },
+      {
+        "name": "cape",
+        "box": [
+          -0.25,
+          0.85,
+          0
+        ],
+        "size": [
+          0.06,
+          0.75,
+          0.62
+        ],
+        "color": "cape"
+      },
+      {
+        "name": "collar",
+        "box": [
+          -0.02,
+          1.03,
+          0
+        ],
+        "size": [
+          0.48,
+          0.08,
+          0.66
+        ],
+        "color": "fur"
+      },
+      {
+        "name": "weapon",
+        "at": [
+          0.14,
+          0.62,
+          0.36
+        ],
+        "rotate": [
+          0,
+          0,
+          -70
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": -0.4
+        },
+        "parts": [
+          {
+            "box": [
+              0.3,
+              0,
+              0
+            ],
+            "size": [
+              0.7,
+              0.07,
+              0.07
+            ],
+            "color": "wood"
+          },
+          {
+            "box": [
+              0.68,
+              0,
+              0
+            ],
+            "size": [
+              0.22,
+              0.2,
+              0.3
+            ],
+            "color": "iron"
+          },
+          {
+            "box": [
+              0.68,
+              0,
+              0
+            ],
+            "size": [
+              0.24,
+              0.06,
+              0.32
+            ],
+            "color": "gold"
+          }
+        ]
       }
     ]
   }

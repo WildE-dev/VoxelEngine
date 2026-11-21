@@ -303,6 +303,8 @@ private:
     double toastUntil = 0.0;
     size_t chatSeen = 0;
     void DrawToast();
+    // A boss's health bar (a Dwarf King's, near you) across the top of the screen.
+    void DrawBossBar();
     void DrawDeath(); // "You died", for a few seconds after dying
     bool showPlayers = false; // P: who's online
     void DrawPlayerList();

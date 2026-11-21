@@ -21,6 +21,7 @@ enum class Achievement : uint8_t {
     Marksman,       // kill something with an arrow
     Angler,         // catch a fish
     BestFriend,     // tame a wolf
+    Kingslayer,     // defeat a Dwarf King
     Count
 };
 
@@ -49,6 +50,7 @@ inline const char* Name(Achievement a) {
     case Achievement::Marksman: return "Marksman";
     case Achievement::Angler: return "Angler";
     case Achievement::BestFriend: return "Best Friend";
+    case Achievement::Kingslayer: return "Kingslayer";
     default: return "?";
     }
 }
@@ -71,6 +73,7 @@ inline const char* Description(Achievement a) {
     case Achievement::Marksman: return "take something down with an arrow";
     case Achievement::Angler: return "catch a fish";
     case Achievement::BestFriend: return "tame a wolf with some venison";
+    case Achievement::Kingslayer: return "defeat a Dwarf King in his stronghold";
     default: return "";
     }
 }

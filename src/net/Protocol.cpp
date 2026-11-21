@@ -405,6 +405,7 @@ std::vector<uint8_t> Encode(const CreatureSnapshot& m) {
         w.Vec3(c.feet);
         w.F32(c.yaw);
         w.U8(c.flags);
+        w.U8(c.health);
     }
     return std::move(w.data);
 }
@@ -789,7 +790,7 @@ bool Decode(ByteReader& in, CreatureSnapshot& m) {
     for (auto& c : m.creatures) {
         uint8_t type;
         if (!in.U16(c.id) || !in.U8(type) || type >= static_cast<uint8_t>(CreatureType::Count) || !in.Vec3(c.feet) || !in.F32(c.yaw) ||
-            !in.U8(c.flags))
+            !in.U8(c.flags) || !in.U8(c.health))
             return false;
         c.type = static_cast<CreatureType>(type);
         if (!std::isfinite(c.feet.x) || !std::isfinite(c.feet.y) || !std::isfinite(c.feet.z) || !std::isfinite(c.yaw)) return false;

@@ -32,6 +32,42 @@ bool GoodGround(const TerrainGenerator& t, const glm::ivec2& c, int radius, int 
     return hi - lo <= spread;
 }
 
+RegionSite StrongholdIn(const TerrainGenerator& t, int rx, int rz, RegionSite out) {
+    static const glm::ivec3 kDirs[4] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+    const int margin = 40;
+    const glm::ivec2 c(rx * kRegionSize + margin + static_cast<int>(out.seed % (kRegionSize - 2 * margin)),
+                       rz * kRegionSize + margin + static_cast<int>((out.seed >> 10) % (kRegionSize - 2 * margin)));
+    int ground = 0;
+    if (!GoodGround(t, c, kHallHalf, 14, ground)) return out;
+    out.gate = kDirs[(out.seed >> 20) % 4];
+    const glm::ivec3 hall(c.x, ground - kHallDepth, c.y);
+    // The stairway climbs a block a step from the hall's wall until it's in the open,
+    // which mustn't be water.
+    for (int k = 1; k < 60; k++) {
+        const glm::ivec3 p = hall + out.gate * (kHallHalf + 1 + k);
+        if (hall.y + k >= t.ColumnAt(p.x, p.z).FirstOpenRow()) {
+            if (t.LakeLevelAt(p.x, p.z) != INT_MIN || t.InRiver(p.x, p.z, 3.0f) || hall.y + k <= TerrainGenerator::kSeaLevel + 1) return out;
+            out.stairs = k;
+            break;
+        }
+    }
+    if (out.stairs == 0) return out;
+    out.exists = true;
+    Site& s = out.site;
+    s.kind = SiteKind::Stronghold;
+    s.centre = hall;
+    const glm::ivec3 side(out.gate.z, 0, -out.gate.x);
+    s.spawns.push_back(hall - out.gate * 7); // (the king's: before his throne)
+    for (int a : { -4, 0, 4 })
+        for (int b : { -3, 3 }) s.spawns.push_back(hall + out.gate * a + side * b);
+    for (int a : { -2, 2, 6 }) s.spawns.push_back(hall + out.gate * a);
+    // (In the vault, behind the throne.)
+    s.chests.push_back(hall - out.gate * (kHallHalf + 3) + side * 2 + glm::ivec3(0, 1, 0));
+    s.chests.push_back(hall - out.gate * (kHallHalf + 3) + side * 4 + glm::ivec3(0, 1, 0));
+    s.kings = 1, s.warriors = 6, s.crossbows = 3;
+    return out;
+}
+
 } // namespace
 
 RegionSite SiteIn(const TerrainGenerator& terrain, int rx, int rz) {
@@ -39,7 +75,8 @@ RegionSite SiteIn(const TerrainGenerator& terrain, int rx, int rz) {
     if (terrain.GetType() != TerrainGenerator::Type::Normal) return out;
     out.seed = Noise::Hash(rx, 11, rz, kSeed);
     const float roll = Noise::Random01(rx, 12, rz, kSeed);
-    const bool camp = roll < 0.32f, mine = !camp && roll < 0.58f;
+    const bool camp = roll < 0.32f, mine = !camp && roll < 0.58f, stronghold = !camp && !mine && roll < 0.62f;
+    if (stronghold) return StrongholdIn(terrain, rx, rz, out);
     if (!camp && !mine) return out;
     const int margin = 28;
     const glm::ivec2 c(rx * kRegionSize + margin + static_cast<int>(out.seed % (kRegionSize - 2 * margin)),
@@ -96,6 +133,90 @@ std::vector<Site> SitesNear(const TerrainGenerator& terrain, const glm::vec3& po
     return out;
 }
 
+namespace {
+
+// A stronghold: its hall, pillars, throne, vault and stairway (see Dwarves.h).
+template <typename Set, typename In, typename At>
+void StampStronghold(const TerrainGenerator& terrain, const RegionSite& r, const glm::ivec3& lo, const glm::ivec3& hi, Set set, In in, At at) {
+    const glm::ivec3 c = r.site.centre, g = r.gate, side(g.z, 0, -g.x);
+    // Everything's within the hall's reach or along the stairway: skip a chunk outside both.
+    const glm::ivec3 far = c + g * (kHallHalf + 2 + r.stairs) + glm::ivec3(0, r.stairs, 0);
+    const glm::ivec3 bmin = glm::min(c - glm::ivec3(16, 4, 16), far - glm::ivec3(4, 0, 4));
+    const glm::ivec3 bmax = glm::max(c + glm::ivec3(16, 12, 16), far + glm::ivec3(4, 12, 4));
+    if (glm::any(glm::lessThan(hi, bmin)) || glm::any(glm::greaterThan(lo, bmax))) return;
+    const Block kAir{}, kBrick(BlockType::STONE_BRICK), kMossy(BlockType::MOSSY_BRICK), kLamp(BlockType::LAMP), kPlanks(BlockType::PLANKS),
+        kLog(BlockType::LOG), kChest(BlockType::CHEST), kIron(BlockType::IRON_ORE), kCoal(BlockType::COAL_ORE);
+    auto brick = [&](const glm::ivec3& p) { return Noise::Random01(p.x, p.y, p.z, r.seed) < 0.18f ? kMossy : kBrick; };
+    // (along: towards the stairway; across: to the side.)
+    auto cell = [&](int along, int y, int across) { return c + g * along + side * across + glm::ivec3(0, y, 0); };
+    const int H = kHallHalf + 1; // the wall
+    // Rock round it rich in ore, then the hall's shell, and the hall itself.
+    for (int a = -H - 3; a <= H + 3; a++)
+        for (int b = -H - 3; b <= H + 3; b++)
+            for (int y = -3; y <= 10; y++) {
+                const glm::ivec3 p = cell(a, y, b);
+                if (!in(p)) continue;
+                const bool inside = std::abs(a) < H && std::abs(b) < H && y >= 0 && y <= 7;
+                const bool shell = !inside && std::abs(a) <= H && std::abs(b) <= H && y >= -1 && y <= 8;
+                if (inside) set(p, kAir);
+                else if (shell) set(p, brick(p));
+                else if (at(p).type == BlockType::STONE) {
+                    const float n = Noise::Random01(p.x * 3 + 1, p.y, p.z * 3 + 2, r.seed);
+                    if (n < 0.14f) set(p, kIron);
+                    else if (n < 0.22f) set(p, kCoal);
+                }
+            }
+    // Pillars (two by two), each with a lamp on it.
+    for (int pa : { -6, 5 })
+        for (int pb : { -6, 5 })
+            for (int da = 0; da < 2; da++)
+                for (int db = 0; db < 2; db++)
+                    for (int y = 0; y <= 7; y++) set(cell(pa + da, y, pb + db), (y == 4 && da == 0 && db == 0) ? kLamp : brick(cell(pa + da, y, pb + db)));
+    // A plank walk from the stairway to the throne.
+    for (int a = -H + 3; a < H; a++)
+        for (int b = -1; b <= 1; b++) set(cell(a, -1, b), kPlanks);
+    // The dais and throne at the far end, lamps either side.
+    for (int a = -H + 1; a <= -H + 3; a++)
+        for (int b = -3; b <= 3; b++) set(cell(a, 0, b), kBrick);
+    set(cell(-H + 2, 1, 0), kPlanks);
+    for (int y = 1; y <= 3; y++) set(cell(-H + 1, y, 0), kLog);
+    for (int b : { -2, 2 }) set(cell(-H + 1, 1, b), kLamp);
+    // The vault behind the wall, off to one side, its doorway from the dais.
+    for (int a = -H - 3; a <= -H + 1; a++)
+        for (int b = 1; b <= 5; b++)
+            for (int y = 0; y <= 4; y++) {
+                const bool room = a >= -H - 2 && a <= -H - 1 && b >= 2 && b <= 4 && y >= 1 && y <= 3;
+                if (a > -H) continue;
+                set(cell(a, y, b), room ? kAir : brick(cell(a, y, b)));
+            }
+    set(cell(-H, 1, 3), kAir);
+    set(cell(-H, 2, 3), kAir);
+    set(cell(-H - 2, 3, 3), kLamp);
+    for (const auto& chest : r.site.chests) set(chest, kChest);
+    // The stairway: three wide and four high, a step up each block, walled and roofed
+    // in brick while it's underground; then a gatehouse in the open.
+    for (int k = 0; k <= r.stairs; k++) {
+        const int floor = c.y + k;
+        for (int b = -2; b <= 2; b++)
+            for (int y = -1; y <= 4; y++) {
+                const glm::ivec3 p = cell(H + k, floor - c.y + y, b);
+                if (!in(p)) continue;
+                const bool open = std::abs(b) <= 1 && y >= 0 && y <= 3;
+                const int ground = terrain.ColumnAt(p.x, p.z).FirstOpenRow();
+                if (open) set(p, kAir);
+                else if (p.y < ground + 1 || y == -1) set(p, brick(p));
+            }
+    }
+    const int top = c.y + r.stairs;
+    for (int b : { -2, 2 }) {
+        for (int y = 0; y <= 4; y++) set(cell(H + r.stairs, top - c.y + y, b), kBrick);
+        set(cell(H + r.stairs, top - c.y + 5, b), kLamp);
+    }
+    for (int b = -1; b <= 1; b++) set(cell(H + r.stairs, top - c.y + 4, b), kBrick);
+}
+
+} // namespace
+
 void Stamp(const TerrainGenerator& terrain, const glm::ivec3& coords, Blocks& out) {
     const glm::ivec3 lo = coords * S, hi = lo + S - 1;
     auto in = [&](const glm::ivec3& p) { return glm::all(glm::greaterThanEqual(p, lo)) && glm::all(glm::lessThanEqual(p, hi)); };
@@ -109,14 +230,18 @@ void Stamp(const TerrainGenerator& terrain, const glm::ivec3& coords, Blocks& ou
     const Block kAir{}, kLog(BlockType::LOG), kPlanks(BlockType::PLANKS), kDirt(BlockType::DIRT), kLamp(BlockType::LAMP), kChest(BlockType::CHEST);
     EdgeData slab;
     for (int e = 0; e < 4; e++) slab.SetTopY(e, 4);
-    const int r0x = FloorDiv(lo.x - 48, kRegionSize), r1x = FloorDiv(hi.x + 48, kRegionSize);
-    const int r0z = FloorDiv(lo.z - 48, kRegionSize), r1z = FloorDiv(hi.z + 48, kRegionSize);
+    const int r0x = FloorDiv(lo.x - 80, kRegionSize), r1x = FloorDiv(hi.x + 80, kRegionSize);
+    const int r0z = FloorDiv(lo.z - 80, kRegionSize), r1z = FloorDiv(hi.z + 80, kRegionSize);
     for (int rx = r0x; rx <= r1x; rx++)
         for (int rz = r0z; rz <= r1z; rz++) {
             const RegionSite r = SiteIn(terrain, rx, rz);
             if (!r.exists) continue;
             const Site& s = r.site;
             const glm::ivec3 c = s.centre;
+            if (s.kind == SiteKind::Stronghold) {
+                StampStronghold(terrain, r, lo, hi, set, in, at);
+                continue;
+            }
             if (s.kind != SiteKind::Mine) {
                 if (c.x + 9 < lo.x || c.x - 9 > hi.x || c.z + 9 < lo.z || c.z - 9 > hi.z || c.y + 6 < lo.y || c.y - 4 > hi.y) continue;
                 const glm::vec2 gate(r.gate.x, r.gate.z);
@@ -226,7 +351,11 @@ std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terr
     auto roll = [&](int salt, int least, int most) {
         return static_cast<uint32_t>(least + static_cast<int>(Noise::Random01(pos.x, pos.y + salt, pos.z, r.seed) * (most - least + 1))) * kBlock;
     };
-    if (r.site.kind == SiteKind::Camp) {
+    if (r.site.kind == SiteKind::Stronghold) {
+        loot = { { BlockType::STEEL_INGOT, roll(1, 3, 6) }, { BlockType::IRON_INGOT, roll(2, 6, 12) }, { BlockType::TNT, roll(3, 2, 4) },
+                 { BlockType::ARROW, roll(4, 8, 16) }, { BlockType::BREAD, roll(5, 3, 6) } };
+    }
+    else if (r.site.kind == SiteKind::Camp) {
         loot = { { BlockType::BREAD, roll(1, 2, 5) }, { BlockType::COOKED_VENISON, roll(2, 1, 3) }, { BlockType::ARROW, roll(3, 4, 12) },
                  { BlockType::IRON_INGOT, roll(4, 1, 3) }, { BlockType::HIDE, roll(5, 1, 3) } };
         if (Noise::Random01(pos.x, pos.y + 6, pos.z, r.seed) < 0.4f) loot.push_back({ BlockType::STEEL_INGOT, kBlock });

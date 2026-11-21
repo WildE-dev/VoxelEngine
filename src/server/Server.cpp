@@ -1,4 +1,6 @@
 #include "server/Server.h"
+#include <unordered_set>
+#include <fstream>
 #include "world/Trades.h"
 #include <filesystem>
 #include "world/BlockData.h"
@@ -137,6 +139,7 @@ bool Server::Start(const Options& opts) {
             storage.reset();
             return false;
         }
+        LoadFallenKings();
         if (storage->IsNew()) {
             storage->SetWorldType(static_cast<uint8_t>(options.worldType));
             storage->SetDefaultMode(static_cast<uint8_t>(options.defaultMode));
@@ -683,6 +686,7 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
             SendResources(client);
             spoils = " (+2 arrows)";
         }
+        if (type == CreatureType::DwarfKing) KingSlain(client);
         SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id + spoils);
         if (type == CreatureType::Deer) Award(client, Achievement::Hunter);
         else if (SpecOf(type).hostile) Award(client, Achievement::DwarfSlayer);
@@ -705,6 +709,34 @@ void Server::HandleInteract(ClientState& client, uint16_t creature) {
     }
     SendChat(client, net::ChatMessage::Kind::Info, "The wolf is yours: it'll follow you, and fight for you");
     Award(client, Achievement::BestFriend);
+}
+
+void Server::KingSlain(ClientState& client) {
+    client.resources[static_cast<size_t>(BlockType::STEEL_INGOT)] += 6 * Block::kUnitsPerBlock;
+    client.resources[static_cast<size_t>(BlockType::IRON_INGOT)] += 8 * Block::kUnitsPerBlock;
+    SendResources(client);
+    SendChat(client, net::ChatMessage::Kind::Info, "The Dwarf King's hoard is yours: +6 steel ingots, +8 iron ingots");
+    Award(client, Achievement::Kingslayer);
+    for (auto& [peer, other] : clients)
+        if (other.welcomed) SendChat(other, net::ChatMessage::Kind::Info, client.name + " has defeated a Dwarf King");
+}
+
+void Server::LoadFallenKings() {
+    if (options.worldDirectory.empty()) return;
+    std::ifstream in(std::filesystem::path(options.worldDirectory) / "kings.txt");
+    std::unordered_set<int64_t> fallen;
+    int x, z;
+    while (in >> x >> z) fallen.insert(CreatureSystem::SiteKey({ x, 0, z }));
+    creatures.SetFallenKings(fallen);
+    fallenKingsSaved = fallen.size();
+}
+
+void Server::SaveFallenKings() {
+    fallenKingsSaved = creatures.FallenKings().size();
+    if (options.worldDirectory.empty()) return;
+    std::ofstream out(std::filesystem::path(options.worldDirectory) / "kings.txt");
+    out << "# Strongholds whose Dwarf King has fallen: x z of each hall's centre\n";
+    for (int64_t key : creatures.FallenKings()) out << static_cast<int32_t>(key >> 32) << ' ' << static_cast<int32_t>(static_cast<uint32_t>(key)) << '\n';
 }
 
 void Server::HandleTrade(ClientState& client, uint16_t trader, uint8_t offerIndex) {
@@ -784,6 +816,7 @@ void Server::UpdateCreatures() {
         for (auto& [peer, client] : clients)
             if (client.id == playerId) Hurt(client, damage, deathMessage);
     });
+    if (creatures.FallenKings().size() != fallenKingsSaved) SaveFallenKings();
     for (uint16_t owner : creatures.TakeEndedHires())
         for (auto& [peer, client] : clients)
             if (client.id == owner) SendChat(client, net::ChatMessage::Kind::Info, "Your hired guard's time is up: they've gone home");
@@ -801,7 +834,8 @@ void Server::SendCreatures() {
             m.creatures.push_back({ c.id, c.type, c.feet, c.yaw,
                                     static_cast<uint8_t>((now < c.hurtUntil ? net::kCreatureHurt : 0) | (c.owner != 0 ? net::kCreatureTame : 0) |
                                                          (c.act == 1 && now - c.actedAt < CreatureSystem::kAttackShown ? net::kCreatureAttacking : 0) |
-                                                         (c.act == 2 && now - c.actedAt < CreatureSystem::kWorkShown ? net::kCreatureWorking : 0)) });
+                                                         (c.act == 2 && now - c.actedAt < CreatureSystem::kWorkShown ? net::kCreatureWorking : 0)),
+                                    static_cast<uint8_t>(std::clamp(255 * c.health / std::max(1, SpecOf(c.type).maxHealth), 0, 255)) });
         }
         net.Send(peer, net::kChannelUnreliable, net::Encode(m));
     }
@@ -1595,6 +1629,7 @@ void Server::UpdateArrows() {
                 if (killed)
                     for (auto& [peer, shooter] : clients)
                         if (shooter.id == a.shooter) {
+                            if (type == CreatureType::DwarfKing) KingSlain(shooter);
                             SendChat(shooter, net::ChatMessage::Kind::Info, std::string("You shot a ") + SpecOf(type).id);
                             Award(shooter, Achievement::Marksman);
                             if (type == CreatureType::Deer) Award(shooter, Achievement::Hunter);

@@ -103,9 +103,10 @@ void CreatureSystem::SpawnDwarves(ServerWorld& world, const std::vector<Player>&
             const int64_t key = (static_cast<int64_t>(site.centre.x) << 32) ^ static_cast<uint32_t>(site.centre.z);
             if (done[key]) continue;
             done[key] = true;
-            int warriors = 0, crossbows = 0, chiefs = 0, traders = 0, guards = 0;
+            int warriors = 0, crossbows = 0, chiefs = 0, traders = 0, guards = 0, kings = 0;
             for (const auto& c : creatures)
-                if (c.hasHome && c.site == site.centre && c.owner == 0) {
+                if (c.hasHome && c.site == site.centre && c.owner == 0 && c.summoner == 0) {
+                    kings += c.type == CreatureType::DwarfKing;
                     warriors += c.type == CreatureType::DwarfWarrior;
                     crossbows += c.type == CreatureType::DwarfCrossbow;
                     chiefs += c.type == CreatureType::DwarfChief;
@@ -114,9 +115,12 @@ void CreatureSystem::SpawnDwarves(ServerWorld& world, const std::vector<Player>&
                 }
             const bool first = !siteRefill.count(key);
             if (!first && clock < siteRefill[key]) continue;
+            bool unloaded = false;
             for (const glm::ivec3& spot : site.spawns) {
                 CreatureType type = CreatureType::Count;
-                if (traders < site.traders) type = CreatureType::DwarfTrader;
+                const int kingsWanted = fallenKings.count(key) ? 0 : site.kings;
+                if (kings < kingsWanted) type = CreatureType::DwarfKing;
+                else if (traders < site.traders) type = CreatureType::DwarfTrader;
                 else if (guards < site.guards) type = CreatureType::DwarfGuard;
                 else if (chiefs < site.chiefs) type = CreatureType::DwarfChief;
                 else if (warriors < site.warriors) type = CreatureType::DwarfWarrior;
@@ -124,19 +128,25 @@ void CreatureSystem::SpawnDwarves(ServerWorld& world, const std::vector<Player>&
                 if (type == CreatureType::Count) break;
                 const glm::vec3 feet = glm::vec3(spot) + glm::vec3(0.5f, 0.0f, 0.5f);
                 Block ground;
-                if (!world.GetBlock(spot.x, spot.y - 1, spot.z, ground) || nearPlayer(feet, 6.0f) || !standable(feet, type)) continue;
+                if (!world.GetBlock(spot.x, spot.y - 1, spot.z, ground)) {
+                    unloaded = true;
+                    continue;
+                }
+                if (nearPlayer(feet, 6.0f) || !standable(feet, type)) continue;
                 const uint16_t id = Spawn(type, feet);
                 if (!id) break;
                 for (auto& c : creatures)
                     if (c.id == id) c.hasHome = true, c.home = glm::vec3(site.centre) + glm::vec3(0.5f, 0.0f, 0.5f), c.site = site.centre;
-                (type == CreatureType::DwarfTrader  ? traders
+                (type == CreatureType::DwarfKing ? kings
+                 : type == CreatureType::DwarfTrader  ? traders
                  : type == CreatureType::DwarfGuard ? guards
                  : type == CreatureType::DwarfChief ? chiefs
                  : type == CreatureType::DwarfWarrior ? warriors
                                                       : crossbows)++;
                 if (!first) break; // (one at a time after the first fill)
             }
-            siteRefill[key] = clock + kSiteRefill;
+            // (Its ground not loaded yet: tried again in a moment, not in kSiteRefill.)
+            if (!(first && unloaded)) siteRefill[key] = clock + kSiteRefill;
         }
     if (siteRefill.size() > 4096) siteRefill.clear();
 
@@ -187,12 +197,13 @@ bool CreatureSystem::Damage(uint16_t id, int damage, const glm::vec3& from, doub
     const glm::vec3 eye = from;
     c.health -= damage;
     c.hurtUntil = now + 0.3;
-    // Knocked back, away from the hitter.
+    // Knocked back, away from the hitter (a king hardly).
+    const float push = c.type == CreatureType::DwarfKing ? 0.2f : 1.0f;
     glm::vec2 away(c.feet.x - eye.x, c.feet.z - eye.z);
     away = glm::length(away) > 1e-3f ? glm::normalize(away) : glm::vec2(1.0f, 0.0f);
-    c.velocity.x = away.x * 6.0f;
-    c.velocity.z = away.y * 6.0f;
-    c.velocity.y = 5.0f;
+    c.velocity.x = away.x * 6.0f * push;
+    c.velocity.z = away.y * 6.0f * push;
+    c.velocity.y = 5.0f * push;
     c.onGround = false;
     if (c.type == CreatureType::Deer || c.type == CreatureType::Bat) {
         c.fleeUntil = now + 5.0;
@@ -200,9 +211,14 @@ bool CreatureSystem::Damage(uint16_t id, int damage, const glm::vec3& from, doub
     }
     if (c.health <= 0) {
         killed = true;
+        Fallen(c);
         creatures.erase(it);
     }
     return true;
+}
+
+void CreatureSystem::Fallen(const Creature& c) {
+    if (c.type == CreatureType::DwarfKing && c.hasHome) fallenKings.insert(SiteKey(c.site));
 }
 
 Collision::AABB CreatureSystem::Box(const Creature& c) { return BoxAt(c.feet, SpecOf(c.type)); }
@@ -411,6 +427,45 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
                     return;
                 }
         keepHome(6.0f);
+        return;
+    }
+
+    if (c.type == CreatureType::DwarfKing) {
+        // A stronghold's king: after the nearest survival player in his hall (not far from
+        // his throne), striking hard, harder and faster once he's down to half; every so
+        // often he calls up two more warriors (at most six about at once).
+        const bool enraged = c.health * 2 < spec.maxHealth;
+        const Player* target = nullptr;
+        float best = 1e9f;
+        for (const auto& p : players) {
+            if (!p.vulnerable || std::abs(p.feet.y - c.feet.y) > 6.0f || (c.hasHome && HorizontalDistance(p.feet, c.home) > 18.0f)) continue;
+            const float d = HorizontalDistance(p.feet, c.feet);
+            if (d < best) best = d, target = &p;
+        }
+        if (!target) {
+            keepHome(2.0f);
+            return;
+        }
+        glm::vec2 to(target->feet.x - c.feet.x, target->feet.z - c.feet.z);
+        const float reach = spec.halfWidth + 0.3f + spec.attackReach;
+        if (glm::length(to) > 0.6f) move = glm::normalize(to);
+        speed = glm::length(to) > reach * 0.7f ? spec.runSpeed * (enraged ? 1.3f : 1.0f) : 0.0f;
+        if (glm::length(to) <= reach && std::abs(target->feet.y - c.feet.y) < 2.2f && now >= c.nextAttack) {
+            c.nextAttack = now + (enraged ? 0.75 : 1.2);
+            c.act = 1, c.actedAt = now;
+            hurt(target->id, spec.attackDamage + (enraged ? 2 : 0), "was crushed by the Dwarf King");
+        }
+        if (c.nextCall == 0.0) c.nextCall = now + 5.0;
+        if (now >= c.nextCall) {
+            c.nextCall = now + (enraged ? 8.0 : 12.0);
+            int called = 0;
+            for (const auto& other : creatures) called += other.summoner == c.id;
+            for (const auto& p : pending) called += p.summoner == c.id;
+            for (int k = 0; k < 2 && called < 6; k++, called++) {
+                const float a = unit(rng) * 6.2831853f;
+                pending.push_back({ CreatureType::DwarfWarrior, c.feet + glm::vec3(std::cos(a) * 2.0f, 0.3f, std::sin(a) * 2.0f), c.home, c.site, c.id });
+            }
+        }
         return;
     }
 
@@ -633,7 +688,17 @@ void CreatureSystem::Update(ServerWorld& world, const std::vector<Player>& playe
         float speed = 0.0f;
         Think(c, players, now, hurt, move, speed);
         Move(world, c, move, speed, dt);
-        if (c.health <= 0) it = creatures.erase(it);
+        if (c.health <= 0) {
+            Fallen(c);
+            it = creatures.erase(it);
+        }
         else ++it;
     }
+    // A king's guard, called up.
+    for (const auto& p : pending) {
+        const uint16_t id = Spawn(p.type, p.feet);
+        for (auto& c : creatures)
+            if (c.id == id) c.hasHome = true, c.home = p.home, c.site = p.site, c.summoner = p.summoner;
+    }
+    pending.clear();
 }

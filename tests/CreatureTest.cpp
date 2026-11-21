@@ -269,6 +269,31 @@ int main() {
         server.QueueConsoleCommand("creatures clear");
         both(20.0, [&] { return a.client.GetCreatures().empty(); });
 
+        std::cout << "The Dwarf King" << std::endl;
+        server.QueueConsoleCommand("gamemode creative Hunter");
+        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+        server.QueueConsoleCommand("summon dwarf_king 10.5 0 8.5");
+        Check(both(20.0, [&] { const auto* k = a.Find(CreatureType::DwarfKing); return k && k->health > 0.99f; }), "a Dwarf King is summoned, at full health");
+        const uint16_t king = a.Find(CreatureType::DwarfKing)->id;
+        a.client.Attack(king, Tool::Sword);
+        Check(both(20.0, [&] { const auto* k = a.Find(CreatureType::DwarfKing); return k && k->health < 0.99f; }), "a hit shows on his health (for the health bar)");
+        // Hit after hit (keeping by him) until he falls.
+        bool slain = both(90.0, [&] {
+            const auto* k = a.Find(CreatureType::DwarfKing);
+            if (!k) return true;
+            if (glm::distance(a.feet, k->feet) > 2.5f) {
+                char tp[96];
+                std::snprintf(tp, sizeof tp, "tp Hunter %.2f %.2f %.2f", k->feet.x - 1.5f, k->feet.y, k->feet.z);
+                server.QueueConsoleCommand(tp);
+            }
+            a.client.Attack(king, Tool::Sword);
+            return false;
+        });
+        Check(slain && both(10.0, [&] { return Has(a, "hoard is yours") && Has(b, "has defeated a Dwarf King"); }), "he falls at last: his hoard is the hunter's, and everyone's told");
+        server.QueueConsoleCommand("creatures clear");
+        both(20.0, [&] { return a.client.GetCreatures().empty(); });
+        server.QueueConsoleCommand("gamemode survival Hunter");
+
         server.QueueConsoleCommand("time midnight");
         server.QueueConsoleCommand("summon dwarf 20 0 20");
         server.QueueConsoleCommand("summon deer 22 0 20");

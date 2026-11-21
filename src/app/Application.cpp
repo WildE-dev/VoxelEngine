@@ -807,6 +807,7 @@ void Application::Run() {
         if (showCompass) DrawCompass();
         if (showMap) DrawMinimap();
         DrawToast();
+        DrawBossBar();
         DrawDeath();
         if (showPlayers) DrawPlayerList();
         DrawHotbar();
@@ -1352,6 +1353,25 @@ void Application::DrawDeath() {
         const ImVec2 size = ImGui::CalcTextSize(how.c_str());
         draw->AddText(ImVec2(cx - size.x * 0.5f, cy + titleSize.y + 14.0f), IM_COL32(255, 230, 220, static_cast<int>(240 * fade)), how.c_str());
     }
+}
+
+void Application::DrawBossBar() {
+    float health = -1.0f, best = 32.0f;
+    for (const auto& c : client->GetCreatures())
+        if (c.type == CreatureType::DwarfKing) {
+            const float d = glm::distance(c.feet, camera.GetPosition());
+            if (d < best) best = d, health = std::clamp(c.health, 0.0f, 1.0f);
+        }
+    if (health < 0.0f) return;
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const float width = std::min(520.0f, viewport->WorkSize.x * 0.5f), height = 14.0f;
+    const ImVec2 corner(viewport->WorkPos.x + (viewport->WorkSize.x - width) * 0.5f, viewport->WorkPos.y + 118.0f);
+    const char* title = "The Dwarf King";
+    const ImVec2 titleSize = ImGui::CalcTextSize(title);
+    draw->AddText(ImVec2(corner.x + (width - titleSize.x) * 0.5f, corner.y - titleSize.y - 4.0f), IM_COL32(255, 220, 140, 255), title);
+    draw->AddRectFilled(ImVec2(corner.x - 2, corner.y - 2), ImVec2(corner.x + width + 2, corner.y + height + 2), IM_COL32(20, 12, 8, 210), 3.0f);
+    draw->AddRectFilled(corner, ImVec2(corner.x + width * health, corner.y + height), health < 0.5f ? IM_COL32(220, 70, 40, 255) : IM_COL32(200, 150, 40, 255), 2.0f);
 }
 
 void Application::DrawToast() {

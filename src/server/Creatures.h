@@ -17,6 +17,7 @@
 #include <functional>
 #include <random>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -56,6 +57,8 @@ public:
         double actedAt = -1e9;
         // A hired guard (owner: who hired it) goes home then.
         double hiredUntil = 0.0;
+        uint16_t summoner = 0;   // a warrior a king called up: that king
+        double nextCall = 0.0;   // a king: when he next calls up warriors
     };
     // How long a creature counts as attacking or working after it did, for the clients.
     static constexpr double kAttackShown = 0.6, kWorkShown = 0.9;
@@ -111,6 +114,10 @@ public:
     // A dwarf guard hired by a player, standing here (0: too many creatures).
     uint16_t Hire(const glm::vec3& feet, uint16_t player, double now, double seconds);
     int HiredBy(uint16_t player) const;
+    // Strongholds whose king has fallen (by their site, for saving), and setting them.
+    const std::unordered_set<int64_t>& FallenKings() const { return fallenKings; }
+    void SetFallenKings(const std::unordered_set<int64_t>& fallen) { fallenKings = fallen; }
+    static int64_t SiteKey(const glm::ivec3& site) { return (static_cast<int64_t>(site.x) << 32) ^ static_cast<uint32_t>(site.z); }
     // Gives it a home (and a site, the block it's in) to keep to.
     void SetHome(uint16_t id, const glm::vec3& home) {
         for (auto& c : creatures)
@@ -140,6 +147,17 @@ private:
 
     std::vector<Creature> creatures;
     std::vector<uint16_t> endedHires;
+    // Strongholds whose king has fallen (he doesn't come back), and creatures to add
+    // once the update's done (a king's guard, called up).
+    std::unordered_set<int64_t> fallenKings;
+    struct Pending {
+        CreatureType type;
+        glm::vec3 feet, home;
+        glm::ivec3 site;
+        uint16_t summoner;
+    };
+    std::vector<Pending> pending;
+    void Fallen(const Creature& c);
     uint16_t nextId = 1;
     std::mt19937 rng;
     bool naturalSpawning = true;

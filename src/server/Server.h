@@ -252,6 +252,12 @@ private:
     void HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool);
     void HandleInteract(ClientState& client, uint16_t creature);
     void HandleTrade(ClientState& client, uint16_t trader, uint8_t offer);
+    // A Dwarf King fell to this player: his hoard, an achievement, and everyone told.
+    void KingSlain(ClientState& client);
+    // The strongholds whose king has fallen, kept in the world's kings.txt.
+    void LoadFallenKings();
+    void SaveFallenKings();
+    size_t fallenKingsSaved = 0;
     void HandleCraft(ClientState& client, int recipe, int count);
     // The tool a player really works with: theirs if they have it, a bare hand if not.
     static Tool Usable(const ClientState& client, Tool tool);

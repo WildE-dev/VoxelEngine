@@ -11,6 +11,11 @@
 //  - A market: a camp of friendly dwarves (the same palisade, huts and fire, lamps
 //    either side of the gate and no loot): a trader (world/Trades.h) and guards, who
 //    fight hostile dwarves that come near, and anyone who hits one of them.
+//  - A stronghold (rare): a great hall of stone bricks kHallDepth below the ground,
+//    23 blocks square and 8 high, with pillars, lamps and walls rich in ore, a throne
+//    at the far end and a vault behind it, reached by a stairway down from a
+//    gatehouse on the surface. Its Dwarf King (a boss) and his guards live there; the
+//    king doesn't come back once he's been defeated.
 //  - A mine: a timber headframe over a shaft three blocks across, with a ladder down
 //    to kMineDepth below the ground, and tunnels three wide and three high running out
 //    from its foot, framed every few blocks by log posts in the walls and a beam
@@ -34,7 +39,9 @@ constexpr int kRegionSize = 160;
 constexpr int kCampRadius = 7;
 constexpr int kMineDepth = 20;
 
-enum class SiteKind : uint8_t { Camp, Mine, Market };
+enum class SiteKind : uint8_t { Camp, Mine, Market, Stronghold };
+constexpr int kHallDepth = 28;  // a stronghold's hall floor, below the ground over it
+constexpr int kHallHalf = 10;   // its floor runs this far either way from the centre
 
 struct Site {
     SiteKind kind = SiteKind::Camp;
@@ -43,6 +50,7 @@ struct Site {
     std::vector<glm::ivec3> chests;
     int warriors = 0, crossbows = 0, chiefs = 0; // how many live there
     int traders = 0, guards = 0;                 // (a market's)
+    int kings = 0;                               // (a stronghold's)
 };
 
 // The site in a region, if any (exists = false: none).
@@ -53,7 +61,8 @@ struct RegionSite {
     // A mine's tunnels: from the shaft's side outwards (unit direction), and how long.
     std::vector<std::pair<glm::ivec3, int>> tunnels;
     int bottom = 0; // a mine's tunnel floor
-    glm::ivec3 gate{ 1, 0, 0 }; // a camp's gate direction
+    glm::ivec3 gate{ 1, 0, 0 }; // a camp's gate direction (a stronghold's stairway's)
+    int stairs = 0;             // a stronghold's stairway: steps up from the hall to the open
 };
 RegionSite SiteIn(const TerrainGenerator& terrain, int regionX, int regionZ);
 

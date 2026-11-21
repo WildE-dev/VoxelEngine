@@ -781,6 +781,28 @@ The layouts are in `src/world/Dwarves.cpp`; like dungeons, each chunk stamps jus
 part of a site inside it. `BiomeTest` checks camps have their fire, chest and
 palisade, and mines their open shaft, ladder, tunnels and chests.
 
+### Strongholds and the Dwarf King
+
+Rarely (about one region in 25), a dwarf **stronghold** lies 28 blocks under the
+ground. A gatehouse of stone bricks with a lamp on each pillar stands over a stairway,
+three wide and a step a block, that leads down to a great hall: 21 blocks square and 8
+high, mossy brick, four great pillars with lamps, a plank walk to a throne on a dais at
+the far end, and walls thick with iron and coal ore. Behind the throne a doorway opens
+on the vault: two chests of steel and iron ingots, TNT, arrows and bread.
+
+The **Dwarf King** sits there, with six warriors and three crossbowmen. Half again as
+tall as a dwarf, in purple and gold with a crown and a great hammer, he has 60 hearts,
+strikes for 3 (4 once he's down to half, and faster), hardly budges when hit, and every
+12 seconds (8 when enraged) calls up two more warriors, up to six at once. He won't
+follow you more than 18 blocks from his throne. Near him, his health shows as a bar
+across the top of the screen.
+
+Defeat him and his hoard is yours (6 steel and 8 iron ingots), everyone's told, and
+you earn **Kingslayer**. He doesn't come back: the strongholds whose king has fallen
+are kept in the world's `kings.txt`. `/locate stronghold` finds the nearest, and
+`/summon dwarf_king` brings one (who will come back). `BiomeTest` checks a stronghold's
+hall, throne, vault and stairway; `CreatureTest` fights a king to the end.
+
 ### Markets
 
 Not every dwarf is out for blood. A market's dwarves (a **trader** in green with a
@@ -805,7 +827,7 @@ up and they go home. You can have two at once.
 
 Hit any of a market's dwarves and the whole market turns on you for five minutes: the
 guards come after you (within 40 blocks of it) and the trader won't deal with you.
-`/locate market` (or `camp`, or `mine`) says where the nearest one is. The offers are
+`/locate market` (or `camp`, `mine` or `stronghold`) says where the nearest one is. The offers are
 in `src/world/Trades.h`; `/summon dwarf_trader` and `/summon dwarf_guard`
 bring them (a market of their own where they're summoned). `CreatureTest` checks a
 trade, a refused one, hiring a guard who follows and fights, and the grudge.

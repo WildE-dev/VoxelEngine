@@ -17,10 +17,10 @@
 
 #include "world/Mining.h"
 
-enum class CreatureType : uint8_t { Deer, DwarfWarrior, DwarfCrossbow, Wolf, Bat, DwarfChief, DwarfMiner, DwarfTrader, DwarfGuard, Count };
+enum class CreatureType : uint8_t { Deer, DwarfWarrior, DwarfCrossbow, Wolf, Bat, DwarfChief, DwarfMiner, DwarfTrader, DwarfGuard, DwarfKing, Count };
 inline bool IsDwarf(CreatureType t) {
     return t == CreatureType::DwarfWarrior || t == CreatureType::DwarfCrossbow || t == CreatureType::DwarfChief || t == CreatureType::DwarfMiner ||
-           t == CreatureType::DwarfTrader || t == CreatureType::DwarfGuard;
+           t == CreatureType::DwarfTrader || t == CreatureType::DwarfGuard || t == CreatureType::DwarfKing;
 }
 // The dwarves of a market (friendly, unless you hit one of them).
 inline bool IsMarketDwarf(CreatureType t) { return t == CreatureType::DwarfTrader || t == CreatureType::DwarfGuard; }
@@ -49,6 +49,7 @@ inline const CreatureSpec& SpecOf(CreatureType type) {
         { "Dwarf miner", "dwarf_miner", 0.36f, 1.4f, 14, 1.2f, 2.5f, false, 0, 0.0f },       // (works a mining post)
         { "Dwarf trader", "dwarf_trader", 0.38f, 1.4f, 20, 1.0f, 2.6f, false, 0, 0.0f },     // (trades at a market)
         { "Dwarf guard", "dwarf_guard", 0.38f, 1.45f, 24, 1.1f, 3.5f, false, 4, 1.0f },      // (guards a market, or whoever hired it)
+        { "Dwarf King", "dwarf_king", 0.55f, 2.0f, 120, 1.0f, 3.2f, true, 6, 1.3f },        // (rules a stronghold: its boss)
     };
     const int t = static_cast<int>(type);
     return specs[t >= 0 && t < static_cast<int>(CreatureType::Count) ? t : 0];

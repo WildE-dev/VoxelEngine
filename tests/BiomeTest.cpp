@@ -251,7 +251,7 @@ int main() {
 
     // Dwarf camps and mines: a camp's fire, chest and palisade; a mine's open shaft with
     // its ladder, its tunnels, and a chest at each tunnel's end.
-    int camps = 0, mines = 0, campsRight = 0, minesRight = 0, markets = 0, marketsRight = 0;
+    int camps = 0, mines = 0, campsRight = 0, minesRight = 0, markets = 0, marketsRight = 0, strongholds = 0, strongholdsRight = 0;
     for (int rx = -6; rx <= 6; rx++)
         for (int rz = -6; rz <= 6; rz++) {
             const auto r = Dwarves::SiteIn(t, rx, rz);
@@ -267,6 +267,16 @@ int main() {
                 for (int d = -7; d <= 7; d++) logs += (world.Get(c + glm::ivec3(d, 0, 7)).type == BlockType::LOG) + (world.Get(c + glm::ivec3(7, 0, d)).type == BlockType::LOG);
                 right = right && logs >= 3;
                 campsRight += right;
+            }
+            else if (r.site.kind == Dwarves::SiteKind::Stronghold) {
+                // A stronghold: its hall open, the throne at the far end, the vault's
+                // chests, and the stairway open to the sky at the top.
+                if (strongholds >= 2) continue;
+                strongholds++;
+                const glm::ivec3 g = r.gate, top = c + g * (Dwarves::kHallHalf + 1 + r.stairs) + glm::ivec3(0, r.stairs, 0);
+                right = right && world.Get(c + glm::ivec3(0, 3, 0)).IsAir() && world.Get(c - g * Dwarves::kHallHalf + glm::ivec3(0, 2, 0)).type == BlockType::LOG &&
+                        r.site.chests.size() == 2 && world.Get(top + glm::ivec3(0, 1, 0)).IsAir() && world.Get(top - g * 5 + glm::ivec3(0, -4, 0)).IsAir();
+                strongholdsRight += right;
             }
             else if (r.site.kind == Dwarves::SiteKind::Market) {
                 // A market: a fire, lamps by the gate, and no loot.
@@ -286,6 +296,8 @@ int main() {
             }
         }
     Check(camps > 0 && campsRight == camps, "dwarf camps have their fire, chest and palisade (" + std::to_string(campsRight) + " of " + std::to_string(camps) + ")");
+    Check(strongholdsRight == strongholds, "dwarf strongholds have an open hall, a throne, a vault and a stairway up (" + std::to_string(strongholdsRight) + " of " +
+                                               std::to_string(strongholds) + ")");
     Check(marketsRight == markets, "dwarf markets have their fire and lamps by the gate, and no loot (" + std::to_string(marketsRight) + " of " + std::to_string(markets) + ")");
     Check(mines > 0 && minesRight == mines, "dwarf mines have an open shaft with a ladder, tunnels and chests (" + std::to_string(minesRight) + " of " + std::to_string(mines) + ")");
 

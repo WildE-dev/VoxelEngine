@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 47;
+constexpr uint32_t kProtocolVersion = 48;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -414,6 +414,7 @@ struct CreatureInfo {
     glm::vec3 feet{0.0f};
     float yaw = 0.0f;
     uint8_t flags = 0;
+    uint8_t health = 255; // how much it has left, of 255 (a boss's health bar)
 };
 struct CreatureSnapshot {
     uint32_t tick = 0;

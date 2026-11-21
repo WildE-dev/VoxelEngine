@@ -168,6 +168,7 @@ public:
         float speed = 0.0f;
         bool tame = false; // a wolf with an owner
         uint8_t action = 0; // 1 attacking, 2 working (net::kCreatureAttacking, kCreatureWorking)
+        float health = 1.0f; // what it has left (0..1)
     };
     std::vector<Creature> GetCreatures() const;
 
