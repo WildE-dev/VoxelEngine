@@ -1,5 +1,6 @@
 // Blocks' details, by block id. Change any of them (or leave a block out, or a
-// field out, for the game's own). Press R in the game to load this file again.
+// field out, for the game's own). The game loads this file again when it changes, and
+// the ModelEditor program edits it (its Blocks tab).
 //   "name": what the game calls it
 //   "textures": {"all": x}, or {"top", "bottom", "side"}, or each of "top", "bottom",
 //       "front", "back", "left" and "right": PNGs in Resources/Textures/Blocks

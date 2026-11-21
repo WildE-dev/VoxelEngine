@@ -78,7 +78,7 @@ int main() {
     }
 
     std::cout << "Writing models back (the model editor)" << std::endl;
-    for (const char* path : { "Resources/Data/creatures.json", "Resources/Data/structures.json" }) {
+    for (const char* path : { "Resources/Data/creatures.json", "Resources/Data/structures.json", "Resources/Data/blocks.json" }) {
         std::string error;
         Json::Value v, again;
         Json::ParseFile(path, v, error);

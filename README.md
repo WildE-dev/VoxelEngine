@@ -1601,8 +1601,8 @@ drawn specially (the water wheel, shafts, gauges, pipes) are still in the code.
 
 ### The model editor
 
-`ModelEditor` (built beside the game) is a program for these two model files, so they
-needn't be edited by hand:
+`ModelEditor` (built beside the game) is a program for these files, so they needn't be
+edited by hand:
 
 ```bash
 cd build && ./ModelEditor            # or: ./ModelEditor structures blast_furnace
@@ -1615,6 +1615,10 @@ cd build && ./ModelEditor            # or: ./ModelEditor structures blast_furnac
   grid of whole blocks (a structure's 3 x 3 footprint in yellow; red is +x, the way a
   creature faces). Drag to turn round it, shift-drag or middle-drag to move, scroll to
   zoom. The View menu sets it walking or working and the light.
+- **Blocks** (the third tab) lists every block, with a search, and shows the one picked
+  as a cube. Its name, textures (one for every face; top, bottom and sides; or each
+  face), hardness, best tool, sound, light and map colour can be changed. Blocks
+  themselves are made in the code, so none can be added here.
 - **Click a part** in the view to pick it, and drag the handles on it: **1** moves its
   box, **2** moves its frame (the pivot, with everything inside it), **3** sizes the box
   by the face you drag (Shift: both ways). Hold Ctrl to snap to sixteenths of a block.

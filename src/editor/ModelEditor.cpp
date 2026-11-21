@@ -1,9 +1,10 @@
 // The model editor: a program of its own for Resources/Data/creatures.json and
-// structures.json (see PlayerModels::CreatureShape for the format). It shows the model
+// structures.json (see PlayerModels::CreatureShape for the format), and blocks.json (see
+// world/BlockData.h). It shows the model
 // being edited as the game draws it, with the part picked flashing, and saves the file
 // back both next to the program (so the game, after R, shows it) and in the source tree.
 //
-//   ModelEditor [creatures|structures] [model]
+//   ModelEditor [creatures|structures|blocks] [model or block]
 //
 // Drag (left or right button) to turn round the model, shift-drag or middle-drag to
 // move, scroll to zoom. Ctrl (Cmd) S saves, Z undoes, shift Z redoes; Delete removes the
@@ -50,8 +51,11 @@ using Part = PlayerModels::ShapePart;
 
 namespace {
 
-constexpr const char* kFiles[] = { "creatures.json", "structures.json" };
-constexpr const char* kFileTitles[] = { "Creatures", "Structures" };
+constexpr const char* kFiles[] = { "creatures.json", "structures.json", "blocks.json" };
+constexpr const char* kFileTitles[] = { "Creatures", "Structures", "Blocks" };
+constexpr int kFileCount = 3;
+// Blocks' lines are long: one block a line.
+int WidthFor(int file) { return file == 2 ? 300 : 110; }
 constexpr const char* kAxes[] = { "x", "y", "z" };
 constexpr float kLeftWidth = 270.0f, kRightWidth = 360.0f;
 
@@ -153,7 +157,7 @@ public:
     void Save() {
         Value tidy = root;
         Tidy(tidy);
-        const std::string text = header + Json::Write(tidy);
+        const std::string text = header + Json::Write(tidy, WidthFor(file));
         std::vector<std::string> wrote;
         auto put = [&](const std::string& path) {
             std::ofstream out(path, std::ios::binary);
@@ -185,7 +189,7 @@ public:
     void ClickAt(float x, float y) { PickAt({ x, y }); }
     void SetTool(int t) { tool = static_cast<Tool>(std::clamp(t, 0, 2)); }
     void OpenNamed(const std::string& name) {
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < kFileCount; i++)
             if (name == kFiles[i] || name + ".json" == kFiles[i]) Open(i);
     }
 
@@ -240,9 +244,11 @@ private:
 #endif
     }
     bool Structures() const { return file == 1; }
+    bool Blocks() const { return file == 2; }
+    std::string blockFilter;
     void ResetView() {
-        yaw = -50.0f, pitch = 22.0f, distance = Structures() ? 9.0f : 4.0f;
-        target = glm::vec3(0.0f, Structures() ? 1.6f : 0.8f, 0.0f);
+        yaw = -50.0f, pitch = 22.0f, distance = Structures() ? 9.0f : Blocks() ? 3.2f : 4.0f;
+        target = glm::vec3(0.0f, Structures() ? 1.6f : Blocks() ? 0.5f : 0.8f, 0.0f);
     }
 
     Value* Model() { return const_cast<Value*>(root.Find(model)); }
@@ -320,6 +326,10 @@ private:
         shapes.clear();
         buildError.clear();
         if (model.empty()) return;
+        if (Blocks()) {
+            BuildBlock();
+            return;
+        }
         if (!models.BuildShapes(root, { model }, shapes, buildError)) shapes.clear();
     }
 
@@ -346,6 +356,11 @@ private:
     }
 
     void DrawScene(int x, int y, int w, int h, float time);
+    void BuildBlock();
+    void BlockInspector(Value& block);
+    // A block's textures: top, bottom and the four sides (+x, -x, +z, -z as front, back,
+    // left, right), from any of the forms the file allows.
+    static void BlockFaces(const Value& block, std::string faces[6]);
     glm::mat4 Base() const { return Structures() ? glm::translate(glm::mat4(1.0f), glm::vec3(-1.5f, 0.0f, -1.5f)) : glm::mat4(1.0f); }
     Handle Handles();
     glm::mat4 HandleMatrix(const Handle& h, int axis, float thickness, bool tip) const;
@@ -391,7 +406,7 @@ void Editor::Frame(int fbWidth, int fbHeight, int winWidth, int winHeight, float
     if (rebuild) Rebuild();
     placed.clear();
     if (auto it = shapes.find(model); it != shapes.end()) PlayerModels::Place(it->second, Base(), time, swingNow, working, placed);
-    ViewTools(top);
+    if (!Blocks()) ViewTools(top);
     const ImVec2 mouse = io.MousePos;
     ViewInput(mouse.x > kLeftWidth && mouse.x < winWidth - kRightWidth && mouse.y > top);
     if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete) && SelectedPart()) {
@@ -570,6 +585,7 @@ float HitBox(const glm::mat4& m, glm::vec3 origin, glm::vec3 direction) {
 }
 
 void Editor::PickAt(glm::vec2 mouse) {
+    if (Blocks()) return;
     glm::vec3 o, d;
     if (!Ray(mouse, o, d)) return;
     const Part* best = nullptr;
@@ -710,7 +726,7 @@ void Editor::ViewInput(bool overView) {
 void Editor::MenuBar() {
     if (!ImGui::BeginMainMenuBar()) return;
     if (ImGui::BeginMenu("File")) {
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < kFileCount; i++)
             if (ImGui::MenuItem(kFileTitles[i], nullptr, file == i) && i != file) {
                 if (unsaved) askFile = i;
                 else Open(i);
@@ -772,14 +788,42 @@ void Editor::UnsavedPrompt() {
 void Editor::LeftPanel(float top, float height) {
     ImGui::SetNextWindowPos(ImVec2(0, top));
     ImGui::SetNextWindowSize(ImVec2(kLeftWidth, height));
-    ImGui::Begin("Models", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+    ImGui::Begin(Blocks() ? "Blocks###left" : "Models###left", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < kFileCount; i++) {
         if (i) ImGui::SameLine();
         if (ImGui::RadioButton(kFileTitles[i], file == i) && i != file) {
             if (unsaved) askFile = i;
             else Open(i);
         }
+    }
+
+    if (Blocks()) {
+        // Blocks are made in the code: their details can be changed, not the list.
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputTextWithHint("##filter", "search blocks", &blockFilter);
+        ImGui::BeginChild("blocks", ImVec2(0, 0), ImGuiChildFlags_Borders);
+        for (const auto& [name, v] : root.object) {
+            const std::string title = v.StringOr("name", name);
+            if (!blockFilter.empty() && name.find(blockFilter) == std::string::npos && title.find(blockFilter) == std::string::npos) continue;
+            std::string faces[6];
+            BlockFaces(v, faces);
+            const int index = faces[2].empty() ? -1 : atlas.GetIndex(faces[2]);
+            if (index > 0) {
+                glm::vec2 a, b;
+                atlas.GetTileUV(index, a, b);
+                ImGui::Image(static_cast<ImTextureID>(atlas.GetTexture()), ImVec2(16, 16), ImVec2(a.x, a.y), ImVec2(b.x, b.y));
+            } else
+                ImGui::Dummy(ImVec2(16, 16));
+            ImGui::SameLine();
+            if (ImGui::Selectable((title + "##" + name).c_str(), name == model)) {
+                model = name;
+                rebuild = true;
+            }
+        }
+        ImGui::EndChild();
+        ImGui::End();
+        return;
     }
 
     // The models in the file.
@@ -954,10 +998,15 @@ void Editor::LeftPanel(float top, float height) {
 void Editor::RightPanel(float left, float top, float height) {
     ImGui::SetNextWindowPos(ImVec2(left, top));
     ImGui::SetNextWindowSize(ImVec2(kRightWidth, height));
-    ImGui::Begin("Parts", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+    ImGui::Begin(Blocks() ? "Block###right" : "Parts###right", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
     Value* m = Model();
     if (!m) {
         ImGui::TextDisabled("No model.");
+        ImGui::End();
+        return;
+    }
+    if (Blocks()) {
+        BlockInspector(*m);
         ImGui::End();
         return;
     }
@@ -1125,6 +1174,124 @@ bool Editor::TexturePicker(const char* id, std::string& name) {
     }
     ImGui::PopID();
     return picked;
+}
+
+void Editor::BlockFaces(const Value& block, std::string faces[6]) {
+    const Value* t = block.Find("textures");
+    if (!t || !t->IsObject()) return;
+    const std::string all = t->StringOr("all", "");
+    const std::string side = t->StringOr("side", all);
+    faces[0] = t->StringOr("top", all);
+    faces[1] = t->StringOr("bottom", all);
+    const char* sides[4] = { "front", "back", "left", "right" };
+    for (int i = 0; i < 4; i++) faces[2 + i] = t->StringOr(sides[i], side);
+}
+
+void Editor::BuildBlock() {
+    const Value* block = Model();
+    if (!block) return;
+    std::string faces[6];
+    BlockFaces(*block, faces);
+    Part p;
+    p.hasBox = true;
+    p.box = glm::vec3(0.0f, 0.5f, 0.0f);
+    p.size = glm::vec3(1.0f);
+    p.color = glm::vec3(1.0f);
+    p.glow = block->NumberOr("light", 0.0) > 0.0;
+    // (Drawn as a model box: top, bottom, and one texture for its sides.)
+    const std::string use[3] = { faces[0], faces[1], faces[2] };
+    for (int f = 0; f < 3; f++) {
+        if (use[f].empty()) continue;
+        glm::vec2 a, b;
+        atlas.GetTileUV(atlas.GetIndex(use[f]), a, b);
+        p.uv[f] = glm::vec4(a, b);
+        p.textured = true;
+    }
+    if (!p.textured) p.color = FromHex(block->StringOr("map", "#b0b0b0"));
+    Shape shape;
+    shape.parts.push_back(p);
+    shapes[model] = shape;
+}
+
+void Editor::BlockInspector(Value& block) {
+    ImGui::SeparatorText(model.c_str());
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("What it is and does stays in the code; these details can be changed. A field left out keeps the game's own.");
+    ImGui::PopTextWrapPos();
+    std::string name = block.StringOr("name", "");
+    if (ImGui::InputText("Name", &name)) {
+        Json::Member(block, "name") = Json::String(name);
+        Changed();
+    }
+
+    ImGui::SeparatorText("Textures");
+    std::string faces[6];
+    BlockFaces(block, faces);
+    const Value* t = block.Find("textures");
+    int mode = 0;
+    if (t && t->IsObject()) {
+        if (t->Find("front") || t->Find("back") || t->Find("left") || t->Find("right")) mode = 2;
+        else if (t->Find("top") || t->Find("bottom") || t->Find("side")) mode = 1;
+    }
+    const char* modes[] = { "One for every face", "Top, bottom, sides", "Each face" };
+    bool changedTextures = ImGui::Combo("Faces", &mode, modes, 3);
+    if (mode == 0) changedTextures |= TexturePicker("Every face", faces[2]), faces[0] = faces[1] = faces[2];
+    else if (mode == 1) {
+        changedTextures |= TexturePicker("Top", faces[0]);
+        changedTextures |= TexturePicker("Bottom", faces[1]);
+        changedTextures |= TexturePicker("Sides", faces[2]);
+    } else {
+        const char* labels[6] = { "Top", "Bottom", "Front", "Back", "Left", "Right" };
+        for (int i = 0; i < 6; i++) changedTextures |= TexturePicker(labels[i], faces[i]);
+        ImGui::TextDisabled("(The preview shows the front on every side.)");
+    }
+    if (changedTextures) {
+        Value o = Json::Object();
+        if (mode == 0) Json::Member(o, "all") = Json::String(faces[2]);
+        else if (mode == 1) {
+            Json::Member(o, "top") = Json::String(faces[0]);
+            Json::Member(o, "bottom") = Json::String(faces[1]);
+            Json::Member(o, "side") = Json::String(faces[2]);
+        } else {
+            const char* keys[6] = { "top", "bottom", "front", "back", "left", "right" };
+            for (int i = 0; i < 6; i++) Json::Member(o, keys[i]) = Json::String(faces[i]);
+        }
+        Json::Member(block, "textures") = o;
+        Changed();
+    }
+
+    ImGui::SeparatorText("Breaking");
+    float hardness = static_cast<float>(block.NumberOr("hardness", 1.0));
+    if (ImGui::DragFloat("Hardness", &hardness, 0.05f, 0.0f, 100.0f, "%.2f s")) {
+        Json::Member(block, "hardness") = Json::Number(std::round(std::max(0.0f, hardness) * 100.0) / 100.0);
+        Changed();
+    }
+    ImGui::SetItemTooltip("Seconds to break it by hand");
+    auto choose = [&](const char* key, const char* label, std::initializer_list<const char*> options) {
+        const std::string now = block.StringOr(key, "");
+        if (ImGui::BeginCombo(label, now.c_str())) {
+            for (const char* o : options)
+                if (ImGui::Selectable(o, now == o)) {
+                    Json::Member(block, key) = Json::String(o);
+                    Changed();
+                }
+            ImGui::EndCombo();
+        }
+    };
+    choose("tool", "Best tool", { "pickaxe", "axe", "shovel", "sword", "none" });
+    choose("sound", "Sound", { "soft", "hard", "sand", "wood", "glass" });
+
+    ImGui::SeparatorText("Looks");
+    int light = static_cast<int>(block.NumberOr("light", 0.0));
+    if (ImGui::SliderInt("Light", &light, 0, 15)) {
+        Json::Member(block, "light") = Json::Number(light);
+        Changed();
+    }
+    glm::vec3 map = FromHex(block.StringOr("map", "#707070"));
+    if (ImGui::ColorEdit3("Map colour", &map.x)) {
+        Json::Member(block, "map") = Json::String(ToHex(map));
+        Changed();
+    }
 }
 
 void Editor::Inspector(Value& part) {
