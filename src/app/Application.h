@@ -235,6 +235,8 @@ private:
     double scrollAccumulator = 0.0;
     bool showDebug = false;
     bool showCompass = true; // F4: the compass, coordinates and clock at the top
+    // Walking bobs the view (how far into the stride), and sprinting widens it a little.
+    float bobPhase = 0.0f, bobAmount = 0.0f, fovBoost = 0.0f;
     void DrawCompass();
     // The minimap (M): a top-down picture of the ground around the player, refreshed
     // a few rows a frame into a small texture.

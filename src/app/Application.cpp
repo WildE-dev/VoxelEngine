@@ -463,7 +463,23 @@ void Application::Run() {
         UpdateNetwork();
         lap(0);
         HandleContinuousInput(deltaTime);
-        camera.SetPosition(player.GetEyePosition());
+        {
+            // A gentle bob while walking on the ground (eased in and out), and the view
+            // widening a few degrees while sprinting.
+            const glm::vec3 v = player.GetVelocity();
+            const float speed = glm::length(glm::vec2(v.x, v.z));
+            const float dt = static_cast<float>(deltaTime);
+            const bool walking = player.IsOnGround() && !player.IsFlying() && speed > 0.5f && settings.viewBobbing;
+            bobAmount += ((walking ? std::min(1.0f, speed / 4.5f) : 0.0f) - bobAmount) * std::min(1.0f, dt * 8.0f);
+            bobPhase += speed * dt * 1.9f;
+            const bool sprinting = speed > 5.5f && !player.IsFlying();
+            fovBoost += ((sprinting ? 8.0f : 0.0f) - fovBoost) * std::min(1.0f, dt * 6.0f);
+            camera.SetFov(settings.fov + fovBoost);
+            const float yaw = glm::radians(camera.GetYaw());
+            const glm::vec3 side(-std::sin(yaw), 0.0f, std::cos(yaw));
+            const glm::vec3 bob = glm::vec3(0.0f, std::abs(std::sin(bobPhase)) * 0.06f, 0.0f) + side * std::sin(bobPhase) * 0.035f;
+            camera.SetPosition(player.GetEyePosition() + bob * bobAmount);
+        }
         world->Update(camera.GetPosition());
         lap(1);
 

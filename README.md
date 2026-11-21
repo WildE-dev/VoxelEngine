@@ -178,7 +178,7 @@ that damaged files are refused, and that a rejoining player is put back in place
 | --- | --- |
 | WASD | Walk (or fly) |
 | Space | Jump (swim: up; fly: up) |
-| Shift | Sprint (fly: faster) |
+| Shift | Sprint (fly: faster); the view widens a little while you sprint |
 | Left Ctrl (hold) | Crouch: lower (fits under 1.5-high gaps) and slow, and you won't walk off edges; your name tag hides. You stand again once there's room. (Flying: down) |
 | Q / E | In no-clip (`/noclip`, operators): fly down / up |
 | Mouse | Look (a crosshair marks the middle of the screen) |
