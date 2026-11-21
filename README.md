@@ -313,7 +313,7 @@ repeats one once it has used them all:
 | Cistern | a deep pit of water with pillars, a ledge all round |
 | Pump room | a pump in a sunken basin with a pipe up into a raised tub (it stands idle until someone brings it air) |
 | Shrine | a lamp on a plinth, pews facing it |
-| Flood chamber | a pressure plate in the floor opens sluice gates in the ceiling, and the reservoir above pours in |
+| Flood chamber | a pressure plate in the floor opens sluice gates in the ceiling (on a channel of their own), and the reservoir above pours in while it's stood on |
 
 **Traps.** Some long corridors have a spike pit across them: either hidden under
 crumbling bricks (three long; they're cracked, if you look) or open (two long, so you
@@ -563,7 +563,7 @@ work the same for everyone:
 - **Spikes** cost two hearts every half second you stand in them.
 - **Crumbling bricks** give way 0.4 seconds after you stand on them, and the collapse
   spreads to the crumbling bricks touching them, so a whole pit cover falls in.
-- **Pressure plates** open every sluice gate within 8 blocks.
+- **Pressure plates** send on their channel while they're stood on (see [Signals](#signals)): a sluice gate listening to it opens.
 - **Falls** of more than 3 blocks cost half a heart for each block beyond that (an
   11-block drop is four hearts). Landing in water is safe. The server measures the
   fall from the highest point since you were last on the ground, deciding "on the
@@ -940,11 +940,11 @@ channel is heard by everything listening to it within **64 blocks**.
 | Block | What it does |
 |---|---|
 | **Lever** | sends on its channel while it's on; right-click flips it |
-| **Pressure plate** | sends for a second after someone steps on it (and still opens the old-style sluice gates around it) |
+| **Pressure plate** | sends while it's stood on, and for a second after |
 | **Logic gate** | listens to one or two channels (A, B) and sends its answer on another: AND, OR, XOR, NOT (of A), RELAY (A again: to carry a signal further than 64 blocks) or CLOCK (on and off each second while A is on, or always with no A) |
 | **Signal lamp** | lights while its channel is on |
 | **Valve** | opens while its channel is on (with no channel, right-click opens and shuts it); see [Air power](#air-power) |
-| **Sluice gate** | with a channel, opens out of the way while it's on, letting water through, and closes when it's off, pushing any water in its cell up or aside (it waits if there's nowhere for it to go); with none, it's the old kind, opened for good by a pressure plate near it |
+| **Sluice gate** | with a channel, opens out of the way while it's on, letting water through, and closes when it's off, pushing any water in its cell up or aside (it waits if there's nowhere for it to go); with none, it stays shut |
 
 Placing a lever, a logic gate or a signal lamp opens a small window to set its
 channels; right-click a gate or a lamp, or crouch and right-click any signal block
@@ -972,6 +972,9 @@ about each block's channels and state as they change (`SignalInfo`, protocol 35)
 - a sluice gate on a channel opens, and closes again pushing the water in its cell out
   beside it;
 - a pressure plate lights its lamp while it's stood on, and it goes out after;
+- (and `DungeonTest`, that every flood chamber's plate sends on a channel its nine
+  sluice gates listen to: the server wires them up the first time the plate is
+  stepped on);
 - a broken block's channels go, and channels are still there after a restart.
 
 ## Beds

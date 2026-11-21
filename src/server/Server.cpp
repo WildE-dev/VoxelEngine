@@ -1169,28 +1169,6 @@ glm::vec3 Server::RespawnPoint(const ClientState& client, std::string& why) cons
     return SpawnPoint();
 }
 
-void Server::TriggerPlate(ClientState& client, const glm::ivec3& plate) {
-    int opened = 0;
-    const int r = kSluiceReach;
-    for (int x = -r; x <= r; x++)
-        for (int y = -r; y <= r; y++)
-            for (int z = -r; z <= r; z++) {
-                Block b;
-                const glm::ivec3 p = plate + glm::ivec3(x, y, z);
-                // (Sluice gates with a channel answer to it instead.)
-                auto sig = signalBlocks.find(p);
-                if (sig != signalBlocks.end() && sig->second.config.a != 0) continue;
-                if (world->GetBlock(p.x, p.y, p.z, b) && b.type == BlockType::SLUICE) {
-                    world->SetBlock(p.x, p.y, p.z, Block());
-                    opened++;
-                }
-            }
-    if (opened) {
-        SendChat(client, net::ChatMessage::Kind::Info, "*click* Something grinds open overhead...");
-        Log(client.name + " opened " + std::to_string(opened) + " sluice gates");
-    }
-}
-
 void Server::UpdateBreath(ClientState& client, float dt) {
     using namespace Breathing;
     Air air;
@@ -1676,12 +1654,17 @@ void Server::UpdateTraps() {
                 if (b.type == BlockType::SPIKES) spiked = true;
                 if (b.type == BlockType::CAMPFIRE) burning = true;
                 if (b.type == BlockType::PRESSURE_PLATE) {
-                    plateSignal[f] = now + Signals::kPlateSeconds; // (sending on its channel, if it has one)
-                    auto it = plateReady.find(f);
-                    if (it == plateReady.end() || now >= it->second) {
-                        plateReady[f] = now + 2.0;
-                        TriggerPlate(client, f);
-                    }
+                    // Sending on its channel, if it has one. A dungeon flood chamber's
+                    // plate and sluice gates get theirs the first time it's stepped on.
+                    if (!plateSignal.count(f) && !signalBlocks.count(f))
+                        for (const auto& [p, config] : Dungeons::FloodChamberSignals(terrain, f))
+                            if (!signalBlocks.count(p)) {
+                                signalBlocks[p].config = config;
+                                BroadcastSignal(p);
+                            }
+                    if (!plateSignal.count(f) && signalBlocks.count(f) && signalBlocks[f].config.out)
+                        SendChat(client, net::ChatMessage::Kind::Info, "*click*");
+                    plateSignal[f] = now + Signals::kPlateSeconds;
                 }
             }
             const glm::ivec3& u = underCells[i];
@@ -1712,7 +1695,6 @@ void Server::UpdateTraps() {
         }
     }
     // Plates' cooldowns that have run out.
-    for (auto it = plateReady.begin(); it != plateReady.end();) it = now >= it->second ? plateReady.erase(it) : std::next(it);
 }
 
 // --- Tick -------------------------------------------------------------------------

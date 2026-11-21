@@ -7,6 +7,7 @@
 #include <glm/glm.hpp>
 
 #include "world/Chunk.h"
+#include "world/Signals.h"
 
 class TerrainGenerator;
 
@@ -89,6 +90,11 @@ Layout LayoutFor(const TerrainGenerator& terrain, int regionX, int regionZ);
 // others hold a few useful things. The server rolls it the first time the chest is
 // opened or broken and keeps it from then on.
 std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos);
+
+// A flood chamber's wiring (world/Signals.h): if `pos` is in one, its pressure plate
+// sends on a channel of its own and its sluice gates listen to it. Empty elsewhere.
+// The server sets these up the first time the plate is stepped on.
+std::vector<std::pair<glm::ivec3, Signals::Config>> FloodChamberSignals(const TerrainGenerator& terrain, const glm::ivec3& pos);
 
 // Stamps the dungeon parts inside a chunk over generated terrain.
 void Stamp(const TerrainGenerator& terrain, const glm::ivec3& chunkCoords, std::array<Block, Chunk::VOLUME>& blocks);

@@ -4,8 +4,7 @@
 //
 // Senders:
 //  - a lever, while it's on (right-click flips it);
-//  - a pressure plate, for kPlateSeconds after someone steps on it (it still opens
-//    the old-style sluice gates around it too);
+//  - a pressure plate, while it's stood on and for kPlateSeconds after;
 //  - a logic gate, while its output is on.
 // Listeners:
 //  - a signal lamp lights while its channel is on;
@@ -13,8 +12,9 @@
 //    shut by hand);
 //  - a sluice gate with a channel opens (out of the way, letting water through) while
 //    its channel is on and closes again when it's off, pushing any water in its cell
-//    up or aside (it waits if there's nowhere for the water to go). A sluice gate with
-//    no channel is the old kind: a pressure plate near it opens it for good.
+//    up or aside (it waits if there's nowhere for the water to go). Without a channel
+//    it stays shut. (A dungeon flood chamber's plate and gates share a channel of their
+//    own: Dungeons::FloodChamberSignals.)
 //  - a logic gate's inputs.
 // Logic gates work out their output from what they hear on their inputs (a and b),
 // each update, and send it on their output channel from the next: AND, OR, XOR, NOT

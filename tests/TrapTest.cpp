@@ -3,7 +3,7 @@
 //  - spikes hurt, death is announced and respawns the player at the spawn point
 //    with full health,
 //  - crumbling bricks give way under a player, and the collapse spreads,
-//  - a pressure plate opens the sluice gates near it,
+//  - a pressure plate opens a sluice gate on its channel, and not one without one,
 //  - no-clip is an operator's command, the server tells the client, and it keeps
 //    traps from hurting,
 //  - a player who isn't an operator can't use the laser; an operator can.
@@ -18,6 +18,7 @@
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "server/Server.h"
+#include "world/Signals.h"
 #include "world/Collision.h"
 
 // Test clients ask for a short view (chunks): plenty for the checks, and light enough
@@ -159,12 +160,23 @@ int main() {
     a.client.PlaceBlock({ 30, 3, 7 }, BlockType::SLUICE);
     b.client.PlaceBlock({ 30, 4, 7 }, BlockType::WATER);
     a.client.PlaceBlock({ 30, 0, 10 }, BlockType::PRESSURE_PLATE);
-    b.client.PlaceBlock({ 50, 3, 7 }, BlockType::SLUICE); // too far from the plate (the creative watcher reaches that far)
+    b.client.PlaceBlock({ 31, 3, 7 }, BlockType::SLUICE); // with no channel (the creative watcher reaches that far)
     both(1.0, [] { return false; });
     Check(TypeAt(b, { 30, 3, 7 }) == BlockType::SLUICE && TypeAt(b, { 30, 0, 10 }) == BlockType::PRESSURE_PLATE, "a sluice gate holds water up; a plate is set nearby");
+    // The plate sends on channel 4, and the first gate listens to it (world/Signals.h).
+    net::SignalInfo plate, gate;
+    plate.pos = { 30, 0, 10 };
+    plate.kind = static_cast<uint8_t>(Signals::Kind::Plate);
+    plate.out = 4;
+    gate.pos = { 30, 3, 7 };
+    gate.kind = static_cast<uint8_t>(Signals::Kind::Sluice);
+    gate.a = 4;
+    b.client.ConfigureSignal(plate);
+    b.client.ConfigureSignal(gate);
+    Check(both(20.0, [&] { return b.client.GetSignals().count(plate.pos) && b.client.GetSignals().count(gate.pos); }), "the plate sends on 4, and the gate listens to 4");
     server.QueueConsoleCommand("tp Tester 30.5 1 10.5");
-    Check(both(20.0, [&] { return TypeAt(b, { 30, 3, 7 }) == BlockType::AIR && Has(a, "grinds open"); }), "stepping on the plate opens the gate");
-    Check(TypeAt(b, { 50, 3, 7 }) == BlockType::SLUICE, "but not one out of its reach");
+    Check(both(20.0, [&] { return TypeAt(b, { 30, 3, 7 }) == BlockType::AIR && Has(a, "*click*"); }), "stepping on the plate opens the gate");
+    Check(TypeAt(b, { 31, 3, 7 }) == BlockType::SLUICE, "but not one with no channel (they don't open the old way)");
     Check(both(20.0, [&] { Block w; return b.world.GetBlock(30, 4, 7, w) && !w.HasWater(); }), "and the water it held pours out");
 
     std::cout << "Falling" << std::endl;

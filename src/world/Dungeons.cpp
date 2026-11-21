@@ -275,7 +275,7 @@ void Furnish(Stamper& s, const Room& r, const std::vector<Box>& corridors) {
 
     case RoomType::FloodChamber: {
         // A reservoir over the ceiling behind sluice gates, and a pressure plate in the
-        // middle of the floor that opens them.
+        // middle of the floor that opens them (on a channel: FloodChamberSignals).
         s.Fill(Reservoir(r), [&](const glm::ivec3& p) { s.Set(p, kFullWater); });
         for (int x = c.x - 1; x <= c.x + 1; x++)
             for (int z = c.z - 1; z <= c.z + 1; z++) s.Set({ x, y1 + 1, z }, Block(BlockType::SLUICE));
@@ -610,6 +610,28 @@ void Stamp(const TerrainGenerator& terrain, const glm::ivec3& chunkCoords, std::
                 s.Set({ c.x + dx, ground, c.y + dz }, kBrick);
             }
     }
+}
+
+std::vector<std::pair<glm::ivec3, Signals::Config>> FloodChamberSignals(const TerrainGenerator& terrain, const glm::ivec3& pos) {
+    std::vector<std::pair<glm::ivec3, Signals::Config>> out;
+    const Layout layout = LayoutFor(terrain, FloorDiv(pos.x, kRegionSize), FloorDiv(pos.z, kRegionSize));
+    if (!layout.exists) return out;
+    for (const auto& r : layout.rooms) {
+        if (r.type != RoomType::FloodChamber || !Expand(r.inner, 1).Contains(pos)) continue;
+        const glm::ivec3 c = Centre(r.inner);
+        // A channel from the room's seed, high up out of the way of players' own.
+        const uint8_t channel = static_cast<uint8_t>(200 + r.seed % 56);
+        Signals::Config plate;
+        plate.kind = Signals::Kind::Plate;
+        plate.out = channel;
+        out.emplace_back(glm::ivec3(c.x, r.inner.min.y, c.z), plate);
+        Signals::Config gate;
+        gate.kind = Signals::Kind::Sluice;
+        gate.a = channel;
+        for (int x = c.x - 1; x <= c.x + 1; x++)
+            for (int z = c.z - 1; z <= c.z + 1; z++) out.emplace_back(glm::ivec3(x, r.inner.max.y + 1, z), gate);
+    }
+    return out;
 }
 
 std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos) {

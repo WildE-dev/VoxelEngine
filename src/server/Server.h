@@ -77,8 +77,8 @@ class WorldStorage;
 //
 // Health and traps (UpdateTraps): players have kMaxHealth half hearts. Standing in
 // spikes hurts; crumbling bricks give way soon after someone stands on them (and the
-// collapse spreads to crumbling bricks touching them); a pressure plate opens every
-// sluice gate within kSluiceReach. At no health a player respawns at the spawn point.
+// collapse spreads to crumbling bricks touching them); a pressure plate sends on its
+// channel (world/Signals.h) while it's stood on. At no health a player respawns at the spawn point.
 // Health comes back slowly once nothing has hurt them for a while. Players in no-clip
 // set off nothing and can't be hurt. Players also need air (UpdateBreath): it runs
 // out under water, and slowly far up (above 300) and deep underground (below -100).
@@ -100,7 +100,6 @@ public:
     static constexpr double kSpikeInterval = 0.5;   // ...every half second
     static constexpr double kCrumbleDelay = 0.4;    // after first being stood on
     static constexpr double kCrumbleSpread = 0.12;  // to each crumbling brick touching it
-    static constexpr int kSluiceReach = 8;          // blocks (per axis) a plate reaches
     static constexpr double kRegenDelay = 5.0, kRegenInterval = 4.0; // a heart per 4 s, 5 s after harm
 
     struct Options {
@@ -323,8 +322,6 @@ private:
     // not drowning, bad air or starving.
     void Hurt(ClientState& client, int amount, const std::string& deathMessage, bool armourHelps = true);
     void SendHealth(ClientState& client, bool hurt);
-    // A pressure plate at `plate` was stepped on: opens the sluice gates near it.
-    void TriggerPlate(ClientState& client, const glm::ivec3& plate);
     // Advances the clock and the weather by one tick.
     void UpdateSky();
     // How far a player can break and build: 6 blocks in survival, 50 in creative (plus slack).
@@ -467,7 +464,6 @@ private:
 
     std::unordered_set<std::string> operators; // lower case
     std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> crumbling;   // crumbling bricks about to fall, and when
-    std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> plateReady;  // plates on cooldown until then
     std::mutex consoleMutex;
     std::vector<std::string> consoleQueue;
 

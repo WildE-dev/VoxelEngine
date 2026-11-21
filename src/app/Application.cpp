@@ -837,7 +837,7 @@ void Application::DrawCrosshair() {
             std::snprintf(text, sizeof text, "Valve: %s - %s", target.type == BlockType::VALVE_OPEN ? "open" : "shut",
                           info.a ? ("listens to " + ch(info.a)).c_str() : "by hand");
             break;
-        default: std::snprintf(text, sizeof text, "Sluice gate - %s", info.a ? ("listens to " + ch(info.a)).c_str() : "opened by a pressure plate nearby"); break;
+        default: std::snprintf(text, sizeof text, "Sluice gate - %s", info.a ? ("listens to " + ch(info.a)).c_str() : "no channel (stays shut)"); break;
         }
         label(text);
         return;
@@ -2251,7 +2251,7 @@ void Application::DrawSignalEditor() {
         }
         else if (Signals::Sends(kind)) {
             channel("Sends on", signalOut);
-            ImGui::TextDisabled(kind == Signals::Kind::Lever ? "Right-click the lever to flip it." : "It sends for a second when stepped on.");
+            ImGui::TextDisabled(kind == Signals::Kind::Lever ? "Right-click the lever to flip it." : "It sends while stood on, and for a second after.");
         }
         else {
             channel("Listens to", signalA);
