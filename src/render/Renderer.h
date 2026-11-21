@@ -100,6 +100,9 @@ private:
     DebugDraw debugDraw;
     Rain rain;
     PlayerModels playerModels;
+public:
+    bool LoadCreatureModels(std::string& error) { return playerModels.LoadCreatureModels(PlayerModels::kCreatureModelsPath, error); }
+private:
     TextureAtlas atlas;
 
     int width = 0, height = 0;

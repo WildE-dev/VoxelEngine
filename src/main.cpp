@@ -123,6 +123,10 @@ int main(int argc, char** argv)
         else if (arg == "--world" && i + 1 < argc) {
             worldDirectory = argv[++i];
         }
+        else if (arg == "--dump-block-data" && i + 1 < argc) {
+            // (For making Resources/Data/blocks.json from the game's own details.)
+            return DumpBlockData(argv[++i]) ? EXIT_SUCCESS : EXIT_FAILURE;
+        }
         else if (arg == "--no-save") {
             noSave = true;
         }

@@ -34,6 +34,7 @@
 #include "world/Achievements.h"
 #include "world/Breathing.h"
 #include "world/Hunger.h"
+#include "world/BlockData.h"
 #include "world/Power.h"
 #include "world/Signals.h"
 #include "world/Chunk.h"
@@ -106,7 +107,11 @@ int IconTile(BlockType type) {
     return IsPlantType(type) ? t.top : t.front;
 }
 
-const char* BlockName(BlockType type) {
+const char* DefaultBlockName(BlockType type);
+// What the game calls a block: Resources/Data/blocks.json's name, or its own.
+const char* BlockName(BlockType type) { return BlockData::NameOr(type, DefaultBlockName(type)); }
+
+const char* DefaultBlockName(BlockType type) {
     switch (type) {
     case BlockType::GRASS: return "Grass";
     case BlockType::DIRT:  return "Dirt";
@@ -320,6 +325,7 @@ bool Application::Init(const ClientOptions& options) {
     if (!mute) audio->Init("Resources/Sounds");
 
     // Block textures must be resolved before the world starts meshing.
+    LoadData();
     LoadBlockTextures();
     LoadHotbar();
     // VOXEL_OPEN_INVENTORY=1 starts with the inventory open (for screenshots).
@@ -452,6 +458,68 @@ void Application::RunMenuFrame(double now) {
     }
     glfwSwapInterval(vsync ? 1 : 0);
     glfwSwapBuffers(window);
+}
+
+namespace {
+uint32_t DefaultMapColour(BlockType type); // (below, with the minimap)
+}
+
+bool DumpBlockData(const std::string& path) {
+    std::ofstream out(path);
+    if (!out) return false;
+    auto hex = [](uint32_t abgr) {
+        char text[8];
+        std::snprintf(text, sizeof text, "#%02x%02x%02x", abgr & 0xFF, (abgr >> 8) & 0xFF, (abgr >> 16) & 0xFF);
+        return std::string(text);
+    };
+    auto tool = [](Tool t) {
+        switch (t) {
+        case Tool::Pickaxe: return "pickaxe";
+        case Tool::Axe: return "axe";
+        case Tool::Shovel: return "shovel";
+        case Tool::Sword: return "sword";
+        default: return "none";
+        }
+    };
+    out << "// Blocks' details, by block id. Change any of them (or leave a block out, or a\n"
+           "// field out, for the game's own). Press R in the game to load this file again.\n"
+           "//   \"name\": what the game calls it\n"
+           "//   \"textures\": {\"all\": x}, or {\"top\", \"bottom\", \"side\"}, or each of \"top\", \"bottom\",\n"
+           "//       \"front\", \"back\", \"left\" and \"right\": PNGs in Resources/Textures/Blocks\n"
+           "//   \"hardness\": seconds to break by hand    \"tool\": pickaxe, axe, shovel, sword or none\n"
+           "//   \"sound\": soft, hard, sand, wood or glass  \"light\": 0 to 15\n"
+           "//   \"map\": its colour on the minimap\n"
+           "{\n";
+    for (int i = 0; i < static_cast<int>(BlockType::COUNT); i++) {
+        const BlockType t = static_cast<BlockType>(i);
+        std::string faces[6];
+        for (int f = 0; f < 6; f++) faces[f] = DefaultBlockTexture(t, f) ? DefaultBlockTexture(t, f) : "";
+        std::string textures;
+        auto q = [](const std::string& s) { return "\"" + s + "\""; };
+        if (faces[0].empty()) textures = "";
+        else if (std::all_of(faces, faces + 6, [&](const std::string& f) { return f == faces[0]; }) || faces[1].empty())
+            textures = "{ \"all\": " + q(faces[0]) + " }";
+        else if (faces[2] == faces[3] && faces[2] == faces[4] && faces[2] == faces[5])
+            textures = "{ \"top\": " + q(faces[0]) + ", \"bottom\": " + q(faces[1]) + ", \"side\": " + q(faces[2]) + " }";
+        else
+            textures = "{ \"top\": " + q(faces[0]) + ", \"bottom\": " + q(faces[1]) + ", \"front\": " + q(faces[2]) + ", \"back\": " + q(faces[3]) +
+                       ", \"left\": " + q(faces[4]) + ", \"right\": " + q(faces[5]) + " }";
+        char hardness[16];
+        std::snprintf(hardness, sizeof hardness, "%g", Mining::DefaultHardness(t));
+        out << "  " << q(i == 0 ? "air" : BlockId(t)) << ": { \"name\": " << q(DefaultBlockName(t)) << (textures.empty() ? "" : ", \"textures\": " + textures)
+            << ", \"hardness\": " << hardness << ", \"tool\": " << q(tool(Mining::DefaultBestTool(t))) << ", \"sound\": " << q(Audio::Material(t))
+            << ", \"light\": " << int(DefaultLightEmission(t)) << ", \"map\": " << q(hex(DefaultMapColour(t))) << " }"
+            << (i + 1 < static_cast<int>(BlockType::COUNT) ? "," : "") << "\n";
+    }
+    out << "}\n";
+    return static_cast<bool>(out);
+}
+
+void Application::LoadData() {
+    // The editable data files (Resources/Data): blocks' details and creatures' models.
+    std::string error;
+    if (!BlockData::Load(BlockData::kPath, error)) std::cerr << "[data] " << error << " (using the game's own block details)" << std::endl;
+    if (!renderer->LoadCreatureModels(error)) std::cerr << "[data] " << error << " (creatures drawn as plain boxes)" << std::endl;
 }
 
 void Application::LoadBlockTextures() {
@@ -1042,7 +1110,12 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
 
 namespace {
 // The colour a block shows from above on the minimap (0xAABBGGRR).
+uint32_t DefaultMapColour(BlockType type);
 uint32_t MapColour(BlockType type) {
+    const auto set = BlockData::MapColour(type);
+    return set ? *set : DefaultMapColour(type);
+}
+uint32_t DefaultMapColour(BlockType type) {
     switch (type) {
     case BlockType::GRASS: return 0xFF3E9A4Au;
     case BlockType::LUSH_GRASS: return 0xFF2F8E36u;
@@ -1793,6 +1866,7 @@ void Application::OnKey(int key, int action) {
     case GLFW_KEY_R:
         renderer->ReloadShaders();
         renderer->ReloadTextures();
+        LoadData();
         LoadBlockTextures();
         world->RebuildAllChunks();
         break;

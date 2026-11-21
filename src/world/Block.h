@@ -343,8 +343,14 @@ inline ShapeStyle StyleOf(BlockType type) {
 }
 
 // Block light emitted by a block type, 0..kMaxLight.
-inline uint8_t GetLightEmission(BlockType type) {
+// (The game's own; Resources/Data/blocks.json may change it: see world/BlockData.h.)
+inline uint8_t DefaultLightEmission(BlockType type) {
     return type == BlockType::LAMP || type == BlockType::SIGNAL_LAMP_ON ? kMaxLight : type == BlockType::CAMPFIRE ? kMaxLight - 1 : type == BlockType::SMELTER_LIT ? 12 : 0;
+}
+namespace BlockData { extern int8_t gLight[]; }
+inline uint8_t GetLightEmission(BlockType type) {
+    const int8_t set = BlockData::gLight[static_cast<size_t>(type)];
+    return set >= 0 ? static_cast<uint8_t>(set) : DefaultLightEmission(type);
 }
 
 // Indices into the texture atlas for each face of a block.
@@ -362,6 +368,9 @@ struct TextureData {
 const char* BlockId(BlockType type);
 BlockType BlockFromId(const std::string& id);
 
+// The game's own texture for a face (0 top, 1 bottom, 2 front, 3 back, 4 left,
+// 5 right), or nullptr (Resources/Data/blocks.json may name another).
+const char* DefaultBlockTexture(BlockType type, int face);
 // Atlas tile indices for each face of a block type. Thread-safe.
 TextureData GetTextureData(BlockType type);
 // Atlas tile a block shows where it's been carved (chiselled faces inside its cell),

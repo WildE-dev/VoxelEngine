@@ -2,10 +2,14 @@
 #include "render/PlayerModels.h"
 
 #include <cmath>
+#include <functional>
+#include <map>
 
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "render/Shader.h"
+#include "world/Creatures.h"
+#include "world/Json.h"
 #include "world/Armour.h"
 
 namespace {
@@ -337,111 +341,146 @@ void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const gl
     for (const auto& c : creatures) {
         shader.SetUniform("lightLevels", c.light);
         auto tint = [&](const glm::vec3& color) { return c.hurt ? glm::mix(color, kRed, 0.55f) : color; };
-        // A box of `size` centred at `centre` in the creature's frame (+x forward).
-        const glm::mat4 base = glm::rotate(glm::translate(glm::mat4(1.0f), c.feet), -glm::radians(c.yaw), glm::vec3(0, 1, 0));
         auto box = [&](const glm::mat4& frame, const glm::vec3& centre, const glm::vec3& size, const glm::vec3& color) {
             shader.SetUniform("model", glm::scale(glm::translate(frame, centre), size));
             shader.SetUniform("color", tint(color));
             glDrawArrays(GL_TRIANGLES, 0, 36);
         };
-        // A limb hanging from `pivot`, swung `angle` radians forward and back.
-        auto limb = [&](const glm::vec3& pivot, float angle, const glm::vec3& size, const glm::vec3& color) {
-            const glm::mat4 frame = glm::rotate(glm::translate(base, pivot), angle, glm::vec3(0, 0, 1));
-            box(frame, glm::vec3(0.0f, -size.y * 0.5f, 0.0f), size, color);
-        };
+        // Its frame: at its feet, turned to face +x along its heading.
+        const glm::mat4 base = glm::rotate(glm::translate(glm::mat4(1.0f), c.feet), -glm::radians(c.yaw), glm::vec3(0, 1, 0));
         const float stride = std::min(1.0f, c.speed / 2.0f);
         const float swing = std::sin(time * (4.0f + c.speed * 2.0f)) * 0.6f * stride;
+        if (c.type >= shapes.size() || !haveShape[c.type]) {
+            // No model for it: a plain box its size.
+            const CreatureSpec& spec = SpecOf(static_cast<CreatureType>(c.type));
+            box(base, { 0.0f, spec.height * 0.5f, 0.0f }, { spec.halfWidth * 2.0f, spec.height, spec.halfWidth * 2.0f }, glm::vec3(0.6f));
+            continue;
+        }
+        const CreatureShape& shape = shapes[c.type];
+        static const glm::vec3 kAxes[3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
+        std::function<void(const glm::mat4&, const ShapePart&)> draw = [&](const glm::mat4& parent, const ShapePart& p) {
+            if (p.when == "tame" && !c.tame) return;
+            glm::mat4 f = glm::translate(parent, p.at);
+            if (p.rotate.x != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.x), kAxes[0]);
+            if (p.rotate.y != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.y), kAxes[1]);
+            if (p.rotate.z != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.z), kAxes[2]);
+            if (p.swingAxis >= 0) f = glm::rotate(f, swing * p.swing, kAxes[p.swingAxis]);
+            if (p.flapAxis >= 0) f = glm::rotate(f, std::sin(time * p.flapSpeed + c.feet.x) * p.flapAmount, kAxes[p.flapAxis]);
+            if (p.hasBox) {
+                if (p.glow) shader.SetUniform("glow", 1.0f);
+                box(f, p.box, p.size, p.color);
+                if (p.glow) shader.SetUniform("glow", 0.0f);
+            }
+            for (const auto& child : p.parts) draw(f, child);
+        };
+        const glm::mat4 scaled = glm::scale(base, glm::vec3(shape.scale));
+        for (const auto& p : shape.parts) draw(scaled, p);
+    }
+}
 
-        if (c.type == 0) { // Deer
-            const glm::vec3 coat(0.58f, 0.40f, 0.24f), dark(0.36f, 0.24f, 0.14f), pale(0.88f, 0.82f, 0.70f);
-            box(base, { 0.0f, 0.88f, 0.0f }, { 1.1f, 0.48f, 0.46f }, coat);           // body
-            for (int i = 0; i < 4; i++) {
-                const float x = i < 2 ? 0.4f : -0.4f, z = (i % 2) ? 0.15f : -0.15f;
-                limb({ x, 0.66f, z }, ((i == 0 || i == 3) ? swing : -swing), { 0.12f, 0.66f, 0.12f }, dark);
-            }
-            const glm::mat4 neck = glm::rotate(glm::translate(base, { 0.5f, 1.02f, 0.0f }), glm::radians(-30.0f), glm::vec3(0, 0, 1));
-            box(neck, { 0.0f, 0.2f, 0.0f }, { 0.2f, 0.45f, 0.2f }, coat);              // neck
-            box(base, { 0.78f, 1.38f, 0.0f }, { 0.38f, 0.24f, 0.24f }, coat);          // head
-            box(base, { 0.98f, 1.34f, 0.0f }, { 0.06f, 0.1f, 0.1f }, glm::vec3(0.1f)); // nose
-            for (float z : { -0.08f, 0.08f }) {
-                box(base, { 0.72f, 1.62f, z * 1.4f }, { 0.05f, 0.28f, 0.05f }, pale);  // antlers
-                box(base, { 0.78f, 1.68f, z * 2.6f }, { 0.05f, 0.05f, 0.18f }, pale);
-            }
-            box(base, { -0.58f, 0.98f, 0.0f }, { 0.08f, 0.14f, 0.12f }, pale);         // tail
-        }
-        else if (c.type == 4) { // Bat: a little dark body, ears, and wings flapping fast
-            const glm::vec3 fur(0.18f, 0.15f, 0.14f), wing(0.12f, 0.1f, 0.1f);
-            box(base, { 0.0f, 0.2f, 0.0f }, { 0.18f, 0.16f, 0.14f }, fur);
-            for (float z : { -0.04f, 0.04f }) box(base, { 0.06f, 0.31f, z }, { 0.03f, 0.06f, 0.03f }, fur);
-            const float flap = std::sin(time * 28.0f + c.feet.x) * 0.7f;
-            for (float side : { -1.0f, 1.0f }) {
-                const glm::mat4 w = glm::rotate(glm::translate(base, { 0.0f, 0.22f, side * 0.07f }), side * flap, glm::vec3(1, 0, 0));
-                box(w, { 0.0f, 0.0f, side * 0.16f }, { 0.16f, 0.02f, 0.32f }, wing);
-            }
-        }
-        else if (c.type == 3) { // Wolf: grey, low and long, with a snout, ears and a bushy tail
-            const glm::vec3 fur(0.55f, 0.55f, 0.56f), darkFur(0.4f, 0.4f, 0.42f), pale(0.8f, 0.8f, 0.78f);
-            box(base, { 0.0f, 0.55f, 0.0f }, { 0.8f, 0.34f, 0.36f }, fur);           // body
-            box(base, { 0.22f, 0.6f, 0.0f }, { 0.36f, 0.4f, 0.42f }, darkFur);       // shoulders
-            for (int i = 0; i < 4; i++) {
-                const float x = i < 2 ? 0.28f : -0.28f, z = (i % 2) ? 0.12f : -0.12f;
-                limb({ x, 0.42f, z }, ((i == 0 || i == 3) ? swing : -swing), { 0.11f, 0.42f, 0.11f }, darkFur);
-            }
-            box(base, { 0.55f, 0.78f, 0.0f }, { 0.3f, 0.28f, 0.3f }, fur);          // head
-            box(base, { 0.75f, 0.72f, 0.0f }, { 0.16f, 0.12f, 0.16f }, pale);       // snout
-            box(base, { 0.79f, 0.76f, 0.0f }, { 0.05f, 0.04f, 0.06f }, glm::vec3(0.08f)); // nose
-            for (float z : { -0.09f, 0.09f }) box(base, { 0.5f, 0.97f, z }, { 0.07f, 0.12f, 0.07f }, darkFur); // ears
-            const glm::mat4 tail = glm::rotate(glm::translate(base, { -0.42f, 0.66f, 0.0f }), glm::radians(-35.0f + swing * 20.0f), glm::vec3(0, 0, 1));
-            box(tail, { -0.18f, 0.0f, 0.0f }, { 0.38f, 0.12f, 0.12f }, fur);
-            if (c.tame) box(base, { 0.4f, 0.74f, 0.0f }, { 0.06f, 0.3f, 0.34f }, glm::vec3(0.8f, 0.12f, 0.1f)); // collar
-        }
-        else { // Dwarves (1 warrior, 2 crossbowman, 5 chieftain, 6 miner): short, stocky, bearded, helmeted
-            const int kind = c.type;
-            const float k = kind == 5 ? 1.15f : 1.0f; // a chieftain is bigger
-            const glm::mat4 frame = glm::scale(base, glm::vec3(k));
-            const glm::vec3 skin(0.86f, 0.66f, 0.52f), boots(0.22f, 0.15f, 0.1f), iron(0.55f, 0.56f, 0.6f), gold(0.85f, 0.68f, 0.2f), wood(0.5f, 0.34f, 0.18f);
-            const glm::vec3 tunic = kind == 1 ? glm::vec3(0.55f, 0.16f, 0.12f) : kind == 2 ? glm::vec3(0.22f, 0.36f, 0.2f) : kind == 5 ? glm::vec3(0.3f, 0.12f, 0.35f)
-                                                                                                                               : glm::vec3(0.36f, 0.3f, 0.22f);
-            const glm::vec3 beard = kind == 5 ? glm::vec3(0.85f, 0.85f, 0.82f) : kind == 2 ? glm::vec3(0.35f, 0.2f, 0.1f) : kind == 6 ? glm::vec3(0.2f, 0.18f, 0.16f)
-                                                                                                                            : glm::vec3(0.62f, 0.3f, 0.1f);
-            auto fbox = [&](const glm::vec3& centre, const glm::vec3& size, const glm::vec3& color) { box(frame, centre, size, color); };
-            auto flimb = [&](const glm::vec3& pivot, float angle, const glm::vec3& size, const glm::vec3& color) {
-                const glm::mat4 f = glm::rotate(glm::translate(frame, pivot), angle, glm::vec3(0, 0, 1));
-                box(f, glm::vec3(0.0f, -size.y * 0.5f, 0.0f), size, color);
-            };
-            for (float z : { -0.12f, 0.12f }) flimb({ 0.0f, 0.42f, z }, z < 0.0f ? swing : -swing, { 0.2f, 0.42f, 0.2f }, boots); // stout legs
-            fbox({ 0.0f, 0.72f, 0.0f }, { 0.44f, 0.6f, 0.6f }, tunic);                  // a broad body
-            fbox({ 0.0f, 0.5f, 0.0f }, { 0.46f, 0.08f, 0.62f }, kind == 5 ? gold : boots); // belt
-            fbox({ 0.02f, 1.17f, 0.0f }, { 0.34f, 0.34f, 0.34f }, skin);                // head
-            fbox({ 0.19f, 1.02f, 0.0f }, { 0.08f, 0.42f, 0.3f }, beard);                // the beard, down the chest
-            fbox({ 0.2f, 1.18f, 0.0f }, { 0.06f, 0.05f, 0.08f }, skin * 0.8f);          // nose
-            for (float z : { -0.07f, 0.07f }) fbox({ 0.2f, 1.24f, z }, { 0.02f, 0.04f, 0.05f }, glm::vec3(0.08f)); // eyes
-            fbox({ 0.02f, 1.38f, 0.0f }, { 0.38f, 0.12f, 0.38f }, kind == 6 ? glm::vec3(0.75f, 0.62f, 0.2f) : iron); // helmet
-            if (kind == 5) { // the chieftain's horns and crown band
-                for (float z : { -0.22f, 0.22f }) fbox({ 0.02f, 1.48f, z }, { 0.07f, 0.2f, 0.07f }, glm::vec3(0.9f, 0.88f, 0.8f));
-                fbox({ 0.02f, 1.33f, 0.0f }, { 0.4f, 0.04f, 0.4f }, gold);
-            }
-            if (kind == 6) { // the miner's lamp, glowing
-                shader.SetUniform("glow", 1.0f);
-                fbox({ 0.2f, 1.4f, 0.0f }, { 0.04f, 0.07f, 0.08f }, glm::vec3(1.0f, 0.9f, 0.5f));
-                shader.SetUniform("glow", 0.0f);
-            }
-            // Arms: swinging as it walks; the right holds its weapon or tool forward.
-            for (float z : { -0.36f, 0.36f }) flimb({ 0.0f, 1.0f, z }, z < 0.0f ? -swing : swing, { 0.16f, 0.5f, 0.16f }, tunic);
-            const glm::mat4 hand = glm::rotate(glm::translate(frame, { 0.14f, 0.62f, 0.36f }), glm::radians(-70.0f) - swing * 0.4f, glm::vec3(0, 0, 1));
-            auto held = [&](const glm::vec3& centre, const glm::vec3& size, const glm::vec3& color) { box(hand, centre, size, color); };
-            if (kind == 1 || kind == 5) { // an axe
-                held({ 0.25f, 0.0f, 0.0f }, { 0.55f, 0.06f, 0.06f }, wood);
-                held({ 0.48f, 0.1f, 0.0f }, { 0.14f, 0.24f, 0.04f }, kind == 5 ? gold : iron);
-            }
-            else if (kind == 6) { // a pickaxe
-                held({ 0.25f, 0.0f, 0.0f }, { 0.55f, 0.05f, 0.05f }, wood);
-                held({ 0.5f, 0.0f, 0.0f }, { 0.06f, 0.06f, 0.4f }, iron);
-            }
-            else { // a crossbow, held level in both hands
-                fbox({ 0.38f, 0.92f, 0.0f }, { 0.5f, 0.07f, 0.08f }, wood);
-                fbox({ 0.55f, 0.94f, 0.0f }, { 0.05f, 0.05f, 0.5f }, wood);
-            }
+namespace {
+
+glm::vec3 Vec3(const Json::Value* v, glm::vec3 fallback = glm::vec3(0.0f)) {
+    if (!v || !v->IsArray() || v->array.size() != 3) return fallback;
+    return { static_cast<float>(v->array[0].number), static_cast<float>(v->array[1].number), static_cast<float>(v->array[2].number) };
+}
+
+int Axis(const std::string& s) { return s == "x" ? 0 : s == "y" ? 1 : s == "z" ? 2 : -1; }
+
+using Palette = std::map<std::string, glm::vec3>;
+
+bool Colour(const std::string& s, const Palette& palette, glm::vec3& out) {
+    if (s.size() == 7 && s[0] == '#') {
+        const unsigned long rgb = std::strtoul(s.c_str() + 1, nullptr, 16);
+        out = glm::vec3((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF) / 255.0f;
+        return true;
+    }
+    auto it = palette.find(s);
+    if (it == palette.end()) return false;
+    out = it->second;
+    return true;
+}
+
+bool ReadPart(const Json::Value& v, const Palette& palette, PlayerModels::ShapePart& p, const std::string& where, std::string& error) {
+    p.at = Vec3(v.Find("at"));
+    p.rotate = Vec3(v.Find("rotate"));
+    if (const auto* sw = v.Find("swing"); sw && sw->IsObject()) {
+        p.swingAxis = Axis(sw->StringOr("axis", "z"));
+        p.swing = static_cast<float>(sw->NumberOr("amount", 1.0));
+    }
+    if (const auto* fl = v.Find("flap"); fl && fl->IsObject()) {
+        p.flapAxis = Axis(fl->StringOr("axis", "x"));
+        p.flapSpeed = static_cast<float>(fl->NumberOr("speed", 10.0));
+        p.flapAmount = static_cast<float>(fl->NumberOr("amount", 0.5));
+    }
+    if (v.Find("size")) {
+        p.hasBox = true;
+        p.box = Vec3(v.Find("box"));
+        p.size = Vec3(v.Find("size"));
+        const std::string colour = v.StringOr("color", "#ffffff");
+        if (!Colour(colour, palette, p.color)) {
+            error = where + ": no colour called '" + colour + "'";
+            return false;
         }
     }
+    p.glow = v.BoolOr("glow", false);
+    p.when = v.StringOr("when", "");
+    if (const auto* kids = v.Find("parts"); kids && kids->IsArray())
+        for (const auto& k : kids->array) {
+            PlayerModels::ShapePart child;
+            if (!ReadPart(k, palette, child, where, error)) return false;
+            p.parts.push_back(std::move(child));
+        }
+    return true;
+}
+
+} // namespace
+
+bool PlayerModels::LoadCreatureModels(const std::string& path, std::string& error) {
+    Json::Value root;
+    shapes.assign(static_cast<size_t>(CreatureType::Count), CreatureShape{});
+    haveShape.assign(static_cast<size_t>(CreatureType::Count), false);
+    if (!Json::ParseFile(path, root, error)) return false;
+    if (!root.IsObject()) {
+        error = path + ": the file should be one { ... } of models";
+        return false;
+    }
+    // A model may inherit another's colours and parts ("inherits"), then add its own
+    // colours (replacing any of the same name) and parts.
+    std::function<bool(const std::string&, Palette&, std::vector<const Json::Value*>&, float&, int)> gather =
+        [&](const std::string& name, Palette& palette, std::vector<const Json::Value*>& partLists, float& scale, int depth) {
+            const Json::Value* m = root.Find(name);
+            if (!m || !m->IsObject() || depth > 8) {
+                error = path + ": no model called '" + name + "'";
+                return false;
+            }
+            if (const auto* parent = m->Find("inherits"); parent && parent->IsString() && !gather(parent->string, palette, partLists, scale, depth + 1)) return false;
+            scale = static_cast<float>(m->NumberOr("scale", scale));
+            if (const auto* colours = m->Find("colors"); colours && colours->IsObject())
+                for (const auto& [k, v] : colours->object) {
+                    glm::vec3 c;
+                    if (v.IsString() && Colour(v.string, palette, c)) palette[k] = c;
+                }
+            if (const auto* parts = m->Find("parts"); parts && parts->IsArray()) partLists.push_back(parts);
+            return true;
+        };
+    for (int t = 0; t < static_cast<int>(CreatureType::Count); t++) {
+        const std::string id = SpecOf(static_cast<CreatureType>(t)).id;
+        if (!root.Find(id)) continue; // (drawn as a box)
+        Palette palette;
+        std::vector<const Json::Value*> partLists;
+        float scale = 1.0f;
+        if (!gather(id, palette, partLists, scale, 0)) return false;
+        CreatureShape shape;
+        shape.scale = scale;
+        for (const auto* list : partLists)
+            for (const auto& v : list->array) {
+                ShapePart p;
+                if (!ReadPart(v, palette, p, path + ": " + id, error)) return false;
+                shape.parts.push_back(std::move(p));
+            }
+        shapes[t] = std::move(shape);
+        haveShape[t] = true;
+    }
+    return true;
 }

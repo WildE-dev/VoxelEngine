@@ -1,4 +1,6 @@
 #include "server/Server.h"
+#include <filesystem>
+#include "world/BlockData.h"
 #include "world/Dwarves.h"
 
 #include <algorithm>
@@ -117,6 +119,11 @@ Server::~Server() {
 }
 
 bool Server::Start(const Options& opts) {
+    // Blocks' editable details (hardness, tools: what breaking takes), if there's the file.
+    {
+        std::string error;
+        if (std::filesystem::exists(BlockData::kPath) && !BlockData::Load(BlockData::kPath, error)) Log("[data] " + error);
+    }
     options = opts;
     if (!net.Listen(options.bindHost, options.port, kMaxClients)) {
         std::cerr << "[server] could not listen on " << options.bindHost << ":" << options.port << std::endl;

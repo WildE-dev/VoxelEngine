@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include <glad/glad.h>
@@ -110,6 +111,34 @@ public:
     // A stable colour per player id.
     static glm::vec3 ColorFor(int id);
 
+    // Creatures' models from Resources/Data/creatures.json (see CreatureShape); false
+    // (with why) if it couldn't be read, when they're drawn as plain boxes.
+    bool LoadCreatureModels(const std::string& path, std::string& error);
+    static constexpr const char* kCreatureModelsPath = "Resources/Data/creatures.json";
+
+    // A creature's model: boxes, each in a frame that may be placed, turned, swung as it
+    // walks or flapped, with frames inside frames.
+    struct ShapePart {
+        glm::vec3 at{ 0.0f };         // the frame's origin (a limb's pivot)
+        glm::vec3 rotate{ 0.0f };     // turned (degrees, about x, then y, then z)
+        int swingAxis = -1;           // swung as it walks about this axis (0 x, 1 y, 2 z)...
+        float swing = 0.0f;           // ...by this much of the stride
+        int flapAxis = -1;            // flapped about this axis, all the time...
+        float flapSpeed = 0.0f, flapAmount = 0.0f;
+        bool hasBox = false;
+        glm::vec3 box{ 0.0f }, size{ 0.0f }; // a box in the frame: its centre and size
+        glm::vec3 color{ 1.0f };
+        bool glow = false;
+        std::string when;             // drawn only then ("tame")
+        std::vector<ShapePart> parts; // inside this frame
+    };
+    struct CreatureShape {
+        float scale = 1.0f;
+        std::vector<ShapePart> parts;
+    };
+
 private:
     GLuint vao = 0, vbo = 0;
+    std::vector<CreatureShape> shapes; // by CreatureType (empty: not loaded)
+    std::vector<bool> haveShape;
 };

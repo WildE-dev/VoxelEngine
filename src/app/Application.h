@@ -44,6 +44,10 @@ struct ClientOptions {
     bool nameGiven = false; // --name: otherwise the name from the settings
 };
 
+// Writes every block's details, as the game has them built in, to a blocks.json
+// (Resources/Data: see world/BlockData.h). False if it couldn't write it.
+bool DumpBlockData(const std::string& path);
+
 class Application
 {
 public:
@@ -73,6 +77,7 @@ private:
     void RefreshWorlds();
     void PlayWorld(const std::string& directory, bool empty, int mode);
     void LoadBlockTextures();
+    void LoadData(); // Resources/Data: blocks' details, creatures' models (again with R)
     void DrawHotbar();
     BlockType SelectedBlock() const;
     Tool SelectedTool() const { return hotbarTools[selectedSlot]; }

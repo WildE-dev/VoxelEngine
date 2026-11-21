@@ -11,6 +11,7 @@
 #include <string>
 
 #include "world/Block.h"
+#include "world/BlockData.h"
 
 // The sword is for fighting (see Combat in world/Creatures.h); it's quick on leaves too.
 enum class Tool : uint8_t { None, Pickaxe, Axe, Shovel, Sword, Bow, Rod, Count }; // (the bow shoots arrows, the rod fishes: right-click)
@@ -61,8 +62,9 @@ inline const char* ToolTexture(Tool t) {
     }
 }
 
-// Seconds a full block of this type takes by hand (0: at once).
-inline float Hardness(BlockType type) {
+// Seconds a full block of this type takes by hand (0: at once): the game's own (see
+// Hardness, below, for what's used).
+inline float DefaultHardness(BlockType type) {
     switch (type) {
     case BlockType::AIR:
     case BlockType::WATER:
@@ -153,8 +155,8 @@ inline float Hardness(BlockType type) {
     }
 }
 
-// The tool that's faster on this type (Tool::None: nothing helps).
-inline Tool BestTool(BlockType type) {
+// The tool that's faster on this type (Tool::None: nothing helps): the game's own.
+inline Tool DefaultBestTool(BlockType type) {
     switch (type) {
     case BlockType::STONE:
     case BlockType::SPRING:
@@ -220,6 +222,16 @@ inline Tool BestTool(BlockType type) {
     case BlockType::PINE_LEAVES: return Tool::Sword;
     default: return Tool::None;
     }
+}
+
+// What's used: Resources/Data/blocks.json's, if it says (world/BlockData.h).
+inline float Hardness(BlockType type) {
+    const auto set = BlockData::Hardness(type);
+    return set ? *set : DefaultHardness(type);
+}
+inline Tool BestTool(BlockType type) {
+    const auto set = BlockData::BestTool(type);
+    return set ? *set : DefaultBestTool(type);
 }
 
 // Seconds it takes to break this block with this tool (in survival).

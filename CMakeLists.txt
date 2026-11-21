@@ -43,6 +43,8 @@ add_library(voxel_common STATIC
     src/world/Coords.h
     src/world/Dungeons.cpp
     src/world/Dwarves.cpp
+    src/world/Json.cpp
+    src/world/BlockData.cpp
     src/world/Dungeons.h
     src/world/Features.cpp
     src/world/Features.h
@@ -159,6 +161,8 @@ target_link_libraries(WaterAreaTest PRIVATE voxel_server)
 # Pumps move water through pipes, conserving it.
 add_executable(SignalTest tests/SignalTest.cpp)
 target_link_libraries(SignalTest PRIVATE voxel_server voxel_client)
+add_executable(DataTest tests/DataTest.cpp)
+target_link_libraries(DataTest PRIVATE voxel_common)
 add_executable(FactoryTest tests/FactoryTest.cpp)
 target_link_libraries(FactoryTest PRIVATE voxel_server voxel_client)
 add_executable(PowerTest tests/PowerTest.cpp)
@@ -230,7 +234,7 @@ target_link_libraries(ShapeTest PRIVATE voxel_server voxel_client)
 add_executable(BiomeTest tests/BiomeTest.cpp)
 target_link_libraries(BiomeTest PRIVATE voxel_common)
 
-foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest)
+foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W3)
     else()
@@ -252,6 +256,6 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 # `ctest` (or `ctest -j14` to run them all at once) runs every test suite.
 enable_testing()
-foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest)
+foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest)
     add_test(NAME ${test} COMMAND ${test} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 endforeach()

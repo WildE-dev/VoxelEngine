@@ -1,0 +1,1024 @@
+// Creature models. Each creature (by its id: deer, wolf, bat, dwarf, crossbow_dwarf,
+// dwarf_chief, dwarf_miner) is a list of parts, drawn facing +x with its feet at 0.
+// Press R in the game to load this file again.
+//
+// A part is a box, and/or a frame for the parts inside it:
+//   "box": [x, y, z]          the box's centre (in its frame)
+//   "size": [x, y, z]         the box's size (a part with no size is just a frame)
+//   "color": "#rrggbb"        or a name from the model's "colors"
+//   "glow": true              lit by itself (a lamp, eyes)
+//   "at": [x, y, z]           the frame's origin, in its parent's frame (a limb's pivot)
+//   "rotate": [x, y, z]       the frame turned (degrees about x, then y, then z)
+//   "swing": {"axis": "z", "amount": 1}   swung back and forth as it walks (radians at
+//                                         full stride: about 0.6 times the amount)
+//   "flap": {"axis": "x", "speed": 28, "amount": 0.7}   flapped all the time
+//   "when": "tame"            only drawn then (a tame wolf's collar)
+//   "parts": [ ... ]          parts inside this frame
+// A model may say "scale" (all of it bigger or smaller), "colors" (names for colours),
+// and "inherits": another model, whose colours and parts it starts from (a model of
+// the same name replacing the colour, its own parts added after). Models no creature
+// is called (like "dwarf_base") are only there to inherit from.
+{
+  "deer": {
+    "colors": {
+      "coat": "#94663d",
+      "dark": "#5c3d24",
+      "pale": "#e0d1b2"
+    },
+    "parts": [
+      {
+        "box": [
+          0,
+          0.88,
+          0
+        ],
+        "size": [
+          1.1,
+          0.48,
+          0.46
+        ],
+        "color": "coat"
+      },
+      {
+        "at": [
+          0.4,
+          0.66,
+          -0.15
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": 1
+        },
+        "box": [
+          0,
+          -0.33,
+          0
+        ],
+        "size": [
+          0.12,
+          0.66,
+          0.12
+        ],
+        "color": "dark"
+      },
+      {
+        "at": [
+          0.4,
+          0.66,
+          0.15
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": -1
+        },
+        "box": [
+          0,
+          -0.33,
+          0
+        ],
+        "size": [
+          0.12,
+          0.66,
+          0.12
+        ],
+        "color": "dark"
+      },
+      {
+        "at": [
+          -0.4,
+          0.66,
+          -0.15
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": -1
+        },
+        "box": [
+          0,
+          -0.33,
+          0
+        ],
+        "size": [
+          0.12,
+          0.66,
+          0.12
+        ],
+        "color": "dark"
+      },
+      {
+        "at": [
+          -0.4,
+          0.66,
+          0.15
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": 1
+        },
+        "box": [
+          0,
+          -0.33,
+          0
+        ],
+        "size": [
+          0.12,
+          0.66,
+          0.12
+        ],
+        "color": "dark"
+      },
+      {
+        "at": [
+          0.5,
+          1.02,
+          0
+        ],
+        "rotate": [
+          0,
+          0,
+          -30
+        ],
+        "box": [
+          0,
+          0.2,
+          0
+        ],
+        "size": [
+          0.2,
+          0.45,
+          0.2
+        ],
+        "color": "coat"
+      },
+      {
+        "box": [
+          0.78,
+          1.38,
+          0
+        ],
+        "size": [
+          0.38,
+          0.24,
+          0.24
+        ],
+        "color": "coat"
+      },
+      {
+        "box": [
+          0.98,
+          1.34,
+          0
+        ],
+        "size": [
+          0.06,
+          0.1,
+          0.1
+        ],
+        "color": "#1a1a1a"
+      },
+      {
+        "box": [
+          0.72,
+          1.62,
+          -0.112
+        ],
+        "size": [
+          0.05,
+          0.28,
+          0.05
+        ],
+        "color": "pale"
+      },
+      {
+        "box": [
+          0.78,
+          1.68,
+          -0.208
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.18
+        ],
+        "color": "pale"
+      },
+      {
+        "box": [
+          0.72,
+          1.62,
+          0.112
+        ],
+        "size": [
+          0.05,
+          0.28,
+          0.05
+        ],
+        "color": "pale"
+      },
+      {
+        "box": [
+          0.78,
+          1.68,
+          0.208
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.18
+        ],
+        "color": "pale"
+      },
+      {
+        "box": [
+          -0.58,
+          0.98,
+          0
+        ],
+        "size": [
+          0.08,
+          0.14,
+          0.12
+        ],
+        "color": "pale"
+      }
+    ]
+  },
+  "bat": {
+    "colors": {
+      "fur": "#2e2624",
+      "wing": "#1f1a1a"
+    },
+    "parts": [
+      {
+        "box": [
+          0,
+          0.2,
+          0
+        ],
+        "size": [
+          0.18,
+          0.16,
+          0.14
+        ],
+        "color": "fur"
+      },
+      {
+        "box": [
+          0.06,
+          0.31,
+          -0.04
+        ],
+        "size": [
+          0.03,
+          0.06,
+          0.03
+        ],
+        "color": "fur"
+      },
+      {
+        "box": [
+          0.06,
+          0.31,
+          0.04
+        ],
+        "size": [
+          0.03,
+          0.06,
+          0.03
+        ],
+        "color": "fur"
+      },
+      {
+        "at": [
+          0,
+          0.22,
+          -0.07
+        ],
+        "flap": {
+          "axis": "x",
+          "speed": 28,
+          "amount": -0.7
+        },
+        "box": [
+          0,
+          0,
+          -0.16
+        ],
+        "size": [
+          0.16,
+          0.02,
+          0.32
+        ],
+        "color": "wing"
+      },
+      {
+        "at": [
+          0,
+          0.22,
+          0.07
+        ],
+        "flap": {
+          "axis": "x",
+          "speed": 28,
+          "amount": 0.7
+        },
+        "box": [
+          0,
+          0,
+          0.16
+        ],
+        "size": [
+          0.16,
+          0.02,
+          0.32
+        ],
+        "color": "wing"
+      }
+    ]
+  },
+  "wolf": {
+    "colors": {
+      "fur": "#8c8c8f",
+      "dark": "#66666b",
+      "pale": "#ccccc7"
+    },
+    "parts": [
+      {
+        "box": [
+          0,
+          0.55,
+          0
+        ],
+        "size": [
+          0.8,
+          0.34,
+          0.36
+        ],
+        "color": "fur"
+      },
+      {
+        "box": [
+          0.22,
+          0.6,
+          0
+        ],
+        "size": [
+          0.36,
+          0.4,
+          0.42
+        ],
+        "color": "dark"
+      },
+      {
+        "at": [
+          0.28,
+          0.42,
+          -0.12
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": 1
+        },
+        "box": [
+          0,
+          -0.21,
+          0
+        ],
+        "size": [
+          0.11,
+          0.42,
+          0.11
+        ],
+        "color": "dark"
+      },
+      {
+        "at": [
+          0.28,
+          0.42,
+          0.12
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": -1
+        },
+        "box": [
+          0,
+          -0.21,
+          0
+        ],
+        "size": [
+          0.11,
+          0.42,
+          0.11
+        ],
+        "color": "dark"
+      },
+      {
+        "at": [
+          -0.28,
+          0.42,
+          -0.12
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": -1
+        },
+        "box": [
+          0,
+          -0.21,
+          0
+        ],
+        "size": [
+          0.11,
+          0.42,
+          0.11
+        ],
+        "color": "dark"
+      },
+      {
+        "at": [
+          -0.28,
+          0.42,
+          0.12
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": 1
+        },
+        "box": [
+          0,
+          -0.21,
+          0
+        ],
+        "size": [
+          0.11,
+          0.42,
+          0.11
+        ],
+        "color": "dark"
+      },
+      {
+        "box": [
+          0.55,
+          0.78,
+          0
+        ],
+        "size": [
+          0.3,
+          0.28,
+          0.3
+        ],
+        "color": "fur"
+      },
+      {
+        "box": [
+          0.75,
+          0.72,
+          0
+        ],
+        "size": [
+          0.16,
+          0.12,
+          0.16
+        ],
+        "color": "pale"
+      },
+      {
+        "box": [
+          0.79,
+          0.76,
+          0
+        ],
+        "size": [
+          0.05,
+          0.04,
+          0.06
+        ],
+        "color": "#141414"
+      },
+      {
+        "box": [
+          0.5,
+          0.97,
+          -0.09
+        ],
+        "size": [
+          0.07,
+          0.12,
+          0.07
+        ],
+        "color": "dark"
+      },
+      {
+        "box": [
+          0.5,
+          0.97,
+          0.09
+        ],
+        "size": [
+          0.07,
+          0.12,
+          0.07
+        ],
+        "color": "dark"
+      },
+      {
+        "at": [
+          -0.42,
+          0.66,
+          0
+        ],
+        "rotate": [
+          0,
+          0,
+          -35
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": 0.349
+        },
+        "box": [
+          -0.18,
+          0,
+          0
+        ],
+        "size": [
+          0.38,
+          0.12,
+          0.12
+        ],
+        "color": "fur"
+      },
+      {
+        "box": [
+          0.4,
+          0.74,
+          0
+        ],
+        "size": [
+          0.06,
+          0.3,
+          0.34
+        ],
+        "color": "#cc1f1a",
+        "when": "tame"
+      }
+    ]
+  },
+  "dwarf_base": {
+    "colors": {
+      "skin": "#dba885",
+      "nose": "#af876a",
+      "boots": "#38261a",
+      "iron": "#8c8f99",
+      "gold": "#d9ad33",
+      "wood": "#80572e",
+      "belt": "#38261a",
+      "helmet": "#8c8f99"
+    },
+    "parts": [
+      {
+        "at": [
+          0,
+          0.42,
+          -0.12
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": 1
+        },
+        "box": [
+          0,
+          -0.21,
+          0
+        ],
+        "size": [
+          0.2,
+          0.42,
+          0.2
+        ],
+        "color": "boots"
+      },
+      {
+        "at": [
+          0,
+          0.42,
+          0.12
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": -1
+        },
+        "box": [
+          0,
+          -0.21,
+          0
+        ],
+        "size": [
+          0.2,
+          0.42,
+          0.2
+        ],
+        "color": "boots"
+      },
+      {
+        "box": [
+          0,
+          0.72,
+          0
+        ],
+        "size": [
+          0.44,
+          0.6,
+          0.6
+        ],
+        "color": "tunic"
+      },
+      {
+        "box": [
+          0,
+          0.5,
+          0
+        ],
+        "size": [
+          0.46,
+          0.08,
+          0.62
+        ],
+        "color": "belt"
+      },
+      {
+        "box": [
+          0.02,
+          1.17,
+          0
+        ],
+        "size": [
+          0.34,
+          0.34,
+          0.34
+        ],
+        "color": "skin"
+      },
+      {
+        "box": [
+          0.19,
+          1.02,
+          0
+        ],
+        "size": [
+          0.08,
+          0.42,
+          0.3
+        ],
+        "color": "beard"
+      },
+      {
+        "box": [
+          0.2,
+          1.18,
+          0
+        ],
+        "size": [
+          0.06,
+          0.05,
+          0.08
+        ],
+        "color": "nose"
+      },
+      {
+        "box": [
+          0.2,
+          1.24,
+          -0.07
+        ],
+        "size": [
+          0.02,
+          0.04,
+          0.05
+        ],
+        "color": "#141414"
+      },
+      {
+        "box": [
+          0.2,
+          1.24,
+          0.07
+        ],
+        "size": [
+          0.02,
+          0.04,
+          0.05
+        ],
+        "color": "#141414"
+      },
+      {
+        "box": [
+          0.02,
+          1.38,
+          0
+        ],
+        "size": [
+          0.38,
+          0.12,
+          0.38
+        ],
+        "color": "helmet"
+      },
+      {
+        "at": [
+          0,
+          1.0,
+          -0.36
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": -1
+        },
+        "box": [
+          0,
+          -0.25,
+          0
+        ],
+        "size": [
+          0.16,
+          0.5,
+          0.16
+        ],
+        "color": "tunic"
+      },
+      {
+        "at": [
+          0,
+          1.0,
+          0.36
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": 1
+        },
+        "box": [
+          0,
+          -0.25,
+          0
+        ],
+        "size": [
+          0.16,
+          0.5,
+          0.16
+        ],
+        "color": "tunic"
+      }
+    ]
+  },
+  "dwarf": {
+    "inherits": "dwarf_base",
+    "colors": {
+      "tunic": "#8c291f",
+      "beard": "#9e4c1a"
+    },
+    "parts": [
+      {
+        "at": [
+          0.14,
+          0.62,
+          0.36
+        ],
+        "rotate": [
+          0,
+          0,
+          -70
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": -0.4
+        },
+        "parts": [
+          {
+            "box": [
+              0.25,
+              0,
+              0
+            ],
+            "size": [
+              0.55,
+              0.06,
+              0.06
+            ],
+            "color": "wood"
+          },
+          {
+            "box": [
+              0.48,
+              0.1,
+              0
+            ],
+            "size": [
+              0.14,
+              0.24,
+              0.04
+            ],
+            "color": "iron"
+          }
+        ]
+      }
+    ]
+  },
+  "crossbow_dwarf": {
+    "inherits": "dwarf_base",
+    "colors": {
+      "tunic": "#385c33",
+      "beard": "#59331a"
+    },
+    "parts": [
+      {
+        "box": [
+          0.38,
+          0.92,
+          0
+        ],
+        "size": [
+          0.5,
+          0.07,
+          0.08
+        ],
+        "color": "wood"
+      },
+      {
+        "box": [
+          0.55,
+          0.94,
+          0
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.5
+        ],
+        "color": "wood"
+      }
+    ]
+  },
+  "dwarf_chief": {
+    "inherits": "dwarf_base",
+    "scale": 1.15,
+    "colors": {
+      "tunic": "#4c1f59",
+      "beard": "#d9d9d1",
+      "belt": "#d9ad33"
+    },
+    "parts": [
+      {
+        "box": [
+          0.02,
+          1.48,
+          -0.22
+        ],
+        "size": [
+          0.07,
+          0.2,
+          0.07
+        ],
+        "color": "#e6e0cc"
+      },
+      {
+        "box": [
+          0.02,
+          1.48,
+          0.22
+        ],
+        "size": [
+          0.07,
+          0.2,
+          0.07
+        ],
+        "color": "#e6e0cc"
+      },
+      {
+        "box": [
+          0.02,
+          1.33,
+          0
+        ],
+        "size": [
+          0.4,
+          0.04,
+          0.4
+        ],
+        "color": "gold"
+      },
+      {
+        "at": [
+          0.14,
+          0.62,
+          0.36
+        ],
+        "rotate": [
+          0,
+          0,
+          -70
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": -0.4
+        },
+        "parts": [
+          {
+            "box": [
+              0.25,
+              0,
+              0
+            ],
+            "size": [
+              0.55,
+              0.06,
+              0.06
+            ],
+            "color": "wood"
+          },
+          {
+            "box": [
+              0.48,
+              0.1,
+              0
+            ],
+            "size": [
+              0.14,
+              0.24,
+              0.04
+            ],
+            "color": "gold"
+          }
+        ]
+      }
+    ]
+  },
+  "dwarf_miner": {
+    "inherits": "dwarf_base",
+    "colors": {
+      "tunic": "#5c4c38",
+      "beard": "#332e29",
+      "helmet": "#bf9e33"
+    },
+    "parts": [
+      {
+        "box": [
+          0.2,
+          1.4,
+          0
+        ],
+        "size": [
+          0.04,
+          0.07,
+          0.08
+        ],
+        "color": "#ffe680",
+        "glow": true
+      },
+      {
+        "at": [
+          0.14,
+          0.62,
+          0.36
+        ],
+        "rotate": [
+          0,
+          0,
+          -70
+        ],
+        "swing": {
+          "axis": "z",
+          "amount": -0.4
+        },
+        "parts": [
+          {
+            "box": [
+              0.25,
+              0,
+              0
+            ],
+            "size": [
+              0.55,
+              0.05,
+              0.05
+            ],
+            "color": "wood"
+          },
+          {
+            "box": [
+              0.5,
+              0,
+              0
+            ],
+            "size": [
+              0.06,
+              0.06,
+              0.4
+            ],
+            "color": "iron"
+          }
+        ]
+      }
+    ]
+  }
+}

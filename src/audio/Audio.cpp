@@ -1,4 +1,5 @@
 #include "audio/Audio.h"
+#include "world/BlockData.h"
 
 #include <algorithm>
 #include <cstring>
@@ -21,7 +22,10 @@
 
 namespace fs = std::filesystem;
 
-const char* Audio::Material(BlockType type) {
+const char* DefaultMaterial(BlockType type);
+const char* Audio::Material(BlockType type) { return BlockData::SoundOr(type, DefaultMaterial(type)); }
+
+const char* DefaultMaterial(BlockType type) {
     switch (type) {
     case BlockType::STONE:
     case BlockType::STONE_BRICK:

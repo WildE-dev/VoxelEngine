@@ -1,4 +1,5 @@
 #include "world/Block.h"
+#include "world/BlockData.h"
 
 #include <algorithm>
 #include <array>
@@ -340,10 +341,16 @@ std::atomic<int> gCarvedTextureIndices[kBlockTypeCount] = {}; // -1: none
 
 } // namespace
 
+const char* DefaultBlockTexture(BlockType type, int face) {
+    const int t = static_cast<int>(type);
+    return t >= 0 && t < kBlockTypeCount && face >= 0 && face < 6 ? kBlockTextureNames[t].faces[face] : nullptr;
+}
+
 void ResolveBlockTextures(const std::function<int(const std::string&)>& lookup) {
     for (int type = 0; type < kBlockTypeCount; type++) {
         for (int face = 0; face < 6; face++) {
-            const char* name = kBlockTextureNames[type].faces[face];
+            const auto set = BlockData::Texture(static_cast<BlockType>(type), face);
+            const char* name = set ? set->c_str() : kBlockTextureNames[type].faces[face];
             gBlockTextureIndices[type][face] = name ? lookup(name) : 0;
         }
         const char* carved = CarvedTextureName(static_cast<BlockType>(type));

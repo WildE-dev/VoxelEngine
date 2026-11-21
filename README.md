@@ -35,7 +35,7 @@ GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
 `FoodTest` (see [Food and hunger](#food-and-hunger)), `ChestTest` (see
 [Chests](#chests)), `BedTest` (see [Beds](#beds)), `PowerTest` (see
 [Air power](#air-power)), `FactoryTest` (see [Air power](#air-power)), `SignalTest`
-(see [Signals](#signals)) and `SoundTest` (see
+(see [Signals](#signals)), `DataTest` (see [Editing blocks and creatures](#editing-blocks-and-creatures)) and `SoundTest` (see
 [Sound](#sound)).
 
 `ctest` in the build directory runs them all, and `ctest -j15` runs them all at
@@ -192,7 +192,7 @@ that damaged files are refused, and that a rejoining player is put back in place
 | I | Inventory: pick which tool or block goes in each hotbar slot |
 | C / Shift+C | Chisel: lower / raise the quarter of the block you're looking at by a quarter |
 | L (hold) | Laser, operators only: carve a tunnel along the view ray |
-| R | Reload shaders and block textures, rebuild all chunk meshes |
+| R | Reload shaders, block textures and the data files (blocks, creature models), rebuild all chunk meshes |
 | Tab | Toggle mouse capture |
 | F1 | Toggle wireframe |
 | F2 | Toggle debug window |
@@ -1518,6 +1518,50 @@ Carrying light: with a lamp or a campfire selected in the hotbar (and some to ho
 the world around you lights up as you walk, falling off a level a block like placed
 light. Other players carrying one light their surroundings too (up to eight lights at
 once), and figures and creatures near a carried light are lit by it.
+## Editing blocks and creatures
+
+Blocks' details and creatures' models are data, in `Resources/Data`, so you can change
+them without touching the code. Edit the files there (the build copies them beside the
+game), or the copies beside the game for a quick try, and press **R** in the game to
+load them again (with the textures and shaders). A file that can't be read is
+reported, with the line, and the game carries on with its own built-in details (blocks)
+or plain boxes (creatures).
+
+**`blocks.json`** has every block, by id. Any of these can be changed, and anything
+left out (a field, or a whole block) keeps the game's own value:
+
+| Field | What it is |
+|---|---|
+| `name` | what the game calls it |
+| `textures` | `{"all": x}`, or `{"top", "bottom", "side"}`, or each of `top`, `bottom`, `front`, `back`, `left`, `right`: PNGs in `Resources/Textures/Blocks` |
+| `hardness` | seconds to break it by hand |
+| `tool` | the tool that's faster on it: `pickaxe`, `axe`, `shovel`, `sword` or `none` |
+| `sound` | `soft`, `hard`, `sand`, `wood` or `glass` |
+| `light` | light it gives off, 0 to 15 |
+| `map` | its colour on the minimap, `#rrggbb` |
+
+The server reads it too (hardness and tools decide how long breaking takes), so a
+server and its players should share the same file. How blocks behave (solid, plant,
+liquid, machine) stays in the code. `VoxelEngine --dump-block-data FILE` writes the
+game's own details out as a fresh file.
+
+**`creatures.json`** has a model for each creature, by id (`deer`, `wolf`, `bat`,
+`dwarf`, `crossbow_dwarf`, `dwarf_chief`, `dwarf_miner`): a list of boxes, drawn facing
++x with its feet at 0. A part is a box (`box`: its centre, `size`, `color`: `#rrggbb`
+or a name from the model's `colors`, `glow`) and/or a frame for the parts inside it
+(`at`: its origin, a limb's pivot; `rotate`: degrees about x, y and z; `swing`: swung
+about an axis as it walks; `flap`: flapped all the time; `when: "tame"`: only on a
+tame wolf; `parts`: the parts inside it). A model may set a `scale`, and `inherits`
+another's colours and parts, adding its own: the dwarves all start from `dwarf_base`
+and change their colours and what they hold. The file explains itself at the top.
+
+Models of blocks drawn specially (the water wheel, shafts, gauges, pipes) are still
+in the code.
+
+`DataTest` checks the JSON reader (comments, trailing commas, an error's line), that a
+blocks file overrides just what it gives and loading another puts the rest back, and
+that the shipped files read cleanly and `blocks.json` matches the game's own details.
+
 ## Block textures
 
 Every PNG in `Resources/Textures/Blocks/` is packed into a texture atlas at
@@ -1653,10 +1697,11 @@ src/
             Textures, DebugDraw
   world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
             Features, Dungeons, Noise, Lighting, Collision, Raycast, Mining,
-            Breathing, Creatures, Crafting, Hunger, Armour, Power, Signals, Smelting, Fluids
+            Breathing, Creatures, Crafting, Hunger, Armour, Power, Signals, Smelting, Fluids,
+            Dwarves, BlockData, Json
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
             BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest, ChestTest, BedTest,
-            PowerTest, SignalTest, FactoryTest
+            PowerTest, SignalTest, FactoryTest, DataTest
 tools/      make_sounds.py (sound effects), make_item_textures.py (item icons)
 ```
