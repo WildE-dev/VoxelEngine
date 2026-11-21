@@ -223,7 +223,6 @@ bool Application::Init(const ClientOptions& options) {
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoKeyboard;
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(kGlslVersion);
@@ -360,7 +359,7 @@ void Application::RunMenuFrame(double now) {
     glViewport(0, 0, width, height);
     glClearColor(0.42f, 0.62f, 0.86f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-    ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+    ImGui::GetIO().ConfigFlags &= ~(ImGuiConfigFlags_NoMouse | ImGuiConfigFlags_NoKeyboard); // the menus type and click
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -481,6 +480,10 @@ void Application::Run() {
         ImGuiIO& io = ImGui::GetIO();
         if (captureCursor) io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
         else io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+        // The keyboard is the UI's only while something takes typing (chat, the pause
+        // menu's settings, the inventory); otherwise it's the game's.
+        if (chatOpen || paused || inventoryOpen) io.ConfigFlags &= ~ImGuiConfigFlags_NoKeyboard;
+        else io.ConfigFlags |= ImGuiConfigFlags_NoKeyboard;
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -715,10 +718,19 @@ void Application::DrawHealth() {
 }
 
 void Application::OpenChat(char openedWith) {
+    // While typing the view stays put and the cursor is free (to click in the box).
+    cursorBeforeChat = captureCursor;
+    SetCursorCaptured(false);
     chatOpen = true;
     chatOpenedWith = openedWith;
     chatOpenFrames = 0;
     std::snprintf(chatInput, sizeof chatInput, "%s", openedWith == '/' ? "/" : "");
+}
+
+void Application::CloseChat() {
+    if (!chatOpen) return;
+    chatOpen = false;
+    SetCursorCaptured(cursorBeforeChat);
 }
 
 void Application::DrawChat() {
@@ -779,7 +791,7 @@ void Application::DrawChat() {
         chatOpenFrames++;
         if (send) {
             client->SendChat(chatInput);
-            chatOpen = false;
+            CloseChat();
         }
     }
     ImGui::End();
@@ -1020,7 +1032,7 @@ void Application::OnKey(int key, int action) {
 
     // While typing, keys belong to the chat line (ImGui gets them too); Esc closes it.
     if (chatOpen) {
-        if (key == GLFW_KEY_ESCAPE) chatOpen = false;
+        if (key == GLFW_KEY_ESCAPE) CloseChat();
         return;
     }
     // The inventory takes I and Esc (to close) and the number keys (to pick a slot).

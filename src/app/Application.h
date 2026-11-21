@@ -104,6 +104,7 @@ private:
     // A small cross in the middle of the screen while aiming.
     void DrawCrosshair();
     void OpenChat(char openedWith);
+    void CloseChat();
 
     void OnKey(int key, int action);
     void OnMouseButton(int button, int action);
@@ -166,6 +167,7 @@ private:
     bool ambientOcclusion = true;
     // Chat: open while typing a line (T, / or Enter opens it).
     bool chatOpen = false;
+    bool cursorBeforeChat = true; // captured before the chat opened (given back on closing)
     char chatInput[260] = {};
     char chatOpenedWith = 0; // the key that opened it ('t', '/' or 0), see DrawChat
     int chatOpenFrames = 0;
