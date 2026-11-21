@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 30;
+constexpr uint32_t kProtocolVersion = 31;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -55,6 +55,7 @@ enum class MsgType : uint8_t {
     Shoot,         // shoot an arrow from your bow, this way
     Cast,          // cast the fishing rod into the water here (or reel in)
     WriteSign,     // set the text on a sign
+    Interact,      // right-clicked a creature (feeding a wolf tames it)
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -356,6 +357,10 @@ struct AttackPlayer {
     Tool tool = Tool::None;
 };
 constexpr uint8_t kCreatureHurt = 1 << 0; // flashes red
+constexpr uint8_t kCreatureTame = 1 << 1; // a wolf with an owner (wears a collar)
+struct Interact {
+    uint16_t creature = 0;
+};
 struct CreatureInfo {
     uint16_t id = 0;
     CreatureType type = CreatureType::Deer;
@@ -448,6 +453,7 @@ std::vector<uint8_t> Encode(const PlayerState& m);
 std::vector<uint8_t> Encode(const EditBreak& m);
 std::vector<uint8_t> Encode(const MineStart& m);
 std::vector<uint8_t> Encode(const Attack& m);
+std::vector<uint8_t> Encode(const Interact& m);
 std::vector<uint8_t> Encode(const AttackPlayer& m);
 std::vector<uint8_t> Encode(const Eat& m);
 std::vector<uint8_t> Encode(const OpenChest& m);
@@ -495,6 +501,7 @@ bool Decode(ByteReader& in, PlayerState& m);
 bool Decode(ByteReader& in, EditBreak& m);
 bool Decode(ByteReader& in, MineStart& m);
 bool Decode(ByteReader& in, Attack& m);
+bool Decode(ByteReader& in, Interact& m);
 bool Decode(ByteReader& in, AttackPlayer& m);
 bool Decode(ByteReader& in, Eat& m);
 bool Decode(ByteReader& in, OpenChest& m);

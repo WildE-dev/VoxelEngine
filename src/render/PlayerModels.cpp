@@ -268,6 +268,22 @@ void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const gl
             }
             box(base, { -0.58f, 0.98f, 0.0f }, { 0.08f, 0.14f, 0.12f }, pale);         // tail
         }
+        else if (c.type == 3) { // Wolf: grey, low and long, with a snout, ears and a bushy tail
+            const glm::vec3 fur(0.55f, 0.55f, 0.56f), darkFur(0.4f, 0.4f, 0.42f), pale(0.8f, 0.8f, 0.78f);
+            box(base, { 0.0f, 0.55f, 0.0f }, { 0.8f, 0.34f, 0.36f }, fur);           // body
+            box(base, { 0.22f, 0.6f, 0.0f }, { 0.36f, 0.4f, 0.42f }, darkFur);       // shoulders
+            for (int i = 0; i < 4; i++) {
+                const float x = i < 2 ? 0.28f : -0.28f, z = (i % 2) ? 0.12f : -0.12f;
+                limb({ x, 0.42f, z }, ((i == 0 || i == 3) ? swing : -swing), { 0.11f, 0.42f, 0.11f }, darkFur);
+            }
+            box(base, { 0.55f, 0.78f, 0.0f }, { 0.3f, 0.28f, 0.3f }, fur);          // head
+            box(base, { 0.75f, 0.72f, 0.0f }, { 0.16f, 0.12f, 0.16f }, pale);       // snout
+            box(base, { 0.79f, 0.76f, 0.0f }, { 0.05f, 0.04f, 0.06f }, glm::vec3(0.08f)); // nose
+            for (float z : { -0.09f, 0.09f }) box(base, { 0.5f, 0.97f, z }, { 0.07f, 0.12f, 0.07f }, darkFur); // ears
+            const glm::mat4 tail = glm::rotate(glm::translate(base, { -0.42f, 0.66f, 0.0f }), glm::radians(-35.0f + swing * 20.0f), glm::vec3(0, 0, 1));
+            box(tail, { -0.18f, 0.0f, 0.0f }, { 0.38f, 0.12f, 0.12f }, fur);
+            if (c.tame) box(base, { 0.4f, 0.74f, 0.0f }, { 0.06f, 0.3f, 0.34f }, glm::vec3(0.8f, 0.12f, 0.1f)); // collar
+        }
         else if (c.type == 2) { // Skeleton: thin bone-white limbs, a skull with dark sockets, a bow
             const glm::vec3 bone(0.86f, 0.84f, 0.76f), dark(0.12f, 0.1f, 0.1f);
             for (float z : { -0.1f, 0.1f })

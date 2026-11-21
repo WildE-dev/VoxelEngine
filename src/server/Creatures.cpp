@@ -111,6 +111,25 @@ bool CreatureSystem::Damage(uint16_t id, int damage, const glm::vec3& from, doub
 
 Collision::AABB CreatureSystem::Box(const Creature& c) { return BoxAt(c.feet, SpecOf(c.type)); }
 
+void CreatureSystem::Provoke(uint16_t id, uint16_t player, double now) {
+    for (auto& c : creatures)
+        if (c.id == id && c.type == CreatureType::Wolf && c.owner == 0) {
+            c.angryAt = player;
+            c.angryUntil = now + 20.0;
+        }
+}
+
+bool CreatureSystem::Tame(uint16_t id, uint16_t player) {
+    for (auto& c : creatures)
+        if (c.id == id && c.type == CreatureType::Wolf && c.owner == 0) {
+            c.owner = player;
+            c.angryAt = 0;
+            c.health = SpecOf(c.type).maxHealth;
+            return true;
+        }
+    return false;
+}
+
 bool CreatureSystem::Burning(ServerWorld& world, const Creature& c, float daylight) const {
     if (!SpecOf(c.type).hostile || daylight < 0.5f) return false;
     uint8_t block = 0, sky = 0;
@@ -134,6 +153,59 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
         move = c.wander;
         speed = spec.walkSpeed;
     };
+
+    if (c.type == CreatureType::Wolf) {
+        auto chaseAndBite = [&](const glm::vec3& at, auto bite) {
+            glm::vec2 to(at.x - c.feet.x, at.z - c.feet.z);
+            const float reach = spec.halfWidth + 0.3f + spec.attackReach;
+            if (glm::length(to) > 0.4f) move = glm::normalize(to);
+            speed = glm::length(to) > reach * 0.7f ? spec.runSpeed : 0.0f;
+            if (glm::length(to) <= reach && std::abs(at.y - c.feet.y) < 1.8f && now >= c.nextAttack) {
+                c.nextAttack = now + 0.9;
+                bite();
+            }
+        };
+        const Player* owner = nullptr;
+        for (const auto& p : players)
+            if (p.id == c.owner) owner = &p;
+        if (c.owner != 0 && owner) {
+            // Tame: fights the hostile creature nearest its owner (within 10 blocks),
+            // else keeps close, and catches up if left far behind.
+            Creature* foe = nullptr;
+            float best = 10.0f;
+            for (auto& other : creatures)
+                if (SpecOf(other.type).hostile && other.health > 0) {
+                    const float d = glm::distance(other.feet, owner->feet);
+                    if (d < best) best = d, foe = &other;
+                }
+            if (foe) {
+                chaseAndBite(foe->feet, [&] {
+                    foe->health -= 4;
+                    foe->hurtUntil = now + 0.3;
+                });
+                return;
+            }
+            const float d = HorizontalDistance(owner->feet, c.feet);
+            if (d > 24.0f) {
+                c.feet = owner->feet + glm::vec3(1.0f, 0.5f, 1.0f); // (caught up)
+                c.velocity = glm::vec3(0.0f);
+            }
+            if (d > 3.0f) {
+                move = glm::normalize(glm::vec2(owner->feet.x - c.feet.x, owner->feet.z - c.feet.z));
+                speed = d > 8.0f ? spec.runSpeed : spec.walkSpeed * 1.5f;
+            }
+            return;
+        }
+        // Wild and provoked: after whoever hit it, for a while.
+        if (c.angryAt != 0 && now < c.angryUntil)
+            for (const auto& p : players)
+                if (p.id == c.angryAt && p.vulnerable) {
+                    chaseAndBite(p.feet, [&] { hurt(p.id, spec.attackDamage, "was mauled by a wolf"); });
+                    return;
+                }
+        wander();
+        return;
+    }
 
     if (c.type == CreatureType::Deer) {
         if (now < c.fleeUntil) {
@@ -273,10 +345,12 @@ void CreatureSystem::SpawnNaturally(ServerWorld& world, const std::vector<Player
                 if (!grass) break;
                 uint8_t block = 0, sky = 0;
                 if (!LightAt(world, { x, y, z }, block, sky) || sky < 12) break; // out in the open
-                const int herd = 1 + static_cast<int>(unit(rng) * 3.0f);
+                // Now and then a pair of wolves instead of a herd of deer.
+                const bool wolves = unit(rng) < 0.15f;
+                const int herd = wolves ? 2 : 1 + static_cast<int>(unit(rng) * 3.0f);
                 for (int i = 0; i < herd; i++) {
                     const glm::vec3 at(x + 0.5f + (i % 2) * 1.5f, static_cast<float>(y), z + 0.5f + (i / 2) * 1.5f);
-                    if (farFromPlayers(at) && Spawn(CreatureType::Deer, at)) animals++;
+                    if (farFromPlayers(at) && Spawn(wolves ? CreatureType::Wolf : CreatureType::Deer, at)) animals++;
                 }
                 break;
             }
@@ -317,6 +391,10 @@ void CreatureSystem::Update(ServerWorld& world, const std::vector<Player>& playe
         // player who's just joined hasn't said where they are yet).
         float nearest = players.empty() ? 0.0f : 1e9f;
         for (const auto& p : players) nearest = std::min(nearest, glm::distance(p.feet, c.feet));
+        // (A tame wolf stays while its owner's here: it catches up.)
+        if (c.owner != 0)
+            for (const auto& p : players)
+                if (p.id == c.owner) nearest = 0.0f;
         if (nearest > kDespawnDistance || c.feet.y < -1000.0f) {
             it = creatures.erase(it);
             continue;

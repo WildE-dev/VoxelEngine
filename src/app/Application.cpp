@@ -531,7 +531,7 @@ void Application::Run() {
             return any ? best : glm::vec2(15.0f, 0.0f);
         };
         for (const auto& c : client->GetCreatures())
-            params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet) });
+            params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet), c.tame });
         for (const auto& b : bolts) params.bolts.push_back({ b.points, b.life / 0.35f });
         for (const auto& f : fireflies) {
             // Each blinks in its own rhythm, and fades in and out at the ends of its life.
@@ -1786,6 +1786,15 @@ void Application::OnMouseButton(int button, int action) {
         }
         if (target.player >= 0) {
             client->AttackPlayer(static_cast<uint16_t>(target.player), client->Usable(SelectedTool()));
+            return;
+        }
+    }
+
+    // Right-click on a creature: feed it (raw venison tames a wild wolf).
+    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+        const FightTarget target = TargetInView();
+        if (target.creature) {
+            client->Interact(target.creature);
             return;
         }
     }

@@ -32,6 +32,7 @@ struct CreatureModel {
     bool hurt = false;
     float speed = 0.0f;
     glm::vec2 light{ 15.0f, 0.0f }; // sky and block light where it stands (0..15)
+    bool tame = false;               // a wolf with an owner: a red collar
 };
 
 // A flying bit of a broken block: a tiny cube showing a piece of the block's texture.

@@ -306,6 +306,17 @@ std::vector<uint8_t> Encode(const AttackPlayer& m) {
     return std::move(w.data);
 }
 
+std::vector<uint8_t> Encode(const Interact& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Interact);
+    w.U16(m.creature);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Interact& m) {
+    return in.U16(m.creature) && in.AtEnd();
+}
+
 std::vector<uint8_t> Encode(const CreatureSnapshot& m) {
     ByteWriter w;
     Begin(w, MsgType::CreatureSnapshot);

@@ -45,13 +45,14 @@ struct TestClient {
     glm::vec3 feet{ 0.0f };
     bool joined = false;
     Tool heldTool = Tool::None; // what others see in their hand
+    BlockType heldBlock = BlockType::AIR;
     void Update() {
         client.Poll();
         if (!joined && client.IsWelcomed()) joined = true, feet = client.GetSpawn();
         if (auto c = client.TakeCorrection()) feet = *c;
         if (!joined) return;
         world.Update(feet + glm::vec3(0.0f, 1.62f, 0.0f));
-        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround, heldTool);
+        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround, heldTool, heldBlock);
     }
     const Client::Creature* Find(CreatureType type) const {
         static thread_local std::vector<Client::Creature> seen;
@@ -181,6 +182,31 @@ int main() {
         server.QueueConsoleCommand("creatures clear");
         server.QueueConsoleCommand("gamemode creative Hunter");
         both(20.0, [&] { return a.client.GetCreatures().empty() && a.client.IsCreative(); });
+
+        std::cout << "Wolves" << std::endl;
+        server.QueueConsoleCommand("time noon");
+        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+        server.QueueConsoleCommand("summon wolf 11.5 0 8.5");
+        server.QueueConsoleCommand("give raw_venison 2 Hunter");
+        Check(both(20.0, [&] { return a.Find(CreatureType::Wolf) != nullptr; }), "a wolf is summoned beside the hunter");
+        const uint16_t wolf = a.Find(CreatureType::Wolf)->id;
+        a.client.Interact(wolf); // (empty-handed: nothing)
+        both(1.0, [] { return false; });
+        Check(!a.Find(CreatureType::Wolf)->tame, "a wolf isn't tamed by an empty hand");
+        a.heldBlock = BlockType::RAW_VENISON;
+        both(0.3, [] { return false; });
+        a.client.Interact(wolf);
+        Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && w->tame; }) && Has(a, "The wolf is yours"), "fed raw venison, it's tamed (and wears a collar)");
+        a.heldBlock = BlockType::AIR;
+        server.QueueConsoleCommand("tp Hunter 22.5 0 8.5");
+        Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && glm::distance(glm::vec2(w->feet.x, w->feet.z), glm::vec2(22.5f, 8.5f)) < 5.0f; }),
+              "it follows its owner");
+        server.QueueConsoleCommand("time midnight");
+        server.QueueConsoleCommand("summon ghoul 26.5 0 8.5");
+        Check(both(20.0, [&] { return a.Find(CreatureType::Ghoul) != nullptr; }), "a ghoul turns up near them");
+        Check(both(30.0, [&] { return a.Find(CreatureType::Ghoul) == nullptr; }), "and the wolf sees it off");
+        server.QueueConsoleCommand("creatures clear");
+        both(20.0, [&] { return a.client.GetCreatures().empty(); });
 
         server.QueueConsoleCommand("time midnight");
         server.QueueConsoleCommand("summon ghoul 20 0 20");

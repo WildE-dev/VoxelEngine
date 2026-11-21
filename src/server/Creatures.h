@@ -38,6 +38,10 @@ public:
         double nextDecision = 0.0;
         double nextAttack = 0.0;
         double nextBurn = 0.0;
+        // Wolves: their owner (0: wild), and the player they're angry with until when.
+        uint16_t owner = 0;
+        uint16_t angryAt = 0;
+        double angryUntil = 0.0;
     };
 
     // A player as the creatures see them.
@@ -70,6 +74,10 @@ public:
     bool Attack(uint16_t id, const glm::vec3& eye, Tool tool, bool iron, double now, bool& killed);
     // Hurts it (from anywhere: an arrow), knocking it back away from `from`.
     bool Damage(uint16_t id, int damage, const glm::vec3& from, double now, bool& killed);
+    // A player hit it: a wild wolf turns on them for a while.
+    void Provoke(uint16_t id, uint16_t player, double now);
+    // Tames a wild wolf for this player (false if it isn't one, or already has an owner).
+    bool Tame(uint16_t id, uint16_t player);
     // Its box, for hit tests.
     static Collision::AABB Box(const Creature& c);
 

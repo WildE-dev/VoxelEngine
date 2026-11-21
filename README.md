@@ -624,6 +624,16 @@ seconds, aimed high enough to allow for its drop. Their arrows hurt whatever the
 (PvP or not). A skeleton has 5 hearts, and killing one leaves you two arrows.
 `/summon skeleton` brings one.
 
+**Wolves** roam grassland in pairs (now and then in place of a herd of deer) and leave
+you alone, unless you hit one: then it goes for you for twenty seconds (1.5 hearts a
+bite). Right-click a wild wolf with raw venison in your hand to tame it (it eats one).
+A tame wolf wears a red collar and follows you, keeping close, catching up if it falls
+far behind, and staying as long as you're here. It goes for the ghoul or skeleton
+nearest you (within 10 blocks) and bites it until it's gone. Taming one is the Best
+Friend achievement. Tame wolves aren't saved: like all creatures, they're gone after
+a restart. `/summon wolf` brings one. `CreatureTest` checks that an empty hand doesn't
+tame a wolf, venison does, a tame wolf follows, and it sees off a ghoul.
+
 In normal worlds they spawn by themselves around each player:
 
 - deer on open grass 20 to 48 blocks away, up to 6 nearby;
@@ -937,7 +947,7 @@ Survival players earn achievements for milestones, once each: breaking a first b
 making a tool, bringing down a deer, defeating a ghoul, cooking venison, eating,
 harvesting wheat, baking bread, digging out iron ore, the iron upgrade, a full set of
 armour, opening a dungeon chest, sleeping through a night, and taking something down
-with an arrow, and catching a fish (fifteen in all). Earning one shows a banner under the compass for a
+with an arrow, catching a fish, and taming a wolf (sixteen in all). Earning one shows a banner under the compass for a
 few seconds (with a chime) and tells everyone else. They're saved with you.
 `/achievements` lists what you've earned and what's still to do. `FoodTest` checks
 the ones it passes on the way, that `/achievements` answers, and that each is earned

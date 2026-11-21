@@ -314,6 +314,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
         if ((ok = net::Decode(in, m))) HandleAttack(client, m.creature, m.tool);
         break;
     }
+    case net::MsgType::Interact: {
+        net::Interact m;
+        if ((ok = net::Decode(in, m))) HandleInteract(client, m.creature);
+        break;
+    }
     case net::MsgType::AttackPlayer: {
         net::AttackPlayer m;
         if ((ok = net::Decode(in, m))) HandleAttackPlayer(client, m.player, m.tool);
@@ -605,7 +610,9 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
     const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
     const CreatureSystem::Creature* target = creatures.Find(creature);
     const CreatureType type = target ? target->type : CreatureType::Count;
-    if (creatures.Attack(creature, eye, tool, (client.tools & Crafting::kIronBit) != 0, now, killed) && killed) {
+    const bool landed = creatures.Attack(creature, eye, tool, (client.tools & Crafting::kIronBit) != 0, now, killed);
+    if (landed && !killed) creatures.Provoke(creature, client.id, now);
+    if (landed && killed) {
         std::string spoils;
         // A deer gives venison (one or two).
         if (type == CreatureType::Deer) {
@@ -624,6 +631,24 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
         SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id + spoils);
         if (type != CreatureType::Skeleton) Award(client, type == CreatureType::Deer ? Achievement::Hunter : Achievement::GhoulSlayer);
     }
+}
+
+void Server::HandleInteract(ClientState& client, uint16_t creature) {
+    const CreatureSystem::Creature* c = creatures.Find(creature);
+    if (!c || c->type != CreatureType::Wolf || c->owner != 0) return;
+    const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
+    const Collision::AABB box = CreatureSystem::Box(*c);
+    if (glm::distance(eye, glm::clamp(eye, box.min, box.max)) > Combat::kReach + 0.5f) return;
+    // Raw venison in hand tames it.
+    uint32_t& venison = client.resources[static_cast<size_t>(BlockType::RAW_VENISON)];
+    if (client.heldBlock != BlockType::RAW_VENISON || (!Creative(client) && venison < Block::kUnitsPerBlock)) return;
+    if (!creatures.Tame(creature, client.id)) return;
+    if (!Creative(client)) {
+        venison -= Block::kUnitsPerBlock;
+        SendResources(client);
+    }
+    SendChat(client, net::ChatMessage::Kind::Info, "The wolf is yours: it'll follow you, and fight for you");
+    Award(client, Achievement::BestFriend);
 }
 
 void Server::HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool) {
@@ -681,7 +706,8 @@ void Server::SendCreatures() {
         m.tick = tickCount;
         for (const auto& c : creatures.All()) {
             if (glm::distance(c.feet, client.feet) > kSendRange) continue;
-            m.creatures.push_back({ c.id, c.type, c.feet, c.yaw, static_cast<uint8_t>(now < c.hurtUntil ? net::kCreatureHurt : 0) });
+            m.creatures.push_back({ c.id, c.type, c.feet, c.yaw,
+                                    static_cast<uint8_t>((now < c.hurtUntil ? net::kCreatureHurt : 0) | (c.owner != 0 ? net::kCreatureTame : 0)) });
         }
         net.Send(peer, net::kChannelUnreliable, net::Encode(m));
     }
@@ -1365,6 +1391,7 @@ void Server::UpdateArrows() {
                 const uint16_t id = c.id;
                 const CreatureType type = c.type;
                 creatures.Damage(id, kArrowDamage, a.position - a.velocity * 0.05f, now, killed);
+                if (!killed && a.shooter != kCreatureShooter) creatures.Provoke(id, a.shooter, now);
                 if (killed)
                     for (auto& [peer, shooter] : clients)
                         if (shooter.id == a.shooter) {

@@ -248,6 +248,7 @@ private:
     void HandleMineStart(ClientState& client, const glm::ivec3& pos, Tool tool);
     void HandleAttack(ClientState& client, uint16_t creature, Tool tool);
     void HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool);
+    void HandleInteract(ClientState& client, uint16_t creature);
     void HandleCraft(ClientState& client, int recipe, int count);
     // The tool a player really works with: theirs if they have it, a bare hand if not.
     static Tool Usable(const ClientState& client, Tool tool);

@@ -154,6 +154,7 @@ public:
         float yaw = 0.0f;
         bool hurt = false;
         float speed = 0.0f;
+        bool tame = false; // a wolf with an owner
     };
     std::vector<Creature> GetCreatures() const;
 
@@ -168,6 +169,8 @@ public:
     // Hit a creature (the server checks the reach).
     void Attack(uint16_t creature, Tool tool);
     void AttackPlayer(uint16_t player, Tool tool);
+    // Right-clicked a creature (with raw venison in hand, a wild wolf is tamed).
+    void Interact(uint16_t creature);
     // Eat one of a food item held (survival; the server checks it).
     void Eat(BlockType item);
     // Chests: ask to open the one at `pos` (the server answers with its contents), close
