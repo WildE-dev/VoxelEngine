@@ -45,6 +45,7 @@ inline const std::vector<Recipe>& Recipes() {
         { "mossy_brick", "Mossy bricks", { { BlockType::STONE_BRICK, kBlock }, { BlockType::LEAVES, kBlock } }, BlockType::MOSSY_BRICK, kBlock },
         { "lamp", "Lamp", { { BlockType::GLASS, kBlock }, { BlockType::PLANKS, kBlock / 2 } }, BlockType::LAMP, kBlock },
         { "pipe", "2 pipes", { { BlockType::STONE, kBlock } }, BlockType::PIPE, 2 * kBlock },
+        { "drain", "Drain", { { BlockType::IRON_INGOT, kBlock / 2 }, { BlockType::STONE, kBlock } }, BlockType::DRAIN, kBlock },
         { "pump", "Pump", { { BlockType::STONE, 2 * kBlock }, { BlockType::GLASS, kBlock } }, BlockType::PUMP, kBlock },
         { "sluice", "Sluice gate", { { BlockType::STONE_BRICK, kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::SLUICE, kBlock },
         { "pressure_plate", "Pressure plate", { { BlockType::STONE, kBlock / 4 } }, BlockType::PRESSURE_PLATE, kBlock },

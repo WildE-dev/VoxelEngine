@@ -105,7 +105,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64), or /give <tool|cap|tunic|boots> [player]" },
     { Level::Operator, "/fill <x1 y1 z1> <x2 y2 z2> <block> - fill a box with a block (air clears it; up to 32768 cells)" },
     { Level::Operator, "/summon <deer|ghoul|skeleton> [x y z] - bring a creature (default: a few blocks ahead of you)" },
-    { Level::Operator, "/locate spring - where the nearest spring (a lake's overflow) is" },
+    { Level::Operator, "/locate <spring|sinkhole> - where the nearest spring (a lake's overflow) or sinkhole (where its river ends) is" },
     { Level::Everyone, "/horde - whether tonight is a horde night" },
     { Level::Operator, "/horde <on|off> - start or end a horde night" },
     { Level::Operator, "/creatures [clear] - count the creatures, or remove them all" },
@@ -403,7 +403,8 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         SetHorde(arg == "on");
     }
     else if (command == "locate") {
-        if (words.size() != 2 || Lower(words[1]) != "spring") return usage("/locate spring");
+        const std::string what = words.size() == 2 ? Lower(words[1]) : "";
+        if (what != "spring" && what != "sinkhole") return usage("/locate <spring|sinkhole>");
         const glm::vec3 from = sender ? sender->feet : glm::vec3(0.0f);
         const glm::ivec3 c = Coords::ChunkOf(glm::ivec3(glm::floor(from)));
         const TerrainGenerator& terrain = world->GetTerrain();
@@ -411,13 +412,13 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         float bestDistance = 1e9f;
         for (int dx = -24; dx <= 24; dx++)
             for (int dz = -24; dz <= 24; dz++)
-                for (const glm::ivec2& sp : terrain.SpringsIn(c.x + dx, c.z + dz)) {
+                for (const glm::ivec2& sp : what == "spring" ? terrain.SpringsIn(c.x + dx, c.z + dz) : terrain.DrainsIn(c.x + dx, c.z + dz)) {
                     const float d = glm::distance(glm::vec2(from.x, from.z), glm::vec2(sp) + 0.5f);
                     if (d < bestDistance) bestDistance = d, best = sp;
                 }
-        if (!best) return reply(Kind::Info, "No spring within 768 blocks");
+        if (!best) return reply(Kind::Info, "No " + what + " within 768 blocks");
         const auto column = terrain.ColumnAt(best->x, best->y);
-        reply(Kind::Info, "The nearest spring is at " + std::to_string(best->x) + " " + std::to_string(column.surfaceRow) + " " + std::to_string(best->y) + ", " +
+        reply(Kind::Info, "The nearest " + what + " is at " + std::to_string(best->x) + " " + std::to_string(column.surfaceRow) + " " + std::to_string(best->y) + ", " +
                               std::to_string(static_cast<int>(bestDistance)) + " blocks away");
     }
     else if (command == "summon") {

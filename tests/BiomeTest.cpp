@@ -226,7 +226,7 @@ int main() {
                 drains++;
                 const auto col = t.ColumnAt(d.x, d.y);
                 const int row = col.HasSlopedTop() ? col.surfaceRow : col.surfaceRow - 1;
-                if (world.Get({ d.x, row, d.y }).type == BlockType::DRAIN) drainsRight++;
+                if (world.Get({ d.x, row, d.y }).type == BlockType::SINKHOLE) drainsRight++;
                 // The channel upstream of it: columns in the river nearby.
                 for (int dx = -12; dx <= 12; dx += 2)
                     for (int dz = -12; dz <= 12; dz += 2) {
@@ -237,10 +237,10 @@ int main() {
                         riverColumns++;
                         const Block& top = world.Get({ x, c.HasSlopedTop() ? c.surfaceRow : c.surfaceRow - 1, z });
                         const Block& over = world.Get({ x, c.FirstOpenRow(), z });
-                        if ((top.type == BlockType::SAND || top.type == BlockType::DRAIN || top.type == BlockType::SPRING) && (over.HasWater() || top.HasWater())) riverRight++;
+                        if ((top.type == BlockType::SAND || top.type == BlockType::SINKHOLE || top.type == BlockType::SPRING) && (over.HasWater() || top.HasWater())) riverRight++;
                     }
             }
-    Check(drains >= 16 && drainsRight == drains, "rivers end in drains in their beds (" + std::to_string(drainsRight) + " of " + std::to_string(drains) + ")");
+    Check(drains >= 16 && drainsRight == drains, "rivers end in sinkholes (natural drains) in their beds (" + std::to_string(drainsRight) + " of " + std::to_string(drains) + ")");
     Check(riverColumns > 50 && riverRight * 10 >= riverColumns * 9,
           "river channels have sand beds with water over them (" + std::to_string(riverRight) + " of " + std::to_string(riverColumns) + " columns looked at)");
     std::cout << "        " << world.generated << " chunks generated, " << world.seconds * 1000.0 / world.generated << " ms each" << std::endl;

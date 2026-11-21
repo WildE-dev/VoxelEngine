@@ -508,7 +508,7 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
     // solid block (under a sloped top, the slope itself), with nothing growing on it.
     std::vector<std::pair<glm::ivec2, BlockType>> wells;
     for (const glm::ivec2& s : SpringsIn(coords.x, coords.z)) wells.emplace_back(s, BlockType::SPRING);
-    for (const glm::ivec2& d : DrainsIn(coords.x, coords.z)) wells.emplace_back(d, BlockType::DRAIN);
+    for (const glm::ivec2& d : DrainsIn(coords.x, coords.z)) wells.emplace_back(d, BlockType::SINKHOLE);
     for (const auto& [s, kind] : wells) {
         const int x = s.x - coords.x * S, z = s.y - coords.z * S;
         const Column column = ColumnFrom(heights, x, z);

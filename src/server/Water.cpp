@@ -116,13 +116,13 @@ void WaterSimulation::RunPumps(ServerWorld& world) {
             gone.push_back(pos);
             continue;
         }
-        if (block.type != BlockType::PUMP && block.type != BlockType::SPRING && block.type != BlockType::DRAIN) {
+        if (block.type != BlockType::PUMP && block.type != BlockType::SPRING && !IsDrainType(block.type)) {
             gone.push_back(pos);
             continue;
         }
         if (limited && !NearCenter(pos, distance)) continue;
         if (block.type == BlockType::SPRING) RunSpring(world, pos);
-        else if (block.type == BlockType::DRAIN) RunDrain(world, pos);
+        else if (IsDrainType(block.type)) RunDrain(world, pos);
         else RunPump(world, pos);
     }
     for (const auto& pos : gone) {

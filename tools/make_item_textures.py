@@ -1507,6 +1507,44 @@ sSssssssSsssssss
 """
 DRAIN_COLOURS = {"i": (60, 62, 68), "I": (120, 124, 132), "k": (14, 16, 22), "s": (96, 104, 100), "S": (118, 128, 122)}
 
+SINKHOLE_TOP = """
+sSsssSSsssSsssSs
+ssssSSsssssssSss
+sSsssdddddssssss
+sssdddkkkddddSss
+ssddkkkkkkkddsss
+sSdkkkkkkkkkdsSs
+ssdkkkKkkkkkdsss
+sddkkkkkkkkkddss
+sdkkkkkkkKkkkdss
+sdkkkKkkkkkkkdSs
+ssdkkkkkkkkkdsss
+sSddkkkkkkkddsss
+sssdddkkkdddssSs
+ssSssddddddsssss
+sSsssssSsssssSss
+ssSssSsssssSssss
+"""
+SINKHOLE_SIDE = """
+sSsssSSsssSsssSs
+ssssSSssssssssss
+sSsssssSssssSsss
+ssSssddsssSsssss
+sssssSdssssssSss
+sSsssssssSssssss
+ssssSsssssssdSss
+sSssssssSsssdsss
+ssssssSsssssSsss
+sSsddssssssSssss
+ssssdsssSsssssSs
+ssSsssSssssssSss
+sSssssssSsssssss
+ssssSssssssSssss
+sSsssssSssssssSs
+ssSssSsssssSssss
+"""
+SINKHOLE_COLOURS = {"s": (78, 86, 84), "S": (98, 108, 104), "d": (50, 58, 60), "k": (14, 18, 22), "K": (40, 60, 80)}
+
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
     draw("cooked_venison", VENISON, COOKED, seed=12)
@@ -1597,6 +1635,8 @@ def main():
     draw("harvester_side", HARVESTER_SIDE, HARVESTER_COLOURS, jitter=4, seed=95)
     draw("drain", DRAIN_TOP, DRAIN_COLOURS, jitter=4, seed=96)
     draw("drain_side", DRAIN_SIDE, DRAIN_COLOURS, jitter=5, seed=97)
+    draw("sinkhole", SINKHOLE_TOP, SINKHOLE_COLOURS, jitter=5, seed=98)
+    draw("sinkhole_side", SINKHOLE_SIDE, SINKHOLE_COLOURS, jitter=5, seed=99)
 
 
 if __name__ == "__main__":

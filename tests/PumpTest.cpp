@@ -227,6 +227,10 @@ int main() {
               "a drain takes " + std::to_string(kDrain) + " units a tick from the cell above (" + std::to_string(WaterAt(world, cup)) + " left)");
         Tick(world, 2);
         Check(WaterAt(world, cup) == 0, "until it's empty");
+        Set(world, drain, Block(BlockType::SINKHOLE));
+        Set(world, cup, Block::Water(kFull));
+        Tick(world, 1);
+        Check(world.GetWater().GetPumpCount() == pumpsBefore + 1 && WaterAt(world, cup) == kFull - kDrain, "a sinkhole (a natural drain) does the same");
     }
 
     std::cout << "Saved pumps" << std::endl;

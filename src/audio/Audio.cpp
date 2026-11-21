@@ -58,6 +58,7 @@ const char* Audio::Material(BlockType type) {
     case BlockType::COAL_ORE:
     case BlockType::SPRING:
     case BlockType::DRAIN:
+    case BlockType::SINKHOLE:
     case BlockType::IRON_ORE: return "hard";
     case BlockType::SAND:
     case BlockType::SNOW: return "sand";

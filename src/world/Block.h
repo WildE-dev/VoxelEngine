@@ -221,9 +221,11 @@ enum class BlockType : uint8_t {
     CRAFTER,
     HARVESTER,
     // A drain: an iron grate that water goes down and is gone (taking from the cells
-    // above and beside it: see Water.h). Found where rivers end. Breaking it gives
-    // stone, and the drain is gone.
+    // above and beside it: see Water.h). Crafted, to build with.
     DRAIN,
+    // A sinkhole: the natural drain, a dark opening in wet rock where rivers end (it
+    // works just like a drain). Breaking it gives stone, and it's gone.
+    SINKHOLE,
     COUNT
 };
 
@@ -235,6 +237,8 @@ inline bool IsPipeType(BlockType type) {
 }
 // Blocks that face one of six ways (their `axis` holds the Face they point to): a
 // piston and its head.
+// Water goes down these and is gone (see Water.h).
+inline bool IsDrainType(BlockType type) { return type == BlockType::DRAIN || type == BlockType::SINKHOLE; }
 inline bool IsFacingType(BlockType type) { return type == BlockType::PISTON || type == BlockType::PISTON_HEAD || type == BlockType::EXTRACTOR; }
 
 // Things held in the inventory that aren't blocks: they can't be placed.
@@ -270,7 +274,7 @@ inline BlockType ResourceTypeOf(BlockType type) {
     case BlockType::PISTON_HEAD: return BlockType::AIR; // (part of the piston: gives nothing)
     case BlockType::SMELTER_LIT: return BlockType::SMELTER;
     case BlockType::SPRING:
-    case BlockType::DRAIN: return BlockType::STONE;
+    case BlockType::SINKHOLE: return BlockType::STONE;
     default: return type;
     }
 }

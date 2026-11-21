@@ -297,12 +297,15 @@ cut two blocks into the land, following its fall and turning gently, its bed nev
 rising (it cuts through small rises), with banks easing up to the ground either side.
 Its bed is sand over dirt, it's full of water a block deep from the start, and no
 trees grow in it or on its banks. It ends where it reaches the sea, or where it would
-have to cut more than seven blocks deep, at a **drain**: an iron grate in its bed
-that takes water away twice as fast as the spring gives it, so the river keeps
+have to cut more than seven blocks deep, at a **sinkhole**: a dark opening in wet
+rock in its bed (a natural drain) that takes water away twice as fast as the spring
+gives it, so the river keeps
 running from spring to drain without flooding the land beyond. Rivers make ready-made
 mill sites: a water wheel with one side in one turns for as long as the spring runs.
-Springs look like wet rock and drains like grates; breaking either gives stone and
-stops it. `/locate spring` (operators) says where the nearest spring is.
+Springs look like wet rock and sinkholes like a dark hole in it; breaking either
+gives stone and stops it. For your own builds, a **drain** (an iron grate, crafted from
+half an iron ingot and a stone) does what a sinkhole does, and can be picked up and
+moved. `/locate spring` and `/locate sinkhole` (operators) say where the nearest is.
 
 ### Dungeons
 
@@ -441,14 +444,14 @@ or in a puddle on dry ground. Puddles don't evaporate while it rains.
 
 **Springs** add water: each one puts up to 48 units a tick (three eighths of a block)
 into the open cells above and beside it that have room, shared between them, for as
-long as it's within the simulation area. **Drains** take it away: up to 96 units a
-tick from the cells above and beside them. Water that reaches the open sea goes: random
+long as it's within the simulation area. **Drains** and sinkholes take it away: up
+to 96 units a tick from the cells above and beside them. Water that reaches the open sea goes: random
 ticks take any water lying above the sea's surface on the open sea, so streams don't
 slowly raise it. `PumpTest` checks that a spring fills the cell above it at that rate
 and stops when it's full, keeps the water coming once there's somewhere for it to
-go, and stops when broken, and that a drain empties a cup at its rate; `BiomeTest`
+go, and stops when broken, and that a drain, or a sinkhole, empties a cup at its rate; `BiomeTest`
 that lakes overflow from springs, each in the ground, open above and below a lake's
-level, that rivers end in drains in their beds, and that their channels have sand
+level, that rivers end in sinkholes in their beds, and that their channels have sand
 beds with water over them.
 
 **Evaporation**: shallow puddles that have stopped flowing dry up. Every water tick,
@@ -1090,7 +1093,7 @@ sensor) and a quarter of an iron ingot, with a quarter of sand (water), glass
 The server runs it ten times a second (`Server::UpdateSignals`,
 `src/server/Signals.cpp`; the rules are in `src/world/Signals.h`), keeps every
 block's channels and saves them with the world (world format 11), and tells everyone
-about each block's channels and state as they change (`SignalInfo`, protocol 42).
+about each block's channels and state as they change (`SignalInfo`, protocol 43).
 `SignalTest` checks:
 
 - a lamp lights and goes out with a lever on its channel, and one on another channel
@@ -1183,6 +1186,7 @@ makes four.
 | Lamp | 1 glass + 0.5 planks |
 | 2 pipes | 1 stone |
 | Pump | 2 stone + 1 glass |
+| Drain | 0.5 iron ingot + 1 stone |
 | Sluice gate | 1 stone brick + 1 planks |
 | Pressure plate | 0.25 stone (pebbles will do) |
 | Spikes | 1 stone |
@@ -1303,7 +1307,7 @@ ones you're allowed to use:
 | `/give <block> [count] [player]`, `/give <tool> [player]` | operators | give survival blocks (`count` in blocks, default 64) or a tool |
 | `/fill <x1 y1 z1> <x2 y2 z2> <block>` | operators | fill a box with a block (`air` clears it; up to 32768 cells) |
 | `/pressurise <x y z>` | operators | fill the air network with a pipe or machine there with air |
-| `/locate spring` | operators | where the nearest spring (a lake's overflow) is |
+| `/locate <spring\|sinkhole>` | operators | where the nearest spring (a lake's overflow) or sinkhole (where its river ends) is |
 | `/horde [on\|off]` | anyone to ask; operators to set | whether tonight is a horde night, or start or end one |
 | `/summon <deer\|ghoul> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
 | `/creatures [clear]` | operators | count the creatures, or remove them all |

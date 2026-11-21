@@ -123,8 +123,8 @@ public:
     // below the ground and never rising, with banks easing up into the land. Its bed is
     // sand over dirt, it's generated full of water a block deep, and it ends, after at
     // most kMaxRiverLength blocks, where it reaches the sea or would have to cut deeper
-    // than kRiverMaxCut, at a drain (BlockType::DRAIN) in its bed that takes the
-    // water away. The drains in a chunk's columns, or none.
+    // than kRiverMaxCut, at a sinkhole (BlockType::SINKHOLE, a natural drain) in its
+    // bed that takes the water away. The drains in a chunk's columns, or none.
     std::vector<glm::ivec2> DrainsIn(int chunkX, int chunkZ) const;
     // Whether a column's middle is in a river's channel (within `margin` more of it).
     bool InRiver(int x, int z, float margin = 0.0f) const;
