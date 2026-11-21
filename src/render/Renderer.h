@@ -38,6 +38,7 @@ struct FrameParams {
     std::vector<glm::vec3> highlightOutline; // the block's shape (Block::OutlineSegments)
     std::vector<PlayerModel> players; // other players
     std::vector<CreatureModel> creatures;
+    std::vector<StructureModel> structures;
     std::vector<ParticleModel> particles; // bits of broken blocks
     std::vector<BoltModel> bolts;         // lightning
     std::vector<ArrowModel> arrows;
@@ -102,6 +103,7 @@ private:
     PlayerModels playerModels;
 public:
     bool LoadCreatureModels(std::string& error) { return playerModels.LoadCreatureModels(PlayerModels::kCreatureModelsPath, error); }
+    bool LoadStructureModels(std::string& error) { return playerModels.LoadStructureModels(PlayerModels::kStructureModelsPath, error); }
 private:
     TextureAtlas atlas;
 

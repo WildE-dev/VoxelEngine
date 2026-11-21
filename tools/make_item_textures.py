@@ -1829,6 +1829,83 @@ wwwwwwwwwwwwwwww
 """
 MINING_POST_COLOURS = {"w": (110, 78, 44), "W": (150, 110, 64), "i": (90, 92, 98), "k": (40, 30, 22), "I": (170, 172, 180), "y": (200, 160, 50)}
 
+STEEL_FRAME = """
+iiiiiiiiiiiiiiii
+iIIkkkkkkkkkkIIi
+iIIIkkkkkkkkIIIi
+ikIIIkkkkkkIIIki
+ikkIIIkkkkIIIkki
+ikkkIIIkkIIIkkki
+ikkkkIIIIIIkkkki
+ikkkkkIIIIkkkkki
+ikkkkkIIIIkkkkki
+ikkkkIIIIIIkkkki
+ikkkIIIkkIIIkkki
+ikkIIIkkkkIIIkki
+ikIIIkkkkkkIIIki
+iIIIkkkkkkkkIIIi
+iIIkkkkkkkkkkIIi
+iiiiiiiiiiiiiiii
+"""
+STEEL_FRAME_COLOURS = {"i": (70, 74, 82), "I": (150, 156, 168), "k": (34, 36, 40)}
+MACHINE_CASING = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIoIIIIIIIIIIoIi
+iIIIIIIIIIIIIIIi
+iIIIyyyyyyyyIIIi
+iIIIykkkkkkyIIIi
+iIIIykIIIIkyIIIi
+iIIIykIIIIkyIIIi
+iIIIykIIIIkyIIIi
+iIIIykIIIIkyIIIi
+iIIIykkkkkkyIIIi
+iIIIyyyyyyyyIIIi
+iIIIIIIIIIIIIIIi
+iIoIIIIIIIIIIoIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+MACHINE_CASING_COLOURS = {"i": (60, 64, 70), "I": (120, 126, 136), "o": (40, 40, 44), "y": (190, 150, 40), "k": (30, 30, 34)}
+FIRE_BRICK = """
+rrrRrrrRmrrrRrrr
+rRrrrRrrmRrrrRrr
+mmmmmmmmmmmmmmmm
+rrRmrrrrRrrrmrRr
+RrrmrRrrrrRrmrrr
+mmmmmmmmmmmmmmmm
+rrrRrrrRmrrrRrrr
+rRrrrRrrmRrrrRrr
+mmmmmmmmmmmmmmmm
+rrRmrrrrRrrrmrRr
+RrrmrRrrrrRrmrrr
+mmmmmmmmmmmmmmmm
+rrrRrrrRmrrrRrrr
+rRrrrRrrmRrrrRrr
+mmmmmmmmmmmmmmmm
+rrRmrrrrRrrrmrRr
+"""
+FIRE_BRICK_COLOURS = {"r": (130, 52, 36), "R": (156, 70, 48), "m": (200, 190, 170)}
+HAMMER = """
+................
+................
+...kkkkkkk......
+..kIIIIIIIk.....
+..kIIIIIIIk.....
+..kIIIIIIIk.....
+...kkkwkkk......
+......w.........
+......w.........
+......w.........
+......w.........
+......w.........
+......w.........
+.....www........
+................
+................
+"""
+HAMMER_COLOURS = {"k": (60, 62, 68), "I": (170, 174, 182), "w": (130, 90, 50)}
+
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
     draw("cooked_venison", VENISON, COOKED, seed=12)
@@ -1942,6 +2019,10 @@ def main():
     draw("outlet_side", FLUID_TANK_TOP, OUTLET_COLOURS | {"k": (30, 30, 34)}, jitter=4, seed=118)
     draw("mining_post_side", MINING_POST_SIDE, MINING_POST_COLOURS, jitter=4, seed=119)
     draw("mining_post_top", MINING_POST_TOP, MINING_POST_COLOURS, jitter=4, seed=120)
+    draw("steel_frame", STEEL_FRAME, STEEL_FRAME_COLOURS, jitter=4, seed=121)
+    draw("machine_casing", MACHINE_CASING, MACHINE_CASING_COLOURS, jitter=4, seed=122)
+    draw("fire_brick", FIRE_BRICK, FIRE_BRICK_COLOURS, jitter=6, seed=123)
+    draw("hammer", HAMMER, HAMMER_COLOURS, jitter=3, seed=124)
 
 
 if __name__ == "__main__":

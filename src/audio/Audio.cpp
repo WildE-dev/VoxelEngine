@@ -71,6 +71,11 @@ const char* DefaultMaterial(BlockType type) {
     case BlockType::REFINERY:
     case BlockType::ENGINE:
     case BlockType::FLUID_OUTLET:
+    case BlockType::STEEL_FRAME:
+    case BlockType::MACHINE_CASING:
+    case BlockType::FIRE_BRICK:
+    case BlockType::MULTIBLOCK:
+    case BlockType::MULTIBLOCK_PART:
     case BlockType::IRON_ORE: return "hard";
     case BlockType::SAND:
     case BlockType::SNOW: return "sand";

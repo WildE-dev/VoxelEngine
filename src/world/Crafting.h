@@ -95,6 +95,11 @@ inline const std::vector<Recipe>& Recipes() {
         { "smelter", "Smelter", { { BlockType::STONE_BRICK, 4 * kBlock }, { BlockType::IRON_INGOT, kBlock } }, BlockType::SMELTER, kBlock },
         { "item_pipe", "4 item pipes", { { BlockType::PLANKS, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::ITEM_PIPE, 4 * kBlock },
         { "mining_post", "Mining post", { { BlockType::PLANKS, 4 * kBlock }, { BlockType::IRON_INGOT, kBlock } }, BlockType::MINING_POST, kBlock },
+        // Multiblock structures (world/Multiblocks.h).
+        { "hammer", "Engineer's hammer", { { BlockType::IRON_INGOT, kBlock }, { BlockType::PLANKS, kBlock / 2 } }, BlockType::HAMMER, kBlock },
+        { "steel_frame", "4 steel frames", { { BlockType::STEEL_INGOT, kBlock }, { BlockType::IRON_INGOT, kBlock } }, BlockType::STEEL_FRAME, 4 * kBlock },
+        { "machine_casing", "2 machine casings", { { BlockType::STEEL_INGOT, kBlock / 2 }, { BlockType::STONE, 2 * kBlock } }, BlockType::MACHINE_CASING, 2 * kBlock },
+        { "fire_brick", "2 fire bricks", { { BlockType::STONE_BRICK, 2 * kBlock }, { BlockType::COAL, kBlock / 4 } }, BlockType::FIRE_BRICK, 2 * kBlock },
         // Oil and fluids (world/Fluids.h).
         { "fluid_pipe", "4 fluid pipes", { { BlockType::IRON_INGOT, kBlock / 4 }, { BlockType::GLASS, kBlock / 4 } }, BlockType::FLUID_PIPE, 4 * kBlock },
         { "fluid_tank", "Fluid tank", { { BlockType::IRON_INGOT, 2 * kBlock }, { BlockType::GLASS, kBlock } }, BlockType::FLUID_TANK, kBlock },

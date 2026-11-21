@@ -1125,14 +1125,12 @@ the kind of the first fluid put in, and nothing else until it's empty). A pipe h
 units and a tank 2,048 (a block of water is 128). Machines join a network from beside
 it; they aren't part of it, so they don't join what's on either side of them:
 
-- An **oil derrick** (an air machine) pumps crude oil up out of the shale under it (a
-  3 by 3 column, down to 110 blocks), 16 units every half second for 2 units of air,
-  into fluid pipes beside it with room for it. The well is the derrick's own: there's
-  no need to dig down. Each shale block gives about 4,000 units, then it's spent
-  (stone).
-- A **refinery** (an air machine) faces the way you look when you place it: it takes
-  crude oil from the pipes at its back and puts the same amount of **fuel** into the
-  pipes in front of it, up to 128 units a second, for 2 units of air each update.
+- An **oil derrick** structure (see [Multiblock structures](#multiblock-structures))
+  pumps crude oil up out of the shale under it into the fluid pipe at its crude port.
+  The well is its own: there's no need to dig down. Each shale block gives about 4,000
+  units, then it's spent (stone).
+- A **refinery** structure takes crude oil from the pipe at its crude port and puts the
+  same amount of **fuel** into the pipe at its fuel port.
 - An **engine** is part of an air network, like a compressor: it burns 16 units of
   fuel a second from the pipes beside it and adds 24 units of air a second to its
   network (more than a water wheel), so oil powers machines anywhere, no river needed.
@@ -1164,6 +1162,43 @@ shale records what's been drawn; then a drain under a cup of water, piped throug
 tank to an outlet, and checks the cup empties and the water comes out of the outlet.
 `SaveTest` checks what pipes and tanks hold is saved. `PumpTest` checks a drain with no
 room in its pipes takes nothing, and with room for 40 units takes just those.
+
+## Multiblock structures
+
+The bigger machines are **structures**: built from a pattern of blocks round a machine
+block, then formed by striking any block of it with an **engineer's hammer** (an iron
+ingot and half a planks: hold it and right-click). If the pattern isn't finished, the
+hammer says how many blocks are missing or wrong and where the first one is, and what
+it needs. Formed, the machine block becomes the structure's core and the rest its
+parts, drawn as one big model; its **ports** stay as the pipes they are, so you join
+air, fluids and items to it the usual way. Break any part of it and it comes apart,
+every block back as it was (the one you broke given up as usual). Patterns can face
+any of the four ways. `/form x y z` (operators) does what the hammer does.
+
+Each is 3 by 3 across. Layers from the ground up, with each layer's rows from back to
+front (`.` is anything):
+
+| Structure | Pattern | What it does |
+|---|---|---|
+| **Oil derrick** | `FFF / ADL / FFF`, then corner frames two high, then `.F. / FFF / .F.`, then one frame on top. F steel frame, D oil derrick, A its air pipe, L its crude pipe | pumps crude oil from the shale under its whole footprint, down to 160 blocks, into the fluid pipe at L: three times what a derrick block alone used to (48 units every half second, for 3 air) |
+| **Refinery** | `CAC / IRO / CCC`, then `TCT / CCC / TCT`, then `.C. / CCC / .C.`. C machine casing, T fluid tank, R refinery, A its air pipe, I crude in, O fuel out | crude oil in at I, fuel out at O, up to 96 units each update (three times as much), for 4 air |
+| **Blast furnace** | `BAB / BBB / BBB`, then `BHB / BSB / BBB`, then `BBB / B.B / BBB`. B fire bricks, S smelter (inside), A its air pipe, H its item pipe | smelts from the chests along its item pipe, a block every half second (four times a smelter), for 3 air |
+
+An oil derrick or refinery block on its own does nothing now: it's the heart of its
+structure. (A smelter still works alone; the blast furnace is its upgrade.) Their
+models are in `Resources/Data/structures.json`, in the same format as creatures (see
+[Editing blocks and creatures](#editing-blocks-and-creatures)): parts can be drawn
+only while it works (the refinery's flare, the furnace's glowing mouth), and its
+motions (the derrick's rocking beam) only move then.
+
+Recipes: 4 steel frames from a steel ingot and an iron ingot; 2 machine casings from
+half a steel ingot and 2 stone; 2 fire bricks from 2 stone bricks and a quarter of a
+coal. The patterns are in `src/world/Multiblocks.cpp`, and the server's side in
+`src/server/Multiblocks.cpp`. `FactoryTest` checks the hammer names the missing block
+of an unfinished blast furnace, forms the finished one (its pipes kept as ports), that
+it smelts four sand in well under the time a smelter takes, that breaking a part takes
+it apart, and that derrick and refinery structures pump crude and refine it into fuel
+for an engine.
 
 ## Signals
 
@@ -1415,6 +1450,7 @@ ones you're allowed to use:
 | `/give <block> [count] [player]`, `/give <tool> [player]` | operators | give survival blocks (`count` in blocks, default 64) or a tool |
 | `/fill <x1 y1 z1> <x2 y2 z2> <block>` | operators | fill a box with a block (`air` clears it; up to 32768 cells) |
 | `/pressurise <x y z>` | operators | fill the air network with a pipe or machine there with air |
+| `/form <x y z>` | operators | form the structure a block is part of, as the engineer's hammer does |
 | `/locate <spring\|sinkhole\|oil>` | operators | where the nearest spring (a lake's overflow), sinkhole (where its river ends) or oil is |
 | `/horde [on\|off]` | anyone to ask; operators to set | whether tonight is a horde night, or start or end one |
 | `/summon <deer\|wolf\|bat\|dwarf\|crossbow_dwarf\|dwarf_chief\|dwarf_miner> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
@@ -1555,8 +1591,9 @@ tame wolf; `parts`: the parts inside it). A model may set a `scale`, and `inheri
 another's colours and parts, adding its own: the dwarves all start from `dwarf_base`
 and change their colours and what they hold. The file explains itself at the top.
 
-Models of blocks drawn specially (the water wheel, shafts, gauges, pipes) are still
-in the code.
+**`structures.json`** has the multiblock structures' models (see
+[Multiblock structures](#multiblock-structures)), in the same format. Models of blocks
+drawn specially (the water wheel, shafts, gauges, pipes) are still in the code.
 
 `DataTest` checks the JSON reader (comments, trailing commas, an error's line), that a
 blocks file overrides just what it gives and loading another puts the rest back, and
@@ -1698,7 +1735,7 @@ src/
   world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
             Features, Dungeons, Noise, Lighting, Collision, Raycast, Mining,
             Breathing, Creatures, Crafting, Hunger, Armour, Power, Signals, Smelting, Fluids,
-            Dwarves, BlockData, Json
+            Dwarves, BlockData, Json, Multiblocks
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
             BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest, ChestTest, BedTest,

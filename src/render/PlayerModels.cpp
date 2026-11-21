@@ -356,25 +356,51 @@ void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const gl
             box(base, { 0.0f, spec.height * 0.5f, 0.0f }, { spec.halfWidth * 2.0f, spec.height, spec.halfWidth * 2.0f }, glm::vec3(0.6f));
             continue;
         }
-        const CreatureShape& shape = shapes[c.type];
-        static const glm::vec3 kAxes[3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
-        std::function<void(const glm::mat4&, const ShapePart&)> draw = [&](const glm::mat4& parent, const ShapePart& p) {
-            if (p.when == "tame" && !c.tame) return;
-            glm::mat4 f = glm::translate(parent, p.at);
-            if (p.rotate.x != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.x), kAxes[0]);
-            if (p.rotate.y != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.y), kAxes[1]);
-            if (p.rotate.z != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.z), kAxes[2]);
-            if (p.swingAxis >= 0) f = glm::rotate(f, swing * p.swing, kAxes[p.swingAxis]);
-            if (p.flapAxis >= 0) f = glm::rotate(f, std::sin(time * p.flapSpeed + c.feet.x) * p.flapAmount, kAxes[p.flapAxis]);
-            if (p.hasBox) {
-                if (p.glow) shader.SetUniform("glow", 1.0f);
-                box(f, p.box, p.size, p.color);
-                if (p.glow) shader.SetUniform("glow", 0.0f);
-            }
-            for (const auto& child : p.parts) draw(f, child);
-        };
-        const glm::mat4 scaled = glm::scale(base, glm::vec3(shape.scale));
-        for (const auto& p : shape.parts) draw(scaled, p);
+        DrawShape(shader, base, shapes[c.type], time, swing, 1.0f, c.tame, false, c.hurt, c.feet.x);
+    }
+}
+
+void PlayerModels::DrawShape(Shader& shader, const glm::mat4& base, const CreatureShape& shape, float time, float swing, float motion, bool tame, bool working,
+                             bool hurt, float phase) {
+    const glm::vec3 kRed(0.9f, 0.15f, 0.1f);
+    static const glm::vec3 kAxes[3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
+    std::function<void(const glm::mat4&, const ShapePart&)> draw = [&](const glm::mat4& parent, const ShapePart& p) {
+        if ((p.when == "tame" && !tame) || (p.when == "working" && !working) || (p.when == "idle" && working)) return;
+        glm::mat4 f = glm::translate(parent, p.at);
+        if (p.rotate.x != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.x), kAxes[0]);
+        if (p.rotate.y != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.y), kAxes[1]);
+        if (p.rotate.z != 0.0f) f = glm::rotate(f, glm::radians(p.rotate.z), kAxes[2]);
+        if (p.swingAxis >= 0) f = glm::rotate(f, swing * p.swing, kAxes[p.swingAxis]);
+        if (p.flapAxis >= 0) f = glm::rotate(f, std::sin(time * p.flapSpeed + phase) * p.flapAmount * motion, kAxes[p.flapAxis]);
+        if (p.hasBox) {
+            if (p.glow) shader.SetUniform("glow", 1.0f);
+            shader.SetUniform("model", glm::scale(glm::translate(f, p.box), p.size));
+            shader.SetUniform("color", hurt ? glm::mix(p.color, kRed, 0.55f) : p.color);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+            if (p.glow) shader.SetUniform("glow", 0.0f);
+        }
+        for (const auto& child : p.parts) draw(f, child);
+    };
+    const glm::mat4 scaled = glm::scale(base, glm::vec3(shape.scale));
+    for (const auto& p : shape.parts) draw(scaled, p);
+}
+
+void PlayerModels::DrawStructures(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<StructureModel>& structures, float time) {
+    if (structures.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 0.0f);
+    shader.SetUniform("textured", 0.0f);
+    glBindVertexArray(vao);
+    for (const auto& s : structures) {
+        auto it = structureShapes.find(s.id);
+        if (it == structureShapes.end()) continue;
+        shader.SetUniform("lightLevels", s.light);
+        // Its frame: the pattern's corner, turned about its middle column.
+        const glm::mat4 base = glm::translate(glm::rotate(glm::translate(glm::mat4(1.0f), s.origin + glm::vec3(1.5f, 0.0f, 1.5f)), glm::radians(-90.0f * s.turn), glm::vec3(0, 1, 0)),
+                                              glm::vec3(-1.5f, 0.0f, -1.5f));
+        DrawShape(shader, base, it->second, time, 0.0f, s.working ? 1.0f : 0.0f, false, s.working, false, 0.0f);
     }
 }
 
@@ -436,10 +462,9 @@ bool ReadPart(const Json::Value& v, const Palette& palette, PlayerModels::ShapeP
 
 } // namespace
 
-bool PlayerModels::LoadCreatureModels(const std::string& path, std::string& error) {
+bool PlayerModels::LoadShapes(const std::string& path, const std::vector<std::string>& names, std::map<std::string, CreatureShape>& out, std::string& error) {
     Json::Value root;
-    shapes.assign(static_cast<size_t>(CreatureType::Count), CreatureShape{});
-    haveShape.assign(static_cast<size_t>(CreatureType::Count), false);
+    out.clear();
     if (!Json::ParseFile(path, root, error)) return false;
     if (!root.IsObject()) {
         error = path + ": the file should be one { ... } of models";
@@ -464,9 +489,13 @@ bool PlayerModels::LoadCreatureModels(const std::string& path, std::string& erro
             if (const auto* parts = m->Find("parts"); parts && parts->IsArray()) partLists.push_back(parts);
             return true;
         };
-    for (int t = 0; t < static_cast<int>(CreatureType::Count); t++) {
-        const std::string id = SpecOf(static_cast<CreatureType>(t)).id;
-        if (!root.Find(id)) continue; // (drawn as a box)
+    // The models asked for (all of them, if none named; one only there to inherit from
+    // isn't built by itself).
+    std::vector<std::string> wanted = names;
+    if (wanted.empty())
+        for (const auto& [id, value] : root.object) wanted.push_back(id);
+    for (const auto& id : wanted) {
+        if (!root.Find(id)) continue;
         Palette palette;
         std::vector<const Json::Value*> partLists;
         float scale = 1.0f;
@@ -479,8 +508,25 @@ bool PlayerModels::LoadCreatureModels(const std::string& path, std::string& erro
                 if (!ReadPart(v, palette, p, path + ": " + id, error)) return false;
                 shape.parts.push_back(std::move(p));
             }
-        shapes[t] = std::move(shape);
+        out[id] = std::move(shape);
+    }
+    return true;
+}
+
+bool PlayerModels::LoadCreatureModels(const std::string& path, std::string& error) {
+    shapes.assign(static_cast<size_t>(CreatureType::Count), CreatureShape{});
+    haveShape.assign(static_cast<size_t>(CreatureType::Count), false);
+    std::map<std::string, CreatureShape> all;
+    std::vector<std::string> ids;
+    for (int t = 0; t < static_cast<int>(CreatureType::Count); t++) ids.push_back(SpecOf(static_cast<CreatureType>(t)).id);
+    if (!LoadShapes(path, ids, all, error)) return false;
+    for (int t = 0; t < static_cast<int>(CreatureType::Count); t++) {
+        auto it = all.find(SpecOf(static_cast<CreatureType>(t)).id);
+        if (it == all.end()) continue; // (drawn as a box)
+        shapes[t] = it->second;
         haveShape[t] = true;
     }
     return true;
 }
+
+bool PlayerModels::LoadStructureModels(const std::string& path, std::string& error) { return LoadShapes(path, {}, structureShapes, error); }

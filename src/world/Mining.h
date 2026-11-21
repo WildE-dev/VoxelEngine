@@ -140,6 +140,11 @@ inline float DefaultHardness(BlockType type) {
     case BlockType::OIL_SHALE: return 4.0f;
     case BlockType::TAR: return 1.0f;
     case BlockType::MINING_POST: return 1.5f;
+    case BlockType::STEEL_FRAME:
+    case BlockType::MULTIBLOCK:
+    case BlockType::MULTIBLOCK_PART: return 3.0f;
+    case BlockType::MACHINE_CASING: return 4.0f;
+    case BlockType::FIRE_BRICK: return 5.0f;
     case BlockType::FLUID_PIPE:
     case BlockType::FLUID_TANK:
     case BlockType::OIL_DERRICK:
@@ -169,6 +174,11 @@ inline Tool DefaultBestTool(BlockType type) {
     case BlockType::REFINERY:
     case BlockType::ENGINE:
     case BlockType::FLUID_OUTLET:
+    case BlockType::STEEL_FRAME:
+    case BlockType::MACHINE_CASING:
+    case BlockType::FIRE_BRICK:
+    case BlockType::MULTIBLOCK:
+    case BlockType::MULTIBLOCK_PART:
     case BlockType::COAL_ORE:
     case BlockType::IRON_ORE:
     case BlockType::STONE_BRICK:

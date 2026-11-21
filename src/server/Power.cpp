@@ -8,6 +8,7 @@
 #include "server/Server.h"
 #include "server/ServerWorld.h"
 #include "world/Crafting.h"
+#include "world/Multiblocks.h"
 #include "world/Smelting.h"
 
 namespace {
@@ -83,6 +84,18 @@ void Server::UpdatePower() {
     prune(smelters);
     prune(workers);
     prune(engines);
+    // Formed structures no longer whole come apart; the rest are found by their air.
+    std::unordered_map<glm::ivec3, glm::ivec3, Coords::IVec3Hash> structureAtAir;
+    for (const auto& pos : machineList) {
+        const Block b = blockAt(pos);
+        if (b.type != BlockType::MULTIBLOCK) continue;
+        if (!StructureWhole(pos, b)) {
+            TakeApart(pos);
+            continue;
+        }
+        glm::ivec3 port;
+        if (Multiblocks::PortOf(pos, b, Multiblocks::Role::AirPort, port)) structureAtAir[port] = pos;
+    }
     BuildFluidNets();
 
     // A piston's head with no piston behind it (broken, or turned) goes too.
@@ -134,7 +147,11 @@ void Server::UpdatePower() {
     networks.clear();
     networkOf.clear();
     std::vector<glm::ivec3> members;
-    for (const auto& start : machineList) {
+    // (Traced from every machine on a network, and from structures' air ports: a
+    // structure isn't part of the network itself.)
+    std::vector<glm::ivec3> starts = machineList;
+    for (const auto& [port, core] : structureAtAir) starts.push_back(port);
+    for (const auto& start : starts) {
         if (networkOf.count(start) || !Power::IsAirPart(blockAt(start).type)) continue;
         const int index = static_cast<int>(networks.size());
         networks.emplace_back();
@@ -150,10 +167,11 @@ void Server::UpdatePower() {
             }
 
         std::vector<std::pair<glm::ivec3, Drill*>> netDrills;
-        std::vector<glm::ivec3> netPumps, netPistons, netSmelters, netWorkers;
+        std::vector<glm::ivec3> netPumps, netPistons, netSmelters, netWorkers, netStructures;
         for (const auto& m : members) {
             auto a = air.find(m);
             if (a != air.end()) net.air += a->second;
+            if (auto st = structureAtAir.find(m); st != structureAtAir.end()) netStructures.push_back(st->second);
             switch (blockAt(m).type) {
             case BlockType::AIR_PIPE: net.pipes++; break;
             case BlockType::AIR_TANK: net.tanks++; break;
@@ -287,6 +305,26 @@ void Server::UpdatePower() {
             if (now >= w.next) {
                 if (net.Pressure() < Power::kMinPressure || net.air < cost) w.state = Power::DrillState::NoPressure;
                 else if (work()) {
+                    net.air -= cost;
+                    w.next = now + interval;
+                    w.last = now;
+                }
+                else w.next = now + 0.5;
+            }
+            if (now - w.last < interval * 1.5) w.state = Power::DrillState::Working;
+            if (w.state == Power::DrillState::Working) net.working++;
+        }
+
+        // Formed structures, each at its own pace (the air comes in at their air port).
+        for (const auto& core : netStructures) {
+            Worker& w = workers[core];
+            const Block b = blockAt(core);
+            const Multiblocks::Kind kind = Multiblocks::KindOf(b);
+            const double interval = kind == Multiblocks::Kind::Refinery ? Power::kInterval * 0.9 : kind == Multiblocks::Kind::OilDerrick ? Fluids::kDerrickInterval : kFurnaceInterval;
+            const float cost = kind == Multiblocks::Kind::Refinery ? 4.0f : 3.0f;
+            if (now >= w.next) {
+                if (net.Pressure() < Power::kMinPressure || net.air < cost) w.state = Power::DrillState::NoPressure;
+                else if (RunStructure(core, b, w)) {
                     net.air -= cost;
                     w.next = now + interval;
                     w.last = now;
@@ -553,10 +591,16 @@ void Server::BuildFluidNets() {
         net.amount = std::min(net.amount, net.capacity);
     };
     for (const auto& pos : machineList) {
-        const BlockType t = blockAt(pos).type;
+        const Block b = blockAt(pos);
+        const BlockType t = b.type;
         if (t == BlockType::FLUID_TANK) trace(pos);
         else if (Fluids::IsMachine(t))
             for (const auto& d : kFaces) trace(pos + d);
+        else if (t == BlockType::MULTIBLOCK) // (a structure's fluid ports)
+            for (const auto role : { Multiblocks::Role::FluidIn, Multiblocks::Role::FluidOut }) {
+                glm::ivec3 port;
+                if (Multiblocks::PortOf(pos, b, role, port)) trace(port);
+            }
     }
 }
 
@@ -609,6 +653,9 @@ void Server::StoreFluids() {
 }
 
 bool Server::PumpOil(const glm::ivec3& pos, Worker& w) {
+    // (A lone derrick block does nothing now: it's built into an oil derrick structure.)
+    w.state = Power::DrillState::Blocked;
+    return false;
     FluidNet* out = FluidNetBeside(pos, Fluids::Kind::Crude, false);
     if (!out || out->Room() < Fluids::kDerrickUnits) {
         w.state = Power::DrillState::NoChest; // (nowhere to put it)
@@ -635,6 +682,9 @@ bool Server::PumpOil(const glm::ivec3& pos, Worker& w) {
 }
 
 bool Server::Refine(const glm::ivec3& pos, const Block& refinery, Worker& w) {
+    // (Likewise a lone refinery block: it's built into a refinery structure.)
+    w.state = Power::DrillState::Blocked;
+    return false;
     FluidNet* in = FluidNetAt(pos - refinery.Facing());
     FluidNet* out = FluidNetAt(pos + refinery.Facing());
     if (!in || !out || in == out) {
@@ -749,6 +799,9 @@ void Server::SendMachines() {
                 world->GetBlock(pos.x, pos.y, pos.z, t);
                 info.type = static_cast<uint8_t>(t.type);
                 info.state = static_cast<uint8_t>(wk->second.state);
+                glm::ivec3 port;
+                if (t.type == BlockType::MULTIBLOCK && Multiblocks::PortOf(pos, t, Multiblocks::Role::AirPort, port))
+                    if (auto n = networkOf.find(port); n != networkOf.end()) info.pressure = ToByte(networks[n->second].Pressure());
             }
             else if (Block g; world->GetBlock(pos.x, pos.y, pos.z, g) && g.type == BlockType::PRESSURE_GAUGE) {
                 // The pressure of what it's fixed to.
@@ -807,6 +860,28 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
                       net->amount > 0 ? Fluids::Name(net->kind) : " (empty)");
         return std::string(line);
     };
+    if (b.type == BlockType::MULTIBLOCK || b.type == BlockType::MULTIBLOCK_PART) {
+        glm::ivec3 core;
+        Block cb;
+        if (!CoreOf(pos, core) || !world->GetBlock(core.x, core.y, core.z, cb)) return;
+        const Multiblocks::Pattern& p = Multiblocks::PatternOf(Multiblocks::KindOf(cb));
+        const Worker w = workers.count(core) ? workers[core] : Worker{};
+        text = std::string(p.name) + " (a structure): ";
+        switch (w.state) {
+        case Power::DrillState::Working: text += "working. "; break;
+        case Power::DrillState::NoPressure: text += "waiting for air pressure (at its air pipe). "; break;
+        case Power::DrillState::NoChest: text += "its ports need connecting (pipes, or chests along its item pipe). "; break;
+        case Power::DrillState::Done: text += "no oil shale under it. "; break;
+        default: text += Multiblocks::KindOf(cb) == Multiblocks::Kind::BlastFurnace ? "nothing to smelt. " : "idle (nothing in, or no room out). ";
+        }
+        glm::ivec3 port;
+        if (Multiblocks::PortOf(core, cb, Multiblocks::Role::AirPort, port)) {
+            auto n = networkOf.find(port);
+            std::snprintf(line, sizeof line, "Air pressure %d%%.", n != networkOf.end() ? int(std::lround(networks[n->second].Pressure() * 100)) : 0);
+            text += line;
+        }
+        return SendChat(client, net::ChatMessage::Kind::Info, text);
+    }
     if (Fluids::IsPart(b.type)) {
         text = std::string(b.type == BlockType::FLUID_TANK ? "Fluid tank. " : "Fluid pipe. ") + describeFluid(FluidNetAt(pos));
         return SendChat(client, net::ChatMessage::Kind::Info, text);
@@ -891,6 +966,11 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
             if (const FluidNet* fn = FluidNetAt(pos - b.Facing())) return SendChat(client, net::ChatMessage::Kind::Info, text + describeFluid(fn));
         }
         else if (b.type == BlockType::OIL_DERRICK || b.type == BlockType::REFINERY) {
+            text += b.type == BlockType::OIL_DERRICK ? "Oil derrick: build the derrick structure round it (steel frames), then strike it with an engineer's hammer. "
+                                                     : "Refinery: build the refinery structure round it (machine casings and fluid tanks), then strike it with an engineer's hammer. ";
+            return SendChat(client, net::ChatMessage::Kind::Info, text);
+        }
+        else if (false) {
             const Worker w = workers.count(pos) ? workers[pos] : Worker{};
             if (b.type == BlockType::OIL_DERRICK)
                 text += w.state == Power::DrillState::Working ? "Oil derrick: pumping crude oil. " : w.state == Power::DrillState::NoPressure ? "Oil derrick: waiting for air pressure. "

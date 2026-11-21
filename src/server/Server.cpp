@@ -788,6 +788,8 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
         }
         client.mining = false;
     }
+    // Part of a formed structure: it comes apart, and the block broken is what it was.
+    if (block.type == BlockType::MULTIBLOCK || block.type == BlockType::MULTIBLOCK_PART) block = TakeApart(pos);
     // Breaking a waterlogged block leaves its water behind.
     world->SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
     if (IsStorageType(block.type)) RemoveChest(pos, &client);
@@ -1105,6 +1107,9 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
         world->SetBlock(pos.x, pos.y, pos.z, flipped);
         return;
     }
+    // An engineer's hammer in hand: form the structure this block is part of.
+    if (client.heldBlock == BlockType::HAMMER && (Creative(client) || client.resources[static_cast<size_t>(BlockType::HAMMER)] >= Block::kUnitsPerBlock))
+        return TryForm(&client, pos);
     // A filter pipe or a crafter: set to what's in hand.
     if (block.type == BlockType::FILTER_PIPE || block.type == BlockType::CRAFTER) {
         const BlockType held = client.heldBlock == BlockType::AIR ? BlockType::AIR : ResourceTypeOf(client.heldBlock);

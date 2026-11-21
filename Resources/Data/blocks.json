@@ -104,5 +104,11 @@
   "refinery": { "name": "Refinery", "textures": { "top": "refinery_out", "bottom": "refinery_in", "side": "refinery_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
   "engine": { "name": "Engine", "textures": { "top": "engine_top", "bottom": "engine_top", "side": "engine_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
   "fluid_outlet": { "name": "Fluid outlet", "textures": { "top": "outlet_face", "bottom": "outlet_back", "side": "outlet_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
-  "mining_post": { "name": "Mining post", "textures": { "top": "mining_post_top", "bottom": "planks", "side": "mining_post_side" }, "hardness": 1.5, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }
+  "mining_post": { "name": "Mining post", "textures": { "top": "mining_post_top", "bottom": "planks", "side": "mining_post_side" }, "hardness": 1.5, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" },
+  "steel_frame": { "name": "Steel frame", "textures": { "all": "steel_frame" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
+  "machine_casing": { "name": "Machine casing", "textures": { "all": "machine_casing" }, "hardness": 4, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
+  "fire_brick": { "name": "Fire bricks", "textures": { "all": "fire_brick" }, "hardness": 5, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
+  "hammer": { "name": "Engineer's hammer", "textures": { "all": "hammer" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" },
+  "multiblock": { "name": "Structure", "textures": { "all": "machine_casing" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
+  "multiblock_part": { "name": "Structure", "textures": { "all": "machine_casing" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }
 }

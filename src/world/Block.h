@@ -251,6 +251,16 @@ enum class BlockType : uint8_t {
     // pay) and up to two dwarves come to work it, digging the ore within reach of it
     // and putting it in the post (see Server::UpdateMiningPosts).
     MINING_POST,
+    // Multiblock structures (see world/Multiblocks.h): building blocks for them (steel
+    // frames, machine casings, fire bricks); the engineer's hammer that forms them (an
+    // item, held); and what a formed structure is made of: its core (drawn as the whole
+    // structure's model) and its other parts (solid, drawn as nothing).
+    STEEL_FRAME,
+    MACHINE_CASING,
+    FIRE_BRICK,
+    HAMMER,
+    MULTIBLOCK,
+    MULTIBLOCK_PART,
     COUNT
 };
 // Blocks that hold things like a chest (opened, filled, emptied, broken open).
@@ -258,7 +268,10 @@ inline bool IsStorageType(BlockType t) { return t == BlockType::CHEST || t == Bl
 
 // Solid blocks drawn by a model of their own (turning wheels and shafts), and pipes
 // drawn as thin tubes: neither hides what's beside it or blocks light.
-inline bool IsModelType(BlockType type) { return type == BlockType::WATER_WHEEL || type == BlockType::SHAFT || type == BlockType::PRESSURE_GAUGE; }
+inline bool IsModelType(BlockType type) {
+    return type == BlockType::WATER_WHEEL || type == BlockType::SHAFT || type == BlockType::PRESSURE_GAUGE || type == BlockType::MULTIBLOCK ||
+           type == BlockType::MULTIBLOCK_PART;
+}
 inline bool IsPipeType(BlockType type) {
     return type == BlockType::PIPE || type == BlockType::AIR_PIPE || type == BlockType::ITEM_PIPE || type == BlockType::FILTER_PIPE || type == BlockType::FLUID_PIPE;
 }
@@ -276,7 +289,7 @@ inline bool IsItemType(BlockType type) {
     return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE || type == BlockType::COAL ||
            type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD ||
            type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH || type == BlockType::BOAT ||
-           type == BlockType::STEEL_INGOT;
+           type == BlockType::STEEL_INGOT || type == BlockType::HAMMER;
 }
 
 inline bool IsPlantType(BlockType type) {
@@ -306,6 +319,8 @@ inline BlockType ResourceTypeOf(BlockType type) {
     case BlockType::SPRING:
     case BlockType::SINKHOLE:
     case BlockType::OIL_SHALE: return BlockType::STONE;
+    case BlockType::MULTIBLOCK:
+    case BlockType::MULTIBLOCK_PART: return BlockType::AIR; // (taking it apart gives back what it was built of)
     default: return type;
     }
 }

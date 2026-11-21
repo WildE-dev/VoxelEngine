@@ -326,6 +326,12 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* ENGINE      */ {{ "engine_top", "engine_top", "engine_side", "engine_side", "engine_side", "engine_side" }},
     /* FLUID_OUTLET */ {{ "outlet_face", "outlet_back", "outlet_side", "outlet_side", "outlet_side", "outlet_side" }},
     /* MINING_POST */ {{ "mining_post_top", "planks", "mining_post_side", "mining_post_side", "mining_post_side", "mining_post_side" }},
+    /* STEEL_FRAME */ {{ "steel_frame", "steel_frame", "steel_frame", "steel_frame", "steel_frame", "steel_frame" }},
+    /* MACHINE_CASING */ {{ "machine_casing", "machine_casing", "machine_casing", "machine_casing", "machine_casing", "machine_casing" }},
+    /* FIRE_BRICK  */ {{ "fire_brick", "fire_brick", "fire_brick", "fire_brick", "fire_brick", "fire_brick" }},
+    /* HAMMER      */ {{ "hammer", "hammer", "hammer", "hammer", "hammer", "hammer" }},
+    /* MULTIBLOCK  */ {{ "machine_casing", "machine_casing", "machine_casing", "machine_casing", "machine_casing", "machine_casing" }}, // (drawn as a model)
+    /* MULTIBLOCK_PART */ {{ "machine_casing", "machine_casing", "machine_casing", "machine_casing", "machine_casing", "machine_casing" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -368,6 +374,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "item_pipe", "smelter", "smelter_lit", "spring", "steel_ingot",
     "extractor", "filter_pipe", "crafter", "harvester", "drain", "sinkhole", "pressure_gauge",
     "oil_shale", "tar", "fluid_pipe", "fluid_tank", "oil_derrick", "refinery", "engine", "fluid_outlet", "mining_post",
+    "steel_frame", "machine_casing", "fire_brick", "hammer", "multiblock", "multiblock_part",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");
@@ -817,7 +824,7 @@ void Block::Shrink() {
 }
 
 int Block::ResourceUnits() const {
-    if (IsAir() || IsLiquid() || type == BlockType::PISTON_HEAD) return 0;
+    if (IsAir() || IsLiquid() || type == BlockType::PISTON_HEAD || type == BlockType::MULTIBLOCK || type == BlockType::MULTIBLOCK_PART) return 0;
     if (type == BlockType::PEBBLES) return kPebbleUnits;
     if (IsFullBlock() || !CanChisel()) return kUnitsPerBlock;
     if (IsStepped()) {
@@ -868,6 +875,8 @@ bool Block::CanChisel() const {
     case BlockType::REFINERY:
     case BlockType::ENGINE:
     case BlockType::FLUID_OUTLET:
+    case BlockType::MULTIBLOCK:
+    case BlockType::MULTIBLOCK_PART:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
     case BlockType::GLASS:

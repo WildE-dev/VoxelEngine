@@ -441,6 +441,22 @@ private:
     // Puts each network's fluid back into its parts (shared by size).
     void StoreFluids();
     bool PumpOil(const glm::ivec3& pos, Worker& w);
+    // Multiblock structures (world/Multiblocks.h; the code is in Multiblocks.cpp).
+    // Striking a block with the hammer: forms the structure it's part of, if it's
+    // complete (else says what's missing). Taking one apart (any of it broken): every
+    // block back as it was; what the block at `pos` was.
+    void TryForm(ClientState* client, const glm::ivec3& pos); // (client: who's told; nobody: the log)
+    Block TakeApart(const glm::ivec3& pos);
+    // The core of the formed structure a block is part of (false: none).
+    bool CoreOf(const glm::ivec3& pos, glm::ivec3& core) const;
+    // Whether a formed structure is still whole (its parts all there).
+    bool StructureWhole(const glm::ivec3& core, const Block& block) const;
+    // A structure's turn (it has the air): pumping, refining or smelting.
+    bool RunStructure(const glm::ivec3& core, const Block& block, Worker& w);
+    static constexpr int kStructureWellDepth = 160;
+    static constexpr int kStructureCrude = 48;     // a derrick structure's draw every half second
+    static constexpr int kStructureRefine = 96;    // a refinery's every update
+    static constexpr double kFurnaceInterval = 0.5;
     bool Refine(const glm::ivec3& pos, const Block& refinery, Worker& w);
     std::unordered_map<glm::ivec3, Compressor, Coords::IVec3Hash> compressors;
     std::unordered_map<glm::ivec3, Power::DrillState, Coords::IVec3Hash> pumpStates;

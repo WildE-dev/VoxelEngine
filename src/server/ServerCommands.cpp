@@ -97,6 +97,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Operator, "/tp <x> <y> <z> | /tp <player> | /tp <player> <x> <y> <z> - teleport (~ for relative)" },
     { Level::Operator, "/save - save the world now" },
     { Level::Operator, "/pressurise <x y z> - fill the air network there with air" },
+    { Level::Operator, "/form <x y z> - form the structure a block is part of (as the engineer's hammer does)" },
     { Level::Operator, "/kick <player> [reason] - remove a player" },
     { Level::Operator, "/op <player>, /deop <player> - make or unmake an operator" },
     { Level::Operator, "/noclip [player] - fly through blocks, on or off (operators may also use the laser, L)" },
@@ -122,7 +123,7 @@ constexpr HelpLine kHelp[] = {
 Level RequiredLevel(const std::string& command, size_t argumentCount) {
     if (command == "stop") return Level::Console;
     if (command == "tp" || command == "teleport" || command == "save" || command == "kick" || command == "op" || command == "deop" ||
-        command == "noclip" || command == "give" || command == "fill" || command == "pressurise" || command == "locate" || command == "summon" || command == "creatures")
+        command == "noclip" || command == "give" || command == "fill" || command == "pressurise" || command == "locate" || command == "form" || command == "summon" || command == "creatures")
         return Level::Operator;
     if ((command == "time" || command == "weather" || command == "gamemode" || command == "pvp" || command == "food" || command == "horde") && argumentCount > 0)
         return Level::Operator;
@@ -368,6 +369,13 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
                     if (IsStorageType(type)) chests[{ x, y, z }] = ChestItems{};
                 }
         reply(Kind::Info, "Filled " + std::to_string(size.x * size.y * size.z) + " cells with " + BlockId(type));
+    }
+    else if (command == "form") {
+        double v[3];
+        if (words.size() != 4) return usage("/form <x y z>");
+        for (int i = 0; i < 3; i++)
+            if (!ParseNumber(words[1 + i], v[i]) || std::abs(v[i]) > 1e7) return usage("/form <x y z>");
+        TryForm(sender, glm::ivec3(glm::floor(glm::dvec3(v[0], v[1], v[2]))));
     }
     else if (command == "pressurise") {
         double v[3];

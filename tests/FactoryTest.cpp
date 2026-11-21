@@ -16,7 +16,10 @@
 //    and an engine burns the fuel to fill its own air network,
 //  - a drain takes water into fluid pipes, and an outlet lets it out elsewhere,
 //  - a mining post hires dwarf miners only while it holds pay, and they dig the ore
-//    in reach into it, paid a quarter of a block of food for each.
+//    in reach into it, paid a quarter of a block of food for each,
+//  - multiblock structures: the hammer says what an unfinished one lacks and forms a
+//    finished one; a blast furnace smelts fast from the chest at its item port;
+//    breaking a part takes it apart; an oil derrick structure pumps crude.
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -266,32 +269,56 @@ int main() {
         Check(pump(5.0, [&] { return Has(a.client, "Pressure gauge. Air pressure"); }), "right-clicking it describes the network");
 
         std::cout << "Oil" << std::endl;
-        // Oil shale under a derrick; fluid pipes to a tank (crude); a refinery (facing
-        // +x) from that tank into another (fuel); an engine on that, with an air
-        // network of its own and a gauge on it. The derrick and refinery share air.
-        server.QueueConsoleCommand("tp Builder 34.5 0 28.5");
-        pump(10.0, [&] { return a.feet.z < 29.0f; });
-        const glm::ivec3 derrick{ 31, 0, 31 }, crude{ 34, 0, 31 }, refinery{ 35, 0, 31 }, fuel{ 36, 0, 31 }, engine{ 37, 0, 31 }, engineGauge{ 37, 2, 31 };
-        fill({ 30, -12, 30 }, { 32, -10, 32 }, "oil_shale");
-        fill(derrick, derrick, "oil_derrick");
-        fill({ 32, 0, 31 }, { 33, 0, 31 }, "fluid_pipe");
-        fill(crude, crude, "fluid_tank");
-        a.client.PlaceBlock(refinery, BlockType::REFINERY, 8, 0);
-        fill(fuel, fuel, "fluid_tank");
-        fill(engine, engine, "engine");
-        fill({ 31, 1, 31 }, { 35, 1, 31 }, "air_pipe");
-        fill({ 37, 1, 31 }, { 37, 1, 31 }, "air_pipe");
-        a.client.PlaceBlock(engineGauge, BlockType::PRESSURE_GAUGE, 8, 2);
-        Check(pump(10.0, [&] { return blockAt(engine) == BlockType::ENGINE && blockAt(refinery) == BlockType::REFINERY && blockAt(engineGauge) == BlockType::PRESSURE_GAUGE; }),
-              "a derrick over oil shale, pipes to a crude tank, a refinery into a fuel tank, an engine with its own air pipe and gauge");
+        // An oil derrick structure over oil shale; its crude into a tank; a refinery
+        // structure taking crude from that tank and putting fuel into another; an engine
+        // on that, with an air network of its own and a gauge on it. The derrick and the
+        // refinery share air.
         auto machine = [&](const glm::ivec3& p) -> const net::MachineInfo* {
             for (const auto& m : a.client.GetMachines())
                 if (m.pos == p) return &m;
             return nullptr;
         };
+        server.QueueConsoleCommand("tp Builder 33.5 0 27.5");
+        pump(10.0, [&] { return a.feet.z < 28.0f; });
+        const glm::ivec3 crude{ 33, 0, 31 }, fuel{ 37, 0, 31 }, engine{ 38, 0, 31 }, engineGauge{ 38, 2, 31 };
+        fill({ 30, -12, 30 }, { 32, -10, 32 }, "oil_shale");
+        // The derrick (pattern corner 30 0 30).
+        fill({ 30, 0, 30 }, { 32, 0, 30 }, "steel_frame");
+        fill({ 30, 0, 32 }, { 32, 0, 32 }, "steel_frame");
+        fill({ 30, 0, 31 }, { 30, 0, 31 }, "air_pipe");
+        fill({ 31, 0, 31 }, { 31, 0, 31 }, "oil_derrick");
+        fill({ 32, 0, 31 }, { 32, 0, 31 }, "fluid_pipe");
+        for (const glm::ivec3 c : { glm::ivec3(30, 1, 30), glm::ivec3(32, 1, 30), glm::ivec3(30, 1, 32), glm::ivec3(32, 1, 32) }) fill(c, c + glm::ivec3(0, 1, 0), "steel_frame");
+        fill({ 31, 3, 30 }, { 31, 3, 32 }, "steel_frame");
+        fill({ 30, 3, 31 }, { 32, 3, 31 }, "steel_frame");
+        fill({ 31, 4, 31 }, { 31, 4, 31 }, "steel_frame");
+        fill(crude, crude, "fluid_tank");
+        // The refinery (pattern corner 34 0 30).
+        server.QueueConsoleCommand("fill 34 0 30 36 2 32 machine_casing");
+        for (const glm::ivec3 t : { glm::ivec3(34, 1, 30), glm::ivec3(36, 1, 30), glm::ivec3(34, 1, 32), glm::ivec3(36, 1, 32) }) fill(t, t, "fluid_tank");
+        for (const glm::ivec3 c : { glm::ivec3(34, 2, 30), glm::ivec3(36, 2, 30), glm::ivec3(34, 2, 32), glm::ivec3(36, 2, 32) }) fill(c, c, "air");
+        fill({ 35, 0, 30 }, { 35, 0, 30 }, "air_pipe");
+        fill({ 34, 0, 31 }, { 34, 0, 31 }, "fluid_pipe");
+        fill({ 35, 0, 31 }, { 35, 0, 31 }, "refinery");
+        fill({ 36, 0, 31 }, { 36, 0, 31 }, "fluid_pipe");
+        fill(fuel, fuel, "fluid_tank");
+        fill(engine, engine, "engine");
+        fill({ 38, 1, 31 }, { 38, 1, 31 }, "air_pipe");
+        // Air to the derrick's and refinery's air pipes.
+        fill({ 29, 0, 29 }, { 29, 0, 31 }, "air_pipe");
+        fill({ 30, 0, 29 }, { 35, 0, 29 }, "air_pipe");
+        a.client.PlaceBlock(engineGauge, BlockType::PRESSURE_GAUGE, 8, 2);
+        Check(pump(10.0, [&] { return blockAt(engineGauge) == BlockType::PRESSURE_GAUGE && blockAt({ 35, 0, 31 }) == BlockType::REFINERY && blockAt({ 31, 4, 31 }) == BlockType::STEEL_FRAME; }),
+              "an oil derrick and a refinery built, tanks between them, an engine with its own air pipe and gauge");
+        a.held = BlockType::HAMMER;
+        wait(0.3);
+        a.client.UseBed({ 31, 0, 31 });
+        a.client.UseBed({ 35, 0, 31 });
+        Check(pump(5.0, [&] { return blockAt({ 31, 0, 31 }) == BlockType::MULTIBLOCK && blockAt({ 35, 0, 31 }) == BlockType::MULTIBLOCK; }), "the hammer forms both");
+        a.held = BlockType::AIR;
         bool crudeIn = false, fuelIn = false, engineRan = false;
         for (int i = 0; i < 30 && !(crudeIn && fuelIn && engineRan); i++) {
-            server.QueueConsoleCommand("pressurise 31 1 31");
+            server.QueueConsoleCommand("pressurise 29 0 31");
             pump(1.0, [&] {
                 const auto* c = machine(crude);
                 const auto* f = machine(fuel);
@@ -371,6 +398,80 @@ int main() {
         Check(a.client.GetChestUnits(BlockType::BREAD) == Crafting::kBlock - 2 * 16, "for a quarter of a block of bread each");
         a.client.BreakBlock(post);
         Check(pump(10.0, [&] { return miners() == 0; }), "breaking the post sends them away");
+
+        std::cout << "Structures" << std::endl;
+        // A blast furnace's pattern (turned as written: x and z as the pattern's), its
+        // air pipe and item pipe out of the front, a chest of sand on the item pipe.
+        server.QueueConsoleCommand("tp Builder 61.5 0 57.5");
+        pump(10.0, [&] { return a.feet.z < 58.0f; });
+        server.QueueConsoleCommand("fill 60 0 60 62 2 62 fire_brick");
+        fill({ 61, 0, 60 }, { 61, 0, 60 }, "air_pipe");
+        fill({ 61, 0, 59 }, { 61, 0, 59 }, "air_pipe");
+        fill({ 61, 1, 60 }, { 61, 1, 60 }, "item_pipe");
+        fill({ 61, 1, 59 }, { 61, 1, 59 }, "chest");
+        fill({ 61, 1, 61 }, { 61, 1, 61 }, "fire_brick"); // (the smelter's place, wrongly)
+        pump(10.0, [&] { return blockAt({ 61, 1, 59 }) == BlockType::CHEST && blockAt({ 61, 1, 60 }) == BlockType::ITEM_PIPE; });
+        a.held = BlockType::HAMMER;
+        wait(0.3);
+        a.client.UseBed({ 60, 0, 60 });
+        Check(pump(5.0, [&] { return Has(a.client, "Not quite a Blast furnace: 1 block missing or wrong (at 61 1 61 it needs smelter)"); }),
+              "striking an unfinished blast furnace with the hammer says what's missing");
+        fill({ 61, 1, 61 }, { 61, 1, 61 }, "smelter");
+        pump(5.0, [&] { return blockAt({ 61, 1, 61 }) == BlockType::SMELTER; });
+        a.client.UseBed({ 62, 2, 62 });
+        Check(pump(5.0, [&] { return Has(a.client, "Formed a Blast furnace"); }), "finished, striking any of its blocks forms it");
+        Check(pump(5.0, [&] { return blockAt({ 61, 1, 61 }) == BlockType::MULTIBLOCK && blockAt({ 60, 0, 60 }) == BlockType::MULTIBLOCK_PART &&
+                                     blockAt({ 61, 0, 60 }) == BlockType::AIR_PIPE && blockAt({ 61, 1, 60 }) == BlockType::ITEM_PIPE; }),
+              "the smelter becomes its core and the bricks its parts; the pipes stay as they are (its ports)");
+        a.held = BlockType::AIR;
+        server.QueueConsoleCommand("give sand 4 Builder");
+        pump(5.0, [&] { return a.client.GetResources(BlockType::SAND) >= 4 * Crafting::kBlock; });
+        a.client.OpenChest({ 61, 1, 59 });
+        pump(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(61, 1, 59); });
+        a.client.MoveChestItems(BlockType::SAND, 4 * Crafting::kBlock, true);
+        const auto started = std::chrono::steady_clock::now();
+        bool glass = false;
+        for (int i = 0; i < 15 && !glass; i++) {
+            server.QueueConsoleCommand("pressurise 61 0 59");
+            glass = pump(1.0, [&] { return a.client.GetChestUnits(BlockType::GLASS) == 4 * Crafting::kBlock; });
+        }
+        const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+        Check(glass && took < 6.0, "with air it smelts the chest's 4 sand into glass, fast (" + std::to_string(took).substr(0, 4) + " s; a smelter takes 8)");
+        a.client.BreakBlock({ 60, 2, 62 });
+        Check(pump(5.0, [&] { return blockAt({ 61, 1, 61 }) == BlockType::SMELTER && blockAt({ 60, 0, 60 }) == BlockType::FIRE_BRICK && blockAt({ 60, 2, 62 }) == BlockType::AIR; }),
+              "breaking a part takes it apart: every block back as it was (the broken one gone)");
+
+        // An oil derrick: steel frames round a derrick block, over oil shale, its crude
+        // port piped to a tank.
+        server.QueueConsoleCommand("tp Builder 71.5 0 57.5");
+        pump(10.0, [&] { return a.feet.x > 71.0f; });
+        fill({ 70, -12, 60 }, { 72, -10, 62 }, "oil_shale");
+        fill({ 70, 0, 60 }, { 72, 0, 60 }, "steel_frame");
+        fill({ 70, 0, 62 }, { 72, 0, 62 }, "steel_frame");
+        fill({ 70, 0, 61 }, { 70, 0, 61 }, "air_pipe");
+        fill({ 69, 0, 61 }, { 69, 0, 61 }, "air_pipe");
+        fill({ 71, 0, 61 }, { 71, 0, 61 }, "oil_derrick");
+        fill({ 72, 0, 61 }, { 72, 0, 61 }, "fluid_pipe");
+        fill({ 73, 0, 61 }, { 73, 0, 61 }, "fluid_tank");
+        for (const glm::ivec3 c : { glm::ivec3(70, 1, 60), glm::ivec3(72, 1, 60), glm::ivec3(70, 1, 62), glm::ivec3(72, 1, 62) }) fill(c, c + glm::ivec3(0, 1, 0), "steel_frame");
+        fill({ 71, 3, 60 }, { 71, 3, 62 }, "steel_frame");
+        fill({ 70, 3, 61 }, { 72, 3, 61 }, "steel_frame");
+        fill({ 71, 4, 61 }, { 71, 4, 61 }, "steel_frame");
+        pump(10.0, [&] { return blockAt({ 71, 4, 61 }) == BlockType::STEEL_FRAME && blockAt({ 73, 0, 61 }) == BlockType::FLUID_TANK; });
+        a.held = BlockType::HAMMER;
+        wait(0.3);
+        a.client.UseBed({ 71, 0, 61 });
+        Check(pump(5.0, [&] { return Has(a.client, "Formed an Oil derrick"); }), "an oil derrick structure forms");
+        a.held = BlockType::AIR;
+        bool pumped = false;
+        for (int i = 0; i < 10 && !pumped; i++) {
+            server.QueueConsoleCommand("pressurise 69 0 61");
+            pumped = pump(1.0, [&] {
+                const auto* t = machine({ 73, 0, 61 });
+                return t && t->depth == static_cast<uint8_t>(Fluids::Kind::Crude) && t->pressure > 0;
+            });
+        }
+        Check(pumped, "it pumps crude oil from the shale under it into the tank");
 
         a.client.Disconnect();
         Pump(a, 0.3, [] { return false; });

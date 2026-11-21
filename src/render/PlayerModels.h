@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,15 @@ struct CreatureModel {
     float speed = 0.0f;
     glm::vec2 light{ 15.0f, 0.0f }; // sky and block light where it stands (0..15)
     bool tame = false;               // a wolf with an owner: a red collar
+};
+
+// A formed multiblock structure (world/Multiblocks.h), drawn from its model.
+struct StructureModel {
+    std::string id;               // its model's name ("refinery")
+    glm::vec3 origin{ 0.0f };     // its pattern's corner
+    int turn = 0;                 // quarter turns
+    bool working = false;
+    glm::vec2 light{ 15.0f, 0.0f };
 };
 
 // A flying bit of a broken block: a tiny cube showing a piece of the block's texture.
@@ -111,6 +121,11 @@ public:
     // A stable colour per player id.
     static glm::vec3 ColorFor(int id);
 
+    // Formed multiblock structures' models from Resources/Data/structures.json (same
+    // format; parts "when": "working" are drawn only while it works, and its motions
+    // only move then).
+    bool LoadStructureModels(const std::string& path, std::string& error);
+    static constexpr const char* kStructureModelsPath = "Resources/Data/structures.json";
     // Creatures' models from Resources/Data/creatures.json (see CreatureShape); false
     // (with why) if it couldn't be read, when they're drawn as plain boxes.
     bool LoadCreatureModels(const std::string& path, std::string& error);
@@ -137,8 +152,16 @@ public:
         std::vector<ShapePart> parts;
     };
 
+    void DrawStructures(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<struct StructureModel>& structures, float time);
+
 private:
     GLuint vao = 0, vbo = 0;
+    // Every model in a file, by name (inheritance worked out).
+    bool LoadShapes(const std::string& path, const std::vector<std::string>& names, std::map<std::string, CreatureShape>& out, std::string& error);
+    // One model drawn in `base` (motion: how much its flaps move, 0..1; phase: offsets them).
+    void DrawShape(Shader& shader, const glm::mat4& base, const CreatureShape& shape, float time, float swing, float motion, bool tame, bool working, bool hurt,
+                   float phase);
+    std::map<std::string, CreatureShape> structureShapes;
     std::vector<CreatureShape> shapes; // by CreatureType (empty: not loaded)
     std::vector<bool> haveShape;
 };

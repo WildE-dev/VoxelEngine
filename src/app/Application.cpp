@@ -35,6 +35,7 @@
 #include "world/Breathing.h"
 #include "world/Hunger.h"
 #include "world/BlockData.h"
+#include "world/Multiblocks.h"
 #include "world/Power.h"
 #include "world/Signals.h"
 #include "world/Chunk.h"
@@ -57,8 +58,8 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP, BlockType::PIPE,
-    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::DRILL, BlockType::SMELTER, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::MINING_POST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::OIL_SHALE, BlockType::TAR, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::STEEL_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
+    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::DRILL, BlockType::SMELTER, BlockType::STEEL_FRAME, BlockType::MACHINE_CASING, BlockType::FIRE_BRICK, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::MINING_POST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::OIL_SHALE, BlockType::TAR, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::STEEL_INGOT, BlockType::HAMMER, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -161,6 +162,12 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::ENGINE: return "Engine";
     case BlockType::FLUID_OUTLET: return "Fluid outlet";
     case BlockType::MINING_POST: return "Mining post";
+    case BlockType::STEEL_FRAME: return "Steel frame";
+    case BlockType::MACHINE_CASING: return "Machine casing";
+    case BlockType::FIRE_BRICK: return "Fire bricks";
+    case BlockType::HAMMER: return "Engineer's hammer";
+    case BlockType::MULTIBLOCK: return "Structure";
+    case BlockType::MULTIBLOCK_PART: return "Structure";
     case BlockType::STEEL_INGOT: return "Steel ingot";
     case BlockType::EXTRACTOR: return "Extractor";
     case BlockType::FILTER_PIPE: return "Filter pipe";
@@ -520,6 +527,7 @@ void Application::LoadData() {
     std::string error;
     if (!BlockData::Load(BlockData::kPath, error)) std::cerr << "[data] " << error << " (using the game's own block details)" << std::endl;
     if (!renderer->LoadCreatureModels(error)) std::cerr << "[data] " << error << " (creatures drawn as plain boxes)" << std::endl;
+    if (!renderer->LoadStructureModels(error)) std::cerr << "[data] " << error << " (structures not drawn)" << std::endl;
 }
 
 void Application::LoadBlockTextures() {
@@ -996,6 +1004,11 @@ void Application::DrawCrosshair() {
                                          pressure > 0 ? " of " : "", pressure > 0 ? what : "");
                 else std::snprintf(text, sizeof text, "Pressure gauge - air %d%%", pressure);
             }
+            else if (target.type == BlockType::MULTIBLOCK) {
+                const char* doing = state == Power::DrillState::Working ? "working" : state == Power::DrillState::NoPressure ? "needs air pressure"
+                                  : state == Power::DrillState::NoChest ? "connect its ports" : state == Power::DrillState::Done ? "no oil under it" : "idle";
+                std::snprintf(text, sizeof text, "%s: %s - air %d%%", Multiblocks::PatternOf(Multiblocks::KindOf(target)).name, doing, pressure);
+            }
             else if (target.type == BlockType::MINING_POST) {
                 const char* doing = state == Power::DrillState::NoPressure ? "waiting for pay (put cooked food in it)"
                                   : state == Power::DrillState::Done        ? "no ore left within 12 blocks"
@@ -1074,6 +1087,17 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
     }
     gaugeNeedles.swap(needles);
 
+    // Formed structures: their models, at their pattern's corner, working or not.
+    std::unordered_map<glm::ivec3, uint8_t, Coords::IVec3Hash> states;
+    for (const auto& m : client->GetMachines()) states[m.pos] = m.state;
+    for (const auto& pos : world->GetModelBlocks()) {
+        Block core;
+        if (!world->GetBlock(pos.x, pos.y, pos.z, core) || core.type != BlockType::MULTIBLOCK) continue;
+        const auto& pattern = Multiblocks::PatternOf(Multiblocks::KindOf(core));
+        const bool working = states.count(pos) && states[pos] == static_cast<uint8_t>(Power::DrillState::Working);
+        params.structures.push_back({ pattern.id, glm::vec3(Multiblocks::OriginOf(pos, core)), Multiblocks::TurnOf(core), working, lightAt(glm::vec3(pos) + glm::vec3(0.0f, 1.0f, 0.0f)) });
+    }
+
     // Wheels and shafts in lines along their axles turn together, as fast as the
     // fastest wheel on the line (still if the server said nothing). Each line keeps its
     // angle under the position of its first block.
@@ -1081,7 +1105,7 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
     std::unordered_map<glm::ivec3, Block, Coords::IVec3Hash> blocks;
     for (const auto& pos : models) {
         Block b;
-        if (world->GetBlock(pos.x, pos.y, pos.z, b) && b.IsModel() && b.type != BlockType::PRESSURE_GAUGE) blocks[pos] = b;
+        if (world->GetBlock(pos.x, pos.y, pos.z, b) && (b.type == BlockType::WATER_WHEEL || b.type == BlockType::SHAFT)) blocks[pos] = b;
     }
     auto sameLine = [&](const glm::ivec3& p, const glm::ivec3& axle) {
         auto it = blocks.find(p);
@@ -2245,6 +2269,12 @@ void Application::OnMouseButton(int button, int action) {
             chestMode = true;
             chestSeenOpen = false;
             chestAskedAt = Client::Now();
+            return;
+        }
+        // The engineer's hammer: strike a structure's block to form it (the server
+        // checks the pattern and says what's missing).
+        if (SelectedBlock() == BlockType::HAMMER && SelectedTool() == Tool::None) {
+            if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f)) client->UseBed(at->block);
             return;
         }
         // A filter pipe or a crafter: set it to what's in hand (with Shift held, it's

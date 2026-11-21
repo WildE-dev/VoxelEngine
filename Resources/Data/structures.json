@@ -1,0 +1,827 @@
+// Multiblock structures' models (world/Multiblocks.h), by structure: oil_derrick,
+// refinery, blast_furnace. Same format as creatures.json, in the structure's own frame:
+// x and z run 0 to 3 across its 3 x 3 footprint (as its pattern's cells, before it's
+// turned to face the way it was built), y up from the ground under it. Parts with
+// "when": "working" are drawn only while it works ("idle": only while it doesn't), and
+// flaps only move while it works. Leave its ports' cells clear: they stay real pipes.
+// Press R in the game to load this file again.
+{
+  "oil_derrick": {
+    "colors": {
+      "steel": "#9aa0aa",
+      "steel_dark": "#4a4e56",
+      "yellow": "#d8b030",
+      "red": "#a83a2a"
+    },
+    "parts": [
+      {
+        "box": [
+          1.5,
+          0.15,
+          0.5
+        ],
+        "size": [
+          3,
+          0.3,
+          1
+        ],
+        "color": "steel_dark"
+      },
+      {
+        "box": [
+          1.5,
+          0.15,
+          2.5
+        ],
+        "size": [
+          3,
+          0.3,
+          1
+        ],
+        "color": "steel_dark"
+      },
+      {
+        "box": [
+          1.5,
+          0.45,
+          1.5
+        ],
+        "size": [
+          0.7,
+          0.9,
+          0.7
+        ],
+        "color": "red"
+      },
+      {
+        "box": [
+          1.5,
+          0.95,
+          1.5
+        ],
+        "size": [
+          0.9,
+          0.12,
+          0.9
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          0.5,
+          1.65,
+          0.5
+        ],
+        "size": [
+          0.22,
+          3.0,
+          0.22
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          0.5,
+          1.65,
+          2.5
+        ],
+        "size": [
+          0.22,
+          3.0,
+          0.22
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          2.5,
+          1.65,
+          0.5
+        ],
+        "size": [
+          0.22,
+          3.0,
+          0.22
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          2.5,
+          1.65,
+          2.5
+        ],
+        "size": [
+          0.22,
+          3.0,
+          0.22
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          1.5,
+          1.5,
+          0.5
+        ],
+        "size": [
+          2.0,
+          0.1,
+          0.1
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          1.5,
+          1.5,
+          2.5
+        ],
+        "size": [
+          2.0,
+          0.1,
+          0.1
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          0.5,
+          1.5,
+          1.5
+        ],
+        "size": [
+          0.1,
+          0.1,
+          2.0
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          2.5,
+          1.5,
+          1.5
+        ],
+        "size": [
+          0.1,
+          0.1,
+          2.0
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          1.5,
+          2.5,
+          0.5
+        ],
+        "size": [
+          2.0,
+          0.1,
+          0.1
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          1.5,
+          2.5,
+          2.5
+        ],
+        "size": [
+          2.0,
+          0.1,
+          0.1
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          0.5,
+          2.5,
+          1.5
+        ],
+        "size": [
+          0.1,
+          0.1,
+          2.0
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          2.5,
+          2.5,
+          1.5
+        ],
+        "size": [
+          0.1,
+          0.1,
+          2.0
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          1.5,
+          3.2,
+          1.5
+        ],
+        "size": [
+          2.4,
+          0.18,
+          2.4
+        ],
+        "color": "steel_dark"
+      },
+      {
+        "box": [
+          1.5,
+          4.3,
+          1.5
+        ],
+        "size": [
+          0.28,
+          2.0,
+          0.28
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          1.5,
+          2.1,
+          1.5
+        ],
+        "size": [
+          0.07,
+          2.2,
+          0.07
+        ],
+        "color": "steel"
+      },
+      {
+        "at": [
+          1.5,
+          3.75,
+          1.5
+        ],
+        "flap": {
+          "axis": "z",
+          "speed": 2.2,
+          "amount": 0.28
+        },
+        "parts": [
+          {
+            "box": [
+              0,
+              0,
+              0
+            ],
+            "size": [
+              2.6,
+              0.18,
+              0.2
+            ],
+            "color": "yellow"
+          },
+          {
+            "box": [
+              1.25,
+              -0.22,
+              0
+            ],
+            "size": [
+              0.28,
+              0.55,
+              0.3
+            ],
+            "color": "yellow"
+          },
+          {
+            "box": [
+              -1.2,
+              -0.12,
+              0
+            ],
+            "size": [
+              0.4,
+              0.4,
+              0.4
+            ],
+            "color": "steel_dark"
+          }
+        ]
+      },
+      {
+        "box": [
+          1.5,
+          3.55,
+          1.5
+        ],
+        "size": [
+          0.3,
+          0.35,
+          0.3
+        ],
+        "color": "steel_dark"
+      }
+    ]
+  },
+  "refinery": {
+    "colors": {
+      "casing": "#78808a",
+      "steel": "#b4bac4",
+      "steel_dark": "#3e4248",
+      "tank": "#d8dcd8",
+      "flame": "#ffa030"
+    },
+    "parts": [
+      {
+        "box": [
+          0.5,
+          0.2,
+          0.5
+        ],
+        "size": [
+          1,
+          0.4,
+          1
+        ],
+        "color": "casing"
+      },
+      {
+        "box": [
+          2.5,
+          0.2,
+          0.5
+        ],
+        "size": [
+          1,
+          0.4,
+          1
+        ],
+        "color": "casing"
+      },
+      {
+        "box": [
+          1.5,
+          0.2,
+          1.5
+        ],
+        "size": [
+          1,
+          0.4,
+          1
+        ],
+        "color": "casing"
+      },
+      {
+        "box": [
+          1.5,
+          0.2,
+          2.5
+        ],
+        "size": [
+          3,
+          0.4,
+          1
+        ],
+        "color": "casing"
+      },
+      {
+        "box": [
+          1.5,
+          0.55,
+          1.5
+        ],
+        "size": [
+          0.8,
+          0.3,
+          0.8
+        ],
+        "color": "steel_dark"
+      },
+      {
+        "box": [
+          1.5,
+          1.6,
+          1.5
+        ],
+        "size": [
+          3,
+          1.2,
+          1
+        ],
+        "color": "casing"
+      },
+      {
+        "box": [
+          1.5,
+          1.6,
+          1.5
+        ],
+        "size": [
+          1,
+          1.2,
+          3
+        ],
+        "color": "casing"
+      },
+      {
+        "box": [
+          0.5,
+          1.5,
+          0.5
+        ],
+        "size": [
+          0.9,
+          1.7,
+          0.9
+        ],
+        "color": "tank"
+      },
+      {
+        "box": [
+          0.5,
+          1.6,
+          0.5
+        ],
+        "size": [
+          0.95,
+          0.1,
+          0.95
+        ],
+        "color": "steel_dark"
+      },
+      {
+        "box": [
+          0.5,
+          2.4,
+          0.5
+        ],
+        "size": [
+          0.7,
+          0.1,
+          0.7
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          0.5,
+          1.5,
+          2.5
+        ],
+        "size": [
+          0.9,
+          1.7,
+          0.9
+        ],
+        "color": "tank"
+      },
+      {
+        "box": [
+          0.5,
+          1.6,
+          2.5
+        ],
+        "size": [
+          0.95,
+          0.1,
+          0.95
+        ],
+        "color": "steel_dark"
+      },
+      {
+        "box": [
+          0.5,
+          2.4,
+          2.5
+        ],
+        "size": [
+          0.7,
+          0.1,
+          0.7
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          2.5,
+          1.5,
+          0.5
+        ],
+        "size": [
+          0.9,
+          1.7,
+          0.9
+        ],
+        "color": "tank"
+      },
+      {
+        "box": [
+          2.5,
+          1.6,
+          0.5
+        ],
+        "size": [
+          0.95,
+          0.1,
+          0.95
+        ],
+        "color": "steel_dark"
+      },
+      {
+        "box": [
+          2.5,
+          2.4,
+          0.5
+        ],
+        "size": [
+          0.7,
+          0.1,
+          0.7
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          2.5,
+          1.5,
+          2.5
+        ],
+        "size": [
+          0.9,
+          1.7,
+          0.9
+        ],
+        "color": "tank"
+      },
+      {
+        "box": [
+          2.5,
+          1.6,
+          2.5
+        ],
+        "size": [
+          0.95,
+          0.1,
+          0.95
+        ],
+        "color": "steel_dark"
+      },
+      {
+        "box": [
+          2.5,
+          2.4,
+          2.5
+        ],
+        "size": [
+          0.7,
+          0.1,
+          0.7
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          1.5,
+          2.4,
+          1.5
+        ],
+        "size": [
+          0.85,
+          3.2,
+          0.85
+        ],
+        "color": "steel"
+      },
+      {
+        "box": [
+          1.5,
+          1.4,
+          1.5
+        ],
+        "size": [
+          1.0,
+          0.08,
+          1.0
+        ],
+        "color": "steel_dark"
+      },
+      {
+        "box": [
+          1.5,
+          2.2,
+          1.5
+        ],
+        "size": [
+          1.0,
+          0.08,
+          1.0
+        ],
+        "color": "steel_dark"
+      },
+      {
+        "box": [
+          1.5,
+          3.0,
+          1.5
+        ],
+        "size": [
+          1.0,
+          0.08,
+          1.0
+        ],
+        "color": "steel_dark"
+      },
+      {
+        "box": [
+          1.5,
+          3.7,
+          1.5
+        ],
+        "size": [
+          1.0,
+          0.08,
+          1.0
+        ],
+        "color": "steel_dark"
+      },
+      {
+        "box": [
+          2.4,
+          3.3,
+          1.5
+        ],
+        "size": [
+          0.12,
+          1.6,
+          0.12
+        ],
+        "color": "steel_dark"
+      },
+      {
+        "box": [
+          2.4,
+          4.15,
+          1.5
+        ],
+        "size": [
+          0.22,
+          0.25,
+          0.22
+        ],
+        "color": "flame",
+        "glow": true,
+        "when": "working"
+      }
+    ]
+  },
+  "blast_furnace": {
+    "colors": {
+      "brick": "#8a3a28",
+      "brick_dark": "#4e2418",
+      "band": "#3a3c40",
+      "fire": "#ffb040",
+      "soot": "#1e1612"
+    },
+    "parts": [
+      {
+        "box": [
+          1.5,
+          1.5,
+          2.0
+        ],
+        "size": [
+          3,
+          3,
+          2
+        ],
+        "color": "brick"
+      },
+      {
+        "box": [
+          0.5,
+          1.5,
+          0.5
+        ],
+        "size": [
+          1,
+          3,
+          1
+        ],
+        "color": "brick"
+      },
+      {
+        "box": [
+          2.5,
+          1.5,
+          0.5
+        ],
+        "size": [
+          1,
+          3,
+          1
+        ],
+        "color": "brick"
+      },
+      {
+        "box": [
+          1.5,
+          2.5,
+          0.5
+        ],
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "color": "brick"
+      },
+      {
+        "box": [
+          1.5,
+          0.98,
+          2.0
+        ],
+        "size": [
+          3.04,
+          0.12,
+          2.04
+        ],
+        "color": "band"
+      },
+      {
+        "box": [
+          1.5,
+          1.98,
+          2.0
+        ],
+        "size": [
+          3.04,
+          0.12,
+          2.04
+        ],
+        "color": "band"
+      },
+      {
+        "box": [
+          1.5,
+          3.6,
+          1.5
+        ],
+        "size": [
+          1.0,
+          1.2,
+          1.0
+        ],
+        "color": "brick_dark"
+      },
+      {
+        "box": [
+          1.5,
+          4.22,
+          1.5
+        ],
+        "size": [
+          1.1,
+          0.12,
+          1.1
+        ],
+        "color": "band"
+      },
+      {
+        "box": [
+          1.5,
+          2.5,
+          -0.02
+        ],
+        "size": [
+          0.55,
+          0.3,
+          0.04
+        ],
+        "color": "fire",
+        "glow": true,
+        "when": "working"
+      },
+      {
+        "box": [
+          1.5,
+          2.5,
+          -0.02
+        ],
+        "size": [
+          0.55,
+          0.3,
+          0.04
+        ],
+        "color": "soot",
+        "when": "idle"
+      }
+    ]
+  }
+}

@@ -123,7 +123,7 @@ inline float CapacityOf(BlockType t) { return t == BlockType::AIR_TANK ? kAirPer
 // Everything to do with air power (what right-clicking describes).
 inline bool IsPart(BlockType t) {
     return IsAirPart(t) || t == BlockType::WATER_WHEEL || t == BlockType::SHAFT || t == BlockType::VALVE || t == BlockType::PRESSURE_GAUGE || Fluids::IsPart(t) ||
-           Fluids::IsMachine(t);
+           Fluids::IsMachine(t) || t == BlockType::MULTIBLOCK || t == BlockType::MULTIBLOCK_PART;
 }
 // What the server keeps track of: wheels, compressors and machines (not pipes or
 // shafts, which it finds from them).
@@ -131,7 +131,7 @@ inline bool IsMachine(BlockType t) {
     return t == BlockType::WATER_WHEEL || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
            t == BlockType::PISTON || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
            t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::PRESSURE_GAUGE ||
-           t == BlockType::FLUID_TANK || Fluids::IsMachine(t) || t == BlockType::MINING_POST;
+           t == BlockType::FLUID_TANK || Fluids::IsMachine(t) || t == BlockType::MINING_POST || t == BlockType::MULTIBLOCK;
 }
 
 // Whether a pipe (drawn as a thin tube) reaches across to this neighbour: water pipes
