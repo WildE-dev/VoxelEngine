@@ -721,7 +721,10 @@ comes up, and ripens into **wheat** on its own, after about a minute and a half 
 average (while its chunk is loaded, which it is near a player). Break ripe wheat to
 harvest it: you get the wheat and one or two seeds to plant again. Breaking a young
 crop just gives its seed back, and water washes crops away. Three wheat bake into
-**bread** (6 food). The server keeps a list of growing crops, saved with the world
+**bread** (6 food). Breaking leaves now and then gives a **sapling** (a pine sapling from pine
+needles); planted on dirt or grass it grows into a tree after about two minutes: a
+trunk four to six logs tall with a round crown of leaves, or a cone of needles for a
+pine, if there's room above it. So wood grows back. The server keeps a list of growing crops, saved with the world
 (format 9). `FoodTest` checks planting (not in mid air), ripening, harvesting, bread
 and eating it.
 

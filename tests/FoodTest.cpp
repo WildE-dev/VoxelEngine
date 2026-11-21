@@ -193,6 +193,16 @@ int main() {
     Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::WHEAT) == Block::kUnitsPerBlock && a.client.GetResources(BlockType::SEEDS) >= 2 * Block::kUnitsPerBlock; }),
           "harvested, it gives wheat and seeds to plant again (wheat " + std::to_string(a.client.GetResources(BlockType::WHEAT)) + ", seeds " +
               std::to_string(a.client.GetResources(BlockType::SEEDS)) + ")");
+    server.QueueConsoleCommand("give sapling 1 Eater");
+    sync();
+    a.client.PlaceBlock({ 5, 0, 7 }, BlockType::SAPLING);
+    Check(Pump(a, 20.0, [&] { Block t; return a.world.GetBlock(5, 0, 7, t) && t.type == BlockType::SAPLING; }), "a sapling planted on grass");
+    Check(Pump(a, 30.0, [&] {
+              Block trunk, top;
+              return a.world.GetBlock(5, 0, 7, trunk) && trunk.type == BlockType::LOG && a.world.GetBlock(5, 5, 7, top) && (top.type == BlockType::LEAVES || top.type == BlockType::LOG);
+          }),
+          "grows into a tree");
+
     server.QueueConsoleCommand("give wheat 2 Eater");
     sync();
     a.client.Craft(Crafting::Find("bread"), 1);

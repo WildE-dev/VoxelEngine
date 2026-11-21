@@ -160,6 +160,9 @@ enum class BlockType : uint8_t {
     TNT,
     TNT_LIT, // (flashing, about to go)
     BOAT,    // item: right-click water to get in
+    // Saplings (plants, from leaves): planted on soil, they grow into a tree.
+    SAPLING,
+    PINE_SAPLING,
     COUNT
 };
 
@@ -174,7 +177,7 @@ inline bool IsPlantType(BlockType type) {
     return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW || type == BlockType::SPIKES ||
            type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES || type == BlockType::CROP || type == BlockType::RIPE_WHEAT ||
            type == BlockType::LADDER || type == BlockType::DOOR_OPEN || type == BlockType::CAMPFIRE ||
-           type == BlockType::SIGN;
+           type == BlockType::SIGN || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING;
 }
 
 // The resource a block counts as in survival (see Block::ResourceUnits): its own type,

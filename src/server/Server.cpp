@@ -762,6 +762,9 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
         if (block.type == BlockType::RIPE_WHEAT) seeds = roll < 0.5f ? 1 : 2;
         if (block.type == BlockType::TALL_GRASS && roll < 0.3f) seeds = 1;
         client.resources[static_cast<size_t>(BlockType::SEEDS)] += seeds * Block::kUnitsPerBlock;
+        // Leaves now and then drop a sapling (a pine's, from pine needles).
+        if (IsLeavesType(block.type) && roll > 0.88f)
+            client.resources[static_cast<size_t>(block.type == BlockType::PINE_LEAVES ? BlockType::PINE_SAPLING : BlockType::SAPLING)] += Block::kUnitsPerBlock;
     }
     // Survival: the block's worth goes to the player.
     if (!Creative(client)) {
@@ -793,7 +796,7 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
         }
     }
     // Seeds are planted on dirt or grass.
-    if (type == BlockType::CROP) {
+    if (type == BlockType::CROP || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING) {
         Block soil;
         if (!world->GetBlock(pos.x, pos.y - 1, pos.z, soil) || !(soil.type == BlockType::DIRT || IsGrassType(soil.type)) || !soil.IsFullBlock()) {
             if (!Creative(client)) SendResources(client);
@@ -820,7 +823,7 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
     }
     world->SetBlock(pos.x, pos.y, pos.z, placed);
     if (type == BlockType::CHEST) chests[pos] = ChestItems{}; // a new chest is empty
-    if (type == BlockType::CROP) crops.insert(pos);
+    if (type == BlockType::CROP || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING) crops.insert(pos);
     if (type == BlockType::DOOR) world->SetBlock(pos.x, pos.y + 1, pos.z, Block(BlockType::DOOR)); // its upper half (part of the one door)
     if (!Creative(client)) {
         held -= cost;
@@ -1519,6 +1522,37 @@ void Server::Award(ClientState& client, Achievement a) {
         if (other.welcomed && other.id != client.id) SendChat(other, net::ChatMessage::Kind::Info, client.name + " earned " + Achievements::Name(a));
 }
 
+bool Server::GrowTree(const glm::ivec3& at, bool pine) {
+    const int height = 4 + static_cast<int>(Noise::Random01(at.x, at.y, at.z, 0x7EE5u) * 3.0f); // 4..6
+    auto open = [&](const glm::ivec3& p) { Block b; return world->GetBlock(p.x, p.y, p.z, b) && (b.IsAir() || b.IsPlant()); };
+    for (int y = 1; y <= height + 1; y++)
+        if (!open(at + glm::ivec3(0, y, 0))) return false; // no room
+    // Leaves first (into open cells), then the trunk through them.
+    const Block leaves(pine ? BlockType::PINE_LEAVES : BlockType::LEAVES);
+    if (pine) {
+        // A cone: wide near the bottom of the crown, narrowing to a tip.
+        for (int y = 2; y <= height + 1; y++) {
+            const int r = std::max(0, (height + 1 - y) / 2 + (y < height ? 1 : 0));
+            for (int x = -r; x <= r; x++)
+                for (int z = -r; z <= r; z++)
+                    if (std::abs(x) + std::abs(z) <= r + 1 && open(at + glm::ivec3(x, y, z))) world->SetBlock(at.x + x, at.y + y, at.z + z, leaves);
+        }
+    }
+    else {
+        // A round crown around the top of the trunk.
+        const glm::ivec3 top = at + glm::ivec3(0, height, 0);
+        for (int x = -2; x <= 2; x++)
+            for (int y = -2; y <= 1; y++)
+                for (int z = -2; z <= 2; z++) {
+                    if (x * x + y * y * 2 + z * z > 6) continue;
+                    const glm::ivec3 p = top + glm::ivec3(x, y, z);
+                    if (open(p)) world->SetBlock(p.x, p.y, p.z, leaves);
+                }
+    }
+    for (int y = 0; y < height; y++) world->SetBlock(at.x, at.y + y, at.z, Block(BlockType::LOG));
+    return true;
+}
+
 void Server::UpdateCrops() {
     // Once a second, each crop (in a loaded chunk) may ripen: on average after 90 s.
     const double now = Now();
@@ -1529,7 +1563,17 @@ void Server::UpdateCrops() {
         Block b;
         const glm::ivec3 p = *it;
         if (!world->GetBlock(p.x, p.y, p.z, b)) { ++it; continue; } // not loaded: waits
-        if (b.type != BlockType::CROP) { it = crops.erase(it); continue; } // trampled, washed away
+        const bool sapling = b.type == BlockType::SAPLING || b.type == BlockType::PINE_SAPLING;
+        if (b.type != BlockType::CROP && !sapling) { it = crops.erase(it); continue; } // trampled, washed away
+        if (sapling) {
+            // Saplings take longer (two minutes on average), and need room to grow.
+            if (Noise::Random01(p.x, p.y, p.z, static_cast<uint32_t>(tickCount) * 2246822519u) < chance * 0.75f && GrowTree(p, b.type == BlockType::PINE_SAPLING)) {
+                it = crops.erase(it);
+                continue;
+            }
+            ++it;
+            continue;
+        }
         if (Noise::Random01(p.x, p.y, p.z, static_cast<uint32_t>(tickCount) * 2654435761u) < chance) {
             world->SetBlock(p.x, p.y, p.z, Block::Plant(BlockType::RIPE_WHEAT, b.edgeData.edges[0]));
             it = crops.erase(it);

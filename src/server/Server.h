@@ -351,6 +351,7 @@ private:
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> crops;
     double nextCropUpdate = 0.0;
     void UpdateCrops();
+    bool GrowTree(const glm::ivec3& at, bool pine); // a sapling grows (false: no room yet)
     // Gives them an achievement if they haven't got it (survival only): a toast for them,
     // a line for everyone else.
     void Award(ClientState& client, Achievement a);
