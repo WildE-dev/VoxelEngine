@@ -359,6 +359,60 @@ std::vector<uint8_t> Encode(const Eat& m) {
     return std::move(w.data);
 }
 
+std::vector<uint8_t> Encode(const OpenChest& m) {
+    ByteWriter w;
+    Begin(w, MsgType::OpenChest);
+    w.IVec3(m.pos);
+    w.U8(m.open);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, OpenChest& m) {
+    return in.IVec3(m.pos) && in.U8(m.open) && m.open <= 1 && in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const ChestMove& m) {
+    ByteWriter w;
+    Begin(w, MsgType::ChestMove);
+    w.IVec3(m.pos);
+    w.U8(static_cast<uint8_t>(m.type));
+    w.VarU32(m.units);
+    w.U8(m.intoChest);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, ChestMove& m) {
+    uint8_t type;
+    if (!in.IVec3(m.pos) || !in.U8(type) || type >= static_cast<uint8_t>(BlockType::COUNT)) return false;
+    m.type = static_cast<BlockType>(type);
+    return in.VarU32(m.units) && in.U8(m.intoChest) && m.intoChest <= 1 && in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const ChestContents& m) {
+    ByteWriter w;
+    Begin(w, MsgType::ChestContents);
+    w.IVec3(m.pos);
+    w.U8(m.open);
+    w.VarU32(static_cast<uint32_t>(m.held.size()));
+    for (const auto& [type, units] : m.held) {
+        w.U8(static_cast<uint8_t>(type));
+        w.VarU32(units);
+    }
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, ChestContents& m) {
+    uint32_t n;
+    if (!in.IVec3(m.pos) || !in.U8(m.open) || m.open > 1 || !in.VarU32(n) || n > static_cast<uint32_t>(BlockType::COUNT)) return false;
+    m.held.resize(n);
+    for (auto& [type, units] : m.held) {
+        uint8_t t;
+        if (!in.U8(t) || t >= static_cast<uint8_t>(BlockType::COUNT) || !in.VarU32(units)) return false;
+        type = static_cast<BlockType>(t);
+    }
+    return in.AtEnd();
+}
+
 bool Decode(ByteReader& in, Eat& m) {
     uint8_t type;
     if (!in.U8(type) || type >= static_cast<uint8_t>(BlockType::COUNT)) return false;

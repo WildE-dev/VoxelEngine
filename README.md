@@ -32,8 +32,8 @@ GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
 `ModeTest` (see [Game modes](#game-modes)), `MiningTest` (see [Mining](#mining)),
 `BreathTest` (see [Breathing](#breathing)), `CreatureTest` (see
 [Creatures](#creatures) and [PvP](#pvp)), `CraftTest` (see [Crafting](#crafting)),
-`FoodTest` (see [Food and hunger](#food-and-hunger)) and `SoundTest` (see
-[Sound](#sound)).
+`FoodTest` (see [Food and hunger](#food-and-hunger)), `ChestTest` (see
+[Chests](#chests)) and `SoundTest` (see [Sound](#sound)).
 
 `ctest` in the build directory runs them all, and `ctest -j15` runs them all at
 once. They're written to pass even then, on a loaded machine:
@@ -476,8 +476,11 @@ There are two, and each player is in one:
 
 - **Survival** (the default): you build with what you collect. Breaking a block
   gives you its worth in that block type, and placing one costs it. Traps hurt, and
-  you have hearts.
-- **Creative**: every block, as many as you like, and nothing hurts you.
+  you have hearts. You can break and build up to 6 blocks away.
+- **Creative**: every block, as many as you like, and nothing hurts you. You can
+  break and build up to 50 blocks away.
+
+The server checks the reach too (with a little slack for movement).
 
 A full block is worth 64 units. Shaped blocks are worth their volume: a half slab is
 32, a quarter slab 16, and a chiselled block whatever's left of it (a slope its mean
@@ -641,6 +644,26 @@ it out with `/give cap|tunic|boots [player]`. The rules are in `src/world/Armour
 damage sums, and that they're kept after a restart; `CreatureTest` checks that armour
 takes a sword hit from 3.5 hearts down to 2.
 
+## Chests
+
+A **chest** (crafted from 2 planks) stores things. Right-click one within 6 blocks
+to open it (Shift-right-click builds against it instead). The window shows what's in
+it above what you have: click a block or item to move a block's worth (or one item)
+across, and Shift-click to move all of that kind. I or Esc closes it, and so does
+walking away. Anyone can open any chest, and everyone with it open sees changes at
+once. Breaking a chest gives what was in it to whoever broke it. Chests can't be
+shaped, and they're fastest to break with an axe.
+
+The server keeps what's in every chest and saves it with the world (world format 8).
+The client is only told what's in a chest while it has it open. `ChestTest` checks:
+
+- crafting and placing a chest;
+- opening it within reach and not from afar, and nothing going in unopened;
+- moving things in and out, and not more than you have;
+- a second player seeing the same contents and taking from them;
+- breaking it (it closes, and the contents go to the breaker);
+- the chest and its contents after a restart.
+
 ## Food and hunger
 
 In survival you also get hungry. Ten drumsticks sit above the right end of the hotbar,
@@ -694,6 +717,7 @@ makes four.
 | Shovel | 1 planks + 0.5 stone |
 | Cooked venison | 1 raw venison + 0.25 log |
 | Sword | 0.5 planks + 2 stone |
+| Chest | 2 planks |
 | Hide cap / tunic / boots | 2 / 4 / 2 hide |
 
 Amounts are in blocks, using the same resource units as building (a block is 64).
@@ -961,6 +985,6 @@ src/
             Breathing, Creatures, Crafting, Hunger, Armour
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
-            BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest
+            BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest, ChestTest
 tools/      make_sounds.py (sound effects), make_item_textures.py (item icons)
 ```

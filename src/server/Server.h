@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -180,6 +181,7 @@ private:
         std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{}; // units held (survival)
         uint8_t tools = 0; // tools made (Crafting::ToolBit each; creative has them all)
         uint8_t armour = 0; // armour worn (Armour::Bit each)
+        std::optional<glm::ivec3> openChest; // the chest they have open
         Tool heldTool = Tool::None;          // in their hand, for others to see
         BlockType heldBlock = BlockType::AIR;
 
@@ -275,6 +277,13 @@ private:
     void UpdateBreath(ClientState& client, float dt);
     void UpdateHunger(ClientState& client, float dt);
     void HandleEat(ClientState& client, BlockType food);
+    // Chests: what's in each (units by type), by position; saved with the world.
+    using ChestItems = std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)>;
+    void HandleOpenChest(ClientState& client, const glm::ivec3& pos, bool open);
+    void HandleChestMove(ClientState& client, const glm::ivec3& pos, BlockType type, uint32_t units, bool intoChest);
+    void SendChest(ClientState& client);         // what's in their open chest (or that it's closed)
+    void SendChestToViewers(const glm::ivec3& pos);
+    void RemoveChest(const glm::ivec3& pos, ClientState* breaker); // gone: contents to whoever broke it
     // Damage in half hearts. `armourHelps`: a hit or a trap (armour takes some off),
     // not drowning, bad air or starving.
     void Hurt(ClientState& client, int amount, const std::string& deathMessage, bool armourHelps = true);
@@ -283,6 +292,8 @@ private:
     void TriggerPlate(ClientState& client, const glm::ivec3& plate);
     // Advances the clock and the weather by one tick.
     void UpdateSky();
+    // How far a player can break and build: 6 blocks in survival, 50 in creative (plus slack).
+    float EditReach(const ClientState& client) const;
     bool InReach(const ClientState& client, const glm::ivec3& pos, float reach) const;
     // Re-sends the authoritative block to the client (after a refused edit).
     void Echo(ClientState& client, const glm::ivec3& pos);
@@ -303,6 +314,7 @@ private:
     net::NetServer net;
     TerrainGenerator terrain;
     CreatureSystem creatures;
+    std::unordered_map<glm::ivec3, ChestItems, Coords::IVec3Hash> chests;
     double lastCreatureTime = 0.0;
     std::unique_ptr<WorldStorage> storage; // declared before `world`, which uses it
     std::unique_ptr<ServerWorld> world;

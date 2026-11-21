@@ -120,6 +120,9 @@ enum class BlockType : uint8_t {
     COOKED_VENISON,
     // Deer hide, for armour (see world/Armour.h).
     HIDE,
+    // A chest: right-click to open it and store things in it (kept by the server, see
+    // Server::HandleChestMove).
+    CHEST,
     COUNT
 };
 

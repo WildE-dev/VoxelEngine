@@ -43,7 +43,8 @@ constexpr int kWindowWidth = 1200;
 constexpr int kWindowHeight = 700;
 constexpr const char* kGlslVersion = "#version 330 core";
 
-constexpr float kReach = 50.0f;
+// How far you can break and build: 6 blocks in survival, 50 in creative.
+constexpr float kCreativeReach = 50.0f, kSurvivalReach = 6.0f;
 constexpr float kLaserRange = 100.0f;
 constexpr int kLaserRadius = 4;
 // Everything the inventory (I) offers, in the order it shows them.
@@ -52,7 +53,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -134,6 +135,7 @@ const char* BlockName(BlockType type) {
     case BlockType::RAW_VENISON: return "Raw venison";
     case BlockType::COOKED_VENISON: return "Cooked venison";
     case BlockType::HIDE: return "Hide";
+    case BlockType::CHEST: return "Chest";
     default:               return "Air";
     }
 }
@@ -453,7 +455,7 @@ void Application::Run() {
         params.fogEnd = static_cast<float>(world->GetViewDistance() * Chunk::CHUNK_SIZE);
         UpdateSky(deltaTime, params);
         UpdateSounds();
-        if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), kReach)) {
+        if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
             params.highlightedBlock = hit->block;
             Block target;
             if (world->GetBlock(hit->block.x, hit->block.y, hit->block.z, target)) params.highlightOutline = target.OutlineSegments();
@@ -1235,6 +1237,10 @@ void Application::SaveHotbar() const {
 void Application::SetInventoryOpen(bool open) {
     if (open == inventoryOpen) return;
     inventoryOpen = open;
+    if (!open && chestMode) {
+        client->CloseChest();
+        chestMode = chestSeenOpen = false;
+    }
     // The cursor is needed to click blocks; give it back to the game on closing.
     if (open) cursorBeforeInventory = captureCursor;
     captureCursor = open ? false : cursorBeforeInventory;
@@ -1244,6 +1250,7 @@ void Application::SetInventoryOpen(bool open) {
 
 void Application::DrawInventory() {
     if (!inventoryOpen) return;
+    if (chestMode) return DrawChest();
     constexpr int kColumns = 7;
     constexpr float kIcon = 44.0f;
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -1399,8 +1406,67 @@ void Application::DrawInventory() {
     if (!open) SetInventoryOpen(false);
 }
 
+void Application::DrawChest() {
+    // Waiting for the server to say it's open; once open, closed by the server (broken,
+    // walked away from): the window goes.
+    const bool open = client->GetOpenChest().has_value();
+    if (open) chestSeenOpen = true;
+    if ((chestSeenOpen && !open) || (!chestSeenOpen && Client::Now() - chestAskedAt > 3.0)) {
+        SetInventoryOpen(false);
+        return;
+    }
+    constexpr int kColumns = 8;
+    constexpr float kIcon = 40.0f;
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.42f),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowBgAlpha(0.85f);
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize;
+    bool keepOpen = true;
+    if (ImGui::Begin("Chest", &keepOpen, flags)) {
+        const TextureAtlas& atlas = renderer->GetAtlas();
+        const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
+        const bool all = ImGui::GetIO().KeyShift;
+        ImGui::TextDisabled("Click to move a block's worth (or one item); Shift-click moves them all. I or Esc closes.");
+        // One grid: every type with some in it, each a button that moves some across.
+        auto grid = [&](const char* id, bool inChest) {
+            int column = 0;
+            for (int t = 1; t < static_cast<int>(BlockType::COUNT); t++) {
+                const BlockType type = static_cast<BlockType>(t);
+                const uint32_t units = inChest ? client->GetChestUnits(type) : client->GetResources(type);
+                if (units == 0) continue;
+                if (column++ % kColumns != 0) ImGui::SameLine();
+                const ImVec2 corner = ImGui::GetCursorScreenPos();
+                glm::vec2 uv0, uv1;
+                atlas.GetTileUV(IconTile(type), uv0, uv1);
+                ImGui::PushID(t + (inChest ? 1000 : 0));
+                if (ImGui::ImageButton(id, texture, ImVec2(kIcon, kIcon), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y))) {
+                    client->MoveChestItems(type, all ? units : std::min<uint32_t>(units, Block::kUnitsPerBlock), !inChest);
+                    audio->PlayHere("pickup", 0.4f);
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s: %s", BlockName(type), FormatBlocks(units).c_str());
+                const std::string count = FormatBlocks(units);
+                ImDrawList* draw = ImGui::GetWindowDrawList();
+                const ImVec2 size = ImGui::CalcTextSize(count.c_str());
+                const ImVec2 at(corner.x + kIcon + 4.0f - size.x, corner.y + kIcon + 4.0f - size.y);
+                draw->AddText(ImVec2(at.x + 1.0f, at.y + 1.0f), IM_COL32(0, 0, 0, 230), count.c_str());
+                draw->AddText(at, IM_COL32_WHITE, count.c_str());
+                ImGui::PopID();
+            }
+            if (column == 0) ImGui::TextDisabled(inChest ? "Empty." : "Nothing to put in.");
+        };
+        ImGui::SeparatorText("In the chest (click to take)");
+        grid("chest", true);
+        ImGui::SeparatorText("Yours (click to put in)");
+        grid("mine", false);
+    }
+    ImGui::End();
+    if (!keepOpen) SetInventoryOpen(false);
+}
+
 void Application::ChiselTarget(bool raise) {
-    auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), kReach);
+    auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach());
     if (!hit) return;
     // Where the view ray enters the block's cube decides the quarter (in x and z).
     const glm::vec3 origin = camera.GetPosition(), dir = camera.GetDirection();
@@ -1436,6 +1502,21 @@ void Application::OnMouseButton(int button, int action) {
         }
     }
 
+    // Right-click on a chest within 6 blocks opens it (with Shift held, or further off,
+    // it's built against instead).
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) != GLFW_PRESS) {
+        Block target;
+        if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
+            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && target.type == BlockType::CHEST) {
+            client->OpenChest(at->block);
+            SetInventoryOpen(true);
+            chestMode = true;
+            chestSeenOpen = false;
+            chestAskedAt = Client::Now();
+            return;
+        }
+    }
+
     // Right-click with an item in hand uses it (wherever you look): food is eaten;
     // items are never placed.
     if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::None && IsItemType(SelectedBlock())) {
@@ -1448,7 +1529,7 @@ void Application::OnMouseButton(int button, int action) {
         return;
     }
 
-    auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), kReach);
+    auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach());
     if (!hit) return;
 
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
@@ -1528,7 +1609,7 @@ void Application::UpdateMining() {
     const bool held = (captureCursor && !chatOpen && !inventoryOpen && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) || holdMine;
     // Not while aiming at a creature (that's a fight, not mining).
     auto hit = held && client->IsWelcomed() && !client->IsCreative() && !TargetInView().Any()
-                   ? Raycast(*world, camera.GetPosition(), camera.GetDirection(), kReach)
+                   ? Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())
                    : std::nullopt;
     Block block;
     if (!hit || !world->GetBlock(hit->block.x, hit->block.y, hit->block.z, block) || block.IsAir() || block.IsLiquid()) {
@@ -1687,4 +1768,8 @@ void Application::MouseButtonCallback(GLFWwindow* window, int button, int action
 
 void Application::CursorPosCallback(GLFWwindow* window, double x, double y) {
     static_cast<Application*>(glfwGetWindowUserPointer(window))->OnCursorMove(x, y);
+}
+
+float Application::Reach() const {
+    return client && client->IsCreative() ? kCreativeReach : kSurvivalReach;
 }

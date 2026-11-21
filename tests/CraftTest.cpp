@@ -104,6 +104,9 @@ int main() {
         auto pump = [&](double s, const std::function<bool()>& done) { return Pump(a, s, done); };
         auto wait = [&](double s) { pump(s, [] { return false; }); };
         Check(pump(20.0, [&] { return a.joined; }), "a survival player joins");
+        // On the ground (survival players build within 6 blocks).
+        server.QueueConsoleCommand("tp Crafter 7.5 0 7.5");
+        pump(20.0, [&] { return a.feet.y < 0.5f; });
         auto units = [&](BlockType t) { return a.client.GetResources(t); };
         // The client shows crafts at once (predicted); this waits until the server has
         // really done them: a command sent after them is answered after them (one

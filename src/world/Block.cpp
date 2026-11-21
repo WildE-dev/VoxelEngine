@@ -260,6 +260,7 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* RAW_VENISON    */ {{ "raw_venison", "raw_venison", "raw_venison", "raw_venison", "raw_venison", "raw_venison" }}, // items: their icon
     /* COOKED_VENISON */ {{ "cooked_venison", "cooked_venison", "cooked_venison", "cooked_venison", "cooked_venison", "cooked_venison" }},
     /* HIDE           */ {{ "hide", "hide", "hide", "hide", "hide", "hide" }},
+    /* CHEST */ {{ "chest_top", "chest_top", "chest_side", "chest_side", "chest_side", "chest_side" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -290,7 +291,7 @@ namespace {
 constexpr const char* kBlockIds[kBlockTypeCount] = {
     "air", "grass", "dirt", "stone", "lamp", "log", "leaves", "tall_grass", "flower_red", "flower_yellow", "sand", "water", "pump", "pipe",
     "stone_brick", "mossy_brick", "spikes", "crumbling_brick", "pressure_plate", "sluice", "snow", "dry_grass", "lush_grass", "snowy_grass",
-    "pine_leaves", "cactus", "dead_bush", "ice", "pebbles", "planks", "glass", "raw_venison", "cooked_venison", "hide",
+    "pine_leaves", "cactus", "dead_bush", "ice", "pebbles", "planks", "glass", "raw_venison", "cooked_venison", "hide", "chest",
 };
 } // namespace
 
@@ -708,7 +709,8 @@ bool Block::CanChisel() const {
     case BlockType::PIPE:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
-    case BlockType::GLASS: return false;
+    case BlockType::GLASS:
+    case BlockType::CHEST: return false;
     default: return true;
     }
 }

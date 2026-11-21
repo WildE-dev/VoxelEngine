@@ -136,6 +136,9 @@ int main() {
     Check(both(15.0, [&] { return a.player.GetFeetPosition().y < 0.5f && a.player.IsOnGround(); }), "and lands");
 
     std::cout << "Crumbling bricks" << std::endl;
+    // (Survival players build within 6 blocks: go there first.)
+    server.QueueConsoleCommand("tp Tester 21.5 0 5.5");
+    both(20.0, [&] { return std::abs(a.player.GetFeetPosition().x - 21.5f) < 0.2f && a.player.IsOnGround(); });
     for (int x = 20; x <= 23; x++) a.client.PlaceBlock({ x, 4, 7 }, BlockType::CRUMBLING_BRICK);
     both(1.0, [] { return false; });
     Check(TypeAt(b, { 20, 4, 7 }) == BlockType::CRUMBLING_BRICK && TypeAt(b, { 23, 4, 7 }) == BlockType::CRUMBLING_BRICK, "a ledge of crumbling bricks is built");
@@ -145,10 +148,12 @@ int main() {
     Check(both(20.0, [&] { return a.player.GetFeetPosition().y < 1.0f; }), "dropping the player to the ground");
 
     std::cout << "Pressure plates" << std::endl;
+    server.QueueConsoleCommand("tp Tester 32.5 0 8.5");
+    both(20.0, [&] { return std::abs(a.player.GetFeetPosition().x - 32.5f) < 0.2f && a.player.IsOnGround(); });
     a.client.PlaceBlock({ 30, 3, 7 }, BlockType::SLUICE);
     b.client.PlaceBlock({ 30, 4, 7 }, BlockType::WATER);
     a.client.PlaceBlock({ 30, 0, 10 }, BlockType::PRESSURE_PLATE);
-    a.client.PlaceBlock({ 50, 3, 7 }, BlockType::SLUICE); // too far from the plate
+    b.client.PlaceBlock({ 50, 3, 7 }, BlockType::SLUICE); // too far from the plate (the creative watcher reaches that far)
     both(1.0, [] { return false; });
     Check(TypeAt(b, { 30, 3, 7 }) == BlockType::SLUICE && TypeAt(b, { 30, 0, 10 }) == BlockType::PRESSURE_PLATE, "a sluice gate holds water up; a plate is set nearby");
     server.QueueConsoleCommand("tp Tester 30.5 1 10.5");

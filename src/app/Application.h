@@ -88,6 +88,8 @@ private:
         bool Any() const { return creature != 0 || player >= 0; }
     };
     FightTarget TargetInView() const;
+    // How far you can break and build (by game mode).
+    float Reach() const;
     void SelectSlot(int slot);
     // Inventory (I): pick which block goes in each hotbar slot; kept in hotbar.txt.
     void DrawInventory();
@@ -198,6 +200,11 @@ private:
     int placeHeight = 8;  // eighths: how tall shapeable blocks are placed (V / Shift+V)
     bool inventoryOpen = false;
     bool cursorBeforeInventory = true;
+    // A chest is open (in place of the inventory): asked for at chestAskedAt, and seen
+    // open by the server since.
+    bool chestMode = false, chestSeenOpen = false;
+    double chestAskedAt = 0.0;
+    void DrawChest();
     double scrollAccumulator = 0.0;
     bool showDebug = false;
     bool vsync = true;

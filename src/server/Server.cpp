@@ -38,6 +38,10 @@ constexpr float kEyeHeight = 1.62f;
 // for movement while the request is in flight.
 constexpr float kReach = 56.0f;
 constexpr float kLaserReach = 112.0f;
+// Survival players reach 6 blocks (the client's raycast), plus slack; chests open
+// from that close in any mode.
+constexpr float kSurvivalReach = 7.5f;
+constexpr float kChestReach = kSurvivalReach;
 
 Collision::AABB BodyAt(const glm::vec3& feet, float shrink = 0.0f) {
     const float half = kPlayerWidth * 0.5f - shrink;
@@ -124,6 +128,8 @@ bool Server::Start(const Options& opts) {
     defaultMode = storage ? static_cast<net::GameMode>(storage->GetDefaultMode()) : options.defaultMode;
     LoadOperators();
     for (const auto& name : options.operators) SetOperator(name, true);
+    if (storage)
+        for (const auto& [pos, held] : storage->GetChests()) chests[pos] = held;
     weatherSeed ^= static_cast<uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
     weatherMode = options.weather;
     raining = options.weather == Options::Weather::Rain;
@@ -213,6 +219,7 @@ void Server::Save(bool shuttingDown) {
     const double start = Now();
     for (const auto& [peer, client] : clients) StorePlayer(client);
     storage->SetTimeOfDay(static_cast<float>(timeOfDay));
+    storage->SetChests({ chests.begin(), chests.end() });
     const size_t saved = world->SaveAll();
     const bool ok = storage->Flush();
     lastSaveTime = Now();
@@ -283,6 +290,16 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     case net::MsgType::AttackPlayer: {
         net::AttackPlayer m;
         if ((ok = net::Decode(in, m))) HandleAttackPlayer(client, m.player, m.tool);
+        break;
+    }
+    case net::MsgType::OpenChest: {
+        net::OpenChest m;
+        if ((ok = net::Decode(in, m))) HandleOpenChest(client, m.pos, m.open != 0);
+        break;
+    }
+    case net::MsgType::ChestMove: {
+        net::ChestMove m;
+        if ((ok = net::Decode(in, m))) HandleChestMove(client, m.pos, m.type, m.units, m.intoChest != 0);
         break;
     }
     case net::MsgType::Eat: {
@@ -454,6 +471,10 @@ void Server::HandlePlayerState(ClientState& client, const net::PlayerState& stat
     if (!blocked) client.lastValid = state.feet;
 }
 
+float Server::EditReach(const ClientState& client) const {
+    return Creative(client) ? kReach : kSurvivalReach;
+}
+
 bool Server::InReach(const ClientState& client, const glm::ivec3& pos, float reach) const {
     const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
     return glm::distance(eye, glm::vec3(pos) + glm::vec3(0.5f)) <= reach;
@@ -571,7 +592,7 @@ void Server::SendCreatures() {
 
 void Server::HandleMineStart(ClientState& client, const glm::ivec3& pos, Tool tool) {
     tool = Usable(client, tool);
-    client.mining = InReach(client, pos, kReach);
+    client.mining = InReach(client, pos, EditReach(client));
     client.miningPos = pos;
     client.miningTool = tool;
     client.miningSince = Now();
@@ -580,7 +601,7 @@ void Server::HandleMineStart(ClientState& client, const glm::ivec3& pos, Tool to
 void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) {
     tool = Usable(client, tool);
     Block block;
-    if (!InReach(client, pos, kReach) || !world->GetBlock(pos.x, pos.y, pos.z, block) || block.IsAir() || block.IsLiquid()) {
+    if (!InReach(client, pos, EditReach(client)) || !world->GetBlock(pos.x, pos.y, pos.z, block) || block.IsAir() || block.IsLiquid()) {
         return Echo(client, pos);
     }
     // Survival: only once it's been mined for long enough, with that tool.
@@ -596,6 +617,7 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
     }
     // Breaking a waterlogged block leaves its water behind.
     world->SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
+    if (block.type == BlockType::CHEST) RemoveChest(pos, &client);
     // Survival: the block's worth goes to the player.
     if (!Creative(client)) {
         uint32_t& held = client.resources[static_cast<size_t>(block.ResourceType())]; // (pebbles are stone)
@@ -606,7 +628,7 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
 
 void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType type, int height, int faceAxis) {
     Block existing;
-    const bool valid = type != BlockType::AIR && !IsItemType(type) && InReach(client, pos, kReach) && world->GetBlock(pos.x, pos.y, pos.z, existing) &&
+    const bool valid = type != BlockType::AIR && !IsItemType(type) && InReach(client, pos, EditReach(client)) && world->GetBlock(pos.x, pos.y, pos.z, existing) &&
                        existing.IsPassable();
     if (!valid) {
         // The client took the cost when it predicted the placement: put its count right.
@@ -633,6 +655,7 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
         }
     }
     world->SetBlock(pos.x, pos.y, pos.z, placed);
+    if (type == BlockType::CHEST) chests[pos] = ChestItems{}; // a new chest is empty
     if (!Creative(client)) {
         held -= cost;
         SendResources(client);
@@ -645,7 +668,7 @@ constexpr int kChiselStep = 2; // eighths
 void Server::HandleChisel(ClientState& client, const net::EditChisel& chisel) {
     const glm::ivec3& p = chisel.pos;
     Block block;
-    if (!InReach(client, p, kReach) || !world->GetBlock(p.x, p.y, p.z, block) || !block.CanChisel()) return Echo(client, p);
+    if (!InReach(client, p, EditReach(client)) || !world->GetBlock(p.x, p.y, p.z, block) || !block.CanChisel()) return Echo(client, p);
     const Block after = block.Chiselled(chisel.edge, chisel.raise ? kChiselStep : -kChiselStep);
     // Survival: chiselling off gives back what it takes away; building up costs it.
     if (!Creative(client)) {
@@ -669,7 +692,11 @@ void Server::HandleCarve(ClientState& client, const net::EditCarve& carve) {
         for (int x = -r; x <= r; x++)
             for (int y = -r; y <= r; y++)
                 for (int z = -r; z <= r; z++)
-                    if (x * x + y * y + z * z <= r * r) world->SetBlock(center.x + x, center.y + y, center.z + z, BlockType::AIR);
+                    if (x * x + y * y + z * z <= r * r) {
+                        const glm::ivec3 p = center + glm::ivec3(x, y, z);
+                        world->SetBlock(p.x, p.y, p.z, BlockType::AIR);
+                        if (chests.count(p)) RemoveChest(p, nullptr); // (lasered: its contents are gone)
+                    }
     }
 }
 
@@ -849,6 +876,65 @@ void Server::HandleEat(ClientState& client, BlockType food) {
     SendHealth(client, false);
 }
 
+void Server::HandleOpenChest(ClientState& client, const glm::ivec3& pos, bool open) {
+    client.openChest.reset();
+    Block block;
+    if (open && InReach(client, pos, kChestReach) && world->GetBlock(pos.x, pos.y, pos.z, block) && block.type == BlockType::CHEST) {
+        client.openChest = pos;
+        chests.try_emplace(pos); // (one from before chests were kept: empty)
+    }
+    SendChest(client);
+}
+
+void Server::HandleChestMove(ClientState& client, const glm::ivec3& pos, BlockType type, uint32_t units, bool intoChest) {
+    // Only with that chest open, still there and in reach.
+    Block block;
+    if (client.openChest != pos || !InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block) || block.type != BlockType::CHEST ||
+        type == BlockType::AIR || block.IsLiquid())
+        return SendResources(client);
+    ChestItems& chest = chests[pos];
+    uint32_t& from = intoChest ? client.resources[static_cast<size_t>(type)] : chest[static_cast<size_t>(type)];
+    uint32_t& to = intoChest ? chest[static_cast<size_t>(type)] : client.resources[static_cast<size_t>(type)];
+    units = std::min(units, from);
+    from -= units;
+    to += units;
+    SendResources(client);
+    SendChestToViewers(pos);
+}
+
+void Server::SendChest(ClientState& client) {
+    net::ChestContents m;
+    m.open = client.openChest.has_value();
+    if (client.openChest) {
+        m.pos = *client.openChest;
+        const ChestItems& chest = chests[*client.openChest];
+        for (size_t t = 0; t < chest.size(); t++)
+            if (chest[t] > 0) m.held.emplace_back(static_cast<BlockType>(t), chest[t]);
+    }
+    net.Send(client.peer, net::kChannelReliable, net::Encode(m));
+}
+
+void Server::SendChestToViewers(const glm::ivec3& pos) {
+    for (auto& [peer, client] : clients)
+        if (client.openChest == pos) SendChest(client);
+}
+
+void Server::RemoveChest(const glm::ivec3& pos, ClientState* breaker) {
+    auto it = chests.find(pos);
+    if (it == chests.end()) return;
+    // What was in it goes to whoever broke it.
+    if (breaker) {
+        for (size_t t = 0; t < it->second.size(); t++) breaker->resources[t] += it->second[t];
+        SendResources(*breaker);
+    }
+    chests.erase(it);
+    for (auto& [peer, client] : clients)
+        if (client.openChest == pos) {
+            client.openChest.reset();
+            SendChest(client);
+        }
+}
+
 void Server::UpdateTraps() {
     const double now = Now();
     // Breath goes by real time, not ticks: on a slow, overloaded machine ticks run late,
@@ -858,6 +944,11 @@ void Server::UpdateTraps() {
     for (auto& [peer, client] : clients) {
         if (!client.welcomed || !client.hasState) continue;
         UpdateHunger(client, breathStep);
+        // Walked away from their open chest: it closes.
+        if (client.openChest && !InReach(client, *client.openChest, kChestReach + 1.0f)) {
+            client.openChest.reset();
+            SendChest(client);
+        }
         // Slow healing once nothing has hurt them for a while, while well fed (in
         // survival; it costs food).
         const bool survival = !Creative(client);

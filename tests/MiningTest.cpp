@@ -117,6 +117,9 @@ int main() {
     Check(both(20.0, [&] { return TypeAt(a, { 15, 0, 12 }) == BlockType::STONE; }), "the builder (in creative) lays a row of stone");
 
     std::cout << "Survival" << std::endl;
+    // On the ground beside the row (survival players reach 6 blocks).
+    server.QueueConsoleCommand("tp Miner 11.5 0 9.5");
+    both(20.0, [&] { return std::abs(a.feet.y) < 0.1f; });
     a.client.BreakBlock({ 10, 0, 12 });
     wait(1.0);
     Check(TypeAt(a, { 10, 0, 12 }) == BlockType::STONE && TypeAt(builder, { 10, 0, 12 }) == BlockType::STONE, "breaking without mining is refused");
@@ -171,6 +174,15 @@ int main() {
     a.client.PlaceBlock({ 9, 0, 9 }, BlockType::PEBBLES);
     Check(both(20.0, [&] { return TypeAt(builder, { 9, 0, 9 }) == BlockType::PEBBLES; }) && a.client.GetResources(BlockType::STONE) == stone,
           "and putting them down costs the 16 stone again");
+
+    std::cout << "Reach" << std::endl;
+    builder.client.PlaceBlock({ 25, 0, 9 }, BlockType::PEBBLES); // 13 blocks from the miner
+    Check(both(20.0, [&] { return TypeAt(a, { 25, 0, 9 }) == BlockType::PEBBLES; }), "pebbles 13 blocks off");
+    a.client.BreakBlock({ 25, 0, 9 });
+    wait(1.0);
+    Check(TypeAt(builder, { 25, 0, 9 }) == BlockType::PEBBLES, "are out of a survival player's reach (6 blocks)");
+    builder.client.BreakBlock({ 25, 0, 9 });
+    Check(both(20.0, [&] { return TypeAt(a, { 25, 0, 9 }) == BlockType::AIR; }), "but not a creative player's");
 
     std::cout << "Creative" << std::endl;
     builder.client.BreakBlock({ 13, 0, 12 });

@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 23;
+constexpr uint32_t kProtocolVersion = 24;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -49,6 +49,8 @@ enum class MsgType : uint8_t {
     Craft,         // make something from resources (survival)
     AttackPlayer,  // hit another player (when PvP is on)
     Eat,           // eat a food item (survival)
+    OpenChest,     // open the chest at a position (or close the open one)
+    ChestMove,     // move units of a type between you and the open chest
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -66,6 +68,7 @@ enum class MsgType : uint8_t {
     Resources,     // what you hold (survival): units of each block type
     CreatureSnapshot, // the creatures near you
     PlayerName,    // a player's name, by id (for their name tag)
+    ChestContents, // what's in the chest you have open (or that it closed)
     Knockback,     // you were hit: a push to add to your velocity
 };
 
@@ -339,6 +342,26 @@ struct Health {
     uint8_t food = 20, foodMax = 20;
 };
 
+// Chests: open one (in reach) to see what's in it, move things in and out, close it.
+// `open` 0 closes whatever chest is open.
+struct OpenChest {
+    glm::ivec3 pos{0};
+    uint8_t open = 1;
+};
+struct ChestMove {
+    glm::ivec3 pos{0};
+    BlockType type = BlockType::AIR;
+    uint32_t units = 0;
+    uint8_t intoChest = 1; // 1: from you into the chest; 0: out of it
+};
+// What's in the open chest, by type (none left out), sent on opening and whenever it
+// changes; `open` 0: it's closed (broken, out of reach, or you closed it).
+struct ChestContents {
+    glm::ivec3 pos{0};
+    uint8_t open = 1;
+    std::vector<std::pair<BlockType, uint32_t>> held;
+};
+
 // Eat one of a food item you hold.
 struct Eat {
     BlockType food = BlockType::AIR;
@@ -375,6 +398,9 @@ std::vector<uint8_t> Encode(const MineStart& m);
 std::vector<uint8_t> Encode(const Attack& m);
 std::vector<uint8_t> Encode(const AttackPlayer& m);
 std::vector<uint8_t> Encode(const Eat& m);
+std::vector<uint8_t> Encode(const OpenChest& m);
+std::vector<uint8_t> Encode(const ChestMove& m);
+std::vector<uint8_t> Encode(const ChestContents& m);
 std::vector<uint8_t> Encode(const Craft& m);
 std::vector<uint8_t> Encode(const CreatureSnapshot& m);
 std::vector<uint8_t> Encode(const EditPlace& m);
@@ -412,6 +438,9 @@ bool Decode(ByteReader& in, MineStart& m);
 bool Decode(ByteReader& in, Attack& m);
 bool Decode(ByteReader& in, AttackPlayer& m);
 bool Decode(ByteReader& in, Eat& m);
+bool Decode(ByteReader& in, OpenChest& m);
+bool Decode(ByteReader& in, ChestMove& m);
+bool Decode(ByteReader& in, ChestContents& m);
 bool Decode(ByteReader& in, Craft& m);
 bool Decode(ByteReader& in, CreatureSnapshot& m);
 bool Decode(ByteReader& in, EditPlace& m);

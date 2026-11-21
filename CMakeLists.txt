@@ -194,6 +194,10 @@ target_link_libraries(MiningTest PRIVATE voxel_server voxel_client)
 add_executable(FoodTest tests/FoodTest.cpp)
 target_link_libraries(FoodTest PRIVATE voxel_server voxel_client)
 
+# Chests: storing, sharing, breaking and saving.
+add_executable(ChestTest tests/ChestTest.cpp)
+target_link_libraries(ChestTest PRIVATE voxel_server voxel_client)
+
 # Breathing: drowning, thin air up mountains, stale air deep down.
 add_executable(BreathTest tests/BreathTest.cpp)
 target_link_libraries(BreathTest PRIVATE voxel_server voxel_client)
@@ -210,7 +214,7 @@ target_link_libraries(ShapeTest PRIVATE voxel_server voxel_client)
 add_executable(BiomeTest tests/BiomeTest.cpp)
 target_link_libraries(BiomeTest PRIVATE voxel_common)
 
-foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest)
+foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W3)
     else()
@@ -232,6 +236,6 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 # `ctest` (or `ctest -j14` to run them all at once) runs every test suite.
 enable_testing()
-foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest)
+foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest)
     add_test(NAME ${test} COMMAND ${test} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 endforeach()

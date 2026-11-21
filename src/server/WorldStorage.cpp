@@ -162,6 +162,26 @@ bool WorldStorage::ReadWorldFile() {
         if (std::isfinite(p.feet.x) && std::isfinite(p.feet.y) && std::isfinite(p.feet.z) && std::isfinite(p.yaw) && std::isfinite(p.pitch))
             players[name] = p;
     }
+    // Chests (format 8 on): position, then the kinds held and their units.
+    uint32_t chestCount = 0;
+    if (version >= 8 && !r.VarU32(chestCount)) chestCount = 0;
+    for (uint32_t c = 0; c < chestCount; c++) {
+        glm::ivec3 pos;
+        ChestItems held{};
+        uint32_t kinds = 0;
+        bool ok = r.IVec3(pos) && r.VarU32(kinds) && kinds <= held.size();
+        for (uint32_t k = 0; ok && k < kinds; k++) {
+            uint8_t type;
+            uint32_t units;
+            ok = r.U8(type) && type < held.size() && r.VarU32(units);
+            if (ok) held[type] = units;
+        }
+        if (!ok) {
+            std::cerr << "[storage] " << path.string() << " is truncated (chests)" << std::endl;
+            return false;
+        }
+        chests.emplace_back(pos, held);
+    }
     return true;
 }
 
@@ -293,6 +313,17 @@ void WorldStorage::SetTimeOfDay(float t) {
     playersDirty = true; // world.dat needs writing
 }
 
+WorldStorage::Chests WorldStorage::GetChests() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return chests;
+}
+
+void WorldStorage::SetChests(Chests c) {
+    std::lock_guard<std::mutex> lock(mutex);
+    chests = std::move(c);
+    playersDirty = true; // world.dat needs writing
+}
+
 size_t WorldStorage::GetStoredChunkCount() const {
     std::lock_guard<std::mutex> lock(mutex);
     return chunks.size();
@@ -352,6 +383,18 @@ bool WorldStorage::Flush() {
                 w.U8(kFieldHealth), w.VarU32(1), w.U8(static_cast<uint8_t>(std::clamp(p.health, 0, 255)));
                 w.U8(kFieldFood), w.VarU32(1), w.U8(static_cast<uint8_t>(std::clamp(p.food, 0, 255)));
                 w.U8(kFieldArmour), w.VarU32(1), w.U8(p.armour);
+            }
+            w.VarU32(static_cast<uint32_t>(chests.size()));
+            for (const auto& [pos, held] : chests) {
+                w.IVec3(pos);
+                uint32_t kinds = 0;
+                for (uint32_t units : held) kinds += units > 0;
+                w.VarU32(kinds);
+                for (size_t t = 0; t < held.size(); t++)
+                    if (held[t] > 0) {
+                        w.U8(static_cast<uint8_t>(t));
+                        w.VarU32(held[t]);
+                    }
             }
             files.emplace_back(directory / "world.dat", std::move(w.data));
             writePlayers = true;

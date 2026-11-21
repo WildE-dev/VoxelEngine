@@ -186,7 +186,7 @@ int main() {
     Check(both(20.0, [&] { return a->client.GetResources(BlockType::STONE_BRICK) == 96 && Has(*a, "Server gave you 1.5 stone_brick"); }),
           "the console can (1.5 blocks: 96)");
     server->QueueConsoleCommand("give diamonds 3 Alice");
-    const glm::ivec3 brick(14, 0, 10);
+    const glm::ivec3 brick(11, 0, 8); // (within the 6 blocks a survival player reaches)
     a->client.PlaceBlock(brick, BlockType::STONE_BRICK);
     Check(both(20.0, [&] { return At(*b, brick).type == BlockType::STONE_BRICK && a->client.GetResources(BlockType::STONE_BRICK) == 32; }),
           "a full brick costs 64");

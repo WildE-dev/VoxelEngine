@@ -162,6 +162,45 @@ BOOTS = """
 """
 ARMOUR_COLOURS = {"o": (60, 38, 20), "t": (158, 108, 62), "T": (186, 138, 86), "s": (90, 60, 34)}
 
+# The chest: dark-edged wooden boards, a lid seam with an iron latch on the sides.
+CHEST_SIDE = """
+dddddddddddddddd
+dwwwwwWwwwwwwwwd
+dwWwwwwwwwwWwwwd
+dwwwwwwwwwwwwwwd
+dwwwWwwwwwwwwWwd
+dwwwwwwwwwwwwwwd
+dddddddiiddddddd
+dwwwwwwiiwwwwwwd
+dwWwwwwkkwwwwwwd
+dwwwwwwwwwwWwwwd
+dwwwwwWwwwwwwwwd
+dwwwwwwwwwwwwwwd
+dwwWwwwwwwwwwWwd
+dwwwwwwwwwwwwwwd
+dwwwwwwwWwwwwwwd
+dddddddddddddddd
+"""
+CHEST_TOP = """
+dddddddddddddddd
+dwwwwwwwwwwwwwwd
+dwWwwwwwwWwwwwwd
+dwwwwwwwwwwwwwwd
+dllllllllllllld.
+dwwwwwwwwwwwwwwd
+dwwwWwwwwwwwwWwd
+dwwwwwwwwwwwwwwd
+dllllllllllllld.
+dwwwwwwwwwwwwwwd
+dwWwwwwwwwwWwwwd
+dwwwwwwwwwwwwwwd
+dllllllllllllld.
+dwwwwwwWwwwwwwwd
+dwwwwwwwwwwwwwwd
+dddddddddddddddd
+""".replace(".", "d")
+CHEST_COLOURS = {"d": (74, 48, 24), "w": (156, 110, 60), "W": (176, 128, 74), "l": (122, 84, 44), "i": (70, 70, 76), "k": (40, 40, 44)}
+
 
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
@@ -171,6 +210,8 @@ def main():
     draw("armour_cap", CAP, ARMOUR_COLOURS, seed=15)
     draw("armour_tunic", TUNIC, ARMOUR_COLOURS, seed=16)
     draw("armour_boots", BOOTS, ARMOUR_COLOURS, seed=17)
+    draw("chest_side", CHEST_SIDE, CHEST_COLOURS, jitter=6, seed=18)
+    draw("chest_top", CHEST_TOP, CHEST_COLOURS, jitter=6, seed=19)
 
 
 if __name__ == "__main__":

@@ -164,6 +164,15 @@ public:
     void AttackPlayer(uint16_t player, Tool tool);
     // Eat one of a food item held (survival; the server checks it).
     void Eat(BlockType item);
+    // Chests: ask to open the one at `pos` (the server answers with its contents), close
+    // it, and move units of a type into or out of it (the server's answer updates both).
+    void OpenChest(const glm::ivec3& pos);
+    void CloseChest();
+    void MoveChestItems(BlockType type, uint32_t units, bool intoChest);
+    // The chest open now (none until the server says it's open, or once it's closed),
+    // and what's in it.
+    std::optional<glm::ivec3> GetOpenChest() const { return openChest; }
+    uint32_t GetChestUnits(BlockType type) const { return chestHeld[static_cast<size_t>(type)]; }
 
     struct Stats {
         uint32_t roundTripMs = 0;
@@ -192,6 +201,8 @@ private:
     uint32_t stateSequence = 0;
     uint16_t correctionId = 0;
     glm::vec3 pendingKnockback{ 0.0f };
+    std::optional<glm::ivec3> openChest;
+    std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> chestHeld{};
     std::optional<glm::vec3> pendingCorrection;
     double lastStateSent = 0.0;
 

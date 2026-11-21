@@ -186,6 +186,17 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         remote = std::move(next); // players missing from the snapshot have left
         break;
     }
+    case net::MsgType::ChestContents: {
+        net::ChestContents m;
+        if (!(ok = net::Decode(in, m))) break;
+        chestHeld.fill(0);
+        if (m.open) {
+            openChest = m.pos;
+            for (const auto& [type, units] : m.held) chestHeld[static_cast<size_t>(type)] = units;
+        }
+        else openChest.reset();
+        break;
+    }
     case net::MsgType::PlayerName: {
         net::PlayerName m;
         if ((ok = net::Decode(in, m))) playerNames[m.id] = m.name;
@@ -396,6 +407,20 @@ std::vector<Client::BlockEvent> Client::TakeBlockEvents() {
     std::vector<BlockEvent> events;
     events.swap(blockEvents);
     return events;
+}
+
+void Client::OpenChest(const glm::ivec3& pos) {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::OpenChest{ pos, 1 }));
+}
+
+void Client::CloseChest() {
+    if (welcomed && openChest) net.Send(net::kChannelReliable, net::Encode(net::OpenChest{ *openChest, 0 }));
+    openChest.reset();
+}
+
+void Client::MoveChestItems(BlockType type, uint32_t units, bool intoChest) {
+    if (welcomed && openChest && units > 0)
+        net.Send(net::kChannelReliable, net::Encode(net::ChestMove{ *openChest, type, units, static_cast<uint8_t>(intoChest ? 1 : 0) }));
 }
 
 void Client::Eat(BlockType item) {

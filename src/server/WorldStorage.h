@@ -37,7 +37,7 @@ public:
     static constexpr int kRegionSize = 8;      // chunks per region along each axis
     // 2: world type; 3: time of day; 4: game modes and resources; 5: block axes (logs);
     // 6: tools players have made
-    static constexpr uint32_t kFormatVersion = 7;
+    static constexpr uint32_t kFormatVersion = 8;
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
@@ -52,6 +52,12 @@ public:
         int food = 20;   // world/Hunger.h
         uint8_t armour = 0; // armour worn (Armour::Bit each)
     };
+
+    // Chests' contents (units by block type), by position (format 8 on).
+    using ChestItems = std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)>;
+    using Chests = std::vector<std::pair<glm::ivec3, ChestItems>>;
+    Chests GetChests() const;
+    void SetChests(Chests chests); // saved with the next Flush
 
     // One bit per block column of a chunk (index x * CHUNK_SIZE + z).
     using ColumnMask = std::array<uint64_t, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE / 64>;
@@ -133,4 +139,5 @@ private:
     uint8_t worldType = 0;
     float timeOfDay = 0.05f;
     uint8_t defaultMode = 1; // creative, for worlds saved before modes
+    Chests chests;
 };
