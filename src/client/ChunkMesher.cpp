@@ -244,7 +244,15 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 if (face != static_cast<int>(Face::Top) || touchesAbove) continue;
             }
             const Block& neighbour = cellAt(n);
-            if (neighbour.HasWater()) continue;                                      // continuous water: no face
+            // Water beside water is one surface, with no face between, except where a
+            // partial block's water stands flat at its own level (see below): there the
+            // side shows above the lower of the two.
+            int theirWater32 = -1;
+            if (neighbour.HasWater()) {
+                if (face == static_cast<int>(Face::Top) || face == static_cast<int>(Face::Bottom)) continue;
+                if (!neighbour.IsPartial() && !self.IsPartial()) continue;
+                theirWater32 = std::clamp((neighbour.WaterShownLevel() + kUnitsPer32nd / 2) / kUnitsPer32nd, 1, kOpenSurfaceTop);
+            }
             if (face == static_cast<int>(Face::Bottom) && self.IsPartial()) continue; // the slope is the floor
 
             Block shape;
@@ -262,8 +270,9 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     const int e = edges.ours[k];
                     uint8_t from = bottom[e];
                     if (neighbour.IsPartial()) from = std::max(from, std::min(neighbour.edgeData.GetTopY(edges.theirs[k]), top[e]));
+                    if (theirWater32 >= 0) from = std::max(from, static_cast<uint8_t>(std::min(theirWater32 / 4, static_cast<int>(top[e]))));
                     shape.edgeData.SetBottomY(e, from);
-                    exposed |= top32[e] > from * 4;
+                    exposed |= top32[e] > std::max(from * 4, theirWater32); // (none where both stand level)
                 }
                 if (!exposed) continue;
             }
