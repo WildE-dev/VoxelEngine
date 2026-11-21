@@ -80,6 +80,7 @@ inline const std::vector<Recipe>& Recipes() {
         { "shaft", "3 shafts", { { BlockType::LOG, kBlock } }, BlockType::SHAFT, 3 * kBlock },
         { "compressor", "Compressor", { { BlockType::IRON_INGOT, kBlock }, { BlockType::STONE, 2 * kBlock }, }, BlockType::COMPRESSOR, kBlock },
         { "air_tank", "Air tank", { { BlockType::IRON_INGOT, 2 * kBlock }, { BlockType::GLASS, kBlock / 2 } }, BlockType::AIR_TANK, kBlock },
+        { "pressure_gauge", "Pressure gauge", { { BlockType::GLASS, kBlock / 4 }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::PRESSURE_GAUGE, kBlock },
         { "valve", "Valve", { { BlockType::IRON_INGOT, kBlock / 2 }, { BlockType::STONE, kBlock } }, BlockType::VALVE, kBlock },
         // Signals (world/Signals.h).
         { "lever", "2 levers", { { BlockType::PLANKS, kBlock / 4 }, { BlockType::STONE, kBlock / 4 } }, BlockType::LEVER, 2 * kBlock },

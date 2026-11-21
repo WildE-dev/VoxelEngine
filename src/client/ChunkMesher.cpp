@@ -433,7 +433,10 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     unsigned joined = 0;
                     for (int face = 0; face < kFaceCount; ++face) {
                         const glm::ivec3 n = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
-                        if (Power::PipeJoins(block.type, cellAt(n).type)) joined |= 1u << face;
+                        const Block& other = cellAt(n);
+                        // (And an air pipe out to a pressure gauge fixed to it.)
+                        const bool gauge = block.type == BlockType::AIR_PIPE && other.type == BlockType::PRESSURE_GAUGE && other.axis % 6 == face;
+                        if (Power::PipeJoins(block.type, other.type) || gauge) joined |= 1u << face;
                     }
                     block.AddBoxVertices(vertices, x, y, z, glm::ivec3(kLo), glm::ivec3(kHi), joined, bl, sl);
                     for (int face = 0; face < kFaceCount; ++face) {

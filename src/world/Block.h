@@ -226,12 +226,16 @@ enum class BlockType : uint8_t {
     // A sinkhole: the natural drain, a dark opening in wet rock where rivers end (it
     // works just like a drain). Breaking it gives stone, and it's gone.
     SINKHOLE,
+    // A pressure gauge: a dial fixed to an air pipe (or a tank, compressor or any other
+    // part of an air network), facing away from it, that shows the network's pressure.
+    // A facing block (its axis: the way the dial faces), drawn as a model.
+    PRESSURE_GAUGE,
     COUNT
 };
 
 // Solid blocks drawn by a model of their own (turning wheels and shafts), and pipes
 // drawn as thin tubes: neither hides what's beside it or blocks light.
-inline bool IsModelType(BlockType type) { return type == BlockType::WATER_WHEEL || type == BlockType::SHAFT; }
+inline bool IsModelType(BlockType type) { return type == BlockType::WATER_WHEEL || type == BlockType::SHAFT || type == BlockType::PRESSURE_GAUGE; }
 inline bool IsPipeType(BlockType type) {
     return type == BlockType::PIPE || type == BlockType::AIR_PIPE || type == BlockType::ITEM_PIPE || type == BlockType::FILTER_PIPE;
 }
@@ -239,7 +243,9 @@ inline bool IsPipeType(BlockType type) {
 // piston and its head.
 // Water goes down these and is gone (see Water.h).
 inline bool IsDrainType(BlockType type) { return type == BlockType::DRAIN || type == BlockType::SINKHOLE; }
-inline bool IsFacingType(BlockType type) { return type == BlockType::PISTON || type == BlockType::PISTON_HEAD || type == BlockType::EXTRACTOR; }
+inline bool IsFacingType(BlockType type) {
+    return type == BlockType::PISTON || type == BlockType::PISTON_HEAD || type == BlockType::EXTRACTOR || type == BlockType::PRESSURE_GAUGE;
+}
 
 // Things held in the inventory that aren't blocks: they can't be placed.
 inline bool IsItemType(BlockType type) {

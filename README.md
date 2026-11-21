@@ -1004,9 +1004,12 @@ The machines:
   itself gives nothing back. A **pressure sensor** (see [Signals](#signals)) joins
   the pipes too, and sends while the pressure is high enough.
 
-Compressors and air tanks carry a **pressure gauge** on each open side: a dial whose
-needle swings from empty to full, with the running pressure (a quarter) marked in
-green. Look at a wheel, compressor, pump or drill to see how it's doing under the
+A **pressure gauge** is a block you fix to an air pipe, tank, compressor or anything
+else on a network: place it against one and it faces out from it, a dial on a short
+stem, its needle swinging from empty to full with the network's pressure (the
+running pressure, a quarter, is marked in green). It reads the network but isn't part
+of it, so it doesn't join what's either side of it; one fixed to nothing reads
+nothing. Look at a wheel, compressor, pump or drill to see how it's doing under the
 crosshair, and right-click any part (wheel, shaft, compressor, pipe, pump or drill)
 with an empty hand or a tool
 for the details in chat: how fast a wheel turns and how much water passes it, whether
@@ -1017,7 +1020,8 @@ Recipes: a water wheel from 6 planks and a log; 3 shafts from a log; a compresso
 from an iron ingot and 2 stone; 4 air pipes from a stone and a quarter of an iron
 ingot; an air tank from 2 iron ingots and half a glass; a valve from half an iron
 ingot and a stone; a drill from a steel ingot, an iron ingot and 2 stone; a piston from a planks, a
-stone and half an iron ingot; a smelter from 4 stone bricks and an iron ingot; 4 item
+stone and half an iron ingot; a pressure gauge from a quarter of a glass and a quarter of an iron ingot; a smelter
+from 4 stone bricks and an iron ingot; 4 item
 pipes from a planks and a quarter of an iron ingot; an extractor from an iron ingot and
 a planks; a filter pipe from an item pipe and a quarter of an iron ingot; a crafter
 from a steel ingot, an iron ingot and 2 planks; a harvester from half a steel ingot
@@ -1055,7 +1059,9 @@ an extractor on that chest sorts it along item pipes: a filter pipe, set by
 right-clicking it with glass in hand, takes the glass to one chest and keeps the iron
 and steel out, which go to another. A crafter on that chest, set to stone bricks,
 turns the stone put in it into bricks block for block, and a harvester beside it
-reaps two ripe crops of wheat into it and replants them.
+reaps two ripe crops of wheat into it and replants them. Last, a pressure gauge fixed
+on top of an air pipe reads the network's pressure, one on bare ground reads nothing,
+and right-clicking the gauge describes the network.
 
 ## Signals
 
@@ -1093,7 +1099,7 @@ sensor) and a quarter of an iron ingot, with a quarter of sand (water), glass
 The server runs it ten times a second (`Server::UpdateSignals`,
 `src/server/Signals.cpp`; the rules are in `src/world/Signals.h`), keeps every
 block's channels and saves them with the world (world format 11), and tells everyone
-about each block's channels and state as they change (`SignalInfo`, protocol 43).
+about each block's channels and state as they change (`SignalInfo`, protocol 44).
 `SignalTest` checks:
 
 - a lamp lights and goes out with a lever on its channel, and one on another channel

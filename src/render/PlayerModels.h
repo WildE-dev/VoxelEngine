@@ -70,11 +70,12 @@ struct WheelModel {
     bool shaft = false;
 };
 
-// A pressure gauge on one side of a compressor or air tank: a round dial with a needle
-// that swings from empty (pointing down and left) to full (down and right).
+// A pressure gauge block fixed to a pipe: a stem back to the pipe, and a round dial in
+// a housing facing away from it, with a needle that swings from empty (pointing down
+// and left) to full (down and right).
 struct GaugeModel {
-    glm::vec3 centre{0.0f};  // the block's centre
-    int side = 0;            // which side: 0 +x, 1 -x, 2 +z, 3 -z
+    glm::vec3 centre{0.0f};       // the block's centre
+    glm::ivec3 facing{ 0, 0, 1 }; // the way the dial faces (the pipe is behind it)
     float pressure = 0.0f;   // 0..1
     glm::vec2 light{ 15.0f, 0.0f };
 };

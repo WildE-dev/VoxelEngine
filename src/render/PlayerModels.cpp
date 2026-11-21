@@ -220,17 +220,22 @@ void PlayerModels::DrawGauges(Shader& shader, const glm::mat4& view, const glm::
     shader.SetUniform("textured", 0.0f);
     glBindVertexArray(vao);
     const glm::vec3 kRim(0.25f, 0.25f, 0.28f), kFace(0.93f, 0.9f, 0.8f), kRed(0.8f, 0.12f, 0.1f), kGreen(0.25f, 0.65f, 0.3f), kPin(0.1f, 0.1f, 0.1f);
-    static const float kTurn[4] = { 90.0f, -90.0f, 0.0f, 180.0f }; // local +z out of each side
     for (const auto& g : gauges) {
         shader.SetUniform("lightLevels", g.light);
-        // Local frame: +z out of the side, +y up, the dial a little above the middle.
-        const glm::mat4 frame = glm::translate(glm::rotate(glm::translate(glm::mat4(1.0f), g.centre), glm::radians(kTurn[g.side & 3]), glm::vec3(0, 1, 0)),
-                                               glm::vec3(0.0f, 0.12f, 0.5f));
+        // Local frame: +z the way it faces (level ones turned about y, upright ones
+        // about x), the pipe behind it at -z.
+        glm::mat4 base = glm::translate(glm::mat4(1.0f), g.centre);
+        if (g.facing.y > 0) base = glm::rotate(base, glm::radians(-90.0f), glm::vec3(1, 0, 0));
+        else if (g.facing.y < 0) base = glm::rotate(base, glm::radians(90.0f), glm::vec3(1, 0, 0));
+        else base = glm::rotate(base, std::atan2(static_cast<float>(g.facing.x), static_cast<float>(g.facing.z)), glm::vec3(0, 1, 0));
         auto part = [&](const glm::mat4& f, const glm::vec3& centre, const glm::vec3& size, const glm::vec3& color) {
             shader.SetUniform("model", glm::scale(glm::translate(f, centre), size));
             shader.SetUniform("color", color);
             glDrawArrays(GL_TRIANGLES, 0, 36);
         };
+        part(base, { 0.0f, 0.0f, -0.38f }, { 0.14f, 0.14f, 0.24f }, kRim);   // the stem, back to the pipe
+        part(base, { 0.0f, 0.0f, -0.2f }, { 0.52f, 0.52f, 0.14f }, kRim);    // the housing
+        const glm::mat4 frame = glm::translate(base, glm::vec3(0.0f, 0.0f, -0.14f));
         part(frame, { 0.0f, 0.0f, 0.01f }, { 0.44f, 0.44f, 0.02f }, kRim);
         part(frame, { 0.0f, 0.0f, 0.02f }, { 0.36f, 0.36f, 0.02f }, kFace);
         // Marks: the running pressure (a quarter) in green, the rest round the dial.

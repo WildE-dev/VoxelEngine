@@ -23,6 +23,8 @@
 //    Compressors stop adding air once it's full; longer networks store more but take
 //    longer to fill. Breaking a pipe lets out the air it held; a network split in two
 //    keeps its pressure on both sides.
+//  - A pressure gauge fixed to any part of a network (it isn't one itself: it doesn't
+//    join what's either side of it) shows the network's pressure on its dial.
 //  - Machines need at least kMinPressure to run, and use air for what they do:
 //     . The drill digs straight down from under itself, one block every
 //       kDrillInterval seconds for kDrillAir, up to kDrillDepth deep, putting what it
@@ -117,13 +119,15 @@ inline bool IsItemPart(BlockType t) {
 // How much air a part holds when full.
 inline float CapacityOf(BlockType t) { return t == BlockType::AIR_TANK ? kAirPerTank : kAirPerCell; }
 // Everything to do with air power (what right-clicking describes).
-inline bool IsPart(BlockType t) { return IsAirPart(t) || t == BlockType::WATER_WHEEL || t == BlockType::SHAFT || t == BlockType::VALVE; }
+inline bool IsPart(BlockType t) {
+    return IsAirPart(t) || t == BlockType::WATER_WHEEL || t == BlockType::SHAFT || t == BlockType::VALVE || t == BlockType::PRESSURE_GAUGE;
+}
 // What the server keeps track of: wheels, compressors and machines (not pipes or
 // shafts, which it finds from them).
 inline bool IsMachine(BlockType t) {
     return t == BlockType::WATER_WHEEL || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
            t == BlockType::PISTON || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
-           t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER;
+           t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::PRESSURE_GAUGE;
 }
 
 // Whether a pipe (drawn as a thin tube) reaches across to this neighbour: water pipes

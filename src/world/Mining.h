@@ -126,7 +126,8 @@ inline float Hardness(BlockType type) {
     case BlockType::DAYLIGHT_SENSOR:
     case BlockType::PLAYER_SENSOR: return 1.0f;
     case BlockType::SIGNAL_LAMP:
-    case BlockType::SIGNAL_LAMP_ON: return 0.5f;
+    case BlockType::SIGNAL_LAMP_ON:
+    case BlockType::PRESSURE_GAUGE: return 0.5f;
     case BlockType::LEVER:
     case BlockType::LEVER_ON: return 0.4f;
     case BlockType::SHAFT:

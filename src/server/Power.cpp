@@ -555,6 +555,12 @@ void Server::SendMachines() {
                 info.type = static_cast<uint8_t>(t.type);
                 info.state = static_cast<uint8_t>(wk->second.state);
             }
+            else if (Block g; world->GetBlock(pos.x, pos.y, pos.z, g) && g.type == BlockType::PRESSURE_GAUGE) {
+                // The pressure of what it's fixed to.
+                info.type = static_cast<uint8_t>(BlockType::PRESSURE_GAUGE);
+                auto on = networkOf.find(pos - g.Facing());
+                info.pressure = on != networkOf.end() ? ToByte(networks[on->second].Pressure()) : 0;
+            }
             else if (Block t; world->GetBlock(pos.x, pos.y, pos.z, t) && t.type == BlockType::AIR_TANK) {
                 info.type = static_cast<uint8_t>(BlockType::AIR_TANK);
             }
@@ -643,12 +649,16 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
         else if (b.type == BlockType::PRESSURE_SENSOR) {
             text += "Pressure sensor. ";
         }
+        else if (b.type == BlockType::PRESSURE_GAUGE) {
+            text += "Pressure gauge. ";
+        }
         else if (b.type == BlockType::PUMP) {
             const Power::DrillState st = pumpStates.count(pos) ? pumpStates[pos] : Power::DrillState::Idle;
             text += st == Power::DrillState::Working ? "Pump: pumping. " : st == Power::DrillState::NoPressure ? "Pump: waiting for air pressure. " : "Pump: nothing to pump. ";
         }
-        auto n = networkOf.find(pos);
-        if (n == networkOf.end()) text += "Not joined to a compressor or machine.";
+        // (A gauge reads what it's fixed to.)
+        auto n = networkOf.find(b.type == BlockType::PRESSURE_GAUGE ? pos - b.Facing() : pos);
+        if (n == networkOf.end()) text += b.type == BlockType::PRESSURE_GAUGE ? "It isn't fixed to an air pipe (or anything joined to a compressor)." : "Not joined to a compressor or machine.";
         else {
             const AirNetwork& net = networks[n->second];
             std::snprintf(line, sizeof line, "Air pressure %d%% (%.0f of %.0f air; %d pipes, %d tanks; compressors: %d, +%.1f air/s; drills working: %d of %d; pumps working: %d of %d)",

@@ -10,7 +10,8 @@
 //    right-clicking it with glass in hand) to glass taking the glass and keeping the
 //    rest out,
 //  - a crafter, set the same way, makes stone bricks from stone in its chest,
-//  - a harvester reaps ripe wheat into its chest and replants it.
+//  - a harvester reaps ripe wheat into its chest and replants it,
+//  - a pressure gauge fixed to an air pipe reads its network's pressure.
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -239,6 +240,22 @@ int main() {
         Check(reaped, "the harvester reaps both crops of wheat into chest A");
         Check(pump(3.0, [&] { return blockAt({ 21, 0, 5 }) == BlockType::CROP && blockAt({ 21, 0, 6 }) == BlockType::CROP; }),
               std::string("and replants them (") + BlockId(blockAt({ 21, 0, 5 })) + ", " + BlockId(blockAt({ 21, 0, 6 })) + ")");
+
+        std::cout << "Gauges" << std::endl;
+        // A gauge fixed on top of an air pipe, and another on bare ground.
+        const glm::ivec3 gauge{ 14, 2, 8 }, loose{ 21, 0, 9 };
+        a.client.PlaceBlock(gauge, BlockType::PRESSURE_GAUGE, 8, 2);
+        a.client.PlaceBlock(loose, BlockType::PRESSURE_GAUGE, 8, 2);
+        auto reading = [&](const glm::ivec3& p) {
+            for (const auto& m : a.client.GetMachines())
+                if (m.pos == p && m.type == static_cast<uint8_t>(BlockType::PRESSURE_GAUGE)) return static_cast<int>(m.pressure);
+            return -1;
+        };
+        server.QueueConsoleCommand("pressurise 12 1 8");
+        Check(pump(5.0, [&] { return reading(gauge) > 200; }), "a gauge on an air pipe reads the network's pressure (" + std::to_string(reading(gauge)) + "/255)");
+        Check(reading(loose) == 0, "one fixed to nothing reads nothing");
+        a.client.Inspect(gauge);
+        Check(pump(5.0, [&] { return Has(a.client, "Pressure gauge. Air pressure"); }), "right-clicking it describes the network");
 
         a.client.Disconnect();
         Pump(a, 0.3, [] { return false; });

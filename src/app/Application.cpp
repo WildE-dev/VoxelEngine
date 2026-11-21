@@ -56,7 +56,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP, BlockType::PIPE,
-    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::DRILL, BlockType::SMELTER, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
+    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::PRESSURE_GAUGE, BlockType::DRILL, BlockType::SMELTER, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
     BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::STEEL_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
@@ -146,6 +146,7 @@ const char* BlockName(BlockType type) {
     case BlockType::SPRING: return "Spring";
     case BlockType::DRAIN: return "Drain";
     case BlockType::SINKHOLE: return "Sinkhole";
+    case BlockType::PRESSURE_GAUGE: return "Pressure gauge";
     case BlockType::STEEL_INGOT: return "Steel ingot";
     case BlockType::EXTRACTOR: return "Extractor";
     case BlockType::FILTER_PIPE: return "Filter pipe";
@@ -908,6 +909,7 @@ void Application::DrawCrosshair() {
                               state == Power::DrillState::Working ? ("making " + std::string(m.depth < static_cast<uint8_t>(BlockType::COUNT) ? BlockName(static_cast<BlockType>(m.depth)) : "?")).c_str()
                               : state == Power::DrillState::NoPressure ? "needs air pressure" : state == Power::DrillState::NoChest ? "needs a chest" : "nothing to smelt",
                               pressure);
+            else if (target.type == BlockType::PRESSURE_GAUGE) std::snprintf(text, sizeof text, "Pressure gauge - air %d%%", pressure);
             else if (target.type == BlockType::EXTRACTOR || target.type == BlockType::CRAFTER || target.type == BlockType::HARVESTER) {
                 const char* name = target.type == BlockType::EXTRACTOR ? "Extractor" : target.type == BlockType::CRAFTER ? "Crafter" : "Harvester";
                 std::string what;
@@ -955,23 +957,19 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
     }
     if (drillDust.size() > 256) drillDust.clear();
 
-    // Pressure gauges on compressors and air tanks, on each side that isn't against a
-    // solid block, their needles easing towards the pressure the server last sent.
+    // Pressure gauges, their needles easing towards the pressure the server last sent.
+    std::unordered_map<glm::ivec3, uint8_t, Coords::IVec3Hash> readings;
+    for (const auto& m : client->GetMachines())
+        if (m.type == static_cast<uint8_t>(BlockType::PRESSURE_GAUGE)) readings[m.pos] = m.pressure;
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> needles;
-    for (const auto& m : client->GetMachines()) {
-        if (m.type != static_cast<uint8_t>(BlockType::COMPRESSOR) && m.type != static_cast<uint8_t>(BlockType::AIR_TANK)) continue;
-        Block here;
-        if (!world->GetBlock(m.pos.x, m.pos.y, m.pos.z, here) || here.type != static_cast<BlockType>(m.type)) continue;
-        float shown = gaugeNeedles.count(m.pos) ? gaugeNeedles[m.pos] : 0.0f;
-        shown += (m.pressure / 255.0f - shown) * std::min(1.0f, dt * 4.0f);
-        needles[m.pos] = shown;
-        static const glm::ivec3 kSides[4] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
-        for (int side = 0; side < 4; side++) {
-            const glm::ivec3 n = m.pos + kSides[side];
-            Block beside;
-            if (world->GetBlock(n.x, n.y, n.z, beside) && beside.HidesNeighbours()) continue;
-            params.gauges.push_back({ glm::vec3(m.pos) + 0.5f, side, shown, lightAt(glm::vec3(n)) });
-        }
+    for (const auto& pos : world->GetModelBlocks()) {
+        Block g;
+        if (!world->GetBlock(pos.x, pos.y, pos.z, g) || g.type != BlockType::PRESSURE_GAUGE) continue;
+        float shown = gaugeNeedles.count(pos) ? gaugeNeedles[pos] : 0.0f;
+        const float reading = readings.count(pos) ? readings[pos] / 255.0f : 0.0f;
+        shown += (reading - shown) * std::min(1.0f, dt * 4.0f);
+        needles[pos] = shown;
+        params.gauges.push_back({ glm::vec3(pos) + 0.5f, g.Facing(), shown, lightAt(glm::vec3(pos)) });
     }
     gaugeNeedles.swap(needles);
 
@@ -982,7 +980,7 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
     std::unordered_map<glm::ivec3, Block, Coords::IVec3Hash> blocks;
     for (const auto& pos : models) {
         Block b;
-        if (world->GetBlock(pos.x, pos.y, pos.z, b) && b.IsModel()) blocks[pos] = b;
+        if (world->GetBlock(pos.x, pos.y, pos.z, b) && b.IsModel() && b.type != BlockType::PRESSURE_GAUGE) blocks[pos] = b;
     }
     auto sameLine = [&](const glm::ivec3& p, const glm::ivec3& axle) {
         auto it = blocks.find(p);
@@ -2289,11 +2287,15 @@ void Application::OnMouseButton(int button, int action) {
             const glm::vec3 look = camera.GetDirection();
             faceAxis = std::abs(look.x) >= std::abs(look.z) ? 0 : 2;
         }
-        // A piston pushes the way you're looking (up, down or level): a Face.
+        // A piston pushes the way you're looking (up, down or level): a Face. A gauge
+        // faces out from what it's fixed to.
         if (IsFacingType(placeBlock)) {
             const glm::vec3 look = camera.GetDirection(), a = glm::abs(look);
             faceAxis = a.y >= a.x && a.y >= a.z ? (look.y > 0 ? 2 : 3) : a.x >= a.z ? (look.x > 0 ? 0 : 1) : (look.z > 0 ? 4 : 5);
         }
+        if (placeBlock == BlockType::PRESSURE_GAUGE)
+            for (int f = 0; f < kFaceCount; f++)
+                if (glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]) == hit->normal) faceAxis = f;
         client->PlaceBlock(place, placeBlock, height, faceAxis);
         PlayAt("place", place, 0.8f);
         if (placeBlock == BlockType::SIGN) OpenSign(place); // and write on it

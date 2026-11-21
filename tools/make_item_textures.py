@@ -1545,6 +1545,26 @@ ssSssSsssssSssss
 """
 SINKHOLE_COLOURS = {"s": (78, 86, 84), "S": (98, 108, 104), "d": (50, 58, 60), "k": (14, 18, 22), "K": (40, 60, 80)}
 
+GAUGE_ICON = """
+................
+.....kkkkkk.....
+...kkwwwwwwkk...
+..kwwkwwwwkwwk..
+..kwwwwwwwwwwk..
+.kwkwwwwwwwwkwk.
+.kwwwwwwwwwrwwk.
+.kwwwwwwwwrwwwk.
+.kwwwwwkkrwwwwk.
+.kwgwwwkkwwwkwk.
+..kwgwwwwwwwwk..
+..kwwgwwwwwwwk..
+...kkwwwwwwkk...
+.....kkkkkk.....
+.......ii.......
+......iiii......
+"""
+GAUGE_ICON_COLOURS = {"k": (60, 60, 66), "w": (236, 230, 205), "r": (200, 30, 25), "g": (60, 160, 70), "i": (110, 112, 118)}
+
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
     draw("cooked_venison", VENISON, COOKED, seed=12)
@@ -1637,6 +1657,7 @@ def main():
     draw("drain_side", DRAIN_SIDE, DRAIN_COLOURS, jitter=5, seed=97)
     draw("sinkhole", SINKHOLE_TOP, SINKHOLE_COLOURS, jitter=5, seed=98)
     draw("sinkhole_side", SINKHOLE_SIDE, SINKHOLE_COLOURS, jitter=5, seed=99)
+    draw("pressure_gauge", GAUGE_ICON, GAUGE_ICON_COLOURS, jitter=3, seed=100)
 
 
 if __name__ == "__main__":
