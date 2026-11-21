@@ -145,7 +145,18 @@ private:
     glm::vec3 lastFeet{ 0.0f };
     float stepDistance = 0.0f;
     bool wasSwimming = false;
-    double lastHurtHeard = 0.0, nextDig = 0.0;
+    double lastHurtHeard = 0.0, nextDig = 0.0, nextChip = 0.0;
+    // Bits of broken blocks, flying and falling (client-side only: just for show).
+    struct Particle {
+        glm::vec3 position, velocity;
+        float life, maxLife, size;
+        glm::vec4 uv;
+    };
+    std::vector<Particle> particles;
+    // Throws `count` bits of this block out of the cell at `pos` (a burst when it breaks,
+    // a few while it's mined).
+    void SpawnParticles(const glm::ivec3& pos, BlockType type, int count, float speed = 3.0f);
+    void UpdateParticles(float dt);
     struct Walker { glm::vec3 feet{ 0.0f }; float distance = 0.0f; bool seen = false; bool hurt = false; };
     std::unordered_map<uint16_t, Walker> walkers;
     struct CreatureSound { bool hurt = false; double nextGroan = 0.0; bool seen = false; };

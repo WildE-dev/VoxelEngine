@@ -128,6 +128,24 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
     }
 }
 
+void PlayerModels::DrawParticles(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ParticleModel>& particles) {
+    if (particles.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 0.0f);
+    shader.SetUniform("textured", 1.0f);
+    shader.SetUniform("color", glm::vec3(1.0f));
+    glBindVertexArray(vao);
+    for (const auto& p : particles) {
+        shader.SetUniform("lightLevels", p.light);
+        shader.SetUniform("tileRect", p.uv);
+        shader.SetUniform("model", glm::scale(glm::translate(glm::mat4(1.0f), p.position), glm::vec3(p.size)));
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+    shader.SetUniform("textured", 0.0f);
+}
+
 void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<CreatureModel>& creatures,
                                  float time) {
     if (creatures.empty()) return;

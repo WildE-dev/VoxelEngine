@@ -592,6 +592,11 @@ only once that block has been mined for long enough with that same tool, give or
 - that the tool and the block must match what was started;
 - that creative is instant.
 
+**Particles.** Breaking a block throws out a burst of little cubes cut from its
+texture, which tumble, bounce on the ground and shrink away; mining one chips a few
+off as you go. Blocks other players break burst too. They're only for show, on the
+client.
+
 ## Creatures
 
 Two kinds of creature live in the world. The server runs them and the players near

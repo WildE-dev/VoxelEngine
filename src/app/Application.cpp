@@ -456,6 +456,7 @@ void Application::Run() {
         params.fogEnd = static_cast<float>(world->GetViewDistance() * Chunk::CHUNK_SIZE);
         UpdateSky(deltaTime, params);
         UpdateSounds();
+        UpdateParticles(static_cast<float>(deltaTime));
         if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
             params.highlightedBlock = hit->block;
             Block target;
@@ -489,6 +490,8 @@ void Application::Run() {
         };
         for (const auto& c : client->GetCreatures())
             params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet) });
+        for (const auto& p : particles)
+            params.particles.push_back({ p.position, p.size * std::min(1.0f, p.life / (0.4f * p.maxLife)), p.uv, lightAt(p.position - glm::vec3(0.0f, 0.1f, 0.0f)) });
         const TextureAtlas& atlas = renderer->GetAtlas();
         for (const auto& other : client->GetRemotePlayers()) {
             PlayerModel model{ other.feet, other.yaw, other.pitch, PlayerModels::ColorFor(other.id), (other.flags & net::kFlagHurt) != 0, lightAt(other.feet) };
@@ -1546,7 +1549,10 @@ void Application::OnMouseButton(int button, int action) {
         // Creative breaks at once; survival mines while the button is held (UpdateMining).
         if (client->IsCreative()) {
             Block broken;
-            if (world->GetBlock(hit->block.x, hit->block.y, hit->block.z, broken)) PlayAt(BreakSound(broken.type), hit->block);
+            if (world->GetBlock(hit->block.x, hit->block.y, hit->block.z, broken)) {
+                PlayAt(BreakSound(broken.type), hit->block);
+                if (!broken.IsLiquid()) SpawnParticles(hit->block, broken.type, 18);
+            }
             client->BreakBlock(hit->block);
         }
     }
@@ -1646,13 +1652,59 @@ void Application::UpdateMining() {
         PlayAt(material == "hard" || material == "glass" ? "dig_hard" : "dig_soft", miningPos, 0.6f);
         nextDig = now + 0.27;
     }
+    if (needed > 0.0 && now >= nextChip) {
+        SpawnParticles(miningPos, block.type, 2, 1.5f); // chips flying off while it's mined
+        nextChip = now + 0.12;
+    }
     if (elapsed >= needed) {
         PlayAt(BreakSound(block.type), miningPos);
+        SpawnParticles(miningPos, block.type, 18);
         client->BreakBlock(miningPos, tool);
         mining = false;
         mineProgress = 0.0f;
         nextMineAt = now + 0.15; // a moment before starting on the next block
     }
+}
+
+void Application::SpawnParticles(const glm::ivec3& pos, BlockType type, int count, float speed) {
+    if (type == BlockType::AIR) return;
+    static std::mt19937 rng(1234);
+    std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+    const TextureAtlas& atlas = renderer->GetAtlas();
+    glm::vec2 uv0, uv1;
+    atlas.GetTileUV(IconTile(type), uv0, uv1);
+    for (int i = 0; i < count && particles.size() < 600; i++) {
+        Particle p;
+        p.position = glm::vec3(pos) + glm::vec3(0.2f + 0.6f * unit(rng), 0.2f + 0.6f * unit(rng), 0.2f + 0.6f * unit(rng));
+        const glm::vec3 out = p.position - (glm::vec3(pos) + glm::vec3(0.5f));
+        p.velocity = out * speed * 2.0f + glm::vec3(0.0f, speed * (0.4f + 0.6f * unit(rng)), 0.0f);
+        p.maxLife = p.life = 0.5f + 0.6f * unit(rng);
+        p.size = 0.07f + 0.07f * unit(rng);
+        // A random quarter-by-quarter piece of the texture.
+        const glm::vec2 span = (uv1 - uv0) * 0.25f, at = uv0 + (uv1 - uv0 - span) * glm::vec2(unit(rng), unit(rng));
+        p.uv = glm::vec4(at, at + span);
+        particles.push_back(p);
+    }
+}
+
+void Application::UpdateParticles(float dt) {
+    // Gravity, a little air drag, and they come to rest on whatever's under them.
+    for (auto& p : particles) {
+        p.life -= dt;
+        p.velocity.y -= 18.0f * dt;
+        p.velocity *= std::exp(-1.5f * dt);
+        glm::vec3 next = p.position + p.velocity * dt;
+        Block below;
+        const glm::ivec3 cell(glm::floor(next - glm::vec3(0.0f, p.size * 0.5f, 0.0f)));
+        if (world->GetBlock(cell.x, cell.y, cell.z, below) && !below.IsPassable() && below.IsFullBlock()) {
+            next.y = std::max(next.y, static_cast<float>(cell.y + 1) + p.size * 0.5f);
+            p.velocity.y = -p.velocity.y * 0.25f;
+            p.velocity.x *= 0.6f;
+            p.velocity.z *= 0.6f;
+        }
+        p.position = next;
+    }
+    particles.erase(std::remove_if(particles.begin(), particles.end(), [](const Particle& p) { return p.life <= 0.0f; }), particles.end());
 }
 
 const char* Application::BreakSound(BlockType type) {
@@ -1704,8 +1756,11 @@ void Application::UpdateSounds() {
 
     // What others broke and built (a few at a time: a collapse or the laser makes many).
     int played = 0;
-    for (const auto& event : client->TakeBlockEvents())
-        if (played++ < 4) PlayAt(event.placed ? "place" : BreakSound(event.type), event.pos, 0.8f);
+    for (const auto& event : client->TakeBlockEvents()) {
+        if (played < 4) PlayAt(event.placed ? "place" : BreakSound(event.type), event.pos, 0.8f);
+        if (!event.placed && played < 24 && event.type != BlockType::WATER) SpawnParticles(event.pos, event.type, played < 4 ? 14 : 4);
+        played++;
+    }
 
     // Other players' steps.
     for (auto& [id, w] : walkers) w.seen = false;

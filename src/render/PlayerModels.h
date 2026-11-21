@@ -34,6 +34,14 @@ struct CreatureModel {
     glm::vec2 light{ 15.0f, 0.0f }; // sky and block light where it stands (0..15)
 };
 
+// A flying bit of a broken block: a tiny cube showing a piece of the block's texture.
+struct ParticleModel {
+    glm::vec3 position{0.0f};
+    float size = 0.1f;
+    glm::vec4 uv{ 0.0f }; // the atlas tile region it shows (top-left, bottom-right)
+    glm::vec2 light{ 15.0f, 0.0f };
+};
+
 // Draws other players as simple box figures: a body, and a head that turns and tilts
 // with their view, with a dark visor on the side they're facing.
 // Must be created and destroyed while the GL context is current.
@@ -47,6 +55,8 @@ public:
 
     void Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<PlayerModel>& players);
     // Creatures, from boxes too: a deer, a ghoul. `time` swings their legs.
+    // Bits of broken blocks (tiny textured cubes).
+    void DrawParticles(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ParticleModel>& particles);
     void DrawCreatures(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<CreatureModel>& creatures, float time);
 
     // A stable colour per player id.
