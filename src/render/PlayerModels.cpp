@@ -84,10 +84,12 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
         // in this frame is their right.
         const glm::mat4 base = glm::rotate(glm::translate(glm::mat4(1.0f), p.feet), -glm::radians(p.yaw), glm::vec3(0, 1, 0));
 
-        const float bodyHeight = kEyeHeight - kHead * 0.5f;
+        // Crouching: everything lower, the head a little forward over the knees.
+        const float eye = p.crouching ? 1.27f : kEyeHeight;
+        const float bodyHeight = eye - kHead * 0.5f;
         box(glm::scale(glm::translate(base, glm::vec3(0, bodyHeight * 0.5f, 0)), glm::vec3(kWidth * 0.5f, bodyHeight, kWidth)), color);
 
-        const glm::mat4 head = glm::rotate(glm::translate(base, glm::vec3(0, kEyeHeight, 0)), glm::radians(p.pitch), glm::vec3(0, 0, 1));
+        const glm::mat4 head = glm::rotate(glm::translate(base, glm::vec3(p.crouching ? 0.12f : 0.0f, eye, 0)), glm::radians(p.pitch), glm::vec3(0, 0, 1));
         box(glm::scale(head, glm::vec3(kHead)), color * 1.1f);
         // Visor on the front (+x in the head's frame).
         box(glm::scale(glm::translate(head, glm::vec3(kHead * 0.5f, 0.03f, 0)), glm::vec3(0.04f, kHead * 0.3f, kHead * 0.8f)), glm::vec3(0.1f));

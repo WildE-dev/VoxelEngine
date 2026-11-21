@@ -47,9 +47,12 @@ constexpr float kChestReach = kSurvivalReach;
 // Players count as asleep for this long after getting into bed (so everyone can get in).
 constexpr double kSleepWindow = 6.0;
 
-Collision::AABB BodyAt(const glm::vec3& feet, float shrink = 0.0f) {
+// A player's body; a crouching player's is shorter (net::kFlagCrouching).
+constexpr float kCrouchHeight = 1.45f; // as Player::kCrouchHeight
+Collision::AABB BodyAt(const glm::vec3& feet, float shrink = 0.0f, bool crouching = false) {
     const float half = kPlayerWidth * 0.5f - shrink;
-    return { feet - glm::vec3(half, -shrink, half), feet + glm::vec3(half, kPlayerHeight - shrink, half) };
+    const float height = crouching ? kCrouchHeight : kPlayerHeight;
+    return { feet - glm::vec3(half, -shrink, half), feet + glm::vec3(half, height - shrink, half) };
 }
 
 uint16_t LocalIndex(const glm::ivec3& world) {
@@ -467,7 +470,7 @@ void Server::HandlePlayerState(ClientState& client, const net::PlayerState& stat
 
     // Walking players can't be inside solid blocks. The client may briefly disagree
     // (a block placed where it stands, not yet received), so only a run of these counts.
-    const bool blocked = !flying && InsideSolid(*world, BodyAt(state.feet, 0.05f));
+    const bool blocked = !flying && InsideSolid(*world, BodyAt(state.feet, 0.05f, (state.flags & net::kFlagCrouching) != 0));
     client.blockedStates = blocked ? client.blockedStates + 1 : 0;
     if (client.blockedStates >= kBlockedStatesBeforeCorrection) return correct(client.lastValid, "inside solid blocks");
 
@@ -661,7 +664,7 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
         const glm::vec3 lo(pos), hi = lo + glm::vec3(1.0f);
         for (const auto& [peer, other] : clients) {
             if (!other.welcomed || ((other.flags & net::kFlagFlying) && other.noclip)) continue;
-            const Collision::AABB body = BodyAt(other.feet);
+            const Collision::AABB body = BodyAt(other.feet, 0.0f, (other.flags & net::kFlagCrouching) != 0);
             if (glm::all(glm::lessThan(lo, body.max)) && glm::all(glm::greaterThan(hi, body.min))) return Echo(client, pos);
         }
     }

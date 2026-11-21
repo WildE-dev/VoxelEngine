@@ -17,6 +17,7 @@ const float kJumpSpeed = std::sqrt(2.0f * kGravity * kJumpHeight);
 
 constexpr float kWalkSpeed = 4.5f;
 constexpr float kSprintSpeed = 7.0f;
+constexpr float kCrouchSpeedFactor = 0.3f; // crouching walks at this share of walking speed
 constexpr float kGroundAcceleration = 60.0f;
 constexpr float kAirAcceleration = 12.0f;
 
@@ -54,9 +55,9 @@ bool Player::IsHeadUnderwater(const BlockAccess& world) const {
     return world.IsUnderwater(GetEyePosition());
 }
 
-Collision::AABB Player::BoundsAt(const glm::vec3& feet) {
+Collision::AABB Player::BoundsAt(const glm::vec3& feet, float height) {
     const float half = kWidth * 0.5f;
-    return { feet - glm::vec3(half, 0.0f, half), feet + glm::vec3(half, kHeight, half) };
+    return { feet - glm::vec3(half, 0.0f, half), feet + glm::vec3(half, height, half) };
 }
 
 void Player::Update(const BlockAccess& world, const PlayerInput& input, float deltaTime) {
@@ -115,6 +116,9 @@ bool Player::Spawn(const BlockAccess& world) {
 
 void Player::SetFlying(const BlockAccess& world, bool fly) {
     flying = fly;
+    crouching = false;
+    height = kHeight;
+    eyeHeight = kEyeHeight;
     velocity = glm::vec3(0.0f);
     onGround = false;
     if (fly) return;
@@ -139,9 +143,22 @@ void Player::Step(const BlockAccess& world, const PlayerInput& input, float dt) 
     const glm::vec2 right(-forward.y, forward.x);
     glm::vec2 move = input.move;
     if (glm::length(move) > 1.0f) move = glm::normalize(move);
-    const glm::vec2 wish = (forward * move.y + right * move.x) * (input.sprint ? kSprintSpeed : kWalkSpeed);
-
     inWater = InWater(world);
+
+    // Crouch while it's held (not swimming); stand up again once there's room.
+    if (input.crouch && !inWater) {
+        crouching = true;
+        height = kCrouchHeight;
+    }
+    else if (crouching && !Collision::BoxBlocked(world, BoundsAt(feet, kHeight))) {
+        crouching = false;
+        height = kHeight;
+    }
+    const float targetEye = crouching ? kCrouchEyeHeight : kEyeHeight;
+    eyeHeight += (targetEye - eyeHeight) * std::min(1.0f, dt * 18.0f);
+
+    const float speed = crouching ? kWalkSpeed * kCrouchSpeedFactor : input.sprint ? kSprintSpeed : kWalkSpeed;
+    const glm::vec2 wish = (forward * move.y + right * move.x) * speed;
 
     const float acceleration = inWater ? kSwimAcceleration : onGround ? kGroundAcceleration : kAirAcceleration;
     glm::vec2 horizontal = Approach({ velocity.x, velocity.z }, inWater ? wish * kSwimSpeedFactor : wish, acceleration * dt);
@@ -193,15 +210,21 @@ void Player::MoveHorizontal(const BlockAccess& world, int axis, float distance) 
         glm::vec3 next = feet;
         next[axis] += step;
 
-        if (Collision::BoxBlocked(world, BoundsAt(next))) {
-            // Walk up low ledges (e.g. from a slope onto a full block) without jumping.
+        if (Collision::BoxBlocked(world, BoundsAt(next, height))) {
+            // Walk up low ledges (e.g. from a slope onto a full block) without jumping:
+            // find the ground a step up, then check there's room at that height (just
+            // there, so a half slab can be stepped onto under a low ceiling).
             const glm::vec3 lift(0.0f, kStepHeight, 0.0f);
-            if (onGround && !Collision::BoxBlocked(world, BoundsAt(feet + lift)) &&
-                !Collision::BoxBlocked(world, BoundsAt(next + lift))) {
+            if (onGround) {
                 bool unknown = false;
-                if (auto ground = Collision::GroundHeight(world, BoundsAt(next + lift), 0.0f, kStepHeight, unknown); ground && !unknown) {
-                    feet = glm::vec3(next.x, *ground + kSkin, next.z);
-                    continue;
+                if (auto ground = Collision::GroundHeight(world, BoundsAt(next + lift, height), 0.0f, kStepHeight, unknown); ground && !unknown) {
+                    const float standY = *ground + kSkin;
+                    const glm::vec3 up(feet.x, standY, feet.z), there(next.x, standY, next.z);
+                    if (standY > feet.y && standY - feet.y <= kStepHeight + kSkin && !Collision::BoxBlocked(world, BoundsAt(up, height)) &&
+                        !Collision::BoxBlocked(world, BoundsAt(there, height))) {
+                        feet = there;
+                        continue;
+                    }
                 }
             }
 
@@ -216,14 +239,24 @@ void Player::MoveHorizontal(const BlockAccess& world, int axis, float distance) 
         // Slopes don't block sideways, but one rising more than a step is a wall, and so
         // is one that would lift our head into a ceiling.
         bool unknown = false;
-        auto slope = Collision::SlopeHeight(world, next.x, next.z, feet.y, feet.y + kHeight, unknown);
+        auto slope = Collision::SlopeHeight(world, next.x, next.z, feet.y, feet.y + height, unknown);
         const bool tooSteep = slope && *slope > feet.y + kStepHeight;
         const bool noHeadroom = slope && *slope > feet.y &&
-            Collision::BoxBlocked(world, BoundsAt(glm::vec3(next.x, *slope + kSkin, next.z)));
+            Collision::BoxBlocked(world, BoundsAt(glm::vec3(next.x, *slope + kSkin, next.z), height));
         if (unknown || tooSteep || noHeadroom) {
             velocity[axis] = 0.0f;
             blockedHorizontally = true;
             return;
+        }
+        // Crouching on the ground: don't step off an edge (there must still be ground
+        // under some of the body, within a step's drop).
+        if (crouching && onGround) {
+            bool unknownGround = false;
+            const auto ground = Collision::GroundHeight(world, BoundsAt(next, height), 0.0f, kStepHeight, unknownGround);
+            if (!ground || unknownGround) {
+                velocity[axis] = 0.0f;
+                return;
+            }
         }
         feet = next;
     }
@@ -235,9 +268,9 @@ void Player::MoveVertical(const BlockAccess& world, float distance, bool wasOnGr
         const int steps = static_cast<int>(std::ceil(distance / kMaxSubstep));
         for (int i = 0; i < steps; i++) {
             glm::vec3 next = feet + glm::vec3(0.0f, distance / steps, 0.0f);
-            if (Collision::BoxBlocked(world, BoundsAt(next))) {
+            if (Collision::BoxBlocked(world, BoundsAt(next, height))) {
                 // Flush under the ceiling, but never lower than we already were.
-                feet.y = std::max(feet.y, std::floor(next.y + kHeight) - kHeight - kSkin);
+                feet.y = std::max(feet.y, std::floor(next.y + height) - height - kSkin);
                 velocity.y = 0.0f;
                 break;
             }
@@ -271,7 +304,7 @@ void Player::MoveVertical(const BlockAccess& world, float distance, bool wasOnGr
         // Never lift into a ceiling, not even by the skin gap (MoveHorizontal keeps us
         // out of spots that are too low to stand in, so this only trims tiny overlaps).
         const float standY = *ground + kSkin;
-        if (standY <= feet.y || !Collision::BoxBlocked(world, BoundsAt(glm::vec3(feet.x, standY, feet.z))))
+        if (standY <= feet.y || !Collision::BoxBlocked(world, BoundsAt(glm::vec3(feet.x, standY, feet.z), height)))
             feet.y = standY;
         velocity.y = 0.0f;
         onGround = true;

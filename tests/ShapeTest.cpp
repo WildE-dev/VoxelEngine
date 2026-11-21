@@ -611,6 +611,59 @@ int main() {
               "a player spawning on the peak lands on top of it (feet at " + std::to_string(player.GetFeetPosition().y) + ")");
     }
 
+    std::cout << "Crouching" << std::endl;
+    {
+        // A floor of stone along x (y = -1) ending at x = 6. Over x = 3 a half slab
+        // raises the floor and a stone block sits at y = 2: a gap 1.5 high, which only
+        // a crouching player fits through.
+        struct Floor : BlockAccess {
+            std::unordered_map<glm::ivec3, Block, Coords::IVec3Hash> blocks;
+            bool GetBlock(int x, int y, int z, Block& b) const override {
+                auto it = blocks.find({ x, y, z });
+                b = it == blocks.end() ? Block() : it->second;
+                return true;
+            }
+        } world;
+        for (int x = -2; x <= 6; x++)
+            for (int z = -2; z <= 2; z++) world.blocks[{ x, -1, z }] = Block(BlockType::STONE);
+        for (int z = -2; z <= 2; z++) {
+            world.blocks[{ 3, 0, z }] = Shaped(BlockType::STONE_BRICK, 4, 4, 4, 4);
+            world.blocks[{ 3, 2, z }] = Block(BlockType::STONE);
+        }
+        auto walk = [&](Player& player, bool crouch, float seconds) {
+            PlayerInput input;
+            input.yaw = 0.0f; // along +x
+            input.move = { 0.0f, 1.0f };
+            input.crouch = crouch;
+            for (int i = 0; i < static_cast<int>(seconds * 60); i++) player.Update(world, input, 1.0f / 60.0f);
+        };
+        Player standing(glm::vec3(0.5f, 0.0f, 0.5f));
+        standing.Spawn(world);
+        walk(standing, false, 2.0f);
+        Check(standing.GetFeetPosition().x < 3.1f, "standing, the 1.5-high gap stops you (at x " + std::to_string(standing.GetFeetPosition().x) + ")");
+        Player crouched(glm::vec3(0.5f, 0.0f, 0.5f));
+        crouched.Spawn(world);
+        walk(crouched, true, 0.5f);
+        const float halfSecond = crouched.GetFeetPosition().x - 0.5f;
+        Check(crouched.IsCrouching() && crouched.GetEyePosition().y < 1.35f && halfSecond < 0.8f,
+              "crouching: lower eyes and slow (" + std::to_string(halfSecond) + " blocks in half a second)");
+        walk(crouched, true, 4.0f);
+        Check(crouched.GetFeetPosition().x > 3.8f, "but you fit under the gap crouching (at x " + std::to_string(crouched.GetFeetPosition().x) + ")");
+        Check(crouched.GetFeetPosition().x < 7.0f + 0.3f && crouched.GetFeetPosition().y > -0.01f,
+              "and crouching won't walk you off the end of the floor (at x " + std::to_string(crouched.GetFeetPosition().x) + ")");
+        // Back under the gap, letting go of crouch: you stay crouched until there's room.
+        Player under(glm::vec3(0.5f, 0.0f, 0.5f));
+        under.Spawn(world);
+        for (int i = 0; i < 600 && under.GetFeetPosition().x < 3.5f; i++) walk(under, true, 1.0f / 60.0f);
+        PlayerInput still;
+        still.yaw = 0.0f;
+        for (int i = 0; i < 30; i++) under.Update(world, still, 1.0f / 60.0f);
+        Check(under.IsCrouching() && under.GetBounds().max.y < under.GetFeetPosition().y + 1.6f, "under the gap, letting go keeps you crouched");
+        still.move = { 0.0f, 1.0f };
+        for (int i = 0; i < 120; i++) under.Update(world, still, 1.0f / 60.0f);
+        Check(!under.IsCrouching(), "and you stand once you're out");
+    }
+
     std::cout << (failures ? "SHAPE TEST FAILED (" : "ALL SHAPE CHECKS PASSED (") << failures << " failures)" << std::endl;
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }

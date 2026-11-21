@@ -492,6 +492,7 @@ void Application::Run() {
         const TextureAtlas& atlas = renderer->GetAtlas();
         for (const auto& other : client->GetRemotePlayers()) {
             PlayerModel model{ other.feet, other.yaw, other.pitch, PlayerModels::ColorFor(other.id), (other.flags & net::kFlagHurt) != 0, lightAt(other.feet) };
+            model.crouching = (other.flags & net::kFlagCrouching) != 0;
             // What's in their hand: a tool's or an item's icon as a card, a block as a
             // little cube.
             int tile = -1;
@@ -678,7 +679,7 @@ void Application::DrawNameTags(const glm::mat4& viewProjection) {
     const glm::vec3 eye = camera.GetPosition();
     constexpr float kRange = 40.0f;
     for (const auto& other : client->GetRemotePlayers()) {
-        if (other.name.empty()) continue;
+        if (other.name.empty() || (other.flags & net::kFlagCrouching)) continue; // (crouching hides your name)
         const glm::vec3 tag = other.feet + glm::vec3(0.0f, 2.15f, 0.0f);
         const glm::vec3 toTag = tag - eye;
         const float distance = glm::length(toTag);
@@ -945,6 +946,7 @@ void Application::HandleContinuousInput(float deltaTime) {
                            (down(GLFW_KEY_W) ? 1.0f : 0.0f) - (down(GLFW_KEY_S) ? 1.0f : 0.0f));
     input.jump = down(GLFW_KEY_SPACE) || (player.IsFlying() && down(GLFW_KEY_E));
     input.descend = down(GLFW_KEY_Q) || down(GLFW_KEY_LEFT_CONTROL);
+    input.crouch = down(GLFW_KEY_LEFT_CONTROL) && !player.IsFlying(); // (flying, Ctrl goes down)
     // Short of breath (thin or stale air, half the air gone): too winded to sprint.
     const Breathing::Cause cause = client->GetAirCause();
     const bool winded = (cause == Breathing::Cause::ThinAir || cause == Breathing::Cause::StaleAir) && client->GetAir() < Breathing::kShortOfBreath;
@@ -961,6 +963,7 @@ void Application::HandleContinuousInput(float deltaTime) {
         if (player.IsFlying()) flags |= net::kFlagFlying;
         if (player.IsOnGround()) flags |= net::kFlagOnGround;
         if (player.IsSwimming()) flags |= net::kFlagSwimming;
+        if (player.IsCrouching()) flags |= net::kFlagCrouching;
         // What's in hand, for others to see (a survival player's empty slot holds nothing).
         const Tool heldTool = client->HasTool(SelectedTool()) ? SelectedTool() : Tool::None;
         BlockType heldBlock = SelectedTool() == Tool::None ? SelectedBlock() : BlockType::AIR;

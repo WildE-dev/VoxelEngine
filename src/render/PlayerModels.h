@@ -20,6 +20,7 @@ struct PlayerModel {
     enum class Held : uint8_t { Nothing, Block, Icon } held = Held::Nothing;
     glm::vec4 heldUV{ 0.0f };
     uint8_t armour = 0; // armour worn (Armour::Bit each): drawn over them
+    bool crouching = false; // ducked: lower, leaning forward
 };
 
 // A creature as drawn (world/Creatures.h): what it is, where, which way it faces,

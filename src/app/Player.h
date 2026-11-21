@@ -12,6 +12,7 @@ struct PlayerInput {
     bool jump = false;    // held
     bool sprint = false;
     bool descend = false; // fly mode only
+    bool crouch = false;  // held: lower, slower, and won't walk off edges (walking only)
     float yaw = -90.0f;   // degrees, from the camera
     glm::vec3 lookDirection{0.0f, 0.0f, -1.0f};
 };
@@ -26,6 +27,9 @@ public:
     static constexpr float kHeight = 1.8f;
     static constexpr float kEyeHeight = 1.62f;
     static constexpr float kStepHeight = 0.6f; // climb ledges this high without jumping
+    // Crouching: a shorter body (fits under 1.5-high gaps) with the eyes lower.
+    static constexpr float kCrouchHeight = 1.45f; // (a little under 1.5, so a 1.5 gap fits)
+    static constexpr float kCrouchEyeHeight = 1.27f;
 
     explicit Player(const glm::vec3& feetPosition) : feet(feetPosition) {}
 
@@ -60,11 +64,13 @@ public:
     void ResumeAt(const glm::vec3& feetPosition) { Teleport(feetPosition); spawned = false; resumeHere = true; }
 
     glm::vec3 GetFeetPosition() const { return feet; }
-    glm::vec3 GetEyePosition() const { return feet + glm::vec3(0.0f, kEyeHeight, 0.0f); }
+    // The eyes sink smoothly to the crouching height and back.
+    glm::vec3 GetEyePosition() const { return feet + glm::vec3(0.0f, eyeHeight, 0.0f); }
+    bool IsCrouching() const { return crouching; }
     glm::vec3 GetVelocity() const { return velocity; }
-    Collision::AABB GetBounds() const { return BoundsAt(feet); }
+    Collision::AABB GetBounds() const { return BoundsAt(feet, height); }
 
-    static Collision::AABB BoundsAt(const glm::vec3& feet);
+    static Collision::AABB BoundsAt(const glm::vec3& feet, float height = kHeight);
 
 private:
     void Step(const BlockAccess& world, const PlayerInput& input, float dt);
@@ -82,4 +88,7 @@ private:
     bool inWater = false;
     bool blockedHorizontally = false; // set by MoveHorizontal during a step
     float accumulator = 0.0f;
+    bool crouching = false;
+    float height = kHeight;         // the body's height now (kCrouchHeight crouching)
+    float eyeHeight = kEyeHeight;   // eased toward the standing or crouching eye height
 };
