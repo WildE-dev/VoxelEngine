@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "render/PlayerModels.h"
 
 #include <cmath>
@@ -207,6 +208,41 @@ void PlayerModels::DrawWheels(Shader& shader, const glm::mat4& view, const glm::
             }
             part(r, { 0.0f, kRim + 0.05f, 0.0f }, { 0.9f, 0.4f, 0.06f }, kWood); // paddle
         }
+    }
+}
+
+void PlayerModels::DrawGauges(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GaugeModel>& gauges) {
+    if (gauges.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 0.0f);
+    shader.SetUniform("textured", 0.0f);
+    glBindVertexArray(vao);
+    const glm::vec3 kRim(0.25f, 0.25f, 0.28f), kFace(0.93f, 0.9f, 0.8f), kRed(0.8f, 0.12f, 0.1f), kGreen(0.25f, 0.65f, 0.3f), kPin(0.1f, 0.1f, 0.1f);
+    static const float kTurn[4] = { 90.0f, -90.0f, 0.0f, 180.0f }; // local +z out of each side
+    for (const auto& g : gauges) {
+        shader.SetUniform("lightLevels", g.light);
+        // Local frame: +z out of the side, +y up, the dial a little above the middle.
+        const glm::mat4 frame = glm::translate(glm::rotate(glm::translate(glm::mat4(1.0f), g.centre), glm::radians(kTurn[g.side & 3]), glm::vec3(0, 1, 0)),
+                                               glm::vec3(0.0f, 0.12f, 0.5f));
+        auto part = [&](const glm::mat4& f, const glm::vec3& centre, const glm::vec3& size, const glm::vec3& color) {
+            shader.SetUniform("model", glm::scale(glm::translate(f, centre), size));
+            shader.SetUniform("color", color);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        };
+        part(frame, { 0.0f, 0.0f, 0.01f }, { 0.44f, 0.44f, 0.02f }, kRim);
+        part(frame, { 0.0f, 0.0f, 0.02f }, { 0.36f, 0.36f, 0.02f }, kFace);
+        // Marks: the running pressure (a quarter) in green, the rest round the dial.
+        for (int i = 0; i <= 8; i++) {
+            const float a = glm::radians(135.0f - 270.0f * i / 8.0f);
+            const glm::mat4 r = glm::rotate(frame, a, glm::vec3(0, 0, 1));
+            part(r, { 0.0f, 0.14f, 0.032f }, { 0.02f, 0.05f, 0.01f }, i == 2 ? kGreen : kPin);
+        }
+        const float angle = glm::radians(135.0f - 270.0f * std::clamp(g.pressure, 0.0f, 1.0f));
+        const glm::mat4 needle = glm::rotate(frame, angle, glm::vec3(0, 0, 1));
+        part(needle, { 0.0f, 0.07f, 0.04f }, { 0.025f, 0.15f, 0.01f }, kRed);
+        part(frame, { 0.0f, 0.0f, 0.045f }, { 0.05f, 0.05f, 0.01f }, kPin);
     }
 }
 

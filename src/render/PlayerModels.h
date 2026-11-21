@@ -70,6 +70,15 @@ struct WheelModel {
     bool shaft = false;
 };
 
+// A pressure gauge on one side of a compressor or air tank: a round dial with a needle
+// that swings from empty (pointing down and left) to full (down and right).
+struct GaugeModel {
+    glm::vec3 centre{0.0f};  // the block's centre
+    int side = 0;            // which side: 0 +x, 1 -x, 2 +z, 3 -z
+    float pressure = 0.0f;   // 0..1
+    glm::vec2 light{ 15.0f, 0.0f };
+};
+
 struct BoltModel {
     std::vector<glm::vec3> points;
     float brightness = 1.0f;
@@ -91,6 +100,7 @@ public:
     void DrawArrows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ArrowModel>& arrows);
     void DrawGlows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GlowModel>& glows);
     void DrawWheels(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<WheelModel>& wheels);
+    void DrawGauges(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GaugeModel>& gauges);
     void DrawBolts(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<BoltModel>& bolts);
     // Bits of broken blocks (tiny textured cubes).
     void DrawParticles(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ParticleModel>& particles);

@@ -919,6 +919,25 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
     }
     if (drillDust.size() > 256) drillDust.clear();
 
+    // Pressure gauges on compressors and air tanks, on each side that isn't against a
+    // solid block, their needles easing towards the pressure the server last sent.
+    std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> needles;
+    for (const auto& m : client->GetMachines()) {
+        if (m.type != static_cast<uint8_t>(BlockType::COMPRESSOR) && m.type != static_cast<uint8_t>(BlockType::AIR_TANK)) continue;
+        Block here;
+        if (!world->GetBlock(m.pos.x, m.pos.y, m.pos.z, here) || here.type != static_cast<BlockType>(m.type)) continue;
+        float shown = gaugeNeedles.count(m.pos) ? gaugeNeedles[m.pos] : 0.0f;
+        shown += (m.pressure / 255.0f - shown) * std::min(1.0f, dt * 4.0f);
+        needles[m.pos] = shown;
+        static const glm::ivec3 kSides[4] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+        for (int side = 0; side < 4; side++) {
+            const glm::ivec3 n = m.pos + kSides[side];
+            Block beside;
+            if (world->GetBlock(n.x, n.y, n.z, beside) && beside.HidesNeighbours()) continue;
+            params.gauges.push_back({ glm::vec3(m.pos) + 0.5f, side, shown, lightAt(glm::vec3(n)) });
+        }
+    }
+    gaugeNeedles.swap(needles);
 
     // Wheels and shafts in lines along their axles turn together, as fast as the
     // fastest wheel on the line (still if the server said nothing). Each line keeps its

@@ -166,6 +166,7 @@ private:
     std::map<std::pair<int, int>, glm::vec3> arrowFacing; // which way arrows were going before they stuck
     // Air power: wheels turning (angle by position), drills' dust (time to the next puff).
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> wheelAngles;
+    std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> gaugeNeedles; // pressure gauges' needles, as drawn (0..1)
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> drillDust;
     double lastMachinesTime = 0.0;
     void UpdateMachines(FrameParams& params, const std::function<glm::vec2(const glm::vec3&)>& lightAt);

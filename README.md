@@ -915,7 +915,9 @@ The machines:
   itself gives nothing back. A **pressure sensor** (see [Signals](#signals)) joins
   the pipes too, and sends while the pressure is high enough.
 
-Look at a wheel, compressor, pump or drill to see how it's doing under the
+Compressors and air tanks carry a **pressure gauge** on each open side: a dial whose
+needle swings from empty to full, with the running pressure (a quarter) marked in
+green. Look at a wheel, compressor, pump or drill to see how it's doing under the
 crosshair, and right-click any part (wheel, shaft, compressor, pipe, pump or drill)
 with an empty hand or a tool
 for the details in chat: how fast a wheel turns and how much water passes it, whether
