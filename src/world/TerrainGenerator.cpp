@@ -195,7 +195,8 @@ const TerrainGenerator::Lake& TerrainGenerator::LakeIn(int cx, int cz) const {
         if (lake.hasSpring) {
             glm::vec2 p = glm::vec2(lake.spring) + 0.5f;
             glm::vec2 dir = glm::normalize(p - lake.centre);
-            float bed = GetBaseHeight(lake.spring.x, lake.spring.y) - kRiverDepth;
+            float bed = std::floor(GetBaseHeight(lake.spring.x, lake.spring.y) - kRiverDepth);
+            float lastGround = bed + kRiverDepth;
             for (int step = 0; step < kMaxRiverLength; step++) {
                 lake.river.emplace_back(p.x, p.y, bed);
                 const float facing = std::atan2(dir.y, dir.x);
@@ -215,19 +216,26 @@ const TerrainGenerator::Lake& TerrainGenerator::LakeIn(int cx, int cz) const {
                     lake.river.emplace_back(p.x, p.y, std::min(bed, ground - kRiverDepth));
                     break; // reached the sea
                 }
-                bed = std::min(bed, ground - kRiverDepth);
+                // The bed stays level until the land comes down to it, then drops: a
+                // block where it falls gently, three where it's steep (a waterfall into
+                // a pool cut back into the slope, rather than a staircase with no room
+                // for water on it).
+                const float fall = lastGround - ground;
+                lastGround = ground;
+                if (bed > ground - kRiverDepth) bed = std::floor(ground - kRiverDepth - (fall > 0.4f ? 2.0f : 0.0f));
                 if (ground - bed > kRiverMaxCut) break; // it would cut too deep: it ends here
             }
             // Pools and drops: the bed in level steps a whole block apart (the water
-            // lies flat in each, instead of in a thin film down a slope), each with a
-            // lip half a block up just before it drops, so the water stands in a pool
-            // behind it and spills over into the next.
+            // lies flat in each, instead of in a thin film down a slope). The points
+            // just before a drop are marked (half a block over their step: only the
+            // whole part is the bed) for a weir across the channel there, so the water
+            // stands in a pool behind it and spills over into the next.
             std::vector<glm::vec3>& river = lake.river;
             std::vector<float> step(river.size());
             for (size_t i = 0; i < river.size(); i++) step[i] = std::floor(river[i].z);
             for (size_t i = 0; i < river.size(); i++) {
                 bool lip = false;
-                for (size_t j = i + 1; j <= i + 2 && j < river.size(); j++) lip = lip || step[j] < step[i];
+                for (size_t j = i + 1; j <= i + 1 && j < river.size(); j++) lip = lip || step[j] < step[i];
                 river[i].z = step[i] + (lip ? 0.5f : 0.0f);
             }
             const glm::vec3 end = lake.river.back();
@@ -334,6 +342,7 @@ float TerrainGenerator::GetHeight(int x, int z) const {
     // Rivers: the channel cut down to its bed, the banks easing up to the land.
     float d, bed;
     if (!NearestRiver(static_cast<float>(x), static_cast<float>(z), d, bed) || d >= kRiverHalfWidth + kRiverBanks) return h;
+    bed = std::floor(bed); // (a weir's half is a slab put on the bed, not the bed)
     if (d < kRiverHalfWidth) return std::min(h, bed);
     const float t = glm::smoothstep(kRiverHalfWidth, kRiverHalfWidth + kRiverBanks, d);
     return std::min(h, bed + (h - bed) * t);
@@ -468,8 +477,7 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
     Caves::Carve(coords, rows, out);
 
     // Lakes and rivers: their water level per column, and their beds kept whole (a
-    // cave opening under one would drain it) and sandy. A river's water is a block
-    // deep over its bed.
+    // cave opening under one would drain it) and sandy. (Rivers' water comes after.)
     std::array<int, S * S> waterLevels;
     for (int x = 0; x < S; x++)
         for (int z = 0; z < S; z++) {
@@ -478,7 +486,6 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
             waterLevels[x * S + z] = std::max(static_cast<int>(kSeaLevel), lake);
             const int m = rows[x * S + z];
             const bool river = InRiver(wx, wz, 0.3f);
-            if (river) waterLevels[x * S + z] = std::max(waterLevels[x * S + z], ColumnFrom(heights, x, z).FirstOpenRow() + 1);
             if (lake <= m && !river) continue; // dry here (water fills from the surface row up)
             const Column column = ColumnFrom(heights, x, z);
             for (int y = 0; y < S; y++) {
@@ -513,6 +520,27 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
             }
         }
     }
+
+    // Rivers' weirs and water: across the channel just before each drop, a slab of
+    // sand half a block high (flat-topped, so it holds the pool to exactly that), and
+    // over the rest of each pool's level bed water half a block deep, up to the weir's
+    // top. So the pools are full but still, and whatever the spring adds spills over
+    // each weir into the next, down to the sinkhole (deeper water would stand still,
+    // generated at rest, with the spring unable to add to it).
+    EdgeData slab;
+    for (int e = 0; e < 4; e++) slab.SetTopY(e, 4);
+    for (int x = 0; x < S; x++)
+        for (int z = 0; z < S; z++) {
+            const int wx = coords.x * S + x, wz = coords.z * S + z;
+            float d, bed;
+            if (!NearestRiver(wx + 0.5f, wz + 0.5f, d, bed) || d >= kRiverHalfWidth + 0.3f || LakeLevelAt(wx, wz) != INT_MIN) continue;
+            const Column column = ColumnFrom(heights, x, z);
+            if (column.HasSlopedTop() || column.surfaceRow < kSeaLevel) continue; // (where it drops, or a bank; or the sea)
+            const int y = column.surfaceRow - coords.y * S;
+            if (y < 0 || y >= S || !out[Index(x, y, z)].IsAir()) continue;
+            const bool weir = bed - std::floor(bed) > 0.25f;
+            out[Index(x, y, z)] = weir ? Block(BlockType::SAND, slab) : Block::Water(Block::kMaxWaterVolume / 2);
+        }
 
     Features::Place(*this, coords, rows, out);
     PlacePlants(coords, heights, rows, out);

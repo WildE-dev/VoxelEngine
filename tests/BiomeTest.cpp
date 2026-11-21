@@ -234,6 +234,7 @@ int main() {
                         if (!t.InRiver(x, z) || t.LakeLevelAt(x, z) != INT_MIN) continue;
                         const auto c = t.ColumnAt(x, z);
                         if (c.surfaceRow < TerrainGenerator::kSeaLevel) continue; // (out in the sea)
+                        if (c.HasSlopedTop()) continue;                            // (a lip or a bank: dry until the spring's water comes)
                         riverColumns++;
                         const Block& top = world.Get({ x, c.HasSlopedTop() ? c.surfaceRow : c.surfaceRow - 1, z });
                         const Block& over = world.Get({ x, c.FirstOpenRow(), z });
@@ -242,7 +243,7 @@ int main() {
             }
     Check(drains >= 16 && drainsRight == drains, "rivers end in sinkholes (natural drains) in their beds (" + std::to_string(drainsRight) + " of " + std::to_string(drains) + ")");
     Check(riverColumns > 50 && riverRight * 10 >= riverColumns * 9,
-          "river channels have sand beds with water over them (" + std::to_string(riverRight) + " of " + std::to_string(riverColumns) + " columns looked at)");
+          "river pools have sand beds with water over them (" + std::to_string(riverRight) + " of " + std::to_string(riverColumns) + " pool columns looked at)");
     std::cout << "        " << world.generated << " chunks generated, " << world.seconds * 1000.0 / world.generated << " ms each" << std::endl;
 
     std::cout << (failures ? "BIOME TEST FAILED (" : "ALL BIOME CHECKS PASSED (") << failures << " failures)" << std::endl;

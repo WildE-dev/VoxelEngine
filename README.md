@@ -295,11 +295,15 @@ wells up out of it without end, a block and a half a second (see [Water](#water)
 From it a river runs downhill, up to 160 blocks: a channel about three blocks wide
 cut two blocks into the land, following its fall and turning gently, its bed never
 rising (it cuts through small rises), with banks easing up to the ground either side.
-The bed goes down in level steps a whole block apart, each with a lip half a block up
-just before the drop, so the water lies flat in a pool behind each lip and spills over
-into the next, instead of spreading in a thin film down a slope.
-Its bed is sand over dirt, it's full of water a block deep from the start, and no
-trees grow in it or on its banks. It ends where it reaches the sea, or where it would
+The bed goes down in level steps, a pool and a drop at a time: it stays level until the
+land comes down to it, then drops a block where the land falls gently, or three where
+it's steep (a small waterfall into a pool cut back into the slope; a mountain river is
+a chain of them). Just before each drop a **weir** of sand slabs half a block high runs
+across the channel, and each pool is generated half a block deep, full to the weir's
+top and still: the spring's water tips each one over into the next all the way down,
+so the river keeps flowing (water deeper than its weirs would just stand still) and
+lies flat in its pools instead of spreading in a thin film down a slope.
+Its bed is sand over dirt, and no trees grow in it or on its banks. It ends where it reaches the sea, or where it would
 have to cut more than seven blocks deep, at a **sinkhole**: a dark opening in wet
 rock in its bed (a natural drain) that takes water away twice as fast as the spring
 gives it, so the river keeps
@@ -454,7 +458,7 @@ slowly raise it. `PumpTest` checks that a spring fills the cell above it at that
 and stops when it's full, keeps the water coming once there's somewhere for it to
 go, and stops when broken, and that a drain, or a sinkhole, empties a cup at its rate; `BiomeTest`
 that lakes overflow from springs, each in the ground, open above and below a lake's
-level, that rivers end in sinkholes in their beds, and that their channels have sand
+level, that rivers end in sinkholes in their beds, and that their pools have sand
 beds with water over them.
 
 **Evaporation**: shallow puddles that have stopped flowing dry up. Every water tick,
@@ -1512,6 +1516,10 @@ many chunks were drawn. The server prints a line of its own: ticks, their averag
 worst time, where it goes (traps, creatures, other updates, air power, signals, world
 and sending), how many machines, air networks and signal blocks there are, and the
 water simulation's ticks (it runs on its own thread), their time and its active cells.
+
+Water by a river costs the same in the mountains as in the lowlands: about 9 ms a
+water tick (four a second, on its own thread) with 5,000 to 8,500 cells moving, the
+river flowing from spring to sinkhole the whole time.
 
 Measured on this Mac (Release, normal world, by the river near spawn): about 108 fps,
 the server's tick 0.08 ms (of the 50 it has), and the water simulation 4 ticks a second
