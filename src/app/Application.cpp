@@ -1796,6 +1796,24 @@ void Application::OnMouseButton(int button, int action) {
         }
     }
 
+    // Middle-click picks the block looked at into the hotbar slot (in survival, only
+    // what you have some of).
+    if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
+        Block looked;
+        if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach());
+            at && world->GetBlock(at->block.x, at->block.y, at->block.z, looked)) {
+            BlockType type = ResourceTypeOf(looked.type) == looked.type || IsItemType(ResourceTypeOf(looked.type)) ? looked.type : ResourceTypeOf(looked.type);
+            if (type == BlockType::DOOR_OPEN) type = BlockType::DOOR;
+            if (type == BlockType::TNT_LIT) type = BlockType::TNT;
+            if (!IsItemType(type) && (client->IsCreative() || client->GetResources(type) > 0)) {
+                hotbar[selectedSlot] = type;
+                hotbarTools[selectedSlot] = Tool::None;
+                SaveHotbar();
+            }
+        }
+        return;
+    }
+
     // Right-click on a creature: feed it (raw venison tames a wild wolf).
     if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         const FightTarget target = TargetInView();

@@ -184,6 +184,7 @@ that damaged files are refused, and that a rejoining player is put back in place
 | Mouse | Look (a crosshair marks the middle of the screen) |
 | Left click | Break block (survival: hold to mine it), or hit the creature in front of you |
 | Right click | Place the selected block; eat food in hand; open a chest; use a bed (Shift: place against a chest or bed instead) |
+| Middle click | Pick the block you're looking at into the selected hotbar slot (survival: if you have some) |
 | V / Shift+V | Placement height for building blocks: full, 3/4, 1/2, 1/4 (and back) |
 | 1-9, 0 / mouse wheel | Select the hotbar slot to place from (with Tab you can also click a slot) |
 | I | Inventory: pick which tool or block goes in each hotbar slot |
