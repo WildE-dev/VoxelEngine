@@ -1055,6 +1055,7 @@ void Application::DrawMinimap() {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         mapPixels.assign(kMapSize * kMapSize, 0xFF202020u);
+        mapHeights.assign(kMapSize * kMapSize, INT_MIN);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kMapSize, kMapSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, mapPixels.data());
         mapCentre = here;
     }
@@ -1062,37 +1063,42 @@ void Application::DrawMinimap() {
     if (std::abs(here.x - mapCentre.x) > kMapSize / 6 || std::abs(here.y - mapCentre.y) > kMapSize / 6) {
         mapCentre = here;
         mapRow = 0;
+        mapFreshRows = 0;
+        std::fill(mapHeights.begin(), mapHeights.end(), INT_MIN);
     }
-    // A few rows a frame: the topmost block of each column, from a little above the
-    // player down (so caves and overhangs below show the ground over them), shaded by
-    // whether the ground rises or falls toward the north.
+    // Redrawn at a pace: the whole picture every few seconds (quicker just after it's
+    // been centred somewhere new), a row at a time. Each row: the topmost block of
+    // each column, from a little above the player down (so caves and overhangs below
+    // show the ground over them), shaded by whether the ground rises or falls toward
+    // the north (the row before's heights, when it has them).
+    const double now = glfwGetTime();
+    const float dt = mapLastTime > 0.0 ? static_cast<float>(std::min(0.25, now - mapLastTime)) : 0.0f;
+    mapLastTime = now;
+    const float seconds = mapFreshRows < kMapSize ? 0.75f : 3.0f;
+    mapRowsDue = std::min(mapRowsDue + dt * kMapSize / seconds, static_cast<float>(kMapSize));
     const int top = static_cast<int>(feet.y) + 24, bottom = static_cast<int>(feet.y) - 40;
-    for (int rows = 0; rows < 6; rows++, mapRow = (mapRow + 1) % kMapSize) {
+    auto ground = [](const Block& b) { return !b.IsAir() && (!b.IsPlant() || b.type == BlockType::CROP || b.type == BlockType::RIPE_WHEAT); };
+    auto solid = [](const Block& b) { return !b.IsAir() && !b.IsPlant(); };
+    for (; mapRowsDue >= 1.0f; mapRowsDue -= 1.0f, mapRow = (mapRow + 1) % kMapSize, mapFreshRows++) {
         const int z = mapCentre.y - kMapSize / 2 + mapRow;
-        int previous = -100000;
+        const int northRow = (mapRow + kMapSize - 1) % kMapSize;
         for (int col = 0; col < kMapSize; col++) {
             const int x = mapCentre.x - kMapSize / 2 + col;
-            uint32_t colour = 0xFF202020u;
-            int height = bottom;
-            for (int y = top; y >= bottom; y--) {
-                Block b;
-                if (!world->GetBlock(x, y, z, b)) break;
-                if (b.IsAir() || (b.IsPlant() && b.type != BlockType::CROP && b.type != BlockType::RIPE_WHEAT)) continue;
-                colour = MapColour(b.type);
-                height = y;
-                break;
-            }
+            Block b;
+            const int found = world->TopSolid(x, z, top, bottom, ground, b);
+            const uint32_t colour = found >= bottom ? MapColour(b.type) : 0xFF202020u;
+            const int height = found >= bottom ? found : bottom;
+            mapHeights[mapRow * kMapSize + col] = height;
             // Relief: a column higher than the one north of it is lit, lower is shaded.
-            Block north;
-            int northHeight = height;
-            for (int y = top; y >= bottom; y--) {
-                if (!world->GetBlock(x, y, z - 1, north)) break;
-                if (!north.IsAir() && !north.IsPlant()) { northHeight = y; break; }
+            int northHeight = mapRow > 0 ? mapHeights[northRow * kMapSize + col] : INT_MIN;
+            if (northHeight == INT_MIN) {
+                Block north;
+                const int n = world->TopSolid(x, z - 1, top, bottom, solid, north);
+                northHeight = n >= bottom ? n : height;
             }
             const float shade = std::clamp(1.0f + 0.12f * (height - northHeight), 0.65f, 1.3f);
             auto channel = [&](int shift) { return static_cast<uint32_t>(std::min(255.0f, ((colour >> shift) & 0xFF) * shade)) << shift; };
             mapPixels[mapRow * kMapSize + col] = 0xFF000000u | channel(0) | channel(8) | channel(16);
-            (void)previous;
         }
         glBindTexture(GL_TEXTURE_2D, mapTexture);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, mapRow, kMapSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, &mapPixels[mapRow * kMapSize]);

@@ -271,6 +271,10 @@ private:
     unsigned int mapTexture = 0;
     std::vector<uint32_t> mapPixels;
     int mapRow = 0;
+    std::vector<int> mapHeights;  // the ground's height under each pixel
+    float mapRowsDue = 0.0f;      // rows owed to the picture (it's redrawn at a pace, not every frame)
+    int mapFreshRows = 0;         // rows drawn since it was last centred
+    double mapLastTime = 0.0;
     glm::ivec2 mapCentre{ 0 };   // the column the picture is centred on
     void DrawMinimap();
     // The newest achievement toast (from chat), shown for a few seconds.

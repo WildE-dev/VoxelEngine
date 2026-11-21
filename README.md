@@ -1524,6 +1524,13 @@ machines with a real drawing cost (a dial is a dozen small boxes), so they're dr
 less detail further off: the marks only within 12 blocks, only the housing from behind,
 and none beyond 48.
 
+The minimap used to cost 2 ms a frame (a fifth of the frame at 100 fps): it redrew six
+rows of its picture every frame, looking up every block down each column, and again
+down the column north of it for the shading. Now it redraws at a pace (the whole map
+every 3 seconds, every 0.75 just after it's re-centred), takes the shading from the
+row it drew before, and looks each chunk up once per column instead of every block:
+0.1 ms, and about 15% more frames.
+
 ## Layout
 
 ```

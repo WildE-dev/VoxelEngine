@@ -81,6 +81,29 @@ public:
     // Blocks drawn as models (Block::IsModel: water wheels) in the loaded chunks.
     // Main thread.
     std::vector<glm::ivec3> GetModelBlocks() const;
+    // The highest row from `top` down to `bottom` in column (x, z) whose block `stops`
+    // says is the ground (and that block), looking each chunk up once rather than every
+    // block; `bottom - 1` (and nothing) if there's none, or it reaches an unloaded chunk.
+    template <typename Stops>
+    int TopSolid(int x, int z, int top, int bottom, Stops stops, Block& found) const {
+        ChunkPtr chunk;
+        glm::ivec3 chunkCoords(0);
+        for (int y = top; y >= bottom; y--) {
+            const glm::ivec3 c = Coords::ChunkOf({ x, y, z });
+            if (!chunk || c != chunkCoords) {
+                chunk = FindChunkShared(c);
+                chunkCoords = c;
+                if (!chunk || !chunk->IsLoaded()) return bottom - 1;
+            }
+            const glm::ivec3 l = Coords::LocalOf({ x, y, z });
+            const Block b = chunk->GetBlock(l.x, l.y, l.z);
+            if (stops(b)) {
+                found = b;
+                return y;
+            }
+        }
+        return bottom - 1;
+    }
 
     size_t GetChunkCount() const { return chunks.size(); }
     size_t GetLoadedChunkCount() const { return loadedCount; }
