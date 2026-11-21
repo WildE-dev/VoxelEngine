@@ -263,14 +263,29 @@ floats. Chunks generate in about 0.2 ms.
 
 ### Mountains
 
-Ranges rise out of the hills in about a fifth of the world: a very large-scale noise
-field decides where they run, and ridges inside them (rounded at the crests, with
-smaller ridges on their flanks) climb up to about 90 blocks above the hills, so peaks
-reach around 100. Above row 44 the ground is bare rock, with nothing growing (trees,
-bushes, grass and flowers stay below that tree line); above row 70 it's snow. The
-slopes are kept mostly under 45 degrees, since each column's surface is one sloped
-block (about 1% of mountain columns are steeper, and show a step). The nearest big
-range to spawn is about 700 blocks out, towards +x +z.
+Ranges rise out of the hills over about a third of the world: a very large-scale
+noise field decides where they run, and ridges inside them (rounded at the crests,
+with smaller ridges on their flanks) climb up to about 150 blocks above the hills, so
+peaks reach around 160. Above row 44 the ground is bare rock, with nothing growing
+(trees, bushes, grass and flowers stay below that tree line); above row 70 it's snow.
+It gets colder the higher you go (a little colder every block above row 12), so high
+ground turns to taiga and tundra. The slopes are kept mostly under 45 degrees, since
+each column's surface is one sloped block (a few mountain columns are steeper, and
+show a step). The nearest ground above row 80 is about 750 blocks from spawn, towards
++x +z.
+
+### Lakes
+
+The hills and mountains hold lakes: the world is divided into 128 x 128 cells, and in
+most cells above the lowlands a round lake 14 to 34 blocks in radius sits in a bowl
+carved into the land, up to 8 blocks deep, with a sandy bed. Its level is set near
+the lowest ground around it, and its rim is raised just above the water all the way
+round (on the uphill side the shore eases into the slope instead), so a lake is
+always contained, however the land falls away below it. They're high above the sea
+and full of still water: tap one and it drains downhill, which is what water wheels
+want (see [Air power](#air-power)). Mountain lakes never freeze, no trees grow in or
+right beside them, and caves never open under them. About one cell in six has one;
+the nearest to spawn is about 70 blocks out, towards -x -z.
 
 ### Dungeons
 

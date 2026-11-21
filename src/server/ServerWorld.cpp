@@ -245,7 +245,7 @@ void ServerWorld::PropagateLight(const std::vector<ChunkPtr>& loadedChunks, cons
             for (int z = 0; z < S; z++)
                 skyFromAbove[i][x * S + z] = WorldStorage::IsColumnSet(blocked, x, z)
                                                  ? 0
-                                                 : TerrainGenerator::ColumnFrom(heights, x, z).SkyLightAbove(chunkTop);
+                                                 : TerrainGenerator::ColumnFrom(heights, x, z).SkyLightAbove(chunkTop, terrain.WaterLevelAt(c.x * S + x, c.z * S + z));
     }
 
     LightPropagator::ChunkSet dirty;

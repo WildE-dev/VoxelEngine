@@ -1,6 +1,10 @@
 #pragma once
 
 #include <array>
+#include <climits>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
 
 #include <glm/glm.hpp>
 
@@ -90,8 +94,9 @@ public:
         // Sandy beaches and sea floors instead of grass.
         bool IsSandy() const { return IsSandyRow(surfaceRow); }
         // Sky light reaching the cell just above `row` in untouched terrain, coming
-        // straight down: 0 under the ground, reduced by any water above.
-        uint8_t SkyLightAbove(int row) const;
+        // straight down: 0 under the ground, reduced by any water above (up to
+        // `waterLevel`: the sea's, or a mountain lake's).
+        uint8_t SkyLightAbove(int row, int waterLevel = kSeaLevel) const;
         // What the column is made of at the top (the biome's grass, sand, rock or snow)
         // and just under it (dirt, sand or rock).
         BlockType TopType(Biome biome) const;
@@ -101,6 +106,18 @@ public:
     };
 
     float GetHeight(int x, int z) const;
+
+    // Lakes in the hills and mountains: on a grid of kLakeCell blocks, most cells
+    // above the lowlands hold a round lake, kLakeMinRadius..kLakeMaxRadius across,
+    // in a bowl carved into the land (an exact bowl under the water; on the uphill
+    // side the shore eases up into the slope) with its rim raised just above the
+    // water all round, so it's always contained. Its level is near the lowest ground
+    // around it. The row water fills up to (exclusive) in this column, or INT_MIN.
+    int LakeLevelAt(int x, int z) const;
+    // Water fills open cells below this row: the sea's level, or a lake's.
+    int WaterLevelAt(int x, int z) const { return std::max(static_cast<int>(kSeaLevel), LakeLevelAt(x, z)); }
+    static constexpr int kLakeCell = 128;
+    static constexpr float kLakeMinRadius = 14.0f, kLakeMaxRadius = 34.0f;
     void ComputeColumnHeights(int chunkX, int chunkZ, ColumnHeights& out) const;
 
     static Column ColumnFrom(const ColumnHeights& heights, int lx, int lz);
@@ -122,7 +139,23 @@ private:
     static constexpr float SIZE = 120.0f;
     static constexpr float AMPLITUDE = 20.0f;
     // Mountain ranges on top of the rolling hills (see GetHeight).
-    static constexpr float kMountainHeight = 90.0f;
+    static constexpr float kMountainHeight = 150.0f;
+
+    struct Lake {
+        bool exists = false;
+        glm::vec2 centre{ 0.0f };
+        float radius = 0.0f, depth = 0.0f;
+        int level = 0;
+    };
+    // The lake in grid cell (cx, cz), worked out once and kept (any thread).
+    const Lake& LakeIn(int cx, int cz) const;
+    // The land before lakes are carved into it.
+    float GetBaseHeight(int x, int z) const;
+    struct LakeCache {
+        std::mutex mutex;
+        std::unordered_map<int64_t, Lake> lakes;
+    };
+    std::shared_ptr<LakeCache> lakeCache = std::make_shared<LakeCache>();
 
     void PlacePlants(const glm::ivec3& chunkCoords, const ColumnHeights& heights, const SurfaceRows& rows, Blocks& out) const;
     float GetHillHeight(int x, int z) const;

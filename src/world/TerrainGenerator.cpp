@@ -60,15 +60,15 @@ float TerrainGenerator::Column::GroundHeightAtCentre() const {
     return static_cast<float>(surfaceRow);
 }
 
-uint8_t TerrainGenerator::Column::SkyLightAbove(int row) const {
+uint8_t TerrainGenerator::Column::SkyLightAbove(int row, int waterLevel) const {
     // The light in cell row + 1, coming straight down. Cells in this column: solid
     // ground below the surface row, the (transparent) sloped top if any, then water up
     // to sea level, then open sky. Below sea level the sloped top is waterlogged.
     // Light loses 2 entering each cell holding water.
     const int cell = row + 1;
     if (cell < surfaceRow) return 0;
-    const int waterAtOrAbove = kSeaLevel - std::max(cell, FirstOpenRow());
-    const bool waterloggedSlope = cell < FirstOpenRow() && surfaceRow < kSeaLevel;
+    const int waterAtOrAbove = waterLevel - std::max(cell, FirstOpenRow());
+    const bool waterloggedSlope = cell < FirstOpenRow() && surfaceRow < waterLevel;
     if (waterAtOrAbove <= 0 && !waterloggedSlope) return kMaxLight;
     int level = kMaxLight - 2 * waterAtOrAbove;
     // The sloped sea floor block under the water is waterlogged: one more water cell.
@@ -125,7 +125,7 @@ TerrainGenerator::Climate TerrainGenerator::BaseClimate(int x, int z) const {
 TerrainGenerator::Climate TerrainGenerator::ClimateAt(int wx, int wz, int surfaceRow) const {
     if (type == Type::Empty) return { 0.0f, -0.6f }; // plains
     Climate c = BaseClimate(wx, wz);
-    c.temperature -= std::max(0, surfaceRow - 12) / 70.0f; // colder higher up
+    c.temperature -= std::max(0, surfaceRow - 12) / 120.0f; // colder higher up (snow on the high peaks)
     return c;
 }
 
@@ -137,7 +137,7 @@ Biome TerrainGenerator::Classify(const Climate& c) {
     return h < -0.18f ? Biome::Desert : h < 0.2f ? Biome::Savanna : Biome::Jungle;
 }
 
-float TerrainGenerator::GetHeight(int x, int z) const {
+float TerrainGenerator::GetBaseHeight(int x, int z) const {
     if (type == Type::Empty) return 0.0f;
     const float land = GetHillHeight(x, z) + GetMountainHeight(x, z);
     // Swamps (temperate and very wet) sink toward sea level, rising and dipping just
@@ -151,19 +151,88 @@ float TerrainGenerator::GetHeight(int x, int z) const {
     return land + (marsh - land) * swamp;
 }
 
+const TerrainGenerator::Lake& TerrainGenerator::LakeIn(int cx, int cz) const {
+    const int64_t key = (static_cast<int64_t>(cx) << 32) ^ static_cast<uint32_t>(cz);
+    {
+        std::lock_guard<std::mutex> lock(lakeCache->mutex);
+        auto it = lakeCache->lakes.find(key);
+        if (it != lakeCache->lakes.end()) return it->second;
+    }
+    Lake lake;
+    constexpr uint32_t kLakeSeed = 0x1A4E5u;
+    if (type == Type::Normal && Noise::Random01(cx, 77, cz, kLakeSeed) < 0.8f) {
+        // Somewhere near the cell's middle (kept far enough in that neighbours' lakes
+        // and their rims never meet).
+        const float room = kLakeCell * 0.5f - kLakeMaxRadius * 1.5f - 1.0f;
+        lake.radius = kLakeMinRadius + (kLakeMaxRadius - kLakeMinRadius) * Noise::Random01(cx, 78, cz, kLakeSeed);
+        lake.centre = glm::vec2(cx * kLakeCell, cz * kLakeCell) + kLakeCell * 0.5f +
+                      glm::vec2(Noise::Random01(cx, 79, cz, kLakeSeed) * 2.0f - 1.0f, Noise::Random01(cx, 80, cz, kLakeSeed) * 2.0f - 1.0f) * room;
+        lake.depth = 3.0f + lake.radius * 0.15f;
+        // The level: near the lowest ground around it, so the rim needs little raising.
+        const float centreHeight = GetBaseHeight(static_cast<int>(lake.centre.x), static_cast<int>(lake.centre.y));
+        float ringMin = 1e9f;
+        for (int i = 0; i < 20; i++) {
+            const float a = i * 6.2831853f / 20.0f;
+            const glm::vec2 p = lake.centre + glm::vec2(std::cos(a), std::sin(a)) * lake.radius * 1.2f;
+            ringMin = std::min(ringMin, GetBaseHeight(static_cast<int>(p.x), static_cast<int>(p.y)));
+        }
+        lake.level = static_cast<int>(std::floor(std::min(ringMin + 1.5f, centreHeight + 2.0f)));
+        // Only in the hills and mountains (lowland hollows have the sea and swamps), and
+        // not hanging off a cliff.
+        lake.exists = lake.level > kSeaLevel + 5 && centreHeight - lake.level < 12.0f && lake.level < kSnowLine + 30;
+    }
+    std::lock_guard<std::mutex> lock(lakeCache->mutex);
+    if (lakeCache->lakes.size() > 65536) lakeCache->lakes.clear(); // (far away: worked out again if needed)
+    return lakeCache->lakes.emplace(key, lake).first->second;
+}
+
+int TerrainGenerator::LakeLevelAt(int x, int z) const {
+    if (type == Type::Empty) return INT_MIN;
+    const glm::vec2 p(x + 0.5f, z + 0.5f);
+    const int cx = static_cast<int>(std::floor(p.x / kLakeCell)), cz = static_cast<int>(std::floor(p.y / kLakeCell));
+    const Lake& lake = LakeIn(cx, cz);
+    // (A column straddling the shore counts, so its sloped top is waterlogged.)
+    if (lake.exists && glm::distance(p, lake.centre) < lake.radius + 1.5f) return lake.level;
+    return INT_MIN;
+}
+
+float TerrainGenerator::GetHeight(int x, int z) const {
+    const float base = GetBaseHeight(x, z);
+    if (type == Type::Empty) return base;
+    const glm::vec2 p(static_cast<float>(x), static_cast<float>(z));
+    const int cx = static_cast<int>(std::floor(p.x / kLakeCell)), cz = static_cast<int>(std::floor(p.y / kLakeCell));
+    const Lake& lake = LakeIn(cx, cz);
+    if (!lake.exists) return base;
+    const float d = glm::distance(p, lake.centre), r = lake.radius;
+    const float level = static_cast<float>(lake.level);
+    if (d < r) {
+        // The bowl under the water; on the uphill side the shore eases into the slope.
+        const float bowl = 1.0f - (d / r) * (d / r);
+        float h = level - 0.5f - lake.depth * bowl;
+        if (base > h) h += glm::smoothstep(0.7f * r, r, d) * (base - h);
+        return h;
+    }
+    if (d < 1.5f * r) {
+        // The rim: just above the water, then down to the land around.
+        const float rim = d < 1.1f * r ? level + 0.5f * (d - r) / (0.1f * r) : level + 0.5f + (base - level - 0.5f) * glm::smoothstep(1.1f * r, 1.5f * r, d);
+        return std::max(base, rim);
+    }
+    return base;
+}
+
 float TerrainGenerator::GetMountainHeight(int x, int z) const {
-    // Where the ranges run: a very large-scale field, high in about a fifth of the
+    // Where the ranges run: a very large-scale field, high in over a third of the
     // world, fading in over a few hundred blocks so ranges rise out of the hills.
     const float range = Noise::Perlin2(x / 900.0f + 31.7f, z / 900.0f - 77.3f);
-    const float mask = glm::smoothstep(0.12f, 0.42f, range);
+    const float mask = glm::smoothstep(-0.02f, 0.3f, range);
     if (mask <= 0.0f) return 0.0f;
     // Ridges inside them: crests where the noise crosses zero, valleys between, with
     // smaller ridges on the flanks. The crests are rounded (smoothstep, not |n|) and the
     // scales wide enough that slopes stay mostly under 45 degrees: each column's
     // surface is one sloped block, so anything much steeper shows as steps.
     auto ridge = [](float n) { return 1.0f - glm::smoothstep(0.0f, 0.6f, std::abs(n)); };
-    const float big = ridge(Noise::Perlin2(x / 430.0f + 11.3f, z / 430.0f + 5.9f));
-    const float small = ridge(Noise::Perlin2(x / 170.0f - 3.1f, z / 170.0f + 17.7f));
+    const float big = ridge(Noise::Perlin2(x / 620.0f + 11.3f, z / 620.0f + 5.9f));
+    const float small = ridge(Noise::Perlin2(x / 250.0f - 3.1f, z / 250.0f + 17.7f));
     return mask * kMountainHeight * big * (0.8f + 0.25f * small);
 }
 
@@ -255,6 +324,29 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
 
     Caves::Carve(coords, rows, out);
 
+    // Lakes: their water level per column, and their beds kept whole (a cave opening
+    // under one would drain it) and sandy.
+    std::array<int, S * S> waterLevels;
+    for (int x = 0; x < S; x++)
+        for (int z = 0; z < S; z++) {
+            const int wx = coords.x * S + x, wz = coords.z * S + z;
+            const int lake = LakeLevelAt(wx, wz);
+            waterLevels[x * S + z] = std::max(static_cast<int>(kSeaLevel), lake);
+            const int m = rows[x * S + z];
+            if (lake <= m) continue; // dry here (water fills from the surface row up)
+            const Column column = ColumnFrom(heights, x, z);
+            for (int y = 0; y < S; y++) {
+                const int blockY = coords.y * S + y;
+                Block& cell = out[Index(x, y, z)];
+                if (blockY < m - 4 || blockY > m) continue;
+                const bool top = blockY == m || (blockY == m - 1 && !column.HasSlopedTop());
+                if (top && blockY == m) {
+                    if (column.HasSlopedTop()) cell = Block(BlockType::SAND, column.EdgesAt(m));
+                }
+                else if (blockY < m) cell = Block(top ? BlockType::SAND : BlockType::DIRT);
+            }
+        }
+
     // Seas and lakes: open cells above the ground and below sea level, plus the open
     // space above a sloped sea floor (waterlogged). Caves are underground (below the
     // surface row), so they stay dry.
@@ -265,12 +357,13 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
             for (int y = 0; y < S; y++) {
                 const int blockY = coords.y * S + y;
                 Block& cell = out[Index(x, y, z)];
-                if (blockY >= firstOpen && blockY < kSeaLevel) {
-                    // Frozen biomes: the sea's top layer is ice.
-                    const bool ice = blockY == kSeaLevel - 1 && IsFrozen(biomes[x * S + z]);
+                const int waterLevel = waterLevels[x * S + z];
+                if (blockY >= firstOpen && blockY < waterLevel) {
+                    // Frozen biomes: the sea's top layer is ice (mountain lakes stay open).
+                    const bool ice = waterLevel == kSeaLevel && blockY == kSeaLevel - 1 && IsFrozen(biomes[x * S + z]);
                     cell = ice ? Block(BlockType::ICE) : Block::Water(Block::kMaxWaterVolume);
                 }
-                else if (blockY == column.surfaceRow && blockY < kSeaLevel && cell.IsPartial()) cell.water = cell.shown = cell.WaterCapacity();
+                else if (blockY == column.surfaceRow && blockY < waterLevel && cell.IsPartial()) cell.water = cell.shown = cell.WaterCapacity();
             }
         }
     }
