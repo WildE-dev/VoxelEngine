@@ -358,6 +358,36 @@ int main() {
             if (nx > 0.5f && lo.x == 5.0f && hi.x == 5.0f && lo.z == 3.0f && hi.z == 3.5f && lo.y == 4.0f) halfFace = true;
         }
         Check(halfFace, "beside a dry carved brick, the pool's side covers the notch right down, a half-width face with a flat bottom");
+
+        // Water in a notch standing higher than the water in front of it, whose surface
+        // sags at that corner toward a dry column beside it (surfaces average the columns
+        // round a corner). The notch's side shows down to where that surface is drawn:
+        // no slit between the two.
+        Chunk::Blocks slit{};
+        for (int x = 0; x <= 8; x++)
+            for (int z = 0; z <= 8; z++) {
+                slit[Chunk::Index(x, 3, z)] = Block(BlockType::STONE);
+                slit[Chunk::Index(x, 4, z)] = Block(BlockType::STONE);
+            }
+        slit[Chunk::Index(4, 4, 4)] = Block();                                   // dry, beside the corner
+        slit[Chunk::Index(5, 4, 4)] = Block::Water(Block::kMaxWaterVolume);      // the water in front
+        {
+            const Block notched = Block(BlockType::STONE_BRICK).Chiselled(2, -8); // notch at (0,0): toward -x and -z
+            slit[Chunk::Index(5, 4, 5)] = notched.WithWater(notched.WaterCapacity());
+        }
+        v.clear();
+        w.clear();
+        Mesh(slit, v, w);
+        const auto sv = Positions(w, true);
+        float notchSideLow = 10.0f, notchSideHigh = 0.0f;
+        for (size_t i = 0; i < sv.size(); i++) {
+            const auto& p = sv[i];
+            const float nz = ((w[i * 2 + 1] >> 20) & 0xFu) / 7.5f - 1.0f;
+            if (nz < -0.5f && p.z == 5.0f && p.x >= 5.0f && p.x <= 5.5f) notchSideLow = std::min(notchSideLow, p.y), notchSideHigh = std::max(notchSideHigh, p.y);
+        }
+        Check(notchSideHigh > 4.9f && notchSideLow < 4.6f,
+              "water in a notch above a sagging surface in front shows its side down to it (no slit; " + std::to_string(notchSideLow) + " to " +
+                  std::to_string(notchSideHigh) + ")");
     }
 
     std::cout << "Aiming and outlines" << std::endl;

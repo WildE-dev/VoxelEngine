@@ -251,12 +251,19 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
             // Water beside water is one surface, with no face between, except where a
             // partial block's water stands flat at its own level (see below): there the
             // side shows above the lower of the two.
-            int theirWater32 = -1;
-            if (neighbour.HasWater()) {
+            const bool besideWater = neighbour.HasWater();
+            if (besideWater) {
                 if (face == static_cast<int>(Face::Top) || face == static_cast<int>(Face::Bottom)) continue;
                 if (!neighbour.IsPartial() && !self.IsPartial()) continue;
-                theirWater32 = std::clamp((neighbour.WaterShownLevel() + kUnitsPer32nd / 2) / kUnitsPer32nd, 1, kOpenSurfaceTop);
             }
+            // How high the neighbour's water is drawn at our corner `e` (32nds; -1 if it
+            // has none): a partial block's flat level, or other water's surface there,
+            // which averages the columns around that corner (not its own level).
+            auto theirWater32 = [&](int e) {
+                if (!besideWater) return -1;
+                if (neighbour.IsPartial()) return std::clamp((neighbour.WaterShownLevel() + kUnitsPer32nd / 2) / kUnitsPer32nd, 1, kOpenSurfaceTop);
+                return cornerHeight(here, kCornerOfEdge[e][0], kCornerOfEdge[e][1]);
+            };
             if (face == static_cast<int>(Face::Bottom) && self.IsPartial()) continue; // the slope is the floor
 
             Block shape;
@@ -303,7 +310,8 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     const int e = edges.ours[k];
                     uint8_t from = bottom[e];
                     if (neighbour.IsPartial()) from = std::max(from, std::min(neighbour.edgeData.GetTopY(edges.theirs[k]), top[e]));
-                    if (theirWater32 >= 0) from = std::max(from, static_cast<uint8_t>(std::min(theirWater32 / 4, static_cast<int>(top[e]))));
+                    const int theirs = theirWater32(e);
+                    if (theirs >= 0) from = std::max(from, static_cast<uint8_t>(std::min(theirs / 4, static_cast<int>(top[e]))));
                     return from;
                 };
                 // A stepped block on either side has a step in the middle of the side: two
@@ -317,7 +325,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                         halfShape.edgeData.SetBottomY(edges.ours[0], from);
                         halfShape.edgeData.SetBottomY(edges.ours[1], from);
                         bool exposed = false;
-                        for (int j = 0; j < 2; j++) exposed |= top32[edges.ours[j]] > std::max(from * 4, theirWater32);
+                        for (int j = 0; j < 2; j++) exposed |= top32[edges.ours[j]] > std::max(from * 4, theirWater32(edges.ours[j]));
                         if (exposed) addFace(halfShape, edges.ours[k], edges.ours[1 - k]);
                     }
                     continue;
@@ -326,7 +334,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 for (int k = 0; k < 2; k++) {
                     const uint8_t from = exposedFrom(k);
                     shape.edgeData.SetBottomY(edges.ours[k], from);
-                    exposed |= top32[edges.ours[k]] > std::max(from * 4, theirWater32); // (none where both stand level)
+                    exposed |= top32[edges.ours[k]] > std::max(from * 4, theirWater32(edges.ours[k])); // (none where both stand level)
                 }
                 if (!exposed) continue;
             }
