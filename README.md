@@ -530,7 +530,11 @@ work the same for everyone:
 The screen flashes red when you're hurt. Hearts come back one every 4 seconds once
 nothing has hurt you for 5, as long as you're well fed (see
 [Food and hunger](#food-and-hunger)). With none left, everyone hears how you died and you
-respawn at the spawn point with full health (and three seconds' grace). In no-clip
+respawn at the spawn point with full health (and three seconds' grace). In survival,
+half of every kind of block and item you carry (rounded down) is left behind in a
+chest placed where you died (or just beside or above, in the nearest open cell), and
+the chat tells you where; anyone can open it, so a killer can take it. Your tools and
+armour aren't dropped. In no-clip
 nothing can hurt you. All four blocks are in the inventory, for building traps of
 your own. `TrapTest` checks spikes, death and respawn, crumbling floors, pressure
 plates and sluice gates, and that no-clip and the laser are operators' only.
@@ -615,9 +619,12 @@ away from the hitter and a little up. The server sends the push and the player's
 game applies it, so the usual movement checks still hold. Killing someone tells
 everyone (`X was slain by Y`), and they respawn. Creative players and players flying in
 no-clip can't be hurt. PvP is on by default; operators switch it with `/pvp on|off`,
-and `/pvp` shows which. With it off, a hit just tells you so. `CreatureTest` checks
+and `/pvp` shows which. With it off, a hit just tells you so. Someone slain leaves
+half of what they carried in a chest where they fell (see
+[Health and traps](#health-and-traps)). `CreatureTest` checks
 names, held items and armour reaching other players, reach, damage, the red flash,
-knockback, `/pvp off`, and being slain.
+knockback, `/pvp off`, being slain, and the killer finding half the victim's things in
+a chest where they died.
 
 ## Swords and armour
 

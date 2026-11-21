@@ -12,6 +12,7 @@
 //  - PvP: players hit each other in reach (flashing red for others, knocked back), can be slain,
 //    and /pvp off stops it.
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
@@ -228,7 +229,8 @@ int main() {
         wait(1.0);
         Check(b.client.GetHealth() == 18 && Has(a, "PvP is off"), "with /pvp off, hits do nothing (and the hitter is told)");
         server.QueueConsoleCommand("pvp on");
-        wait(0.5);
+        server.QueueConsoleCommand("give stone 4 Rival"); // (half is left behind when they die)
+        both(20.0, [&] { return b.client.GetResources(BlockType::STONE) == 4 * 64; });
         for (int i = 0; i < 12 && b.client.GetHealth() > 0 && !Has(b, "slain"); i++) {
             server.QueueConsoleCommand("tp Rival " + std::to_string(a.feet.x + 2.0f) + " 0 8.5");
             wait(0.5);
@@ -237,6 +239,20 @@ int main() {
         }
         Check(both(5.0, [&] { return Has(b, "Rival was slain by Duelist"); }), "enough axe hits slay them (and everyone's told)");
         Check(both(5.0, [&] { return b.client.GetHealth() == 20; }), "and they're back at full health");
+        Check(both(5.0, [&] { return b.client.GetResources(BlockType::STONE) == 2 * 64 && Has(b, "in a chest where you died"); }),
+              "keeping half their stone; the other half is left where they died");
+        glm::ivec3 grave(0);
+        for (const auto& line : b.client.GetChat())
+            if (const size_t at = line.text.find("died ("); at != std::string::npos)
+                std::sscanf(line.text.c_str() + at + 6, "%d, %d, %d", &grave.x, &grave.y, &grave.z);
+        Block left;
+        Check(both(20.0, [&] { return a.world.GetBlock(grave.x, grave.y, grave.z, left) && left.type == BlockType::CHEST; }),
+              "in a chest the killer can see");
+        server.QueueConsoleCommand("tp Duelist " + std::to_string(grave.x - 1.5f) + " 0 " + std::to_string(grave.z + 0.5f));
+        both(20.0, [&] { return std::abs(a.feet.x - (grave.x - 1.5f)) < 0.1f; });
+        a.client.OpenChest(grave);
+        Check(both(20.0, [&] { return a.client.GetChestUnits(BlockType::STONE) == 2 * 64; }), "and open, with the 2 stone in it");
+        a.client.CloseChest();
         server.QueueConsoleCommand("give sword Duelist");
         for (const char* piece : { "cap", "tunic", "boots" }) server.QueueConsoleCommand(std::string("give ") + piece + " Rival");
         server.QueueConsoleCommand("tp Rival " + std::to_string(a.feet.x + 2.0f) + " 0 8.5");

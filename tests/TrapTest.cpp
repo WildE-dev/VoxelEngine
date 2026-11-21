@@ -134,6 +134,12 @@ int main() {
           "then respawns at the spawn point with full health");
     // Respawning drops the player from high up: wait for the landing (building has a reach).
     Check(both(15.0, [&] { return a.player.GetFeetPosition().y < 0.5f && a.player.IsOnGround(); }), "and lands");
+    Check(Has(a, "in a chest where you died") && a.client.GetResources(BlockType::CRUMBLING_BRICK) == 2 * 64,
+          "having left half of what they carried in a chest where they died");
+    // (Half of the trap blocks are in that chest now: more, for the traps below.)
+    for (const char* give : { "give spikes 4 Tester", "give crumbling_brick 2 Tester", "give sluice 1 Tester", "give pressure_plate 1 Tester" })
+        server.QueueConsoleCommand(give);
+    both(20.0, [&] { return a.client.GetResources(BlockType::CRUMBLING_BRICK) == 4 * 64 && a.client.GetResources(BlockType::PRESSURE_PLATE) >= 64; });
 
     std::cout << "Crumbling bricks" << std::endl;
     // (Survival players build within 6 blocks: go there first.)

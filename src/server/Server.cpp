@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <iostream>
 
 #include "server/ServerWorld.h"
@@ -779,8 +780,10 @@ void Server::Hurt(ClientState& client, int amount, const std::string& deathMessa
     client.nextRegen = now + kRegenDelay;
     if (client.health > 0) return SendHealth(client, true);
 
-    // Dead: back to the spawn point, healed, and briefly safe.
+    // Dead: half of what they carry is left where they died, then back to the spawn
+    // point, healed, and briefly safe.
     Broadcast(net::ChatMessage::Kind::Info, client.name + " " + deathMessage);
+    DropOnDeath(client);
     client.health = kMaxHealth;
     client.air = Breathing::kMaxAir;
     client.food = Hunger::kMaxFood;
@@ -789,6 +792,42 @@ void Server::Hurt(ClientState& client, int amount, const std::string& deathMessa
     client.invulnerableUntil = now + 3.0;
     Teleport(client, SpawnPoint());
     SendHealth(client, true);
+}
+
+void Server::DropOnDeath(ClientState& client) {
+    if (!options.dropOnDeath || Creative(client)) return;
+    // Half of each kind (whole units, rounded down: the other half's theirs to keep).
+    ChestItems dropped{};
+    bool any = false;
+    for (size_t t = 0; t < dropped.size(); t++) {
+        dropped[t] = client.resources[t] / 2;
+        any |= dropped[t] > 0;
+    }
+    if (!any) return;
+    // Into a chest in the nearest open cell where they died: their feet's cell, or one
+    // around or just above it (air first; water or a wild plant will do, not a trap).
+    const glm::ivec3 at(glm::floor(client.feet + glm::vec3(0.0f, 0.1f, 0.0f)));
+    std::optional<glm::ivec3> spot;
+    for (int pass = 0; pass < 2 && !spot; pass++)
+        for (int dy = 0; dy <= 3 && !spot; dy++)
+            for (int ring = 0; ring <= 1 && !spot; ring++)
+                for (int dx = -ring; dx <= ring && !spot; dx++)
+                    for (int dz = -ring; dz <= ring && !spot; dz++) {
+                        if (std::max(std::abs(dx), std::abs(dz)) != ring) continue;
+                        const glm::ivec3 p = at + glm::ivec3(dx, dy, dz);
+                        Block b;
+                        if (!world->GetBlock(p.x, p.y, p.z, b)) continue;
+                        const bool ok = pass == 0 ? b.IsAir() : (b.IsLiquid() || (b.IsPlant() && b.type != BlockType::SPIKES));
+                        if (ok) spot = p;
+                    }
+    if (!spot) return; // nowhere to put it: they keep it all
+    world->SetBlock(spot->x, spot->y, spot->z, Block(BlockType::CHEST));
+    chests[*spot] = dropped;
+    for (size_t t = 0; t < dropped.size(); t++) client.resources[t] -= dropped[t];
+    SendResources(client);
+    char where[64];
+    std::snprintf(where, sizeof where, "%d, %d, %d", spot->x, spot->y, spot->z);
+    SendChat(client, net::ChatMessage::Kind::Info, std::string("Half of what you carried is in a chest where you died (") + where + ")");
 }
 
 void Server::TriggerPlate(ClientState& client, const glm::ivec3& plate) {

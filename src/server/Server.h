@@ -124,6 +124,8 @@ public:
         // Creatures spawn by themselves around players (normal worlds only; /summon
         // works anywhere).
         bool creatures = true;
+        // Survival players who die leave half of what they carry in a chest there.
+        bool dropOnDeath = true;
         // How fast players get hungry (1: normal; tests speed it up).
         float hungerRate = 1.0f;
         // Players can hurt each other (operators switch it with /pvp).
@@ -284,6 +286,7 @@ private:
     void SendChest(ClientState& client);         // what's in their open chest (or that it's closed)
     void SendChestToViewers(const glm::ivec3& pos);
     void RemoveChest(const glm::ivec3& pos, ClientState* breaker); // gone: contents to whoever broke it
+    void DropOnDeath(ClientState& client); // half of what they carry, into a chest where they died
     // Damage in half hearts. `armourHelps`: a hit or a trap (armour takes some off),
     // not drowning, bad air or starving.
     void Hurt(ClientState& client, int amount, const std::string& deathMessage, bool armourHelps = true);
