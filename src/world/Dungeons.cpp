@@ -147,6 +147,7 @@ const Block kAir{};
 const Block kLamp(BlockType::LAMP);
 const Block kBrick(BlockType::STONE_BRICK);
 const Block kLog(BlockType::LOG);
+const Block kChest(BlockType::CHEST); // loot is rolled by the server when first opened (see LootFor)
 const Block kFullWater = Block::Water(Block::kMaxWaterVolume);
 
 // Lamps set into the middle of each wall, at `height` above the floor.
@@ -179,6 +180,7 @@ void Furnish(Stamper& s, const Room& r, const std::vector<Box>& corridors) {
                 for (int y = y0; y < y1; y++) s.Set({ x, y, z }, kBrick);
                 s.Set({ x, y1, z }, kLamp); // lamps crown the pillars
             }
+        if (rnd(c, 22) < 0.4f && !onCorridor({ x0 - 1, y0, z0 }) && !onCorridor({ x0, y0, z0 - 1 })) s.Set({ x0, y0, z0 }, kChest);
         break;
 
     case RoomType::Archive: {
@@ -200,6 +202,7 @@ void Furnish(Stamper& s, const Room& r, const std::vector<Box>& corridors) {
         // A reading table under a hanging lamp.
         s.Set({ c.x, y0, c.z }, kLog);
         s.Set({ c.x + 1, y0, c.z }, kLog);
+        s.Set({ c.x - 1, y0, c.z }, kChest); // the archivist's chest, by the table
         s.SetIfWall({ c.x, y1 + 1, c.z }, kLamp);
         break;
     }
@@ -244,6 +247,7 @@ void Furnish(Stamper& s, const Room& r, const std::vector<Box>& corridors) {
                 s.Set({ x, y0, z1 - 2 }, Block(BlockType::STONE));
             }
         }
+        if (!onCorridor({ x1 + 1, y0, c.z })) s.Set({ x1, y0, c.z }, kChest); // grave goods, at the end of the aisle
         WallLamps(s, in, 1);
         break;
 
@@ -266,7 +270,7 @@ void Furnish(Stamper& s, const Room& r, const std::vector<Box>& corridors) {
                 s.Set({ x, y0 - 3, z }, Block::Plant(BlockType::SPIKES, 0));
             }
         s.Set({ c.x, y0, c.z }, kBrick);
-        s.Set({ c.x, y0 + 1, c.z }, kLamp);
+        s.Set({ c.x, y0 + 1, c.z }, kChest); // the prize, on the pedestal (lit by the floor lamps)
         break;
 
     case RoomType::FloodChamber: {
@@ -295,6 +299,7 @@ void Furnish(Stamper& s, const Room& r, const std::vector<Box>& corridors) {
                 }
             }
         s.SetIfWall({ x0 - 1, y0 + 2, c.z }, kLamp); // one lamp still burning
+        if (rnd(c, 23) < 0.35f && !onCorridor({ x1 + 1, y0, z1 }) && !onCorridor({ x1, y0, z1 + 1 })) s.Set({ x1, y0, z1 }, kChest); // half buried
         break;
 
     case RoomType::Cistern: {
@@ -336,6 +341,7 @@ void Furnish(Stamper& s, const Room& r, const std::vector<Box>& corridors) {
         s.Set({ c.x, y0, c.z }, kBrick);
         s.Set({ c.x, y0 + 1, c.z }, kBrick);
         s.Set({ c.x, y0 + 2, c.z }, kLamp);
+        if (rnd(c, 21) < 0.6f) s.Set({ c.x, y0, c.z - 1 }, kChest); // offerings, behind the plinth
         // Pews facing the plinth, with an aisle down the middle.
         for (int z = c.z + 2; z <= z1 - 1; z += 2)
             for (int x = x0 + 1; x <= x1 - 1; x++)
@@ -604,6 +610,41 @@ void Stamp(const TerrainGenerator& terrain, const glm::ivec3& chunkCoords, std::
                 s.Set({ c.x + dx, ground, c.y + dz }, kBrick);
             }
     }
+}
+
+std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos) {
+    std::vector<std::pair<BlockType, uint32_t>> loot;
+    const Layout layout = LayoutFor(terrain, FloorDiv(pos.x, kRegionSize), FloorDiv(pos.z, kRegionSize));
+    if (!layout.exists) return loot;
+    const Room* room = nullptr;
+    for (const auto& r : layout.rooms)
+        if (Expand(r.inner, 1).Contains(pos)) room = &r;
+    if (!room) return loot;
+    const bool rich = room->type == RoomType::Vault;
+    struct Entry { BlockType type; int least, most; };
+    static const Entry kCommon[] = {
+        { BlockType::COOKED_VENISON, 1, 3 }, { BlockType::RAW_VENISON, 1, 2 }, { BlockType::HIDE, 1, 3 }, { BlockType::LAMP, 1, 3 },
+        { BlockType::PLANKS, 4, 10 }, { BlockType::GLASS, 2, 5 }, { BlockType::STONE_BRICK, 4, 12 }, { BlockType::MOSSY_BRICK, 2, 6 },
+        { BlockType::PIPE, 2, 6 }, { BlockType::LOG, 2, 5 },
+    };
+    static const Entry kRich[] = {
+        { BlockType::COOKED_VENISON, 3, 6 }, { BlockType::HIDE, 3, 8 }, { BlockType::LAMP, 3, 8 }, { BlockType::PUMP, 1, 2 },
+        { BlockType::SLUICE, 1, 3 }, { BlockType::GLASS, 6, 12 }, { BlockType::PIPE, 6, 16 }, { BlockType::SPIKES, 2, 4 },
+        { BlockType::CHEST, 1, 2 }, { BlockType::BED, 1, 1 },
+    };
+    const Entry* table = rich ? kRich : kCommon;
+    const int tableSize = rich ? static_cast<int>(std::size(kRich)) : static_cast<int>(std::size(kCommon));
+    const uint32_t seed = room->seed ^ 0x100Du;
+    const int picks = (rich ? 5 : 3) + static_cast<int>(Noise::Random01(pos.x, pos.y, pos.z, seed) * 3.0f); // 3-5, or 5-7
+    for (int i = 0; i < picks; i++) {
+        const Entry& e = table[static_cast<int>(Noise::Random01(pos.x, pos.y + i, pos.z, seed ^ 0x51u) * tableSize) % tableSize];
+        const int count = e.least + static_cast<int>(Noise::Random01(pos.x + i, pos.y, pos.z, seed ^ 0x77u) * (e.most - e.least + 1));
+        auto it = std::find_if(loot.begin(), loot.end(), [&](const auto& l) { return l.first == e.type; });
+        const uint32_t units = static_cast<uint32_t>(std::min(count, e.most)) * Block::kUnitsPerBlock;
+        if (it != loot.end()) it->second += units;
+        else loot.emplace_back(e.type, units);
+    }
+    return loot;
 }
 
 } // namespace Dungeons

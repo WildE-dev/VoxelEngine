@@ -84,6 +84,12 @@ struct Layout {
 // The dungeon of a region (exists is false for regions without one). Deterministic.
 Layout LayoutFor(const TerrainGenerator& terrain, int regionX, int regionZ);
 
+// What's in a dungeon chest at `pos` (units by block type; empty if there's no
+// dungeon room there), rolled from its position and its room: a vault's is rich,
+// others hold a few useful things. The server rolls it the first time the chest is
+// opened or broken and keeps it from then on.
+std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos);
+
 // Stamps the dungeon parts inside a chunk over generated terrain.
 void Stamp(const TerrainGenerator& terrain, const glm::ivec3& chunkCoords, std::array<Block, Chunk::VOLUME>& blocks);
 

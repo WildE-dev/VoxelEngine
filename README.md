@@ -299,6 +299,16 @@ crumbling bricks (three long; they're cracked, if you look) or open (two long, s
 can jump it). A vault's lit pedestal is ringed by crumbling floor over spikes. Fall in
 and there's no climbing out. Flood chambers flood when you step on their plate.
 
+**Loot.** Dungeons hide chests: the prize on every vault's pedestal (past the trap),
+one by each archive's reading table, grave goods at the end of a crypt's aisle,
+offerings behind most shrines' plinths, and now and then one in a corner of a hall or
+half buried in a collapsed room. A chest holds three to five finds (food, hide, lamps,
+planks, glass, bricks, pipes, logs); a vault's holds five to seven richer ones (more
+food and hide, lamps, pumps, sluice gates, glass, pipes, spikes, even a spare chest or
+a bed). The loot is rolled from the chest's position and room the first time anyone
+opens or breaks it (`Dungeons::LootFor`), so it's the same whoever finds it, and kept
+from then on like any chest's.
+
 Layouts come from a seed hashed from the region's coordinates, and everything a
 dungeon places is a function of world position, so each chunk stamps just its own
 part and neighbouring chunks agree at their borders. Stamping runs in three passes:
@@ -314,7 +324,8 @@ with the mouse wheel). Empty worlds (`--empty-world`) have no dungeons.
 that every room type turns up, layouts and chunks are deterministic, every room can
 be reached from the entrance across chunk borders, shafts reach the surface, water
 can't spill, rooms stay deep, gardens and archives are furnished all over regardless
-of chunk borders, and pump rooms are wired up.
+of chunk borders, pump rooms are wired up, and vault and archive chests are there with
+loot in them (and none for a chest outside a dungeon).
 
 ## Water
 

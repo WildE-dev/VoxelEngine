@@ -102,7 +102,7 @@ int main() {
     std::cout << "Generated dungeons" << std::endl;
     bool interiors = true, corners = true, connected = true, sealed = true, deep = true, shafts = true, pumps = true;
     bool gardens = true, archives = true; // furnished all over, whatever the chunk borders
-    bool pitsOk = true, vaultsOk = true, floodsOk = true;
+    bool pitsOk = true, vaultsOk = true, vaultChestsOk = true, floodsOk = true;
     int coveredPits = 0, openPits = 0, vaults = 0, floods = 0;
     int checked = 0, withShaft = 0, pumpRooms = 0, rooms = 0;
     std::map<std::string, int> typeCounts;
@@ -157,6 +157,12 @@ int main() {
             const glm::ivec3 c = (lo + hi) / 2;
             if (r.type == Dungeons::RoomType::Vault) {
                 vaults++;
+                // The prize on the pedestal, with rich loot in it.
+                const glm::ivec3 prize(c.x, lo.y + 1, c.z);
+                if (world.Get(prize).type != BlockType::CHEST) vaultChestsOk = false;
+                uint32_t worth = 0;
+                for (const auto& [type, units] : Dungeons::LootFor(world.terrain, prize)) worth += units;
+                if (worth < 8 * Block::kUnitsPerBlock) vaultChestsOk = false;
                 for (int x = c.x - 1; x <= c.x + 1; x++)
                     for (int z = c.z - 1; z <= c.z + 1; z++) {
                         if (x == c.x && z == c.z) continue;
@@ -241,6 +247,26 @@ int main() {
     Check(pitsOk && coveredPits > 0 && openPits > 0,
           std::to_string(coveredPits) + " covered and " + std::to_string(openPits) + " open corridor pits, with spikes along the bottom");
     Check(vaultsOk && vaults > 0, std::to_string(vaults) + " vault pedestals ringed by crumbling floor over spikes");
+    Check(vaultChestsOk, "each with a chest on it, full of loot");
+    {
+        // Archives keep a chest by the reading table, with a few useful things in it.
+        int archiveChests = 0;
+        bool archiveLoot = true;
+        for (const auto& [region, layout] : dungeons)
+            for (const auto& r : layout.rooms)
+                if (r.type == Dungeons::RoomType::Archive) {
+                    const glm::ivec3 c = (r.inner.min + r.inner.max) / 2;
+                    const glm::ivec3 at(c.x - 1, r.inner.min.y, c.z);
+                    if (world.Get(at).type != BlockType::CHEST) continue;
+                    archiveChests++;
+                    archiveLoot &= !Dungeons::LootFor(world.terrain, at).empty();
+                }
+        Check(archiveChests > 0 && archiveLoot, std::to_string(archiveChests) + " archive chests, each with loot");
+        Check(Dungeons::LootFor(world.terrain, { 5, 80, 5 }).empty(), "no loot for a chest that isn't in a dungeon (someone's own)");
+        const auto& layout = dungeons[0].second;
+        const glm::ivec3 any = layout.rooms[0].inner.min;
+        Check(Dungeons::LootFor(world.terrain, any) == Dungeons::LootFor(world.terrain, any), "the same chest always rolls the same loot");
+    }
     Check(floodsOk && floods > 0, std::to_string(floods) + " flood chambers with a plate, sluice gates and a full reservoir");
     Check(gardens, "gardens are planted all over");
     Check(archives, "archive shelves are exactly where the layout puts them (all along the walls, gaps and doorways aside)");

@@ -9,6 +9,7 @@
 #include "server/ServerWorld.h"
 #include "server/WorldStorage.h"
 #include "world/Collision.h"
+#include "world/Dungeons.h"
 
 namespace {
 
@@ -979,7 +980,7 @@ void Server::HandleOpenChest(ClientState& client, const glm::ivec3& pos, bool op
     Block block;
     if (open && InReach(client, pos, kChestReach) && world->GetBlock(pos.x, pos.y, pos.z, block) && block.type == BlockType::CHEST) {
         client.openChest = pos;
-        chests.try_emplace(pos); // (one from before chests were kept: empty)
+        ChestAt(pos);
     }
     SendChest(client);
 }
@@ -1017,7 +1018,19 @@ void Server::SendChestToViewers(const glm::ivec3& pos) {
         if (client.openChest == pos) SendChest(client);
 }
 
+Server::ChestItems& Server::ChestAt(const glm::ivec3& pos) {
+    auto it = chests.find(pos);
+    if (it != chests.end()) return it->second;
+    // Never opened: placed chests are always recorded, so this is a dungeon's, and its
+    // loot is rolled now (from its position, so it's the same whenever it's found).
+    ChestItems& chest = chests[pos];
+    chest.fill(0);
+    for (const auto& [type, units] : Dungeons::LootFor(terrain, pos)) chest[static_cast<size_t>(type)] += units;
+    return chest;
+}
+
 void Server::RemoveChest(const glm::ivec3& pos, ClientState* breaker) {
+    if (breaker) ChestAt(pos); // (an unopened dungeon chest still holds its loot)
     auto it = chests.find(pos);
     if (it == chests.end()) return;
     // What was in it goes to whoever broke it.

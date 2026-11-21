@@ -286,6 +286,7 @@ private:
     void HandleOpenChest(ClientState& client, const glm::ivec3& pos, bool open);
     void HandleChestMove(ClientState& client, const glm::ivec3& pos, BlockType type, uint32_t units, bool intoChest);
     void SendChest(ClientState& client);         // what's in their open chest (or that it's closed)
+    ChestItems& ChestAt(const glm::ivec3& pos);  // its contents (a dungeon chest's loot is rolled the first time)
     void SendChestToViewers(const glm::ivec3& pos);
     void RemoveChest(const glm::ivec3& pos, ClientState* breaker); // gone: contents to whoever broke it
     void DropOnDeath(ClientState& client); // half of what they carry, into a chest where they died
