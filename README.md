@@ -549,7 +549,8 @@ work the same for everyone:
   ground" from the world rather than from what your client says. Teleports, respawns,
   flying and creative start the count afresh. Armour doesn't help.
 
-The screen flashes red when you're hurt. Hearts come back one every 4 seconds once
+The screen flashes red when you're hurt, and when you die it goes dark red for a few
+seconds with "You died!" and how it happened. Hearts come back one every 4 seconds once
 nothing has hurt you for 5, as long as you're well fed (see
 [Food and hunger](#food-and-hunger)). With none left, everyone hears how you died and you
 respawn at the spawn point (or your bed: see [Beds](#beds)) with full health (and three seconds' grace). In survival,

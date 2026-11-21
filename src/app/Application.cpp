@@ -1,6 +1,7 @@
 #include "app/Application.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <fstream>
 #include <cstdio>
 #include <cstring>
@@ -618,6 +619,7 @@ void Application::Run() {
         if (showCompass) DrawCompass();
         if (showMap) DrawMinimap();
         DrawToast();
+        DrawDeath();
         DrawHotbar();
         DrawStatus();
         DrawChat();
@@ -885,6 +887,37 @@ void Application::DrawMinimap() {
     draw->AddTriangleFilled(ImVec2(me.x + f.x * 7.0f, me.y + f.y * 7.0f), ImVec2(me.x - f.x * 4.0f + r.x * 4.5f, me.y - f.y * 4.0f + r.y * 4.5f),
                             ImVec2(me.x - f.x * 4.0f - r.x * 4.5f, me.y - f.y * 4.0f - r.y * 4.5f), IM_COL32(255, 255, 255, 255));
     draw->AddText(ImVec2(lo.x + kShown * 0.5f - 4.0f, lo.y + 2.0f), IM_COL32(255, 110, 100, 255), "N");
+}
+
+void Application::DrawDeath() {
+    const double since = Client::Now() - client->GetLastDeath();
+    if (since > 4.0 || since < 0.0) return;
+    // How it happened: the latest line in chat about us dying ("Name was ...").
+    std::string how;
+    const std::string me = client->GetMyName() + " ";
+    for (const auto& line : client->GetChat())
+        if (line.text.rfind(me, 0) == 0) {
+            const std::string rest = line.text.substr(me.size());
+            for (const char* death : { "was ", "drowned", "suffocated", "ran out of breath", "starved", "fell ", "walked into" })
+                if (rest.rfind(death, 0) == 0) how = "You " + (rest.rfind("was ", 0) == 0 ? "were " + rest.substr(4) : rest);
+        }
+    const float fade = static_cast<float>(std::min(1.0, std::min(since * 6.0, (4.0 - since) * 1.5)));
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const ImVec2 lo = viewport->WorkPos, hi(lo.x + viewport->WorkSize.x, lo.y + viewport->WorkSize.y);
+    draw->AddRectFilledMultiColor(lo, hi, IM_COL32(90, 0, 0, static_cast<int>(150 * fade)), IM_COL32(90, 0, 0, static_cast<int>(150 * fade)),
+                                  IM_COL32(20, 0, 0, static_cast<int>(200 * fade)), IM_COL32(20, 0, 0, static_cast<int>(200 * fade)));
+    const char* title = "You died!";
+    const float cx = lo.x + viewport->WorkSize.x * 0.5f, cy = lo.y + viewport->WorkSize.y * 0.38f;
+    ImFont* font = ImGui::GetFont();
+    const float big = ImGui::GetFontSize() * 2.6f;
+    const ImVec2 titleSize = font->CalcTextSizeA(big, FLT_MAX, 0.0f, title);
+    draw->AddText(font, big, ImVec2(cx - titleSize.x * 0.5f + 3.0f, cy + 3.0f), IM_COL32(0, 0, 0, static_cast<int>(200 * fade)), title);
+    draw->AddText(font, big, ImVec2(cx - titleSize.x * 0.5f, cy), IM_COL32(255, 90, 80, static_cast<int>(255 * fade)), title);
+    if (!how.empty()) {
+        const ImVec2 size = ImGui::CalcTextSize(how.c_str());
+        draw->AddText(ImVec2(cx - size.x * 0.5f, cy + titleSize.y + 14.0f), IM_COL32(255, 230, 220, static_cast<int>(240 * fade)), how.c_str());
+    }
 }
 
 void Application::DrawToast() {

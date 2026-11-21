@@ -35,6 +35,7 @@ double Client::Now() {
 bool Client::Connect(const std::string& host, uint16_t port, const std::string& name, std::string& error, int viewDistance) {
     if (!net.Connect(host, port, 5000, error)) return false;
     disconnectReason.clear();
+    myName = name;
     net::Hello hello;
     hello.name = name;
     hello.viewDistance = static_cast<uint8_t>(std::clamp(viewDistance, 0, 255));
@@ -95,6 +96,7 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         food = m.food;
         maxFood = m.foodMax;
         if (m.hurt) lastHurt = Now();
+        if (m.hurt && m.health == m.max) lastDeath = Now(); // (hurt, yet full: died and came back)
         break;
     }
     case net::MsgType::GameModeIs: {

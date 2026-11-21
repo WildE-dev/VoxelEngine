@@ -108,6 +108,9 @@ public:
     int GetHealth() const { return health; }
     int GetMaxHealth() const { return maxHealth; }
     double GetLastHurt() const { return lastHurt; }
+    // When we last died (and respawned), and the name we joined with.
+    double GetLastDeath() const { return lastDeath; }
+    const std::string& GetMyName() const { return myName; }
     // Breath (survival): air left (0..GetMaxAir()) and what's taking it.
     int GetAir() const { return air; }
     // Hunger (survival): food points (0..GetMaxFood(), world/Hunger.h).
@@ -245,6 +248,8 @@ private:
     };
     std::unordered_map<uint16_t, std::deque<Sample>> remote;
     std::unordered_map<uint16_t, std::string> playerNames; // by id (PlayerName)
+    double lastDeath = -1000.0;
+    std::string myName;
     struct CreatureSample {
         double time;
         Creature state;
