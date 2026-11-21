@@ -235,7 +235,7 @@ void Client::BreakBlock(const glm::ivec3& pos, Tool tool) {
     if (world.GetBlock(pos.x, pos.y, pos.z, block)) {
         // Breaking a waterlogged block leaves its water behind (as the server does).
         world.SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
-        if (!IsCreative()) resources[static_cast<size_t>(block.type)] += static_cast<uint32_t>(block.ResourceUnits());
+        if (!IsCreative()) resources[static_cast<size_t>(block.ResourceType())] += static_cast<uint32_t>(block.ResourceUnits());
     }
     net.Send(net::kChannelReliable, net::Encode(net::EditBreak{ pos, tool }));
 }
@@ -250,7 +250,7 @@ void Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths
     if (!welcomed || !CanAfford(type, heightEighths)) return;
     const Block placed = Block::Placed(type, heightEighths, faceAxis);
     world.SetBlock(pos.x, pos.y, pos.z, placed);
-    if (!IsCreative()) resources[static_cast<size_t>(type)] -= static_cast<uint32_t>(placed.ResourceUnits());
+    if (!IsCreative()) resources[static_cast<size_t>(ResourceTypeOf(type))] -= static_cast<uint32_t>(placed.ResourceUnits());
     net.Send(net::kChannelReliable, net::Encode(net::EditPlace{ pos, type, static_cast<uint8_t>(heightEighths), static_cast<uint8_t>(faceAxis) }));
 }
 

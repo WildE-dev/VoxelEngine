@@ -8,7 +8,8 @@
 //  - and its plants: cacti and dead bushes (no trees) in deserts, pines in taigas, far
 //    more trees in jungles than on plains,
 //  - frozen seas have ice over water, swamps have shallow standing water,
-//  - nothing floats: trunks and cacti stand on something, plants on their ground.
+//  - nothing floats: trunks and cacti stand on something, plants on their ground,
+//  - pebbles lie about on solid ground.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -118,7 +119,7 @@ int main() {
         }
     };
     struct Census {
-        int columns = 0, rightGround = 0, logs = 0, leaves = 0, pine = 0, cacti = 0, deadBushes = 0, water = 0, deepWater = 0;
+        int columns = 0, rightGround = 0, logs = 0, leaves = 0, pine = 0, cacti = 0, deadBushes = 0, water = 0, deepWater = 0, pebbles = 0;
     };
     std::map<Biome, Census> census;
     bool nothingFloats = true, plantsGrounded = true;
@@ -150,7 +151,11 @@ int main() {
                     if (block.type == BlockType::LEAVES) n.leaves++;
                     if (block.type == BlockType::PINE_LEAVES) n.pine++;
                     if (block.type == BlockType::DEAD_BUSH) n.deadBushes++;
-                    if (block.IsPlant() && block.type != BlockType::SPIKES) {
+                    if (block.type == BlockType::PEBBLES) {
+                        n.pebbles++;
+                        if (!below.IsFullBlock() && !below.IsPartial()) plantsGrounded = false; // on solid ground
+                    }
+                    else if (block.IsPlant() && block.type != BlockType::SPIKES) {
                         const bool onGrass = IsGrassType(below.type);
                         const bool onSand = below.type == BlockType::SAND && block.type == BlockType::DEAD_BUSH;
                         if (!onGrass && !onSand) plantsGrounded = false;
@@ -173,7 +178,11 @@ int main() {
     Check(swamp.water * 10 > swamp.columns && swamp.deepWater * 50 < swamp.columns,
           "swamps have shallow standing water (" + std::to_string(100 * swamp.water / std::max(1, swamp.columns)) + "% of columns, almost all under 4 deep)");
     Check(nothingFloats, "every trunk and cactus stands on something");
-    Check(plantsGrounded, "every plant stands on grass (or a dead bush on sand)");
+    Check(plantsGrounded, "every plant stands on grass (a dead bush on sand, pebbles on any solid ground)");
+    int pebbles = 0, sampled = 0;
+    for (const auto& [b, n] : census) pebbles += n.pebbles, sampled += n.columns;
+    Check(pebbles * 400 > sampled && pebbles * 30 < sampled,
+          "pebbles lie about, here and there (" + std::to_string(pebbles) + " in " + std::to_string(sampled) + " columns)");
 
     // Frozen seas: the top layer of sea in a frozen biome is ice, with water under it.
     bool sawIce = false, iceRight = true;

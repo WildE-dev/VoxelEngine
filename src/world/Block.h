@@ -114,13 +114,20 @@ enum class BlockType : uint8_t {
     CACTUS,
     DEAD_BUSH,
     ICE,
+    // A few loose stones on the ground (drawn as tiny stones, passable like a plant):
+    // picked up, they're a quarter of a block of stone.
+    PEBBLES,
     COUNT
 };
 
 inline bool IsPlantType(BlockType type) {
     return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW || type == BlockType::SPIKES ||
-           type == BlockType::DEAD_BUSH;
+           type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES;
 }
+
+// The resource a block counts as in survival (see Block::ResourceUnits): its own type,
+// except pebbles, which are stone.
+inline BlockType ResourceTypeOf(BlockType type) { return type == BlockType::PEBBLES ? BlockType::STONE : type; }
 
 // Grass of any biome (plants grow on it).
 inline bool IsGrassType(BlockType type) {
@@ -271,7 +278,9 @@ struct Block {
     // type; a shaped one is worth its volume (a half slab 32, each eighth of a
     // quarter 2). Things that can't be shaped (plants, machines) are worth a full block.
     static constexpr int kUnitsPerBlock = 64;
+    static constexpr int kPebbleUnits = 16; // a quarter of a block of stone
     int ResourceUnits() const;
+    BlockType ResourceType() const { return ResourceTypeOf(type); }
 
     static Block Plant(BlockType t, uint8_t dropEighths) {
         Block b(t);
@@ -365,6 +374,7 @@ struct Block {
     // Appends a plant's crossed sprite (two double-sided diagonal quads), lit by the
     // light in its own cell.
     void AddPlantVertices(std::vector<uint32_t>& vertices, int x, int y, int z, uint8_t blockLight, uint8_t skyLight) const;
+    void AddPebbleVertices(std::vector<uint32_t>& vertices, int x, int y, int z, uint8_t blockLight, uint8_t skyLight) const;
 
     // The edges of the block's shape (pairs of points, block-local), for the outline
     // around the block in view: a cube, a slope's outline, a stepped block's quarters,

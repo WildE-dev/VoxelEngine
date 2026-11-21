@@ -254,6 +254,7 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* CACTUS */ {{ "cactus_top", "cactus_top", "cactus_side", "cactus_side", "cactus_side", "cactus_side" }},
     /* DEAD_BUSH */ {{ "dead_bush", nullptr, nullptr, nullptr, nullptr, nullptr }},
     /* ICE   */ {{ "ice", "ice", "ice", "ice", "ice", "ice" }},
+    /* PEBBLES */ {{ "pebbles", "stone", nullptr, nullptr, nullptr, nullptr }}, // icon; the stones' own texture
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -284,7 +285,7 @@ namespace {
 constexpr const char* kBlockIds[kBlockTypeCount] = {
     "air", "grass", "dirt", "stone", "lamp", "log", "leaves", "tall_grass", "flower_red", "flower_yellow", "sand", "water", "pump", "pipe",
     "stone_brick", "mossy_brick", "spikes", "crumbling_brick", "pressure_plate", "sluice", "snow", "dry_grass", "lush_grass", "snowy_grass",
-    "pine_leaves", "cactus", "dead_bush", "ice",
+    "pine_leaves", "cactus", "dead_bush", "ice", "pebbles",
 };
 } // namespace
 
@@ -494,6 +495,7 @@ float Block::SurfaceHeight(float fx, float fz) const {
 }
 
 void Block::AddPlantVertices(std::vector<uint32_t>& vertices, int x, int y, int z, uint8_t blockLight, uint8_t skyLight) const {
+    if (type == BlockType::PEBBLES) return AddPebbleVertices(vertices, x, y, z, blockLight, skyLight);
     const float bottom = y - PlantDrop();
     const float top = bottom + 1.0f;
     const int texture = GetTextureData(type).top;
@@ -522,6 +524,47 @@ void Block::AddPlantVertices(std::vector<uint32_t>& vertices, int x, int y, int 
     }
 }
 
+void Block::AddPebbleVertices(std::vector<uint32_t>& vertices, int x, int y, int z, uint8_t blockLight, uint8_t skyLight) const {
+    // Four or five little stones, an eighth high, one or two eighths across, placed
+    // by the cell's position (so neighbouring cells differ), on the ground the plant
+    // drop says.
+    const int texture = GetTextureData(type).bottom; // stone
+    const float bottom = y - PlantDrop();
+    uint32_t h = static_cast<uint32_t>(x) * 73856093u ^ static_cast<uint32_t>(z) * 19349663u ^ static_cast<uint32_t>(y) * 83492791u;
+    auto next = [&](uint32_t range) {
+        h ^= h << 13;
+        h ^= h >> 17;
+        h ^= h << 5;
+        return h % range;
+    };
+    auto vertex = [&](const glm::vec3& p, float u, float v, const glm::vec3& normal) {
+        VertexData d(p, glm::vec2(u, v), texture, normal);
+        d.light = blockLight;
+        d.sky = skyLight;
+        return d;
+    };
+    const int count = 4 + static_cast<int>(next(2));
+    for (int i = 0; i < count; i++) {
+        const int w = 1 + static_cast<int>(next(2)), d = 1 + static_cast<int>(next(2)); // eighths
+        const int px = 1 + static_cast<int>(next(static_cast<uint32_t>(7 - w))), pz = 1 + static_cast<int>(next(static_cast<uint32_t>(7 - d)));
+        const glm::vec3 lo(x + px / 8.0f, bottom, z + pz / 8.0f), hi(lo.x + w / 8.0f, bottom + 1.0f / 8.0f, lo.z + d / 8.0f);
+        const float u0 = px / 8.0f, v0 = pz / 8.0f, u1 = u0 + w / 8.0f, v1 = v0 + d / 8.0f; // their bit of the texture
+        auto quad = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec3& e, const glm::vec3& n) {
+            const VertexData q[4] = { vertex(a, u0, v1, n), vertex(b, u1, v1, n), vertex(c, u0, v0, n), vertex(e, u1, v0, n) };
+            // Both windings (like plants): small enough not to matter.
+            for (const VertexData& p : { q[0], q[2], q[1], q[1], q[2], q[3], q[0], q[1], q[2], q[1], q[3], q[2] }) {
+                vertices.push_back(p.PackPosition());
+                vertices.push_back(p.PackShading());
+            }
+        };
+        quad({ lo.x, hi.y, lo.z }, { hi.x, hi.y, lo.z }, { lo.x, hi.y, hi.z }, { hi.x, hi.y, hi.z }, { 0, 1, 0 }); // top
+        quad({ lo.x, lo.y, lo.z }, { hi.x, lo.y, lo.z }, { lo.x, hi.y, lo.z }, { hi.x, hi.y, lo.z }, { 0, 0, -1 });
+        quad({ lo.x, lo.y, hi.z }, { hi.x, lo.y, hi.z }, { lo.x, hi.y, hi.z }, { hi.x, hi.y, hi.z }, { 0, 0, 1 });
+        quad({ lo.x, lo.y, lo.z }, { lo.x, lo.y, hi.z }, { lo.x, hi.y, lo.z }, { lo.x, hi.y, hi.z }, { -1, 0, 0 });
+        quad({ hi.x, lo.y, lo.z }, { hi.x, lo.y, hi.z }, { hi.x, hi.y, lo.z }, { hi.x, hi.y, hi.z }, { 1, 0, 0 });
+    }
+}
+
 std::vector<glm::vec3> Block::OutlineSegments() const {
     std::vector<glm::vec3> lines;
     auto edge = [&](glm::vec3 a, glm::vec3 b) {
@@ -537,6 +580,11 @@ std::vector<glm::vec3> Block::OutlineSegments() const {
             edge(c[i], c[4 + i]);               // sides
         }
     };
+    if (type == BlockType::PEBBLES) {
+        const float drop = PlantDrop();
+        box({ 0.1f, -drop, 0.1f }, { 0.9f, 0.15f - drop, 0.9f });
+        return lines;
+    }
     if (IsPlant()) {
         const float drop = PlantDrop();
         box({ 0.15f, -drop, 0.15f }, { 0.85f, 0.9f - drop, 0.85f });
@@ -582,6 +630,7 @@ void Block::Shrink() {
 
 int Block::ResourceUnits() const {
     if (IsAir() || IsLiquid()) return 0;
+    if (type == BlockType::PEBBLES) return kPebbleUnits;
     if (IsFullBlock() || !CanChisel()) return kUnitsPerBlock;
     if (IsStepped()) {
         // Four quarters: each eighth of a quarter's height is 1/32 of the block.

@@ -48,7 +48,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -123,6 +123,7 @@ const char* BlockName(BlockType type) {
     case BlockType::CACTUS: return "Cactus";
     case BlockType::DEAD_BUSH: return "Dead bush";
     case BlockType::ICE: return "Ice";
+    case BlockType::PEBBLES: return "Pebbles";
     default:               return "Air";
     }
 }

@@ -39,12 +39,13 @@ bool LightAt(ServerWorld& world, const glm::ivec3& p, uint8_t& block, uint8_t& s
 }
 
 // A cell a creature could stand in: room for its height above a floor.
-bool CanStand(const BlockAccess& world, const glm::ivec3& feet, int height, bool& floorIsGrass) {
+bool CanStand(const BlockAccess& world, const glm::ivec3& feet, int height, bool& floorIsGrass, bool* floorIsLeaves = nullptr) {
     Block floor, b;
     if (!world.GetBlock(feet.x, feet.y - 1, feet.z, floor) || !floor.IsFullBlock()) return false;
     for (int y = 0; y < height; y++)
         if (!world.GetBlock(feet.x, feet.y + y, feet.z, b) || !b.IsPassable() || b.HasWater()) return false;
     floorIsGrass = IsGrassType(floor.type);
+    if (floorIsLeaves) *floorIsLeaves = IsLeavesType(floor.type);
     return true;
 }
 
@@ -230,22 +231,23 @@ void CreatureSystem::SpawnNaturally(ServerWorld& world, const std::vector<Player
         for (const auto& c : creatures)
             if (glm::distance(c.feet, player.feet) < kNearRange) (SpecOf(c.type).hostile ? hostiles : animals)++;
 
-        // A herd of deer on grass somewhere around, with room to stand.
-        if (animals < kMaxAnimalsNear) {
+        // A herd of deer on grass somewhere around, with room to stand: a few tries.
+        for (int attempt = 0; attempt < 4 && animals < kMaxAnimalsNear; attempt++) {
             const float a = unit(rng) * 6.2831853f, d = 20.0f + 28.0f * unit(rng);
             const int x = static_cast<int>(std::floor(player.feet.x + std::cos(a) * d));
             const int z = static_cast<int>(std::floor(player.feet.z + std::sin(a) * d));
             const int top = static_cast<int>(player.feet.y) + 24;
             for (int y = top; y > top - 48; y--) {
-                bool grass = false;
-                if (!CanStand(world, { x, y, z }, 2, grass)) continue;
+                bool grass = false, leaves = false;
+                if (!CanStand(world, { x, y, z }, 2, grass, &leaves)) continue;
+                if (leaves) continue; // a treetop: look under it
                 if (!grass) break;
                 uint8_t block = 0, sky = 0;
                 if (!LightAt(world, { x, y, z }, block, sky) || sky < 12) break; // out in the open
                 const int herd = 1 + static_cast<int>(unit(rng) * 3.0f);
                 for (int i = 0; i < herd; i++) {
                     const glm::vec3 at(x + 0.5f + (i % 2) * 1.5f, static_cast<float>(y), z + 0.5f + (i / 2) * 1.5f);
-                    if (farFromPlayers(at)) Spawn(CreatureType::Deer, at);
+                    if (farFromPlayers(at) && Spawn(CreatureType::Deer, at)) animals++;
                 }
                 break;
             }

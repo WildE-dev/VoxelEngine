@@ -57,7 +57,8 @@ inline float Hardness(BlockType type) {
     case BlockType::TALL_GRASS:
     case BlockType::FLOWER_RED:
     case BlockType::FLOWER_YELLOW:
-    case BlockType::DEAD_BUSH: return 0.0f;
+    case BlockType::DEAD_BUSH:
+    case BlockType::PEBBLES: return 0.0f;
     case BlockType::LEAVES:
     case BlockType::PINE_LEAVES: return 0.3f;
     case BlockType::DIRT:

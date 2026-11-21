@@ -408,11 +408,11 @@ int main() {
                 Block b;
                 for (int y = c.surfaceRow; y <= c.surfaceRow + 3; y++) {
                     world.GetBlock(x, y, z, b);
-                    if (b.type == BlockType::LOG || b.IsPlant()) nothingGrows = false;
+                    if (b.type == BlockType::LOG || (b.IsPlant() && b.type != BlockType::PEBBLES)) nothingGrows = false;
                 }
             }
         Check(high > 0 && bare == high, "every column above the tree line is bare rock or snow (" + std::to_string(high) + " checked)");
-        Check(nothingGrows, "and no trees or plants grow up there");
+        Check(nothingGrows, "and no trees or plants grow up there (loose pebbles may lie about)");
         Check(steep * 50 < slopes, std::to_string(100 * steep / std::max(1, slopes)) + "% of mountain columns are steeper than a block per block");
 
         Player player(glm::vec3(px + 0.5f, 0.0f, pz + 0.5f));

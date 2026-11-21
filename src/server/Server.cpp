@@ -506,7 +506,7 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
     world->SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
     // Survival: the block's worth goes to the player.
     if (!Creative(client)) {
-        uint32_t& held = client.resources[static_cast<size_t>(block.type)];
+        uint32_t& held = client.resources[static_cast<size_t>(block.ResourceType())]; // (pebbles are stone)
         held += static_cast<uint32_t>(block.ResourceUnits());
         SendResources(client);
     }
@@ -522,7 +522,7 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
     // Survival: it costs its worth, which the player must have. Water can't be
     // collected (only moved, with pumps), so it can't be placed either.
     const uint32_t cost = static_cast<uint32_t>(placed.ResourceUnits());
-    uint32_t& held = client.resources[static_cast<size_t>(type)];
+    uint32_t& held = client.resources[static_cast<size_t>(ResourceTypeOf(type))];
     if (!Creative(client) && (held < cost || placed.IsLiquid())) {
         SendResources(client); // so the client's count is right again
         return Echo(client, pos);

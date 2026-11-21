@@ -107,7 +107,8 @@ public:
     // on edits, put right by the server).
     net::GameMode GetMode() const { return mode; }
     bool IsCreative() const { return mode == net::GameMode::Creative; }
-    uint32_t GetResources(BlockType type) const { return resources[static_cast<size_t>(type)]; }
+    // (By what the type counts as: pebbles show the stone held.)
+    uint32_t GetResources(BlockType type) const { return resources[static_cast<size_t>(ResourceTypeOf(type))]; }
     // Whether we may place this (creative, or we hold enough of it).
     bool CanAfford(BlockType type, int heightEighths) const;
 

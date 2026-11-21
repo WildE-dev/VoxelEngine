@@ -5,6 +5,7 @@
 //  - refuses a break that wasn't mined, or wasn't mined for long enough,
 //  - lets it through once it has been, by hand or faster with the right tool,
 //  - holds the tool to what it was started with,
+//  - picks pebbles up at once, as a quarter block of stone,
 //  - and in creative breaks at once.
 #include <chrono>
 #include <cmath>
@@ -142,6 +143,21 @@ int main() {
     a.client.BreakBlock({ 8, -1, 8 }, Tool::Shovel);
     Check(both(20.0, [&] { return TypeAt(builder, { 8, -1, 8 }) == BlockType::AIR; }) && a.client.GetResources(BlockType::GRASS) == 64,
           "a shovel takes grass in a moment, and the block's worth is collected");
+
+    std::cout << "Pebbles" << std::endl;
+    Check(Seconds(Block::Placed(BlockType::PEBBLES), Tool::None) == 0.0f && Block::Placed(BlockType::PEBBLES).ResourceUnits() == 16 &&
+              Block::Placed(BlockType::PEBBLES).ResourceType() == BlockType::STONE,
+          "pebbles are picked up at once, and are a quarter block of stone");
+    builder.client.PlaceBlock({ 9, 0, 9 }, BlockType::PEBBLES);
+    Check(both(20.0, [&] { return TypeAt(a, { 9, 0, 9 }) == BlockType::PEBBLES; }), "pebbles lie on the ground");
+    const uint32_t stone = a.client.GetResources(BlockType::STONE);
+    a.client.BreakBlock({ 9, 0, 9 });
+    Check(both(20.0, [&] { return TypeAt(builder, { 9, 0, 9 }) == BlockType::AIR; }) &&
+              both(20.0, [&] { return a.client.GetResources(BlockType::STONE) == stone + 16; }),
+          "picking them up (no mining needed) adds 16 stone");
+    a.client.PlaceBlock({ 9, 0, 9 }, BlockType::PEBBLES);
+    Check(both(20.0, [&] { return TypeAt(builder, { 9, 0, 9 }) == BlockType::PEBBLES; }) && a.client.GetResources(BlockType::STONE) == stone,
+          "and putting them down costs the 16 stone again");
 
     std::cout << "Creative" << std::endl;
     builder.client.BreakBlock({ 13, 0, 12 });

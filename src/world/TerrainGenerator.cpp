@@ -287,7 +287,11 @@ void TerrainGenerator::PlacePlants(const glm::ivec3& coords, const ColumnHeights
             const bool desert = biome == Biome::Desert && ground == BlockType::SAND;
             // Snowfields: only the odd dead bush pokes through.
             const bool snowfield = ground == BlockType::SNOWY_GRASS;
-            if (!IsGrassType(ground) && !desert) continue;
+            // Pebbles lie about anywhere on solid ground, more on beaches and bare rock.
+            const bool rocky = ground == BlockType::STONE || ground == BlockType::SAND;
+            const bool pebbles = (IsGrassType(ground) || rocky || ground == BlockType::DIRT) &&
+                                 Noise::Random01(wx, 1, wz, kPlantSeed) < (rocky ? 0.035f : 0.008f);
+            if (!IsGrassType(ground) && !desert && !pebbles) continue;
 
             // The plant stands in the first air cell above the ground. On a sloped top
             // that's the cell above the slope, lowered so it sits on the surface.
@@ -315,7 +319,8 @@ void TerrainGenerator::PlacePlants(const glm::ivec3& coords, const ColumnHeights
             const float grassChance = std::clamp(grass + meadow * grass * 1.5f, grass * 0.2f, grass * 2.0f);
             const float r = Noise::Random01(wx, 0, wz, kPlantSeed);
             BlockType type;
-            if (desert || snowfield) {
+            if (pebbles) type = BlockType::PEBBLES;
+            else if (desert || snowfield) {
                 if (r >= (desert ? 0.02f : 0.01f)) continue;
                 type = BlockType::DEAD_BUSH;
             }

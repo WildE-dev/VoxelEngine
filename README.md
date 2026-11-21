@@ -460,7 +460,10 @@ height). Press V to pick the height you place building blocks at (full, 3/4, 1/2
 much you have. Counts are shown in blocks, so 32 units reads as 0.5. Chiselling a
 block down gives back what it takes off, and building it up costs the same.
 Plants, pumps, pipes, sluices and pressure plates can't be shaped, so they're
-always worth a whole block. Water can't be collected, so in survival it can't be
+always worth a whole block. Pebbles are the exception. They're small clusters of
+stones lying about on the ground, more often on beaches and bare rock, and they're
+picked up at once with a click. Each one counts as a quarter of a block of stone
+(16 units), and putting pebbles down costs the same. Water can't be collected, so in survival it can't be
 placed either; use pumps to move it. The laser gives nothing.
 
 In survival the inventory (I) lists only the blocks you have, with counts on them
