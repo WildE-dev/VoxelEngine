@@ -10,7 +10,8 @@
 //    eighth of a block or more); a pressure sensor (part of an air network) while the
 //    network's pressure is at least its setting, b percent (any air at all, with 0); a
 //    daylight sensor by day, while the sky is open above it; a player sensor while a
-//    player is within b blocks of it (kPlayerRange, with 0; at most kMaxPlayerRange).
+//    player is within b blocks of it (kPlayerRange, with 0; at most kMaxPlayerRange),
+//    or, set to (mode Or), a hostile creature too.
 // Listeners:
 //  - a signal lamp lights while its channel is on;
 //  - a valve opens while its channel is on (a valve with no channel is opened and
@@ -80,6 +81,8 @@ struct Config {
 inline bool IsSensor(Kind k) { return k == Kind::WaterSensor || k == Kind::PressureSensor || k == Kind::DaylightSensor || k == Kind::PlayerSensor; }
 inline bool Sends(Kind k) { return k == Kind::Lever || k == Kind::Plate || k == Kind::Gate || IsSensor(k); }
 inline bool Listens(Kind k) { return k == Kind::Lamp || k == Kind::Valve || k == Kind::Sluice || k == Kind::Gate || k == Kind::Piston; }
+// A player sensor whose mode is Or senses hostile creatures (ghouls, skeletons) too.
+inline bool SensesCreatures(const Config& c) { return c.kind == Kind::PlayerSensor && c.mode == Mode::Or; }
 // Whether a kind has a setting in b (besides a gate's second input).
 inline bool HasSetting(Kind k) { return k == Kind::PressureSensor || k == Kind::PlayerSensor; }
 // A player sensor's range for its setting.

@@ -19,6 +19,7 @@ namespace Mining {
 
 constexpr float kToolSpeed = 4.0f;
 constexpr float kIronToolSpeed = 6.0f; // with the iron upgrade (see world/Crafting.h)
+constexpr float kSteelToolSpeed = 9.0f; // with the steel upgrade
 // A carved block takes time by its volume, but no less than this share of a full one.
 constexpr float kMinVolumeShare = 0.3f;
 // The server lets a break through this much early (network jitter), in seconds plus
@@ -193,11 +194,12 @@ inline Tool BestTool(BlockType type) {
 }
 
 // Seconds it takes to break this block with this tool (in survival).
-inline float Seconds(const Block& block, Tool tool, bool iron = false) {
+// `tier`: what the tools are made of (Crafting::Tier: 0 stone, 1 iron, 2 steel).
+inline float Seconds(const Block& block, Tool tool, int tier = 0) {
     float seconds = Hardness(block.type);
     if (seconds <= 0.0f) return 0.0f;
     const Tool best = BestTool(block.type);
-    if (best != Tool::None && tool == best) seconds /= iron ? kIronToolSpeed : kToolSpeed;
+    if (best != Tool::None && tool == best) seconds /= tier >= 2 ? kSteelToolSpeed : tier == 1 ? kIronToolSpeed : kToolSpeed;
     if (!block.IsFullBlock() && block.CanChisel())
         seconds *= std::max(kMinVolumeShare, block.ResourceUnits() / static_cast<float>(Block::kUnitsPerBlock));
     return seconds;

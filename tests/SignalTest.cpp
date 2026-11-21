@@ -11,6 +11,8 @@
 //  - a piston with air pushes a row of blocks out and pulls the first back, one
 //    without air doesn't move, a chest stops it, and its head goes with it;
 //  - player, water, pressure and daylight sensors send when they should,
+//  - creatures press plates and die on spikes, and a player sensor set to can sense
+//    them; /horde starts and ends a horde night,
 //  - channels set on blocks are still there after a restart, and go when a block is
 //    broken.
 #include <chrono>
@@ -348,6 +350,51 @@ int main() {
         Check(pump(5.0, [&] { return lit(dayLamp); }), "the daylight sensor comes on at noon");
         server.QueueConsoleCommand("fill 30 3 32 30 3 32 stone");
         Check(pump(5.0, [&] { return !lit(dayLamp); }), "and goes off with a roof over it");
+
+        std::cout << "Creatures" << std::endl;
+        // A ghoul penned on a pressure plate, with a creature-sensing player sensor and a
+        // players-only one beside the pen; another penned on spikes.
+        server.QueueConsoleCommand("time midnight");
+        server.QueueConsoleCommand("fill 39 0 39 41 1 41 stone");
+        server.QueueConsoleCommand("fill 45 0 39 47 1 41 stone");
+        const glm::ivec3 penPlate{ 40, 0, 40 }, penSpikes{ 46, 0, 40 }, creatureSensor{ 40, 0, 43 }, playerOnly{ 41, 0, 43 };
+        const glm::ivec3 plateLamp2{ 42, 0, 45 }, creatureLamp{ 43, 0, 45 }, playerOnlyLamp{ 44, 0, 45 };
+        goTo(42.5f, 48.5f);
+        fill({ 40, 1, 40 }, "air");
+        fill({ 46, 1, 40 }, "air");
+        fill(penPlate, "pressure_plate");
+        fill(penSpikes, "spikes");
+        fill(creatureSensor, "player_sensor");
+        fill(playerOnly, "player_sensor");
+        for (const auto& p : { plateLamp2, creatureLamp, playerOnlyLamp }) fill(p, "signal_lamp");
+        pump(10.0, [&] { return blockAt(playerOnlyLamp) == BlockType::SIGNAL_LAMP && blockAt(penSpikes) == BlockType::SPIKES; });
+        Check(configure(penPlate, Signals::Kind::Plate, 0, 0, 20) && configure(creatureSensor, Signals::Kind::PlayerSensor, 0, 4, 21, Signals::Mode::Or) &&
+                  configure(playerOnly, Signals::Kind::PlayerSensor, 0, 4, 22) && configure(plateLamp2, Signals::Kind::Lamp, 20, 0, 0) &&
+                  configure(creatureLamp, Signals::Kind::Lamp, 21, 0, 0) && configure(playerOnlyLamp, Signals::Kind::Lamp, 22, 0, 0),
+              "a plate sending on 20, a player sensor that senses creatures too on 21, and a players-only one on 22, each with a lamp");
+        goTo(42.5f, 56.5f);
+        auto ghouls = [&] {
+            int n = 0;
+            for (const auto& c : a.client.GetCreatures()) n += c.type == CreatureType::Ghoul;
+            return n;
+        };
+        server.QueueConsoleCommand("summon ghoul 40.5 0 40.5");
+        Check(pump(5.0, [&] { return ghouls() == 1; }), "a ghoul is penned on the plate");
+        Check(pump(5.0, [&] { return lit(plateLamp2); }), "it presses the plate: its lamp lights");
+        Check(pump(5.0, [&] { return lit(creatureLamp); }), "the sensor set to sense creatures sees it");
+        wait(0.5);
+        Check(!lit(playerOnlyLamp), "the players-only sensor doesn't");
+        server.QueueConsoleCommand("summon ghoul 46.5 0 40.5");
+        Check(pump(5.0, [&] { return ghouls() == 2; }), "another is penned on spikes");
+        Check(pump(10.0, [&] { return ghouls() == 1; }), "the spikes kill it");
+
+        std::cout << "Horde nights" << std::endl;
+        server.QueueConsoleCommand("horde on");
+        Check(pump(5.0, [&] { return Has(a.client, "a horde is coming tonight"); }), "/horde on announces a horde night");
+        a.client.SendChat("/horde");
+        Check(pump(5.0, [&] { return Has(a.client, "Tonight is a horde night"); }), "and /horde says so");
+        server.QueueConsoleCommand("horde off");
+        Check(pump(5.0, [&] { return Has(a.client, "The horde fades"); }), "/horde off ends it");
 
         server.QueueConsoleCommand("save");
         wait(1.0);

@@ -136,6 +136,9 @@ bool Server::Senses(const glm::ivec3& pos, const Signals::Config& c) const {
         const glm::vec3 centre = glm::vec3(pos) + 0.5f;
         for (const auto& [peer, client] : clients)
             if (client.welcomed && client.hasState && client.health > 0 && glm::distance(client.feet + glm::vec3(0, 0.9f, 0), centre) <= range) return true;
+        if (Signals::SensesCreatures(c))
+            for (const auto& creature : creatures.All())
+                if (SpecOf(creature.type).hostile && glm::distance(creature.feet + glm::vec3(0, 0.9f, 0), centre) <= range) return true;
         return false;
     }
     default: return false;

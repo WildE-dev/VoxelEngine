@@ -28,8 +28,9 @@ struct Recipe {
     Tool tool = Tool::None;
     ArmourPiece armour = ArmourPiece::Count; // a piece of armour (made once, then worn)
     bool ironUpgrade = false;                // the iron upgrade (made once: Crafting::kIronBit)
-    // Made once and kept: a tool, a piece of armour, or the upgrade.
-    bool MadeOnce() const { return tool != Tool::None || armour != ArmourPiece::Count || ironUpgrade; }
+    bool steelUpgrade = false;               // the steel upgrade (made once, after the iron one: Crafting::kSteelBit)
+    // Made once and kept: a tool, a piece of armour, or an upgrade.
+    bool MadeOnce() const { return tool != Tool::None || armour != ArmourPiece::Count || ironUpgrade || steelUpgrade; }
 };
 
 namespace Crafting {
@@ -91,10 +92,13 @@ inline const std::vector<Recipe>& Recipes() {
         { "air_pipe", "4 air pipes", { { BlockType::STONE, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::AIR_PIPE, 4 * kBlock },
         { "smelter", "Smelter", { { BlockType::STONE_BRICK, 4 * kBlock }, { BlockType::IRON_INGOT, kBlock } }, BlockType::SMELTER, kBlock },
         { "item_pipe", "4 item pipes", { { BlockType::PLANKS, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::ITEM_PIPE, 4 * kBlock },
-        { "drill", "Drill", { { BlockType::IRON_INGOT, 2 * kBlock }, { BlockType::STONE, 2 * kBlock } }, BlockType::DRILL, kBlock },
+        // (Steel comes from a smelter: a drill is the next step after one.)
+        { "drill", "Drill", { { BlockType::STEEL_INGOT, kBlock }, { BlockType::IRON_INGOT, kBlock }, { BlockType::STONE, 2 * kBlock } }, BlockType::DRILL, kBlock },
         { "coal_lamp", "Lamp (with coal)", { { BlockType::GLASS, kBlock / 2 }, { BlockType::COAL, kBlock / 4 } }, BlockType::LAMP, kBlock },
         { "iron_tools", "Iron upgrade (all tools)", { { BlockType::IRON_INGOT, 3 * kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::AIR, 0, Tool::None,
           ArmourPiece::Count, true },
+        { "steel_tools", "Steel upgrade (all tools)", { { BlockType::STEEL_INGOT, 3 * kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::AIR, 0, Tool::None,
+          ArmourPiece::Count, false, true },
     };
     return recipes;
 }
@@ -109,6 +113,11 @@ inline int Find(const char* id) {
 // The iron upgrade's bit in the tools mask (tools use bits 1..4): every tool you make
 // mines at Mining::kIronToolSpeed and hits a heart harder.
 constexpr uint8_t kIronBit = 1u << 7;
+// The steel upgrade's bit (bit 0: no tool uses it), made once you have the iron one:
+// tools mine at Mining::kSteelToolSpeed and hit harder still.
+constexpr uint8_t kSteelBit = 1u << 0;
+// What the tools are made of, from the tools mask: 0 stone, 1 iron, 2 steel.
+inline int Tier(uint8_t tools) { return (tools & kSteelBit) ? 2 : (tools & kIronBit) ? 1 : 0; }
 
 // Tools held, one bit each (1 << Tool).
 inline uint8_t ToolBit(Tool tool) { return static_cast<uint8_t>(1u << static_cast<unsigned>(tool)); }

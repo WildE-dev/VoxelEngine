@@ -308,6 +308,7 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* SMELTER     */ {{ "smelter_top", "smelter_top", "smelter_front", "smelter_side", "smelter_side", "smelter_side" }},
     /* SMELTER_LIT */ {{ "smelter_top", "smelter_top", "smelter_front_lit", "smelter_side", "smelter_side", "smelter_side" }},
     /* SPRING      */ {{ "spring", "spring", "spring", "spring", "spring", "spring" }},
+    /* STEEL_INGOT */ {{ "steel_ingot", "steel_ingot", "steel_ingot", "steel_ingot", "steel_ingot", "steel_ingot" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -341,7 +342,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "pine_leaves", "cactus", "dead_bush", "ice", "pebbles", "planks", "glass", "raw_venison", "cooked_venison", "hide", "chest", "bed", "coal_ore", "iron_ore", "coal", "iron_ingot", "seeds", "crop", "ripe_wheat", "wheat", "bread", "ladder", "door", "door_open", "arrow", "raw_fish", "cooked_fish", "campfire", "sign", "tnt", "tnt_lit", "boat", "sapling", "pine_sapling",
     "water_wheel", "air_pipe", "drill", "shaft", "compressor", "lever", "lever_on", "logic_gate", "signal_lamp", "signal_lamp_on", "air_tank", "valve", "valve_open",
     "piston", "piston_head", "water_sensor", "pressure_sensor", "daylight_sensor", "player_sensor",
-    "item_pipe", "smelter", "smelter_lit", "spring",
+    "item_pipe", "smelter", "smelter_lit", "spring", "steel_ingot",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");

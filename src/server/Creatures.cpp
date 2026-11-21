@@ -70,7 +70,7 @@ const CreatureSystem::Creature* CreatureSystem::Find(uint16_t id) const {
     return nullptr;
 }
 
-bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, bool iron, double now, bool& killed) {
+bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, int tier, double now, bool& killed) {
     killed = false;
     auto it = std::find_if(creatures.begin(), creatures.end(), [&](const Creature& c) { return c.id == id; });
     if (it == creatures.end()) return false;
@@ -80,7 +80,7 @@ bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, bool i
     const Collision::AABB box = BoxAt(c.feet, spec);
     const glm::vec3 nearest = glm::clamp(eye, box.min, box.max);
     if (glm::distance(eye, nearest) > Combat::kReach + 0.5f) return false; // (slack for movement in flight)
-    return Damage(id, Combat::Damage(tool, iron), eye, now, killed);
+    return Damage(id, Combat::Damage(tool, tier), eye, now, killed);
 }
 
 bool CreatureSystem::Damage(uint16_t id, int damage, const glm::vec3& from, double now, bool& killed) {
@@ -231,7 +231,7 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
 
     // Ghoul: after the nearest survival player in sight range.
     const Player* target = nullptr;
-    float best = kSightRange;
+    float best = horde ? 2.0f * kSightRange : kSightRange;
     for (const auto& p : players) {
         if (!p.vulnerable || std::abs(p.feet.y - c.feet.y) > 8.0f) continue;
         const float d = HorizontalDistance(p.feet, c.feet);
@@ -387,8 +387,10 @@ void CreatureSystem::SpawnNaturally(ServerWorld& world, const std::vector<Player
             }
         }
 
-        // Ghouls in the dark: a few tries at a dark floor within 40 blocks.
-        for (int attempt = 0; attempt < 3 && hostiles < kMaxHostilesNear; attempt++) {
+        // Ghouls in the dark: a few tries at a dark floor within 40 blocks (more, for
+        // more of them, on a horde night).
+        const int maxHostiles = horde ? 3 * kMaxHostilesNear : kMaxHostilesNear;
+        for (int attempt = 0; attempt < (horde ? 9 : 3) && hostiles < maxHostiles; attempt++) {
             const int x = static_cast<int>(std::floor(player.feet.x + (unit(rng) * 2.0f - 1.0f) * 40.0f));
             const int z = static_cast<int>(std::floor(player.feet.z + (unit(rng) * 2.0f - 1.0f) * 40.0f));
             const int start = static_cast<int>(std::floor(player.feet.y)) + static_cast<int>(unit(rng) * 32.0f) - 20;

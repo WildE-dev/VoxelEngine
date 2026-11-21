@@ -703,6 +703,19 @@ In normal worlds they spawn by themselves around each player:
 - deer on open grass 20 to 48 blocks away, up to 6 nearby;
 - ghouls in the dark within 40 blocks, up to 5 nearby, never closer than 12.
 
+**Horde nights.** One night in four (decided at dusk, and announced: "The ground
+stirs... a horde is coming tonight"), there are three times the hostile creatures
+around each player, they turn up faster, and ghouls hunt from 32 blocks instead of 16.
+It ends at dawn. Walls, gates, traps and lamps are worth having. `/horde` says
+whether tonight is one; operators can start or end one with `/horde on` and
+`/horde off`.
+
+**Traps work on creatures too** (all but bats, which fly): they press pressure plates
+(setting off whatever's on the plate's channel, a dungeon flood chamber included),
+spikes hurt them as they hurt players, and crumbling bricks give way under them. A
+player sensor can be set to sense hostile creatures as well as players (see
+[Signals](#signals)), so a ghoul at the gate can shut it or light a warning lamp.
+
 They go when no player is within 96 blocks. They aren't saved: a world fills with
 them again as you play. Empty worlds have none of their own; `/summon deer` or
 `/summon ghoul` brings one anywhere. Their models are boxes like the players': a deer
@@ -759,6 +772,17 @@ Three ingots and a plank make the **iron upgrade**, once: from then on every too
 make mines faster (6 times a hand's speed on what it's for, instead of 4) and hits a
 heart harder (a sword does 4.5 hearts). It's kept like tools are. `MiningTest` checks
 where ore lies, what it breaks into, and what the upgrade does.
+
+**Steel** comes next, and only from machines: a **smelter** (see
+[Air power](#air-power)) turns an iron ingot and half a coal into a **steel ingot**;
+there's no recipe for it by hand. A smelter also gets twice the iron out of ore that
+crafting does, so the way on is: iron by hand for a compressor, a water wheel and a
+smelter, then the smelter's iron and steel. Three steel ingots and a plank make the
+**steel upgrade**, once you have the iron one: tools mine 9 times a hand's speed and
+hit harder again (a steel sword does 5.5 hearts). A **drill** takes a steel ingot
+too, so it comes after the smelter. `CraftTest` checks the steel upgrade needs the
+iron one, what it does, and that both are kept; `FactoryTest` that a smelter makes
+steel from the iron it smelts and the coal a drill digs.
 
 ## Farming
 
@@ -932,8 +956,9 @@ The machines:
   joined to it (touching it, or at the end of item pipes from it), putting what it
   makes back in the same chest: iron ore into **twice** the iron ingots crafting gives
   (and no coal), raw venison and fish into cooked, sand into glass, and logs into
-  half a block of coal (charcoal). It takes whatever's first in that list that a
-  chest has. It glows while it works. So a drill and a smelter on the same chest, or
+  half a block of coal (charcoal), and last of all an iron ingot and half a coal into
+  a **steel ingot** (the only way to make steel; keep iron you want as iron in a chest
+  it can't reach). It takes whatever's first in that list that a chest has. It glows while it works. So a drill and a smelter on the same chest, or
   joined to it by item pipes, dig and smelt ore on their own.
 - **Item pipes** (thin wooden tubes) join face to face and to chests, drills and
   smelters: a drill or smelter reaches every chest along them (up to 512 pipes).
@@ -961,7 +986,7 @@ pressure, pipes and working machines.
 Recipes: a water wheel from 6 planks and a log; 3 shafts from a log; a compressor
 from an iron ingot and 2 stone; 4 air pipes from a stone and a quarter of an iron
 ingot; an air tank from 2 iron ingots and half a glass; a valve from half an iron
-ingot and a stone; a drill from 2 iron ingots and 2 stone; a piston from a planks, a
+ingot and a stone; a drill from a steel ingot, an iron ingot and 2 stone; a piston from a planks, a
 stone and half an iron ingot; a smelter from 4 stone bricks and an iron ingot; 4 item
 pipes from a planks and a quarter of an iron ingot.
 
@@ -1011,7 +1036,7 @@ channel is heard by everything listening to it within **64 blocks**.
 | **Water sensor** | sends while water touches it (an eighth of a block or more, on any side) |
 | **Pressure sensor** | joined to air pipes, sends while their pressure is at least its setting (a percentage; 0 for any air at all) |
 | **Daylight sensor** | sends by day, while the sky is open above it |
-| **Player sensor** | sends while a player is within its range (4 blocks unless set, up to 16) |
+| **Player sensor** | sends while a player is within its range (4 blocks unless set, up to 16); tick "Hostile creatures too" and ghouls and skeletons count as well |
 
 Placing a lever, a logic gate, a signal lamp, a piston or a sensor opens a small
 window to set its channels (and a pressure or player sensor's setting); right-click a gate or a lamp (with an empty hand or a tool), or crouch and
@@ -1030,7 +1055,7 @@ sensor) and a quarter of an iron ingot, with a quarter of sand (water), glass
 The server runs it ten times a second (`Server::UpdateSignals`,
 `src/server/Signals.cpp`; the rules are in `src/world/Signals.h`), keeps every
 block's channels and saves them with the world (world format 11), and tells everyone
-about each block's channels and state as they change (`SignalInfo`, protocol 37).
+about each block's channels and state as they change (`SignalInfo`, protocol 40).
 `SignalTest` checks:
 
 - a lamp lights and goes out with a lever on its channel, and one on another channel
@@ -1048,6 +1073,9 @@ about each block's channels and state as they change (`SignalInfo`, protocol 37)
   stays put, a chest in the row stops it, and breaking a piston takes its head;
 - player, water, pressure and daylight sensors each come on and go off when they
   should;
+- a ghoul penned on a pressure plate presses it, a player sensor set to sense
+  creatures sees it (and a players-only one doesn't), spikes kill another, and
+  `/horde on`, `/horde` and `/horde off` do what they say;
 - (and `DungeonTest`, that every flood chamber's plate sets a latch gate in its
   ceiling that its nine sluice gates listen to, and a lever resets it, each on a
   channel of its own: the server wires them up the first time the plate is stepped
@@ -1143,6 +1171,7 @@ makes four.
 | Iron ingot | 1 iron ore + 0.25 coal |
 | Lamp (with coal) | 0.5 glass + 0.25 coal |
 | Iron upgrade | 3 iron ingots + 1 planks |
+| Steel upgrade (after the iron one) | 3 steel ingots + 1 planks |
 | Bread | 3 wheat |
 | Hide cap / tunic / boots | 2 / 4 / 2 hide |
 
@@ -1240,6 +1269,7 @@ ones you're allowed to use:
 | `/fill <x1 y1 z1> <x2 y2 z2> <block>` | operators | fill a box with a block (`air` clears it; up to 32768 cells) |
 | `/pressurise <x y z>` | operators | fill the air network with a pipe or machine there with air |
 | `/locate spring` | operators | where the nearest spring (a lake's overflow) is |
+| `/horde [on\|off]` | anyone to ask; operators to set | whether tonight is a horde night, or start or end one |
 | `/summon <deer\|ghoul> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
 | `/creatures [clear]` | operators | count the creatures, or remove them all |
 | `/pvp`, `/food` | everyone | whether players can hurt each other; how fed you are |

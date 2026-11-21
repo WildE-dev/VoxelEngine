@@ -2,7 +2,8 @@
 // What a smelter (world/Power.h) makes from what: each recipe takes resource units of
 // one or two types from a chest and puts what it makes back in the same chest. A
 // smelter does the first recipe in this list that a chest joined to it can afford.
-// Smelting iron ore gives twice what crafting it by hand does, and needs no coal.
+// Smelting iron ore gives twice what crafting it by hand does, and needs no coal; steel
+// (iron and coal) can only be smelted.
 #include <cstdint>
 #include <vector>
 
@@ -28,6 +29,9 @@ inline const std::vector<SmeltRecipe>& Recipes() {
         { BlockType::RAW_FISH, kBlock, BlockType::AIR, 0, BlockType::COOKED_FISH, kBlock },
         { BlockType::SAND, kBlock, BlockType::AIR, 0, BlockType::GLASS, kBlock },
         { BlockType::LOG, kBlock, BlockType::AIR, 0, BlockType::COAL, kBlock / 2 }, // charcoal
+        // Last, so ore becomes iron first (and iron you want to keep is best kept in a
+        // chest the smelter can't reach).
+        { BlockType::IRON_INGOT, kBlock, BlockType::COAL, kBlock / 2, BlockType::STEEL_INGOT, kBlock },
     };
     return recipes;
 }

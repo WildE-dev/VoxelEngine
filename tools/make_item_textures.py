@@ -1317,6 +1317,7 @@ sSssSssssSsswwss
 """
 SPRING_COLOURS = {"s": (96, 104, 100), "S": (118, 128, 122), "w": (70, 96, 104), "b": (60, 110, 170), "B": (120, 170, 230), "W": (80, 120, 120)}
 
+
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
     draw("cooked_venison", VENISON, COOKED, seed=12)
@@ -1392,6 +1393,9 @@ def main():
     draw("smelter_front_lit", SMELTER_FRONT, SMELTER_LIT_COLOURS, jitter=5, seed=82)
     draw("smelter_top", SMELTER_TOP, SMELTER_COLOURS, jitter=5, seed=83)
     draw("spring", SPRING, SPRING_COLOURS, jitter=6, seed=84)
+    # Steel: the ingot's shape, blue-grey and brighter.
+    steel = {k: (min(255, int(v[0] * 0.8 + 40)), min(255, int(v[1] * 0.85 + 50)), min(255, int(v[2] * 0.95 + 70))) for k, v in INGOT_COLOURS.items()}
+    draw("steel_ingot", INGOT, steel, jitter=4, seed=85)
 
 
 if __name__ == "__main__":

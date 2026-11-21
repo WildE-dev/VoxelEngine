@@ -57,7 +57,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::SPRING, BlockType::PUMP, BlockType::PIPE,
     BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::DRILL, BlockType::SMELTER, BlockType::ITEM_PIPE, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::STEEL_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -144,6 +144,7 @@ const char* BlockName(BlockType type) {
     case BlockType::SMELTER: return "Smelter";
     case BlockType::SMELTER_LIT: return "Smelter (lit)";
     case BlockType::SPRING: return "Spring";
+    case BlockType::STEEL_INGOT: return "Steel ingot";
     case BlockType::STONE_BRICK: return "Stone bricks";
     case BlockType::MOSSY_BRICK: return "Mossy bricks";
     case BlockType::SPIKES: return "Spikes";
@@ -865,7 +866,8 @@ void Application::DrawCrosshair() {
                              : k == Signals::Kind::DaylightSensor ? "Daylight sensor" : "Player sensor";
             std::string setting;
             if (k == Signals::Kind::PressureSensor) setting = info.b ? " at " + std::to_string(info.b) + "%" : " (any air)";
-            if (k == Signals::Kind::PlayerSensor) setting = " within " + std::to_string(Signals::PlayerRange(info.b)) + " blocks";
+            if (k == Signals::Kind::PlayerSensor)
+                setting = (info.mode == static_cast<uint8_t>(Signals::Mode::Or) ? " (and creatures) within " : " within ") + std::to_string(Signals::PlayerRange(info.b)) + " blocks";
             std::snprintf(text, sizeof text, "%s%s: %s - sends on %s", what, setting.c_str(), info.on ? "on" : "off", ch(info.out).c_str());
             break;
         }
@@ -1929,6 +1931,7 @@ void Application::DrawInventory() {
                     ImGui::TableNextColumn();
                     glm::vec2 uv0, uv1;
                     const int icon = recipe.ironUpgrade                     ? atlas.GetIndex("iron_ingot")
+                                     : recipe.steelUpgrade                    ? atlas.GetIndex("steel_ingot")
                                      : recipe.tool != Tool::None              ? ToolTile(atlas, recipe.tool)
                                      : recipe.armour != ArmourPiece::Count ? atlas.GetIndex(Armour::Texture(recipe.armour))
                                                                            : IconTile(recipe.output);
@@ -1941,7 +1944,7 @@ void Application::DrawInventory() {
                     std::string needs;
                     for (const auto& in : recipe.inputs)
                         needs += (needs.empty() ? "" : " + ") + FormatBlocks(in.units) + " " + BlockName(in.type);
-                    const bool owned = (recipe.ironUpgrade && client->HasIron()) || (recipe.tool != Tool::None && client->HasTool(recipe.tool)) ||
+                    const bool owned = (recipe.ironUpgrade && client->HasIron()) || (recipe.steelUpgrade && client->HasSteel()) || (recipe.tool != Tool::None && client->HasTool(recipe.tool)) ||
                                        (recipe.armour != ArmourPiece::Count && client->HasArmour(recipe.armour));
                     if (owned) ImGui::TextDisabled(recipe.armour != ArmourPiece::Count ? "worn" : "made");
                     else if (client->CanCraft(r)) ImGui::TextUnformatted(needs.c_str());
@@ -2337,7 +2340,11 @@ void Application::DrawSignalEditor() {
             case Signals::Kind::PlayerSensor:
                 ImGui::SetNextItemWidth(160.0f);
                 if (ImGui::InputInt("Range (blocks)", &signalB)) signalB = std::clamp(signalB, 0, Signals::kMaxPlayerRange);
-                ImGui::TextDisabled("Sends while a player is this near (0: %d blocks).", Signals::kPlayerRange);
+                {
+                    bool creaturesToo = signalModeIndex == static_cast<int>(Signals::Mode::Or);
+                    if (ImGui::Checkbox("Hostile creatures too", &creaturesToo)) signalModeIndex = creaturesToo ? static_cast<int>(Signals::Mode::Or) : 0;
+                }
+                ImGui::TextDisabled("Sends while a player (or, ticked, a ghoul or skeleton) is this near (0: %d blocks).", Signals::kPlayerRange);
                 break;
             default: break;
             }
@@ -2479,7 +2486,7 @@ void Application::UpdateMining() {
         miningStart = now;
         client->StartMining(miningPos, tool);
     }
-    const double needed = Mining::Seconds(block, tool, client->HasIron() && !client->IsCreative()), elapsed = now - miningStart;
+    const double needed = Mining::Seconds(block, tool, client->IsCreative() ? 0 : client->HasSteel() ? 2 : client->HasIron() ? 1 : 0), elapsed = now - miningStart;
     mineProgress = needed > 0.0 ? static_cast<float>(std::min(1.0, elapsed / needed)) : 1.0f;
     // A tap on the block every so often while mining it.
     if (needed > 0.0 && now >= nextDig) {

@@ -106,6 +106,8 @@ constexpr HelpLine kHelp[] = {
     { Level::Operator, "/fill <x1 y1 z1> <x2 y2 z2> <block> - fill a box with a block (air clears it; up to 32768 cells)" },
     { Level::Operator, "/summon <deer|ghoul|skeleton> [x y z] - bring a creature (default: a few blocks ahead of you)" },
     { Level::Operator, "/locate spring - where the nearest spring (a lake's overflow) is" },
+    { Level::Everyone, "/horde - whether tonight is a horde night" },
+    { Level::Operator, "/horde <on|off> - start or end a horde night" },
     { Level::Operator, "/creatures [clear] - count the creatures, or remove them all" },
     { Level::Everyone, "/food - how hungry you are" },
     { Level::Everyone, "/achievements - the milestones you've reached, and those still to come" },
@@ -122,7 +124,8 @@ Level RequiredLevel(const std::string& command, size_t argumentCount) {
     if (command == "tp" || command == "teleport" || command == "save" || command == "kick" || command == "op" || command == "deop" ||
         command == "noclip" || command == "give" || command == "fill" || command == "pressurise" || command == "locate" || command == "summon" || command == "creatures")
         return Level::Operator;
-    if ((command == "time" || command == "weather" || command == "gamemode" || command == "pvp" || command == "food") && argumentCount > 0) return Level::Operator;
+    if ((command == "time" || command == "weather" || command == "gamemode" || command == "pvp" || command == "food" || command == "horde") && argumentCount > 0)
+        return Level::Operator;
     return Level::Everyone;
 }
 
@@ -391,6 +394,13 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
             air[p] = Power::CapacityOf(b.type);
         }
         reply(Kind::Info, "Filled " + std::to_string(parts.size()) + " air parts");
+    }
+    else if (command == "horde") {
+        if (words.size() == 1) return reply(Kind::Info, creatures.Horde() ? "Tonight is a horde night" : "No horde tonight");
+        const std::string arg = Lower(words[1]);
+        if (arg != "on" && arg != "off") return usage("/horde [on|off]");
+        if ((arg == "on") == creatures.Horde()) return reply(Kind::Info, creatures.Horde() ? "A horde night is already on" : "There's no horde night on");
+        SetHorde(arg == "on");
     }
     else if (command == "locate") {
         if (words.size() != 2 || Lower(words[1]) != "spring") return usage("/locate spring");

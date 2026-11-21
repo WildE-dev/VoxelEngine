@@ -63,5 +63,6 @@ inline int Damage(Tool tool) {
     }
 }
 // With the iron upgrade, every tool hits a heart harder.
-inline int Damage(Tool tool, bool iron) { return Damage(tool) + (iron && tool != Tool::None ? 2 : 0); }
+// `tier`: what the tools are made of (0 stone, 1 iron, 2 steel): 2 more for each.
+inline int Damage(Tool tool, int tier) { return Damage(tool) + (tool != Tool::None ? 2 * tier : 0); }
 } // namespace Combat

@@ -611,14 +611,17 @@ void Server::HandleCraft(ClientState& client, int recipeIndex, int count) {
     const Recipe& recipe = recipes[recipeIndex];
     if (recipe.MadeOnce()) {
         const bool made = recipe.ironUpgrade       ? (client.tools & Crafting::kIronBit) != 0
+                          : recipe.steelUpgrade     ? (client.tools & Crafting::kSteelBit) != 0
                           : recipe.tool != Tool::None ? (client.tools & Crafting::ToolBit(recipe.tool)) != 0
                                                       : (client.armour & Armour::Bit(recipe.armour)) != 0;
         if (made) return SendResources(client); // made already
+        if (recipe.steelUpgrade && !(client.tools & Crafting::kIronBit)) return SendResources(client); // iron first
         count = 1;
     }
     if (Crafting::TimesAffordable(recipe, client.resources) < static_cast<uint32_t>(count)) return SendResources(client); // can't afford
     for (const auto& in : recipe.inputs) client.resources[static_cast<size_t>(in.type)] -= in.units * count;
     if (recipe.ironUpgrade) client.tools |= Crafting::kIronBit;
+    else if (recipe.steelUpgrade) client.tools |= Crafting::kSteelBit;
     else if (recipe.tool != Tool::None) client.tools |= Crafting::ToolBit(recipe.tool);
     else if (recipe.armour != ArmourPiece::Count) client.armour |= Armour::Bit(recipe.armour);
     else client.resources[static_cast<size_t>(recipe.output)] += recipe.outputUnits * count;
@@ -639,7 +642,7 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
     const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
     const CreatureSystem::Creature* target = creatures.Find(creature);
     const CreatureType type = target ? target->type : CreatureType::Count;
-    const bool landed = creatures.Attack(creature, eye, tool, (client.tools & Crafting::kIronBit) != 0, now, killed);
+    const bool landed = creatures.Attack(creature, eye, tool, Crafting::Tier(client.tools), now, killed);
     if (landed && !killed) creatures.Provoke(creature, client.id, now);
     if (landed && killed) {
         std::string spoils;
@@ -697,7 +700,7 @@ void Server::HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool)
         // Knocked back, away from the hitter and a little up (as creatures are). The
         // target moves itself, so it's told to; a slain player respawns instead.
         const double before = target.invulnerableUntil;
-        Hurt(target, Combat::Damage(tool, (client.tools & Crafting::kIronBit) != 0), "was slain by " + client.name);
+        Hurt(target, Combat::Damage(tool, Crafting::Tier(client.tools)), "was slain by " + client.name);
         if (target.health > 0 && target.lastHurt >= now && target.invulnerableUntil == before) {
             glm::vec2 away(target.feet.x - client.feet.x, target.feet.z - client.feet.z);
             away = glm::length(away) > 1e-3f ? glm::normalize(away) : glm::vec2(1.0f, 0.0f);
@@ -758,7 +761,7 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
     }
     // Survival: only once it's been mined for long enough, with that tool.
     if (!Creative(client)) {
-        const double needed = Mining::Seconds(block, tool, (client.tools & Crafting::kIronBit) != 0);
+        const double needed = Mining::Seconds(block, tool, Crafting::Tier(client.tools));
         const bool started = client.mining && client.miningPos == pos && client.miningTool == tool;
         const double mined = started ? Now() - client.miningSince : 0.0;
         if (needed > 0.0 && mined < needed * (1.0 - Mining::kSlackShare) - Mining::kSlackSeconds) {
@@ -1662,17 +1665,9 @@ void Server::UpdateTraps() {
                 if (b.type == BlockType::SPIKES) spiked = true;
                 if (b.type == BlockType::CAMPFIRE) burning = true;
                 if (b.type == BlockType::PRESSURE_PLATE) {
-                    // Sending on its channel, if it has one. A dungeon flood chamber's
-                    // plate and sluice gates get theirs the first time it's stepped on.
-                    if (!plateSignal.count(f) && !signalBlocks.count(f))
-                        for (const auto& [p, config] : Dungeons::FloodChamberSignals(terrain, f))
-                            if (!signalBlocks.count(p)) {
-                                signalBlocks[p].config = config;
-                                BroadcastSignal(p);
-                            }
-                    if (!plateSignal.count(f) && signalBlocks.count(f) && signalBlocks[f].config.out)
-                        SendChat(client, net::ChatMessage::Kind::Info, "*click*");
-                    plateSignal[f] = now + Signals::kPlateSeconds;
+                    const bool fresh = !plateSignal.count(f);
+                    PressPlate(f, now);
+                    if (fresh && signalBlocks.count(f) && signalBlocks[f].config.out) SendChat(client, net::ChatMessage::Kind::Info, "*click*");
                 }
             }
             const glm::ivec3& u = underCells[i];
@@ -1702,7 +1697,60 @@ void Server::UpdateTraps() {
             if (world->GetBlock(q.x, q.y, q.z, b) && b.type == BlockType::CRUMBLING_BRICK && !crumbling.count(q)) crumbling[q] = now + kCrumbleSpread;
         }
     }
-    // Plates' cooldowns that have run out.
+    // Creatures set traps off too (not bats, which fly): plates, spikes, and crumbling
+    // bricks under them.
+    std::vector<std::pair<uint16_t, glm::vec3>> spiked;
+    for (const auto& c : creatures.All()) {
+        if (c.type == CreatureType::Bat) continue;
+        const glm::ivec3 f(glm::floor(c.feet + glm::vec3(0.0f, 0.01f, 0.0f))), u(glm::floor(c.feet - glm::vec3(0.0f, 0.05f, 0.0f)));
+        Block b;
+        if (world->GetBlock(f.x, f.y, f.z, b)) {
+            if (b.type == BlockType::PRESSURE_PLATE) PressPlate(f, now);
+            double& next = creatureSpikeAt[c.id];
+            if (b.type == BlockType::SPIKES && now >= next) {
+                next = now + kSpikeInterval;
+                spiked.emplace_back(c.id, c.feet);
+            }
+        }
+        if (world->GetBlock(u.x, u.y, u.z, b) && b.type == BlockType::CRUMBLING_BRICK && !crumbling.count(u)) crumbling[u] = now + kCrumbleDelay;
+    }
+    for (const auto& [id, feet] : spiked) {
+        bool killed = false;
+        creatures.Damage(id, kSpikeDamage, feet - glm::vec3(0.0f, 1.0f, 0.0f), now, killed);
+    }
+    if (creatureSpikeAt.size() > 4 * CreatureSystem::kMaxCreatures) creatureSpikeAt.clear();
+}
+
+void Server::PressPlate(const glm::ivec3& f, double now) {
+    // Sending on its channel, if it has one. A dungeon flood chamber's plate and
+    // sluice gates get theirs the first time it's pressed.
+    if (!plateSignal.count(f) && !signalBlocks.count(f))
+        for (const auto& [p, config] : Dungeons::FloodChamberSignals(terrain, f))
+            if (!signalBlocks.count(p)) {
+                signalBlocks[p].config = config;
+                BroadcastSignal(p);
+            }
+    plateSignal[f] = now + Signals::kPlateSeconds;
+}
+
+void Server::UpdateHorde() {
+    // Night as players see it: the sun well down.
+    const float sun = static_cast<float>(std::sin(timeOfDay * 6.283185307179586));
+    const bool night = sun < -0.12f;
+    if (night == wasNight) return;
+    wasNight = night;
+    if (night && creatures.NaturalSpawning()) {
+        weatherSeed = weatherSeed * 1664525u + 1013904223u;
+        if ((weatherSeed >> 8) % kHordeOdds == 0) SetHorde(true);
+    }
+    else if (!night && creatures.Horde()) SetHorde(false);
+}
+
+void Server::SetHorde(bool on) {
+    if (on == creatures.Horde()) return;
+    creatures.SetHorde(on);
+    Broadcast(net::ChatMessage::Kind::Info, on ? "The ground stirs... a horde is coming tonight." : "The horde fades with the dawn.");
+    Log(on ? "a horde night begins" : "the horde night ends");
 }
 
 // --- Tick -------------------------------------------------------------------------
@@ -1711,6 +1759,7 @@ void Server::Tick() {
     tickCount++;
     RunConsoleCommands();
     UpdateSky();
+    UpdateHorde();
     UpdateTraps();
     UpdateCreatures();
     UpdateCrops();

@@ -1,8 +1,9 @@
 // A small factory over a real connection (world/Power.h, world/Smelting.h). A creative
-// player in an empty world sets up a drill over a column of sand and iron ore, item
+// player in an empty world sets up a drill over a column of sand, iron ore and coal ore, item
 // pipes from it to a chest, a smelter on the chest, and air pipes to both. Checks that
 //  - the drill sends what it digs down the item pipes into the chest,
-//  - the smelter smelts it there (iron ore into twice the iron, sand into glass), lit
+//  - the smelter smelts it there (iron ore into twice the iron, sand into glass, iron
+//    and coal into steel), lit
 //    while it works,
 //  - right-clicking the smelter describes it.
 #include <chrono>
@@ -103,6 +104,7 @@ int main() {
 
         std::cout << "Building" << std::endl;
         const glm::ivec3 drill{ 12, 0, 8 }, chest{ 15, 0, 8 }, smelter{ 15, 1, 8 };
+        fill({ 12, -5, 8 }, { 12, -5, 8 }, "coal_ore");
         fill({ 12, -4, 8 }, { 12, -3, 8 }, "iron_ore");
         fill({ 12, -2, 8 }, { 12, -1, 8 }, "sand");
         fill(drill, drill, "drill");
@@ -127,12 +129,14 @@ int main() {
                 if (blockAt(smelter) == BlockType::SMELTER_LIT) sawLit = true;
                 return false;
             });
-            if (a.client.GetChestUnits(BlockType::IRON_INGOT) >= 4 * Crafting::kBlock && a.client.GetChestUnits(BlockType::GLASS) >= 2 * Crafting::kBlock) break;
+            if (a.client.GetChestUnits(BlockType::STEEL_INGOT) >= 2 * Crafting::kBlock && a.client.GetChestUnits(BlockType::GLASS) >= 2 * Crafting::kBlock) break;
         }
         Check(sawSand, "the drill's sand comes down the item pipes into the chest");
         Check(a.client.GetChestUnits(BlockType::GLASS) == 2 * Crafting::kBlock && a.client.GetChestUnits(BlockType::SAND) == 0, "the smelter makes both blocks of sand into glass");
-        Check(a.client.GetChestUnits(BlockType::IRON_INGOT) == 4 * Crafting::kBlock && a.client.GetChestUnits(BlockType::IRON_ORE) == 0,
+        Check(a.client.GetChestUnits(BlockType::IRON_ORE) == 0 && a.client.GetChestUnits(BlockType::IRON_INGOT) + a.client.GetChestUnits(BlockType::STEEL_INGOT) == 4 * Crafting::kBlock,
               "and both blocks of iron ore into 4 iron ingots");
+        Check(a.client.GetChestUnits(BlockType::STEEL_INGOT) == 2 * Crafting::kBlock && a.client.GetChestUnits(BlockType::COAL) == 0,
+              "and then, with the coal from the coal ore, 2 of them into steel");
         Check(sawLit, "lit while it works");
         Check(pump(6.0, [&] { return blockAt(smelter) == BlockType::SMELTER; }), "and dark again once there's nothing left to smelt");
         a.client.Inspect(smelter);

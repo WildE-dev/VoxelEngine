@@ -4,6 +4,7 @@
 //  - over a real connection: a recipe turns resources into its output, as many times
 //    as asked; one that can't be afforded changes nothing; a tool is made once and
 //    kept; creative players don't craft (they have everything),
+//  - the steel upgrade needs the iron one first, and steel tools beat iron,
 //  - tools made are saved with the player.
 #include <chrono>
 #include <cstdlib>
@@ -177,6 +178,25 @@ int main() {
               "a sword's 7 comes down to 4; a hit always does at least one");
         // (Planks were used for the sword: 6.5 left.)
 
+        std::cout << "Iron and steel" << std::endl;
+        server.QueueConsoleCommand("give steel_ingot 3 Crafter");
+        server.QueueConsoleCommand("give iron_ingot 3 Crafter");
+        sync();
+        pump(20.0, [&] { return units(BlockType::STEEL_INGOT) == 3 * kBlock && units(BlockType::IRON_INGOT) == 3 * kBlock; });
+        Check(!a.client.CanCraft(Crafting::Find("steel_tools")), "the steel upgrade can't be made before the iron one");
+        a.client.Craft(Crafting::Find("iron_tools"), 1);
+        sync();
+        Check(pump(20.0, [&] { return a.client.HasIron(); }), "3 iron ingots and a planks make the iron upgrade");
+        Check(a.client.CanCraft(Crafting::Find("steel_tools")), "after which the steel one can be made");
+        a.client.Craft(Crafting::Find("steel_tools"), 1);
+        sync();
+        Check(pump(20.0, [&] { return a.client.HasSteel(); }) && units(BlockType::STEEL_INGOT) == 0, "3 steel ingots and a planks make the steel upgrade");
+        const Block stone(BlockType::STONE);
+        Check(Mining::Seconds(stone, Tool::Pickaxe, 2) < Mining::Seconds(stone, Tool::Pickaxe, 1) &&
+                  Mining::Seconds(stone, Tool::Pickaxe, 1) < Mining::Seconds(stone, Tool::Pickaxe, 0) && Combat::Damage(Tool::Sword, 2) > Combat::Damage(Tool::Sword, 1),
+              "steel tools mine faster than iron ones, and a steel sword hits harder");
+        // (Planks were used for the upgrades: 4.5 left.)
+
         server.QueueConsoleCommand("gamemode creative Crafter");
         pump(20.0, [&] { return a.client.IsCreative(); });
         Check(a.client.HasTool(Tool::Axe) && !a.client.CanCraft(Crafting::Find("stone_brick")), "creative players have every tool and craft nothing");
@@ -196,11 +216,12 @@ int main() {
         std::string error;
         a.client.Connect("127.0.0.1", server.GetPort(), "Crafter", error, kTestViewDistance);
         const bool back = Pump(a, 20.0, [&] { return a.joined && a.client.GetResources(BlockType::PLANKS) > 0; });
-        Check(back && a.client.HasTool(Tool::Pickaxe) && !a.client.HasTool(Tool::Shovel) && a.client.GetResources(BlockType::PLANKS) == 7 * kBlock - kBlock / 2,
+        Check(back && a.client.HasTool(Tool::Pickaxe) && !a.client.HasTool(Tool::Shovel) && a.client.GetResources(BlockType::PLANKS) == 5 * kBlock - kBlock / 2,
               "after a restart: the pickaxe and the planks are still theirs (joined " + std::to_string(a.joined) + ", mode " +
                   std::to_string(static_cast<int>(a.client.GetMode())) + ", planks " + std::to_string(a.client.GetResources(BlockType::PLANKS)) +
                   ", pickaxe " + std::to_string(a.client.HasTool(Tool::Pickaxe)) + ")");
         Check(a.client.HasTool(Tool::Sword) && a.client.HasArmour(ArmourPiece::Tunic), "and so are the sword and the armour");
+        Check(a.client.HasIron() && a.client.HasSteel(), "and the iron and steel upgrades");
         a.client.Disconnect();
         Pump(a, 0.3, [] { return false; });
         server.Stop();

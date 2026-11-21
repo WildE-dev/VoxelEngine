@@ -450,6 +450,16 @@ private:
     std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> plateSignal; // plates sending until then
     double nextSignalUpdate = 0.0;
     void UpdateSignals();
+    // A pressure plate pressed (by a player or a creature): it sends for a while. A
+    // dungeon flood chamber's gets its wiring the first time.
+    void PressPlate(const glm::ivec3& pos, double now);
+    std::unordered_map<uint16_t, double> creatureSpikeAt; // creatures' next spike hits
+    // Horde nights (see CreatureSystem::SetHorde): one night in kHordeOdds, announced
+    // at dusk; operators can start one with /horde.
+    static constexpr int kHordeOdds = 4;
+    bool wasNight = false;
+    void UpdateHorde();
+    void SetHorde(bool on);
     // Whether a sensor senses what it's for (world/Signals.h).
     bool Senses(const glm::ivec3& pos, const Signals::Config& c) const;
     void HandleConfigureSignal(ClientState& client, const net::SignalInfo& m);

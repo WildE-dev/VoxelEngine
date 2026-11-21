@@ -63,6 +63,11 @@ public:
 
     // Natural spawning on or off (the server turns it off for empty worlds).
     void SetNaturalSpawning(bool on) { naturalSpawning = on; }
+    bool NaturalSpawning() const { return naturalSpawning; }
+    // A horde night: three times the hostile creatures around each player, spawning
+    // faster, and hunting from twice as far.
+    void SetHorde(bool on) { horde = on; }
+    bool Horde() const { return horde; }
 
     // Adds one; returns its id (0 if there are too many).
     uint16_t Spawn(CreatureType type, const glm::vec3& feet);
@@ -71,7 +76,7 @@ public:
 
     // A player at `eye` hits creature `id` with `tool`. Returns whether it landed
     // (exists, in reach); `killed` says if it died.
-    bool Attack(uint16_t id, const glm::vec3& eye, Tool tool, bool iron, double now, bool& killed);
+    bool Attack(uint16_t id, const glm::vec3& eye, Tool tool, int tier, double now, bool& killed);
     // Hurts it (from anywhere: an arrow), knocking it back away from `from`.
     bool Damage(uint16_t id, int damage, const glm::vec3& from, double now, bool& killed);
     // A player hit it: a wild wolf turns on them for a while.
@@ -96,6 +101,7 @@ private:
     uint16_t nextId = 1;
     std::mt19937 rng;
     bool naturalSpawning = true;
+    bool horde = false;
     double nextSpawnCheck = 0.0;
     double clock = 0.0;
     ShootArrow shooter;

@@ -207,6 +207,9 @@ enum class BlockType : uint8_t {
     // and beside it: see Water.h). Found where lakes overflow, starting the streams that
     // run down from them. Breaking it gives stone, and the spring is gone.
     SPRING,
+    // An item: steel, which only a smelter makes (from iron ingots and coal, see
+    // world/Smelting.h), for the steel upgrade and drills.
+    STEEL_INGOT,
     COUNT
 };
 
@@ -222,7 +225,8 @@ inline bool IsFacingType(BlockType type) { return type == BlockType::PISTON || t
 inline bool IsItemType(BlockType type) {
     return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE || type == BlockType::COAL ||
            type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD ||
-           type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH || type == BlockType::BOAT;
+           type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH || type == BlockType::BOAT ||
+           type == BlockType::STEEL_INGOT;
 }
 
 inline bool IsPlantType(BlockType type) {
