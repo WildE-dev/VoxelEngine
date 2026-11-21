@@ -8,7 +8,9 @@
 //  - disconnecting the pipe or breaking the pump stops it, and placing it again
 //    restarts it,
 //  - a pump outside the simulation distance waits,
-//  - a saved pump keeps pumping after its chunk is saved and loaded again.
+//  - a saved pump keeps pumping after its chunk is saved and loaded again,
+//  - a spring adds kSpringRate units a tick to the open cells around it while
+//    they have room, and stops when it's broken.
 #include <chrono>
 #include <algorithm>
 #include <cstdlib>
@@ -181,6 +183,36 @@ int main() {
         world.Update({ glm::ivec3(1, 0, 0) });
         Tick(world, 1);
         Check(WaterAt(world, kDest) == std::min(before + kRate, kFull), "and resumes when a player comes close");
+    }
+
+    std::cout << "Springs" << std::endl;
+    {
+        // A spring with stone round its sides, under a one-cell stone cup.
+        constexpr int kSpring = WaterSimulation::kSpringRate;
+        ServerWorld world(terrain);
+        world.Update({ glm::ivec3(0) });
+        Check(WaitLoaded(world), "chunks load");
+        const glm::ivec3 spring(20, 40, 20), above = spring + glm::ivec3(0, 1, 0);
+        for (const auto& d : { glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0), glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1), glm::ivec3(0, -1, 0) })
+            Set(world, spring + d, Block(BlockType::STONE));
+        Cup(world, above, spring);
+        const size_t pumpsBefore = world.GetWater().GetPumpCount();
+        Set(world, spring, Block(BlockType::SPRING));
+        Tick(world, 1);
+        Check(world.GetWater().GetPumpCount() == pumpsBefore + 1, "a spring is registered (with the pumps)");
+        Check(WaterAt(world, above) == kSpring, "it adds " + std::to_string(kSpring) + " units a tick to the cell above (" + std::to_string(WaterAt(world, above)) + ")");
+        Tick(world, 6);
+        Check(WaterAt(world, above) == kFull && WaterAt(world, above + glm::ivec3(0, 1, 0)) == 0, "until the cup is full, then stops (water doesn't climb)");
+        Set(world, above + glm::ivec3(1, 0, 0), Block());
+        Tick(world, 6);
+        int total = 0;
+        for (int x = 15; x <= 25; x++)
+            for (int y = 30; y <= 42; y++)
+                for (int z = 15; z <= 25; z++) total += std::max(0, WaterAt(world, { x, y, z }));
+        Check(total > kFull + 3 * kSpring, "opening the cup lets it run out, and the spring keeps it coming (" + std::to_string(total) + " units about)");
+        Set(world, spring, Block(BlockType::STONE));
+        Tick(world, 1);
+        Check(world.GetWater().GetPumpCount() == pumpsBefore, "breaking it unregisters it");
     }
 
     std::cout << "Saved pumps" << std::endl;

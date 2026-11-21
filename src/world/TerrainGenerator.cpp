@@ -170,16 +170,26 @@ const TerrainGenerator::Lake& TerrainGenerator::LakeIn(int cx, int cz) const {
         lake.depth = 3.0f + lake.radius * 0.15f;
         // The level: near the lowest ground around it, so the rim needs little raising.
         const float centreHeight = GetBaseHeight(static_cast<int>(lake.centre.x), static_cast<int>(lake.centre.y));
-        float ringMin = 1e9f;
+        float ringMin = 1e9f, lowestAngle = 0.0f;
         for (int i = 0; i < 20; i++) {
             const float a = i * 6.2831853f / 20.0f;
             const glm::vec2 p = lake.centre + glm::vec2(std::cos(a), std::sin(a)) * lake.radius * 1.2f;
-            ringMin = std::min(ringMin, GetBaseHeight(static_cast<int>(p.x), static_cast<int>(p.y)));
+            const float h = GetBaseHeight(static_cast<int>(p.x), static_cast<int>(p.y));
+            if (h < ringMin) ringMin = h, lowestAngle = a;
         }
         lake.level = static_cast<int>(std::floor(std::min(ringMin + 1.5f, centreHeight + 2.0f)));
         // Only in the hills and mountains (lowland hollows have the sea and swamps), and
         // not hanging off a cliff.
         lake.exists = lake.level > kSeaLevel + 5 && centreHeight - lake.level < 12.0f && lake.level < kSnowLine + 30;
+        // Its overflow: just past the rim on the lowest side, if the land there is
+        // below the water (so the stream runs away downhill) but above the sea.
+        if (lake.exists) {
+            const glm::vec2 p = lake.centre + glm::vec2(std::cos(lowestAngle), std::sin(lowestAngle)) * (lake.radius * 1.5f + 2.0f);
+            const glm::ivec2 column(static_cast<int>(std::floor(p.x)), static_cast<int>(std::floor(p.y)));
+            const float h = GetBaseHeight(column.x, column.y);
+            lake.hasSpring = h < lake.level - 1.0f && h > kSeaLevel + 1.0f;
+            lake.spring = column;
+        }
     }
     std::lock_guard<std::mutex> lock(lakeCache->mutex);
     if (lakeCache->lakes.size() > 65536) lakeCache->lakes.clear(); // (far away: worked out again if needed)
@@ -194,6 +204,23 @@ int TerrainGenerator::LakeLevelAt(int x, int z) const {
     // (A column straddling the shore counts, so its sloped top is waterlogged.)
     if (lake.exists && glm::distance(p, lake.centre) < lake.radius + 1.5f) return lake.level;
     return INT_MIN;
+}
+
+std::vector<glm::ivec2> TerrainGenerator::SpringsIn(int chunkX, int chunkZ) const {
+    std::vector<glm::ivec2> out;
+    if (type != Type::Normal) return out;
+    // A lake's spring is within 1.5 radii (and a little) of its centre, which is in its
+    // own cell: the cells around this chunk's.
+    const int x0 = chunkX * S, z0 = chunkZ * S;
+    const int cx0 = static_cast<int>(std::floor((x0 - kLakeCell) / static_cast<float>(kLakeCell)));
+    const int cz0 = static_cast<int>(std::floor((z0 - kLakeCell) / static_cast<float>(kLakeCell)));
+    for (int cx = cx0; cx <= cx0 + 2; cx++)
+        for (int cz = cz0; cz <= cz0 + 2; cz++) {
+            const Lake& lake = LakeIn(cx, cz);
+            if (!lake.exists || !lake.hasSpring) continue;
+            if (lake.spring.x >= x0 && lake.spring.x < x0 + S && lake.spring.y >= z0 && lake.spring.y < z0 + S) out.push_back(lake.spring);
+        }
+    return out;
 }
 
 float TerrainGenerator::GetHeight(int x, int z) const {
@@ -370,6 +397,21 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
 
     Features::Place(*this, coords, rows, out);
     PlacePlants(coords, heights, rows, out);
+    // Springs where lakes overflow: the column's top solid block (under a sloped top, the
+    // slope itself), with nothing growing on it.
+    for (const glm::ivec2& s : SpringsIn(coords.x, coords.z)) {
+        const int x = s.x - coords.x * S, z = s.y - coords.z * S;
+        const Column column = ColumnFrom(heights, x, z);
+        const int row = column.HasSlopedTop() ? column.surfaceRow : column.surfaceRow - 1;
+        const int y = row - coords.y * S;
+        if (y >= 0 && y < S) out[Index(x, y, z)] = Block(BlockType::SPRING);
+        // (Clear of plants and boulders over it, so the water can come out; a tree's
+        // trunk is left standing.)
+        if (y + 1 >= 0 && y + 1 < S) {
+            Block& over = out[Index(x, y + 1, z)];
+            if (!over.IsAir() && !over.IsLiquid() && over.type != BlockType::LOG) over = Block();
+        }
+    }
     Dungeons::Stamp(*this, coords, out);
 }
 

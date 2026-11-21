@@ -1202,6 +1202,121 @@ SENSOR_COLOURS = {"s": (70, 70, 76), "S": (124, 124, 130), "k": (36, 36, 40), "b
                   "g": (30, 34, 30), "G": (180, 180, 170), "r": (210, 60, 50), "d": (40, 60, 110), "y": (230, 190, 60), "Y": (255, 240, 160),
                   "p": (50, 40, 50), "P": (200, 120, 200), "e": (255, 255, 255)}
 
+ITEM_PIPE = """
+oooooooooooooooo
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+iiiiiiiiiiiiiiii
+wwwwwwwwwwwwwwww
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+wwwwwwwwwwwwwwww
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+wwwwwwwwwwwwwwww
+wWWWWWWWWWWWWWWw
+iiiiiiiiiiiiiiii
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+oooooooooooooooo
+"""
+ITEM_PIPE_END = """
+iiiiiiiiiiiiiiii
+iwwwwwwwwwwwwwwi
+iwWWWWWWWWWWWWwi
+iwWooooooooooWwi
+iwWoooooooooOWwi
+iwWoooooooooOWwi
+iwWoooooooooOWwi
+iwWoooooooooOWwi
+iwWoooooooooOWwi
+iwWoooooooooOWwi
+iwWoooooooooOWwi
+iwWoOOOOOOOOOWwi
+iwWWWWWWWWWWWWwi
+iwwwwwwwwwwwwwwi
+iwwwwwwwwwwwwwwi
+iiiiiiiiiiiiiiii
+"""
+ITEM_PIPE_COLOURS = {"o": (40, 30, 22), "O": (70, 52, 36), "w": (132, 96, 56), "W": (164, 124, 76), "i": (110, 112, 118)}
+SMELTER_SIDE = """
+bbbbbbbbbbbbbbbb
+bBBBbBBBBbBBBBbb
+bbbbbbbbbbbbbbbb
+BBbBBBBbBBBBbBBB
+bbbbbbbbbbbbbbbb
+bBBBbBBBBbBBBBbb
+bbbbbbbbbbbbbbbb
+BBbBBBBbBBBBbBBB
+bbbbbbbbbbbbbbbb
+bBBBbBBBBbBBBBbb
+bbbbbbbbbbbbbbbb
+BBbBBBBbBBBBbBBB
+bbbbbbbbbbbbbbbb
+bBBBbBBBBbBBBBbb
+bbbbbbbbbbbbbbbb
+iiiiiiiiiiiiiiii
+"""
+SMELTER_FRONT = """
+bbbbbbbbbbbbbbbb
+bBBBbBBBBbBBBBbb
+bbbbbbbbbbbbbbbb
+BBbBiiiiiiiibBBB
+bbbbikkkkkkibbbb
+bBBBikkkkkkiBBbb
+bbbbikkkkkkibbbb
+BBbBikkkkkkibBBB
+bbbbikfffkkibbbb
+bBBBikFfFfkiBBbb
+bbbbiiiiiiiibbbb
+BBbBBBBbBBBBbBBB
+bbbbbbbbbbbbbbbb
+bBBBbBBBBbBBBBbb
+bbbbbbbbbbbbbbbb
+iiiiiiiiiiiiiiii
+"""
+SMELTER_TOP = """
+iiiiiiiiiiiiiiii
+ibbbbbbbbbbbbbbi
+ibBBBBBBBBBBBBbi
+ibBkkkkkkkkkkBbi
+ibBkKKKKKKKKkBbi
+ibBkKkkkkkkKkBbi
+ibBkKkkkkkkKkBbi
+ibBkKkkkkkkKkBbi
+ibBkKkkkkkkKkBbi
+ibBkKkkkkkkKkBbi
+ibBkKkkkkkkKkBbi
+ibBkKKKKKKKKkBbi
+ibBkkkkkkkkkkBbi
+ibBBBBBBBBBBBBbi
+ibbbbbbbbbbbbbbi
+iiiiiiiiiiiiiiii
+"""
+SMELTER_COLOURS = {"b": (96, 92, 90), "B": (130, 124, 120), "i": (70, 72, 78), "k": (24, 22, 22), "K": (50, 46, 44),
+                   "f": (60, 40, 30), "F": (90, 60, 40)}
+SMELTER_LIT_COLOURS = dict(SMELTER_COLOURS, k=(200, 80, 20), f=(255, 200, 60), F=(255, 140, 30))
+
+SPRING = """
+sSsssSSsssSsssSs
+sswwSSsssWwssSss
+sSwbbwssswbwsssS
+ssbBBbwsSwbbwSss
+sSwbBbwsswbBbwss
+ssswbwssSswbwsSs
+sSsswsssssswssss
+SsssSSssWwsssSss
+sswwsssWbbwssssS
+sSwbbwsWbBbwsSss
+sswbBbwswbbwssSs
+sSswbbwSsswsssss
+SssswwssSssswwSs
+sSssssSsssswbbws
+ssSsssssSsswbBws
+sSssSssssSsswwss
+"""
+SPRING_COLOURS = {"s": (96, 104, 100), "S": (118, 128, 122), "w": (70, 96, 104), "b": (60, 110, 170), "B": (120, 170, 230), "W": (80, 120, 120)}
+
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
     draw("cooked_venison", VENISON, COOKED, seed=12)
@@ -1270,6 +1385,13 @@ def main():
     draw("player_sensor", PLAYER_SENSOR, SENSOR_COLOURS, jitter=4, seed=75)
     draw("sensor_side", SENSOR_SIDE, SENSOR_COLOURS, jitter=4, seed=76)
     draw("sensor_bottom", SENSOR_SIDE, SENSOR_COLOURS, jitter=4, seed=77)
+    draw("item_pipe", ITEM_PIPE, ITEM_PIPE_COLOURS, jitter=5, seed=78)
+    draw("item_pipe_end", ITEM_PIPE_END, ITEM_PIPE_COLOURS, jitter=5, seed=79)
+    draw("smelter_side", SMELTER_SIDE, SMELTER_COLOURS, jitter=5, seed=80)
+    draw("smelter_front", SMELTER_FRONT, SMELTER_COLOURS, jitter=5, seed=81)
+    draw("smelter_front_lit", SMELTER_FRONT, SMELTER_LIT_COLOURS, jitter=5, seed=82)
+    draw("smelter_top", SMELTER_TOP, SMELTER_COLOURS, jitter=5, seed=83)
+    draw("spring", SPRING, SPRING_COLOURS, jitter=6, seed=84)
 
 
 if __name__ == "__main__":

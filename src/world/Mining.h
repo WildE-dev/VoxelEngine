@@ -113,6 +113,9 @@ inline float Hardness(BlockType type) {
     case BlockType::PISTON:
     case BlockType::PISTON_HEAD:
     case BlockType::PRESSURE_SENSOR:
+    case BlockType::ITEM_PIPE:
+    case BlockType::SMELTER:
+    case BlockType::SMELTER_LIT:
     case BlockType::SLUICE: return 3.0f;
     case BlockType::WATER_SENSOR:
     case BlockType::DAYLIGHT_SENSOR:
@@ -123,7 +126,8 @@ inline float Hardness(BlockType type) {
     case BlockType::LEVER_ON: return 0.4f;
     case BlockType::SHAFT:
     case BlockType::WATER_WHEEL: return 2.0f;
-    case BlockType::STONE: return 4.0f;
+    case BlockType::STONE:
+    case BlockType::SPRING: return 4.0f;
     case BlockType::COAL_ORE: return 4.5f;
     case BlockType::IRON_ORE: return 6.0f;
     case BlockType::STONE_BRICK:
@@ -136,6 +140,7 @@ inline float Hardness(BlockType type) {
 inline Tool BestTool(BlockType type) {
     switch (type) {
     case BlockType::STONE:
+    case BlockType::SPRING:
     case BlockType::COAL_ORE:
     case BlockType::IRON_ORE:
     case BlockType::STONE_BRICK:
@@ -159,6 +164,9 @@ inline Tool BestTool(BlockType type) {
     case BlockType::PRESSURE_SENSOR:
     case BlockType::DAYLIGHT_SENSOR:
     case BlockType::PLAYER_SENSOR:
+    case BlockType::ITEM_PIPE:
+    case BlockType::SMELTER:
+    case BlockType::SMELTER_LIT:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE: return Tool::Pickaxe;
     case BlockType::WATER_WHEEL:

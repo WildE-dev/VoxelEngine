@@ -43,12 +43,16 @@ const char* Audio::Material(BlockType type) {
     case BlockType::PRESSURE_SENSOR:
     case BlockType::DAYLIGHT_SENSOR:
     case BlockType::PLAYER_SENSOR:
+    case BlockType::ITEM_PIPE:
+    case BlockType::SMELTER:
+    case BlockType::SMELTER_LIT:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
     case BlockType::SPIKES:
     case BlockType::ICE:
     case BlockType::PEBBLES:
     case BlockType::COAL_ORE:
+    case BlockType::SPRING:
     case BlockType::IRON_ORE: return "hard";
     case BlockType::SAND:
     case BlockType::SNOW: return "sand";

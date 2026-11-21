@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 37;
+constexpr uint32_t kProtocolVersion = 39;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;

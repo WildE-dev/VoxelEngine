@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <climits>
 
 #include "server/ServerWorld.h"
 
@@ -115,18 +116,65 @@ void WaterSimulation::RunPumps(ServerWorld& world) {
             gone.push_back(pos);
             continue;
         }
-        if (block.type != BlockType::PUMP) {
+        if (block.type != BlockType::PUMP && block.type != BlockType::SPRING) {
             gone.push_back(pos);
             continue;
         }
         if (limited && !NearCenter(pos, distance)) continue;
-        RunPump(world, pos);
+        if (block.type == BlockType::SPRING) RunSpring(world, pos);
+        else RunPump(world, pos);
     }
     for (const auto& pos : gone) {
         pumps.erase(pos);
         pumpBudget.erase(pos);
     }
     pumpCount.store(pumps.size(), std::memory_order_relaxed);
+}
+
+void WaterSimulation::RunSpring(ServerWorld& world, const glm::ivec3& spring) {
+    struct Cell {
+        glm::ivec3 pos;
+        Block block;
+        int room;
+    };
+    std::vector<Cell> cells;
+    for (const glm::ivec3 d : { glm::ivec3(0, 1, 0), glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0), glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1) }) {
+        const glm::ivec3 p = spring + d;
+        Block b;
+        if (!world.GetBlock(p.x, p.y, p.z, b) || !b.CanHoldWater()) continue;
+        const int room = b.WaterCapacity() - b.WaterVolume();
+        if (room > 0) cells.push_back({ p, b, room });
+    }
+    // Shared out evenly, what one can't take going to the others.
+    int left = kSpringRate;
+    std::vector<int> given(cells.size(), 0);
+    for (int round = 0; round < 5 && left > 0; round++) {
+        int open = 0;
+        for (size_t i = 0; i < cells.size(); i++) open += given[i] < cells[i].room;
+        if (open == 0) break;
+        const int share = std::max(1, left / open);
+        for (size_t i = 0; i < cells.size() && left > 0; i++) {
+            const int add = std::min({ share, cells[i].room - given[i], left });
+            if (add <= 0) continue;
+            given[i] += add;
+            left -= add;
+        }
+    }
+    for (size_t i = 0; i < cells.size(); i++)
+        if (given[i] > 0) SetWater(world, cells[i].pos, cells[i].block, cells[i].block.WaterVolume() + given[i]);
+}
+
+bool WaterSimulation::IsAboveSea(const ServerWorld& world, const glm::ivec3& pos) {
+    if (world.GetTerrain().GetType() != TerrainGenerator::Type::Normal || pos.y < TerrainGenerator::kSeaLevel) return false;
+    // Water all the way down to a full cell at the sea's top row, in sea that's open
+    // (not a lake: its level is its own).
+    if (world.GetTerrain().LakeLevelAt(pos.x, pos.z) != INT_MIN) return false;
+    Block b;
+    for (int y = pos.y - 1; y >= TerrainGenerator::kSeaLevel - 1; y--) {
+        if (!world.GetBlock(pos.x, y, pos.z, b) || !b.HasWater()) return false;
+        if (y == TerrainGenerator::kSeaLevel - 1) return b.IsFullWater();
+    }
+    return false;
 }
 
 void WaterSimulation::RunPump(ServerWorld& world, const glm::ivec3& pump) {
@@ -257,18 +305,27 @@ void WaterSimulation::RandomTicks(ServerWorld& world) {
     const bool rain = IsRaining();
     puddles.clear();
     wet.clear();
+    aboveSea.clear();
     for (const auto& chunk : randomChunks)
         for (int i = 0; i < kRandomTicksPerChunk; i++) {
             const glm::ivec3 pos = chunk * S + glm::ivec3(local(random), local(random), local(random));
             Block block;
             if (!world.GetBlock(pos.x, pos.y, pos.z, block) || !block.HasWater()) continue;
-            if (rain) wet.push_back(pos);                                // rain lands in it
+            if (pos.y >= TerrainGenerator::kSeaLevel && IsAboveSea(world, pos)) aboveSea.push_back(pos); // the sea takes it
+            else if (rain) wet.push_back(pos);                                // rain lands in it
             else if (block.WaterVolume() <= kPuddleVolume) puddles.push_back(pos); // may dry up
         }
-    if (puddles.empty() && wet.empty()) return;
+    if (puddles.empty() && wet.empty() && aboveSea.empty()) return;
 
     // ...then check the few candidates properly and dry them up under it.
     std::lock_guard<std::recursive_mutex> lock(world.GetEditMutex());
+    for (const auto& pos : aboveSea) {
+        Block block;
+        if (!world.GetBlock(pos.x, pos.y, pos.z, block) || !block.HasWater() || !IsAboveSea(world, pos)) continue;
+        SetWater(world, pos, block, 0);
+        evaporatedCount.fetch_add(1, std::memory_order_relaxed);
+    }
+    aboveSea.clear();
     for (const auto& pos : wet) RainOn(world, pos);
     for (const auto& pos : puddles) {
         Block block;

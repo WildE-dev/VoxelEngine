@@ -34,7 +34,8 @@ GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
 [Creatures](#creatures) and [PvP](#pvp)), `CraftTest` (see [Crafting](#crafting)),
 `FoodTest` (see [Food and hunger](#food-and-hunger)), `ChestTest` (see
 [Chests](#chests)), `BedTest` (see [Beds](#beds)), `PowerTest` (see
-[Air power](#air-power)), `SignalTest` (see [Signals](#signals)) and `SoundTest` (see
+[Air power](#air-power)), `FactoryTest` (see [Air power](#air-power)), `SignalTest`
+(see [Signals](#signals)) and `SoundTest` (see
 [Sound](#sound)).
 
 `ctest` in the build directory runs them all, and `ctest -j15` runs them all at
@@ -288,6 +289,16 @@ want (see [Air power](#air-power)). Mountain lakes never freeze, no trees grow i
 right beside them, and caves never open under them. About one cell in six has one;
 the nearest to spawn is about 70 blocks out, towards -x -z.
 
+**Streams.** Where a lake's rim is lowest and the land beyond falls away below its
+level, it overflows: a **spring** sits in the ground just outside the rim, and water
+wells up out of it without end, a block and a half a second (see [Water](#water)).
+The water simulation does the rest: the stream runs downhill from it, along hollows
+and down slopes, filling dips into ponds on its way, until it reaches the sea or
+spreads out thin and dries up. Streams make ready-made mill sites: a water wheel with
+one side in a stream turns for as long as the spring runs. Springs look like wet
+rock; breaking one gives stone and stops it. `/locate spring` (operators) says where
+the nearest is.
+
 ### Dungeons
 
 Deep underground (their floors 43 to 52 blocks down, well below any sea floor) lie
@@ -418,12 +429,21 @@ water under it. So rain refills drained lakes and pools to the level they had, d
 water (hit more often) fastest, and never puts water in a dry cell, above a full one,
 or in a puddle on dry ground. Puddles don't evaporate while it rains.
 
+**Springs** add water: each one puts up to 48 units a tick (three eighths of a block)
+into the open cells above and beside it that have room, shared between them, for as
+long as it's within the simulation area. Water that reaches the open sea goes: random
+ticks take any water lying above the sea's surface on the open sea, so streams don't
+slowly raise it. `PumpTest` checks that a spring fills the cell above it at that rate
+and stops when it's full, keeps the water coming once there's somewhere for it to
+go, and stops when broken; `BiomeTest` that lakes overflow from springs, each in the
+ground, open above and below a lake's level.
+
 **Evaporation**: shallow puddles that have stopped flowing dry up. Every water tick,
 8 random cells of each chunk near a player are looked at (random ticks), and a resting
 puddle among them disappears: a cell with at most a quarter of a block of water that
 isn't full, has no water above it and isn't flowing. Each cell comes up about every
-2.1 minutes on average, so a spill fades away cell by cell. This is the only way
-water is ever destroyed; lakes and pools are deeper than that and stay. Random ticks
+2.1 minutes on average, so a spill fades away cell by cell. This and the sea are the
+only ways water is ever destroyed (and springs the only way it's made); lakes and pools are deeper than that and stay. Random ticks
 cost about 1 ms per tick for the whole simulation area. `EvaporationTest` checks that a
 spill settles into a puddle that dries up gradually, that a deep pool keeps its water,
 and that nothing evaporates with no player nearby.
@@ -893,7 +913,7 @@ The machines:
 
 - The **drill** digs straight down from under itself, one block every 1.5 seconds for
   12 units of air, up to 32 blocks deep, and puts what it digs into a **chest
-  touching it**. It stops at water (the shaft would flood), at chests, beds, doors,
+  touching it**, or one at the end of **item pipes** from it. It stops at water (the shaft would flood), at chests, beds, doors,
   signs, TNT, pumps and other machinery, and waits without a chest or without
   pressure. A working drill throws up dust where it digs.
 - The **pump** (see [Water](#water)) lifts water on air, cheaply: the air a wheel
@@ -903,6 +923,15 @@ The machines:
   so a pump can keep its own wheels turning and lift plenty more besides. Pumps take
   only the air above the running pressure that the drills on their network don't need
   for their next block.
+- The **smelter** smelts a block every 2 seconds for 6 units of air, in the chests
+  joined to it (touching it, or at the end of item pipes from it), putting what it
+  makes back in the same chest: iron ore into **twice** the iron ingots crafting gives
+  (and no coal), raw venison and fish into cooked, sand into glass, and logs into
+  half a block of coal (charcoal). It takes whatever's first in that list that a
+  chest has. It glows while it works. So a drill and a smelter on the same chest, or
+  joined to it by item pipes, dig and smelt ore on their own.
+- **Item pipes** (thin wooden tubes) join face to face and to chests, drills and
+  smelters: a drill or smelter reaches every chest along them (up to 512 pipes).
 - The **piston** pushes the way you were looking when you placed it (level, up or
   down). Give it a channel (see [Signals](#signals)) and join it to air pipes: while
   the channel is on it pushes the row of blocks in front of it (up to 12) a block on,
@@ -928,7 +957,8 @@ Recipes: a water wheel from 6 planks and a log; 3 shafts from a log; a compresso
 from an iron ingot and 2 stone; 4 air pipes from a stone and a quarter of an iron
 ingot; an air tank from 2 iron ingots and half a glass; a valve from half an iron
 ingot and a stone; a drill from 2 iron ingots and 2 stone; a piston from a planks, a
-stone and half an iron ingot.
+stone and half an iron ingot; a smelter from 4 stone bricks and an iron ingot; 4 item
+pipes from a planks and a quarter of an iron ingot.
 
 The server runs it all four times a second (`Server::UpdatePower`,
 `src/server/Power.cpp`; the rules and numbers are in `src/world/Power.h`): the water
@@ -952,6 +982,12 @@ to a drill and a pump) and checks:
   network's air into it;
 - cutting the air pipe starves the drill;
 - stopping the water brings the wheels to a stop.
+
+`FactoryTest` builds a drill over a column of sand and iron ore, item pipes from it to
+a chest, a smelter on the chest and air pipes to both, and checks that the drill's
+sand comes down the item pipes into the chest, the smelter turns both blocks of sand
+into glass and both of iron ore into four iron ingots, glowing while it works and
+going dark when there's nothing left, and that right-clicking it describes it.
 
 ## Signals
 
@@ -1198,6 +1234,7 @@ ones you're allowed to use:
 | `/give <block> [count] [player]`, `/give <tool> [player]` | operators | give survival blocks (`count` in blocks, default 64) or a tool |
 | `/fill <x1 y1 z1> <x2 y2 z2> <block>` | operators | fill a box with a block (`air` clears it; up to 32768 cells) |
 | `/pressurise <x y z>` | operators | fill the air network with a pipe or machine there with air |
+| `/locate spring` | operators | where the nearest spring (a lake's overflow) is |
 | `/summon <deer\|ghoul> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
 | `/creatures [clear]` | operators | count the creatures, or remove them all |
 | `/pvp`, `/food` | everyone | whether players can hurt each other; how fed you are |
@@ -1409,10 +1446,10 @@ src/
             Textures, DebugDraw
   world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
             Features, Dungeons, Noise, Lighting, Collision, Raycast, Mining,
-            Breathing, Creatures, Crafting, Hunger, Armour
+            Breathing, Creatures, Crafting, Hunger, Armour, Power, Signals, Smelting
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
             BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest, ChestTest, BedTest,
-            PowerTest, SignalTest
+            PowerTest, SignalTest, FactoryTest
 tools/      make_sounds.py (sound effects), make_item_textures.py (item icons)
 ```

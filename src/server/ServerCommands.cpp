@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <unordered_set>
 
@@ -104,6 +105,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64), or /give <tool|cap|tunic|boots> [player]" },
     { Level::Operator, "/fill <x1 y1 z1> <x2 y2 z2> <block> - fill a box with a block (air clears it; up to 32768 cells)" },
     { Level::Operator, "/summon <deer|ghoul|skeleton> [x y z] - bring a creature (default: a few blocks ahead of you)" },
+    { Level::Operator, "/locate spring - where the nearest spring (a lake's overflow) is" },
     { Level::Operator, "/creatures [clear] - count the creatures, or remove them all" },
     { Level::Everyone, "/food - how hungry you are" },
     { Level::Everyone, "/achievements - the milestones you've reached, and those still to come" },
@@ -118,7 +120,7 @@ constexpr HelpLine kHelp[] = {
 Level RequiredLevel(const std::string& command, size_t argumentCount) {
     if (command == "stop") return Level::Console;
     if (command == "tp" || command == "teleport" || command == "save" || command == "kick" || command == "op" || command == "deop" ||
-        command == "noclip" || command == "give" || command == "fill" || command == "pressurise" || command == "summon" || command == "creatures")
+        command == "noclip" || command == "give" || command == "fill" || command == "pressurise" || command == "locate" || command == "summon" || command == "creatures")
         return Level::Operator;
     if ((command == "time" || command == "weather" || command == "gamemode" || command == "pvp" || command == "food") && argumentCount > 0) return Level::Operator;
     return Level::Everyone;
@@ -389,6 +391,24 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
             air[p] = Power::CapacityOf(b.type);
         }
         reply(Kind::Info, "Filled " + std::to_string(parts.size()) + " air parts");
+    }
+    else if (command == "locate") {
+        if (words.size() != 2 || Lower(words[1]) != "spring") return usage("/locate spring");
+        const glm::vec3 from = sender ? sender->feet : glm::vec3(0.0f);
+        const glm::ivec3 c = Coords::ChunkOf(glm::ivec3(glm::floor(from)));
+        const TerrainGenerator& terrain = world->GetTerrain();
+        std::optional<glm::ivec2> best;
+        float bestDistance = 1e9f;
+        for (int dx = -24; dx <= 24; dx++)
+            for (int dz = -24; dz <= 24; dz++)
+                for (const glm::ivec2& sp : terrain.SpringsIn(c.x + dx, c.z + dz)) {
+                    const float d = glm::distance(glm::vec2(from.x, from.z), glm::vec2(sp) + 0.5f);
+                    if (d < bestDistance) bestDistance = d, best = sp;
+                }
+        if (!best) return reply(Kind::Info, "No spring within 768 blocks");
+        const auto column = terrain.ColumnAt(best->x, best->y);
+        reply(Kind::Info, "The nearest spring is at " + std::to_string(best->x) + " " + std::to_string(column.surfaceRow) + " " + std::to_string(best->y) + ", " +
+                              std::to_string(static_cast<int>(bestDistance)) + " blocks away");
     }
     else if (command == "summon") {
         const CreatureType type = words.size() > 1 ? CreatureFromId(Lower(words[1])) : CreatureType::Count;

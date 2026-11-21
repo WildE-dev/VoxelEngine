@@ -89,6 +89,8 @@ inline const std::vector<Recipe>& Recipes() {
         { "daylight_sensor", "Daylight sensor", { { BlockType::PLANKS, kBlock }, { BlockType::GLASS, kBlock / 2 }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::DAYLIGHT_SENSOR, kBlock },
         { "player_sensor", "Player sensor", { { BlockType::STONE, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 }, { BlockType::COAL, kBlock / 4 } }, BlockType::PLAYER_SENSOR, kBlock },
         { "air_pipe", "4 air pipes", { { BlockType::STONE, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::AIR_PIPE, 4 * kBlock },
+        { "smelter", "Smelter", { { BlockType::STONE_BRICK, 4 * kBlock }, { BlockType::IRON_INGOT, kBlock } }, BlockType::SMELTER, kBlock },
+        { "item_pipe", "4 item pipes", { { BlockType::PLANKS, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::ITEM_PIPE, 4 * kBlock },
         { "drill", "Drill", { { BlockType::IRON_INGOT, 2 * kBlock }, { BlockType::STONE, 2 * kBlock } }, BlockType::DRILL, kBlock },
         { "coal_lamp", "Lamp (with coal)", { { BlockType::GLASS, kBlock / 2 }, { BlockType::COAL, kBlock / 4 } }, BlockType::LAMP, kBlock },
         { "iron_tools", "Iron upgrade (all tools)", { { BlockType::IRON_INGOT, 3 * kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::AIR, 0, Tool::None,

@@ -194,6 +194,27 @@ int main() {
             iceRight = world.Get({ x, TerrainGenerator::kSeaLevel - 1, z }).type == BlockType::ICE && world.Get({ x, TerrainGenerator::kSeaLevel - 2, z }).IsLiquid();
         }
     Check(sawIce && iceRight, "frozen seas have ice on top, water under it");
+
+    // Springs where lakes overflow: in the ground just outside a lake, below its level,
+    // open above so the water can come out (unless a tree grows there).
+    int springs = 0, springsRight = 0;
+    for (int cx = -60; cx <= 60 && springs < 24; cx++)
+        for (int cz = -60; cz <= 60 && springs < 24; cz++)
+            for (const glm::ivec2& s : t.SpringsIn(cx, cz)) {
+                springs++;
+                const auto col = t.ColumnAt(s.x, s.y);
+                const int row = col.HasSlopedTop() ? col.surfaceRow : col.surfaceRow - 1;
+                bool lakeAbove = false;
+                for (int dx = -60; dx <= 60 && !lakeAbove; dx += 3)
+                    for (int dz = -60; dz <= 60 && !lakeAbove; dz += 3) lakeAbove = t.LakeLevelAt(s.x + dx, s.y + dz) > row + 1;
+                if (world.Get({ s.x, row, s.y }).type == BlockType::SPRING && (!world.Get({ s.x, row + 1, s.y }).IsFullBlock() || world.Get({ s.x, row + 1, s.y }).type == BlockType::LOG) && lakeAbove)
+                    springsRight++;
+                else
+                    std::cout << "        spring at " << s.x << " " << row << " " << s.y << ": " << BlockId(world.Get({ s.x, row, s.y }).type) << ", above "
+                              << BlockId(world.Get({ s.x, row + 1, s.y }).type) << (lakeAbove ? "" : ", no lake above") << std::endl;
+            }
+    Check(springs >= 24, "lakes overflow from springs (" + std::to_string(springs) + " looked at)");
+    Check(springsRight == springs, "each spring is in the ground, open above, below a lake's level nearby (" + std::to_string(springsRight) + " of " + std::to_string(springs) + ")");
     std::cout << "        " << world.generated << " chunks generated, " << world.seconds * 1000.0 / world.generated << " ms each" << std::endl;
 
     std::cout << (failures ? "BIOME TEST FAILED (" : "ALL BIOME CHECKS PASSED (") << failures << " failures)" << std::endl;

@@ -26,8 +26,8 @@
 //  - Machines need at least kMinPressure to run, and use air for what they do:
 //     . The drill digs straight down from under itself, one block every
 //       kDrillInterval seconds for kDrillAir, up to kDrillDepth deep, putting what it
-//       digs into a chest touching it. It stops at water, at a chest or a machine,
-//       and at anything it can't dig.
+//       digs into a chest touching it (or joined to it by item pipes). It stops at
+//       water, at a chest or a machine, and at anything it can't dig.
 //     . A piston (facing one of six ways; see Signals.h) pushes out while its
 //       channel is on, for kPistonAir: the blocks in a row in front of it (up to
 //       kPushLimit) each move a block on, and its head fills the space. A row ending
@@ -35,6 +35,10 @@
 //       the end are crushed. It won't move chests, beds, doors, signs, signal blocks,
 //       machinery or anything unloaded. When the channel goes off it pulls its head
 //       back, bringing the block in front of the head with it (free).
+//     . A smelter smelts a block every kSmeltInterval seconds for kSmeltAir, from
+//       the chests joined to it (touching it, or at the far end of item pipes): the
+//       first thing it finds it can smelt (world/Smelting.h), the result going back
+//       into the same chest. It's lit while it works.
 //     . A pump (see Water.h) lifts water: kPumpAir for every unit of water raised a
 //       block (at least a block, even on the level). It's cheap: the air a wheel
 //       makes from water pouring past it lifts kPumpGain times that water as high as
@@ -70,12 +74,19 @@ constexpr float kPumpAir = kWheelMaxAir / (kWheelFullFlow * 3.0f * kPumpGain);
 constexpr int kMaxNetwork = 4096;             // pipes and machines in one network, at most
 constexpr float kPistonAir = 4.0f;            // air for each push (pulling back is free)
 constexpr int kPushLimit = 12;                // blocks a piston can push in a row, at most
+constexpr float kSmeltAir = 6.0f;             // air for each block smelted
+constexpr double kSmeltInterval = 2.0;        // seconds per block smelted
+constexpr int kMaxItemNetwork = 512;          // item pipes a drill or smelter looks through, at most
 
 // Parts of an air network (wheels and shafts aren't: they turn compressors).
 // (A valve is part of the network only while it's open: shut, it divides it.)
 inline bool IsAirPart(BlockType t) {
     return t == BlockType::AIR_PIPE || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
-           t == BlockType::VALVE_OPEN || t == BlockType::PISTON || t == BlockType::PRESSURE_SENSOR;
+           t == BlockType::VALVE_OPEN || t == BlockType::PISTON || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT;
+}
+// What item pipes join: each other, chests, and the machines that fill or empty them.
+inline bool IsItemPart(BlockType t) {
+    return t == BlockType::ITEM_PIPE || t == BlockType::CHEST || t == BlockType::DRILL || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT;
 }
 // How much air a part holds when full.
 inline float CapacityOf(BlockType t) { return t == BlockType::AIR_TANK ? kAirPerTank : kAirPerCell; }
@@ -85,7 +96,7 @@ inline bool IsPart(BlockType t) { return IsAirPart(t) || t == BlockType::WATER_W
 // shafts, which it finds from them).
 inline bool IsMachine(BlockType t) {
     return t == BlockType::WATER_WHEEL || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
-           t == BlockType::PISTON || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR;
+           t == BlockType::PISTON || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT;
 }
 
 // Whether a pipe (drawn as a thin tube) reaches across to this neighbour: water pipes
@@ -93,6 +104,7 @@ inline bool IsMachine(BlockType t) {
 inline bool PipeJoins(BlockType pipe, BlockType other) {
     if (pipe == BlockType::PIPE) return other == BlockType::PIPE || other == BlockType::PUMP;
     if (pipe == BlockType::AIR_PIPE) return IsAirPart(other) || other == BlockType::VALVE;
+    if (pipe == BlockType::ITEM_PIPE) return IsItemPart(other);
     return false;
 }
 

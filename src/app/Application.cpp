@@ -55,8 +55,8 @@ constexpr int kLaserRadius = 4;
 constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
-    BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
-    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::DRILL, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
+    BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::SPRING, BlockType::PUMP, BlockType::PIPE,
+    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::DRILL, BlockType::SMELTER, BlockType::ITEM_PIPE, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
     BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
@@ -140,6 +140,10 @@ const char* BlockName(BlockType type) {
     case BlockType::PRESSURE_SENSOR: return "Pressure sensor";
     case BlockType::DAYLIGHT_SENSOR: return "Daylight sensor";
     case BlockType::PLAYER_SENSOR: return "Player sensor";
+    case BlockType::ITEM_PIPE: return "Item pipe";
+    case BlockType::SMELTER: return "Smelter";
+    case BlockType::SMELTER_LIT: return "Smelter (lit)";
+    case BlockType::SPRING: return "Spring";
     case BlockType::STONE_BRICK: return "Stone bricks";
     case BlockType::MOSSY_BRICK: return "Mossy bricks";
     case BlockType::SPIKES: return "Spikes";
@@ -884,6 +888,12 @@ void Application::DrawCrosshair() {
             else if (target.type == BlockType::COMPRESSOR)
                 std::snprintf(text, sizeof text, "Compressor: +%.1f air/s from %d wheel%s - air %d%%", m.speed / 2.0f, m.depth, m.depth == 1 ? "" : "s", pressure);
             else if (target.type == BlockType::AIR_TANK) std::snprintf(text, sizeof text, "Air tank - air %d%%", pressure);
+            else if (target.type == BlockType::SMELTER || target.type == BlockType::SMELTER_LIT)
+                std::snprintf(text, sizeof text, "Smelter: %s - air %d%%",
+                              state == Power::DrillState::Working ? ("making " + std::string(m.depth < static_cast<uint8_t>(BlockType::COUNT) ? BlockName(static_cast<BlockType>(m.depth)) : "?")).c_str()
+                              : state == Power::DrillState::NoPressure ? "needs air pressure" : state == Power::DrillState::NoChest ? "needs a chest" : "nothing to smelt",
+                              pressure);
+            else if (target.type == BlockType::PISTON || target.type == BlockType::PISTON_HEAD || target.type == BlockType::PRESSURE_SENSOR) continue;
             else if (target.type == BlockType::PUMP)
                 std::snprintf(text, sizeof text, "Pump: %s - air %d%%", state == Power::DrillState::Working ? "pumping" : state == Power::DrillState::NoPressure ? "needs air pressure" : "nothing to pump", pressure);
             else std::snprintf(text, sizeof text, "Drill: %s - air %d%%", Power::Describe(state), pressure);

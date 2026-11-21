@@ -130,6 +130,11 @@ private:
     const TerrainGenerator& terrain;
     WorldStorage* const storage;
 
+public:
+    const TerrainGenerator& GetTerrain() const { return terrain; }
+
+private:
+
     std::unordered_map<glm::ivec3, ChunkPtr, Coords::IVec3Hash> chunks;
     mutable std::shared_mutex chunksMutex;
     std::recursive_mutex editMutex; // recursive: SetBlock may uproot a plant above

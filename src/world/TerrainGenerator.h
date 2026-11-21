@@ -114,6 +114,10 @@ public:
     // water all round, so it's always contained. Its level is near the lowest ground
     // around it. The row water fills up to (exclusive) in this column, or INT_MIN.
     int LakeLevelAt(int x, int z) const;
+    // Where a lake overflows: a spring (BlockType::SPRING) in the ground just outside
+    // its rim on its lowest side, where the land falls away below its level, starting a
+    // stream that runs downhill from it. The springs in a chunk's columns, or none.
+    std::vector<glm::ivec2> SpringsIn(int chunkX, int chunkZ) const;
     // Water fills open cells below this row: the sea's level, or a lake's.
     int WaterLevelAt(int x, int z) const { return std::max(static_cast<int>(kSeaLevel), LakeLevelAt(x, z)); }
     static constexpr int kLakeCell = 128;
@@ -146,6 +150,8 @@ private:
         glm::vec2 centre{ 0.0f };
         float radius = 0.0f, depth = 0.0f;
         int level = 0;
+        bool hasSpring = false;
+        glm::ivec2 spring{ 0 }; // the column of its spring
     };
     // The lake in grid cell (cx, cz), worked out once and kept (any thread).
     const Lake& LakeIn(int cx, int cz) const;

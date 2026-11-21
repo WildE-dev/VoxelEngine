@@ -197,13 +197,23 @@ enum class BlockType : uint8_t {
     PRESSURE_SENSOR,
     DAYLIGHT_SENSOR,
     PLAYER_SENSOR,
+    // Item pipes (drawn as thin tubes) join chests to drills and smelters further away.
+    // A smelter (an air machine; lit while it works) smelts what's in the chests joined
+    // to it, in place (see world/Smelting.h).
+    ITEM_PIPE,
+    SMELTER,
+    SMELTER_LIT,
+    // A spring: wet rock that water wells up out of, without end (into the cells above
+    // and beside it: see Water.h). Found where lakes overflow, starting the streams that
+    // run down from them. Breaking it gives stone, and the spring is gone.
+    SPRING,
     COUNT
 };
 
 // Solid blocks drawn by a model of their own (turning wheels and shafts), and pipes
 // drawn as thin tubes: neither hides what's beside it or blocks light.
 inline bool IsModelType(BlockType type) { return type == BlockType::WATER_WHEEL || type == BlockType::SHAFT; }
-inline bool IsPipeType(BlockType type) { return type == BlockType::PIPE || type == BlockType::AIR_PIPE; }
+inline bool IsPipeType(BlockType type) { return type == BlockType::PIPE || type == BlockType::AIR_PIPE || type == BlockType::ITEM_PIPE; }
 // Blocks that face one of six ways (their `axis` holds the Face they point to): a
 // piston and its head.
 inline bool IsFacingType(BlockType type) { return type == BlockType::PISTON || type == BlockType::PISTON_HEAD; }
@@ -238,6 +248,8 @@ inline BlockType ResourceTypeOf(BlockType type) {
     case BlockType::SIGNAL_LAMP_ON: return BlockType::SIGNAL_LAMP;
     case BlockType::VALVE_OPEN: return BlockType::VALVE;
     case BlockType::PISTON_HEAD: return BlockType::AIR; // (part of the piston: gives nothing)
+    case BlockType::SMELTER_LIT: return BlockType::SMELTER;
+    case BlockType::SPRING: return BlockType::STONE;
     default: return type;
     }
 }
@@ -275,7 +287,7 @@ inline ShapeStyle StyleOf(BlockType type) {
 
 // Block light emitted by a block type, 0..kMaxLight.
 inline uint8_t GetLightEmission(BlockType type) {
-    return type == BlockType::LAMP || type == BlockType::SIGNAL_LAMP_ON ? kMaxLight : type == BlockType::CAMPFIRE ? kMaxLight - 1 : 0;
+    return type == BlockType::LAMP || type == BlockType::SIGNAL_LAMP_ON ? kMaxLight : type == BlockType::CAMPFIRE ? kMaxLight - 1 : type == BlockType::SMELTER_LIT ? 12 : 0;
 }
 
 // Indices into the texture atlas for each face of a block.

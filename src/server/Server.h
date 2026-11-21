@@ -391,6 +391,12 @@ private:
         int depth = 0; // how deep the last block it dug was
         Power::DrillState state = Power::DrillState::Idle;
     };
+    struct Smelter {
+        double nextSmelt = 0.0;
+        double lastSmelt = -1e9;
+        Power::DrillState state = Power::DrillState::Idle; // Working, NoPressure, NoChest, or Idle (nothing to smelt)
+        BlockType made = BlockType::AIR;                     // what it made last
+    };
     struct Compressor {
         float power = 0.0f; // the speeds of the wheels on its shaft lines, added up
         int wheels = 0, turning = 0;
@@ -402,6 +408,7 @@ private:
     };
     std::unordered_map<glm::ivec3, Wheel, Coords::IVec3Hash> wheels;
     std::unordered_map<glm::ivec3, Drill, Coords::IVec3Hash> drills;
+    std::unordered_map<glm::ivec3, Smelter, Coords::IVec3Hash> smelters;
     std::unordered_map<glm::ivec3, Compressor, Coords::IVec3Hash> compressors;
     std::unordered_map<glm::ivec3, Power::DrillState, Coords::IVec3Hash> pumpStates;
     std::unordered_map<glm::ivec3, Power::DrillState, Coords::IVec3Hash> pistonStates; // Idle (in), Working (out), NoPressure, Blocked
@@ -417,6 +424,12 @@ private:
     // A drill's turn to dig (it has the air): digs the next block under it into a chest
     // beside it. Returns whether it dug.
     bool DrillDig(const glm::ivec3& pos, Drill& drill);
+    // The chests joined to a machine: touching it, or at the ends of item pipes from it
+    // (nearest first).
+    std::vector<glm::ivec3> ChestsJoined(const glm::ivec3& pos) const;
+    // A smelter's turn (it has the air): smelts a block in a chest joined to it.
+    // Returns whether it did.
+    bool Smelt(const glm::ivec3& pos, Smelter& smelter);
     // A piston pushing out (the blocks in front of it, up to Power::kPushLimit, a block
     // further, and its head into the space): whether it could. And pulling back (the
     // block in front of its head with it).

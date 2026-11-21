@@ -304,6 +304,10 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* PRESSURE_SENSOR */ {{ "pressure_sensor", "sensor_bottom", "pressure_sensor", "pressure_sensor", "pressure_sensor", "pressure_sensor" }},
     /* DAYLIGHT_SENSOR */ {{ "daylight_sensor", "sensor_bottom", "sensor_side", "sensor_side", "sensor_side", "sensor_side" }},
     /* PLAYER_SENSOR */ {{ "player_sensor", "sensor_bottom", "player_sensor", "player_sensor", "player_sensor", "player_sensor" }},
+    /* ITEM_PIPE   */ {{ "item_pipe_end", "item_pipe_end", "item_pipe", "item_pipe", "item_pipe", "item_pipe" }},
+    /* SMELTER     */ {{ "smelter_top", "smelter_top", "smelter_front", "smelter_side", "smelter_side", "smelter_side" }},
+    /* SMELTER_LIT */ {{ "smelter_top", "smelter_top", "smelter_front_lit", "smelter_side", "smelter_side", "smelter_side" }},
+    /* SPRING      */ {{ "spring", "spring", "spring", "spring", "spring", "spring" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -337,6 +341,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "pine_leaves", "cactus", "dead_bush", "ice", "pebbles", "planks", "glass", "raw_venison", "cooked_venison", "hide", "chest", "bed", "coal_ore", "iron_ore", "coal", "iron_ingot", "seeds", "crop", "ripe_wheat", "wheat", "bread", "ladder", "door", "door_open", "arrow", "raw_fish", "cooked_fish", "campfire", "sign", "tnt", "tnt_lit", "boat", "sapling", "pine_sapling",
     "water_wheel", "air_pipe", "drill", "shaft", "compressor", "lever", "lever_on", "logic_gate", "signal_lamp", "signal_lamp_on", "air_tank", "valve", "valve_open",
     "piston", "piston_head", "water_sensor", "pressure_sensor", "daylight_sensor", "player_sensor",
+    "item_pipe", "smelter", "smelter_lit", "spring",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");
@@ -823,6 +828,9 @@ bool Block::CanChisel() const {
     case BlockType::PRESSURE_SENSOR:
     case BlockType::DAYLIGHT_SENSOR:
     case BlockType::PLAYER_SENSOR:
+    case BlockType::ITEM_PIPE:
+    case BlockType::SMELTER:
+    case BlockType::SMELTER_LIT:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
     case BlockType::GLASS:

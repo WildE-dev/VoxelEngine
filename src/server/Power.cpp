@@ -7,6 +7,7 @@
 
 #include "server/Server.h"
 #include "server/ServerWorld.h"
+#include "world/Smelting.h"
 
 namespace {
 
@@ -77,6 +78,7 @@ void Server::UpdatePower() {
     prune(compressors);
     prune(pumpStates);
     prune(pistonStates);
+    prune(smelters);
 
     // A piston's head with no piston behind it (broken, or turned) goes too.
     for (const auto& pos : machineList) {
@@ -143,7 +145,7 @@ void Server::UpdatePower() {
             }
 
         std::vector<std::pair<glm::ivec3, Drill*>> netDrills;
-        std::vector<glm::ivec3> netPumps, netPistons;
+        std::vector<glm::ivec3> netPumps, netPistons, netSmelters;
         for (const auto& m : members) {
             auto a = air.find(m);
             if (a != air.end()) net.air += a->second;
@@ -163,6 +165,8 @@ void Server::UpdatePower() {
                 netPumps.push_back(m);
                 break;
             case BlockType::PISTON: netPistons.push_back(m); break;
+            case BlockType::SMELTER:
+            case BlockType::SMELTER_LIT: netSmelters.push_back(m); break;
             default: break;
             }
         }
@@ -217,10 +221,29 @@ void Server::UpdatePower() {
             if (drill->state == Power::DrillState::Working) net.working++;
         }
 
+        // Smelters too: a block each in turn, lit while they work.
+        for (const auto& p : netSmelters) {
+            Smelter& sm = smelters[p];
+            if (now >= sm.nextSmelt) {
+                if (net.Pressure() < Power::kMinPressure || net.air < Power::kSmeltAir) sm.state = Power::DrillState::NoPressure;
+                else if (Smelt(p, sm)) {
+                    net.air -= Power::kSmeltAir;
+                    sm.nextSmelt = now + Power::kSmeltInterval;
+                    sm.lastSmelt = now;
+                }
+                else sm.nextSmelt = now + 0.5; // (look again soon)
+            }
+            if (now - sm.lastSmelt < Power::kSmeltInterval * 1.5) sm.state = Power::DrillState::Working;
+            if (sm.state == Power::DrillState::Working) net.working++;
+            const BlockType shown = sm.state == Power::DrillState::Working ? BlockType::SMELTER_LIT : BlockType::SMELTER;
+            if (blockAt(p).type != shown) world->SetBlock(p.x, p.y, p.z, Block(shown));
+        }
+
         // What the pumps may lift until the next update: the air above the running
-        // pressure, less what the drills need for their next blocks (they come first),
-        // shared between them (none below it).
-        const float reserve = Power::kMinPressure * net.capacity + Power::kDrillAir * static_cast<float>(netDrills.size());
+        // pressure, less what the drills and smelters need for their next blocks (they
+        // come first), shared between them (none below it).
+        const float reserve = Power::kMinPressure * net.capacity + Power::kDrillAir * static_cast<float>(netDrills.size()) +
+                              Power::kSmeltAir * static_cast<float>(netSmelters.size());
         const float spare = std::max(0.0f, net.air - reserve);
         for (const auto& p : netPumps)
             water.SetPumpBudget(p, net.Pressure() >= Power::kMinPressure ? spare / static_cast<float>(netPumps.size()) / Power::kPumpAir : 0.0f);
@@ -233,15 +256,52 @@ void Server::UpdatePower() {
     SendMachines();
 }
 
-bool Server::DrillDig(const glm::ivec3& pos, Drill& drill) {
-    // Somewhere to put what it digs: a chest touching it (not under it, where it digs).
-    std::optional<glm::ivec3> chestAt;
-    for (const auto& d : kFaces) {
-        Block b;
-        if (d.y < 0 || !world->GetBlock(pos.x + d.x, pos.y + d.y, pos.z + d.z, b) || b.type != BlockType::CHEST) continue;
-        chestAt = pos + d;
-        break;
+std::vector<glm::ivec3> Server::ChestsJoined(const glm::ivec3& pos) const {
+    std::vector<glm::ivec3> chestsFound, pipes{ pos };
+    std::unordered_set<glm::ivec3, Coords::IVec3Hash> seen{ pos };
+    for (size_t i = 0; i < pipes.size() && pipes.size() < static_cast<size_t>(Power::kMaxItemNetwork); i++)
+        for (const auto& d : kFaces) {
+            const glm::ivec3 n = pipes[i] + d;
+            Block b;
+            if (seen.count(n) || !world->GetBlock(n.x, n.y, n.z, b)) continue;
+            seen.insert(n);
+            if (b.type == BlockType::CHEST) chestsFound.push_back(n);
+            else if (b.type == BlockType::ITEM_PIPE) pipes.push_back(n);
+        }
+    return chestsFound;
+}
+
+bool Server::Smelt(const glm::ivec3& pos, Smelter& smelter) {
+    const auto joined = ChestsJoined(pos);
+    if (joined.empty()) {
+        smelter.state = Power::DrillState::NoChest;
+        return false;
     }
+    for (const auto& c : joined) {
+        ChestItems& chest = ChestAt(c);
+        const SmeltRecipe* r = Smelting::FirstAffordable(chest);
+        if (!r) continue;
+        chest[static_cast<size_t>(r->input)] -= r->inputUnits;
+        if (r->extra != BlockType::AIR) chest[static_cast<size_t>(r->extra)] -= r->extraUnits;
+        chest[static_cast<size_t>(r->output)] += r->outputUnits;
+        SendChestToViewers(c);
+        smelter.made = r->output;
+        smelter.state = Power::DrillState::Working;
+        return true;
+    }
+    smelter.state = Power::DrillState::Idle;
+    return false;
+}
+
+bool Server::DrillDig(const glm::ivec3& pos, Drill& drill) {
+    // Somewhere to put what it digs: a chest touching it or joined to it by item pipes
+    // (not under it, where it digs).
+    std::optional<glm::ivec3> chestAt;
+    for (const auto& c : ChestsJoined(pos))
+        if (c != pos - glm::ivec3(0, 1, 0)) {
+            chestAt = c;
+            break;
+        }
     if (!chestAt) {
         drill.state = Power::DrillState::NoChest;
         return false;
@@ -354,6 +414,12 @@ void Server::SendMachines() {
                 info.depth = static_cast<uint8_t>(std::clamp(c->second.wheels, 0, 255));
                 info.state = static_cast<uint8_t>(c->second.turning ? Power::DrillState::Working : Power::DrillState::Idle);
             }
+            else if (auto s = smelters.find(pos); s != smelters.end()) {
+                // depth: what it made last.
+                info.type = static_cast<uint8_t>(BlockType::SMELTER);
+                info.state = static_cast<uint8_t>(s->second.state);
+                info.depth = static_cast<uint8_t>(s->second.made);
+            }
             else if (Block t; world->GetBlock(pos.x, pos.y, pos.z, t) && t.type == BlockType::AIR_TANK) {
                 info.type = static_cast<uint8_t>(BlockType::AIR_TANK);
             }
@@ -412,6 +478,13 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
                   : st == Power::DrillState::Blocked ? "Piston: blocked (something it can't move, or too many blocks in a row). " : "Piston: in. ";
             text += sig != signalBlocks.end() && sig->second.config.a ? "Listens to channel " + std::to_string(sig->second.config.a) + ". "
                                                                       : "No channel (crouch and right-click to set one). ";
+        }
+        else if (b.type == BlockType::SMELTER || b.type == BlockType::SMELTER_LIT) {
+            const Smelter sm = smelters.count(pos) ? smelters[pos] : Smelter{};
+            const size_t chestCount = ChestsJoined(pos).size();
+            text += sm.state == Power::DrillState::Working ? "Smelter: smelting. " : sm.state == Power::DrillState::NoPressure ? "Smelter: waiting for air pressure. "
+                  : sm.state == Power::DrillState::NoChest ? "Smelter: needs a chest touching it or joined by item pipes. " : "Smelter: nothing to smelt in its chests. ";
+            text += std::to_string(chestCount) + (chestCount == 1 ? " chest joined. " : " chests joined. ");
         }
         else if (b.type == BlockType::PRESSURE_SENSOR) {
             text += "Pressure sensor. ";

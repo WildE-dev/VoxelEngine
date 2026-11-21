@@ -55,6 +55,14 @@ class ServerWorld;
 // full one, so it tops drained lakes and pools back up to the level they had, and
 // deep water (hit more often) fills fastest. Puddles don't evaporate while it rains.
 //
+// Springs: each tick, a spring adds up to kSpringRate units of new water to the open
+// cells above and beside it that have room (shared between them), so a stream runs
+// from it for as long as there's somewhere for the water to go. They're kept with the
+// pumps (AddPump), and like them only run in the simulation area. Where water ends up
+// in the sea it goes: in a world with a sea, random ticks take any water lying above
+// the sea's surface on top of the open sea (as rain never adds any there), so streams
+// running into the sea don't slowly raise it.
+//
 // Pumps: each tick, a pump takes up to kPumpRate units from the water in the cells
 // around it and sends them through the pipes connected to it (pipes join face to
 // face), out of the network's open ends: the open cells beside a pipe that joins only
@@ -141,6 +149,8 @@ public:
     static constexpr size_t kCellsPerSlice = 128;
     // Units a pump moves per tick: 5/8 of a block, 2.5 blocks a second.
     static constexpr int kPumpRate = Block::kMaxWaterVolume * 5 / 8;
+    // Units a spring adds per tick: 3/8 of a block, a block and a half a second.
+    static constexpr int kSpringRate = Block::kMaxWaterVolume * 3 / 8;
     // Puddles: up to a quarter of a block deep. With 8 random cells per chunk per tick
     // a puddle cell lasts about 512 ticks (2.1 minutes) on average.
     static constexpr int kPuddleVolume = Block::kMaxWaterVolume / 4;
@@ -161,6 +171,9 @@ private:
     // Rain landing in the body of water at `pos`. Edit mutex held.
     void RainOn(ServerWorld& world, const glm::ivec3& pos);
     void RunPump(ServerWorld& world, const glm::ivec3& pump);
+    void RunSpring(ServerWorld& world, const glm::ivec3& spring);
+    // Water lying above the sea on top of the open sea (taken by random ticks).
+    static bool IsAboveSea(const ServerWorld& world, const glm::ivec3& pos);
     // Whether a cell is within `range` chunks of a simulation centre. Edit mutex held.
     bool NearCenter(const glm::ivec3& pos, int range) const;
     void Wake();
@@ -182,7 +195,7 @@ private:
     std::atomic<size_t> pumpCount{0};
 
     std::mt19937 random{0x5EED}; // ticking thread only (fixed seed: tests repeat)
-    std::vector<glm::ivec3> randomChunks, puddles, wet; // tick scratch
+    std::vector<glm::ivec3> randomChunks, puddles, wet, aboveSea; // tick scratch
     std::atomic<bool> raining{false};
     std::atomic<size_t> rainedUnits{0};
     std::atomic<size_t> evaporatedCount{0};
