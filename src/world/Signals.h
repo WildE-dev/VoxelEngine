@@ -13,13 +13,15 @@
 //  - a sluice gate with a channel opens (out of the way, letting water through) while
 //    its channel is on and closes again when it's off, pushing any water in its cell
 //    up or aside (it waits if there's nowhere for the water to go). Without a channel
-//    it stays shut. (A dungeon flood chamber's plate and gates share a channel of their
-//    own: Dungeons::FloodChamberSignals.)
+//    it stays shut. (A dungeon flood chamber's plate sets a latch that opens its gates,
+//    on channels of their own: Dungeons::FloodChamberSignals.)
 //  - a logic gate's inputs.
 // Logic gates work out their output from what they hear on their inputs (a and b),
 // each update, and send it on their output channel from the next: AND, OR, XOR, NOT
 // (of a), RELAY (a, sent on again: to carry a signal further than kRange), and CLOCK
-// (on and off every kClockSeconds while a is on, or always with no a).
+// (on and off every kClockSeconds while a is on, or always with no a), and LATCH (a
+// sets it, b resets it: it turns on when a comes on and stays on, after a goes off,
+// until b comes on; while b is on it's off whatever a does).
 // The server runs it (Server::UpdateSignals, every kInterval seconds), keeps every
 // block's channels, and saves them. Crouch-right-click (or right-click, for those with
 // nothing else to do) opens a window to set them.
@@ -35,7 +37,7 @@ constexpr double kPlateSeconds = 1.0;
 constexpr double kClockSeconds = 1.0;
 
 enum class Kind : uint8_t { None, Lever, Plate, Gate, Lamp, Valve, Sluice };
-enum class Mode : uint8_t { And, Or, Xor, Not, Relay, Clock, Count };
+enum class Mode : uint8_t { And, Or, Xor, Not, Relay, Clock, Latch, Count };
 
 inline Kind KindOf(BlockType t) {
     switch (t) {
@@ -63,7 +65,7 @@ struct Config {
 inline bool Sends(Kind k) { return k == Kind::Lever || k == Kind::Plate || k == Kind::Gate; }
 inline bool Listens(Kind k) { return k == Kind::Lamp || k == Kind::Valve || k == Kind::Sluice || k == Kind::Gate; }
 // How many inputs a gate in this mode uses.
-inline int Inputs(Mode m) { return m == Mode::And || m == Mode::Or || m == Mode::Xor ? 2 : 1; }
+inline int Inputs(Mode m) { return m == Mode::And || m == Mode::Or || m == Mode::Xor || m == Mode::Latch ? 2 : 1; }
 
 inline const char* ModeName(Mode m) {
     switch (m) {
@@ -73,18 +75,21 @@ inline const char* ModeName(Mode m) {
     case Mode::Not: return "NOT";
     case Mode::Relay: return "RELAY";
     case Mode::Clock: return "CLOCK";
+    case Mode::Latch: return "LATCH";
     default: return "?";
     }
 }
 
-// A gate's output for what it hears (a clock is handled by the server).
-inline bool Evaluate(Mode m, bool a, bool b) {
+// A gate's output for what it hears, given what it's sending now (only a latch
+// remembers; a clock is handled by the server).
+inline bool Evaluate(Mode m, bool a, bool b, bool on = false) {
     switch (m) {
     case Mode::And: return a && b;
     case Mode::Or: return a || b;
     case Mode::Xor: return a != b;
     case Mode::Not: return !a;
     case Mode::Relay: return a;
+    case Mode::Latch: return !b && (a || on);
     default: return false;
     }
 }

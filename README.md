@@ -313,12 +313,13 @@ repeats one once it has used them all:
 | Cistern | a deep pit of water with pillars, a ledge all round |
 | Pump room | a pump in a sunken basin with a pipe up into a raised tub (it stands idle until someone brings it air) |
 | Shrine | a lamp on a plinth, pews facing it |
-| Flood chamber | a pressure plate in the floor opens sluice gates in the ceiling (on a channel of their own), and the reservoir above pours in while it's stood on |
+| Flood chamber | a pressure plate in the floor sets a latch gate in the ceiling, which opens the sluice gates beside it and keeps them open: the reservoir above pours in, and goes on pouring after you step off. A lever hidden in a wall by a corner resets the latch (and, left on, disarms the trap) |
 
 **Traps.** Some long corridors have a spike pit across them: either hidden under
 crumbling bricks (three long; they're cracked, if you look) or open (two long, so you
 can jump it). A vault's lit pedestal is ringed by crumbling floor over spikes. Fall in
-and there's no climbing out. Flood chambers flood when you step on their plate.
+and there's no climbing out. Flood chambers flood when you step on their plate, and
+keep flooding until someone finds the lever.
 
 **Loot.** Dungeons hide chests: the prize on every vault's pedestal (past the trap),
 one by each archive's reading table, grave goods at the end of a crypt's aisle,
@@ -947,7 +948,7 @@ channel is heard by everything listening to it within **64 blocks**.
 |---|---|
 | **Lever** | sends on its channel while it's on; right-click flips it |
 | **Pressure plate** | sends while it's stood on, and for a second after |
-| **Logic gate** | listens to one or two channels (A, B) and sends its answer on another: AND, OR, XOR, NOT (of A), RELAY (A again: to carry a signal further than 64 blocks) or CLOCK (on and off each second while A is on, or always with no A) |
+| **Logic gate** | listens to one or two channels (A, B) and sends its answer on another: AND, OR, XOR, NOT (of A), RELAY (A again: to carry a signal further than 64 blocks), CLOCK (on and off each second while A is on, or always with no A) or LATCH (A turns it on and it stays on until B turns it off; while B is on, A can't turn it on) |
 | **Signal lamp** | lights while its channel is on |
 | **Valve** | opens while its channel is on (with no channel, right-click opens and shuts it); see [Air power](#air-power) |
 | **Sluice gate** | with a channel, opens out of the way while it's on, letting water through, and closes when it's off, pushing any water in its cell up or aside (it waits if there's nowhere for it to go); with none, it stays shut |
@@ -967,21 +968,24 @@ a glass and a quarter of a coal.
 The server runs it ten times a second (`Server::UpdateSignals`,
 `src/server/Signals.cpp`; the rules are in `src/world/Signals.h`), keeps every
 block's channels and saves them with the world (world format 11), and tells everyone
-about each block's channels and state as they change (`SignalInfo`, protocol 35).
+about each block's channels and state as they change (`SignalInfo`, protocol 36).
 `SignalTest` checks:
 
 - a lamp lights and goes out with a lever on its channel, and one on another channel
   doesn't;
 - signals don't reach 80 blocks, and a relay gate carries them 82;
 - AND and NOT gates follow two levers, and a clock gate blinks its lamp;
+- a latch gate comes on with A and stays on after it, goes off with B, and won't come
+  on while B is on;
 - a valve without a channel opens by hand; one on a channel opens and shuts with it
   and won't move by hand;
 - a sluice gate on a channel opens, and closes again pushing the water in its cell out
   beside it;
 - a pressure plate lights its lamp while it's stood on, and it goes out after;
-- (and `DungeonTest`, that every flood chamber's plate sends on a channel its nine
-  sluice gates listen to: the server wires them up the first time the plate is
-  stepped on);
+- (and `DungeonTest`, that every flood chamber's plate sets a latch gate in its
+  ceiling that its nine sluice gates listen to, and a lever resets it, each on a
+  channel of its own: the server wires them up the first time the plate is stepped
+  on);
 - a broken block's channels go, and channels are still there after a restart.
 
 ## Beds

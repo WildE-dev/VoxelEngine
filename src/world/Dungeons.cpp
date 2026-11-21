@@ -91,6 +91,13 @@ Box VaultPit(const Room& r) {
 Box Reservoir(const Room& r) {
     return { { r.inner.min.x + 1, r.inner.max.y + 2, r.inner.min.z + 1 }, { r.inner.max.x - 1, r.inner.max.y + 4, r.inner.max.z - 1 } };
 }
+// A flood chamber's latch gate (in the ceiling, beside the sluice gates) and the
+// lever that resets it (in the wall, at head height, by a corner).
+glm::ivec3 FloodLatch(const Room& r) {
+    const glm::ivec3 c = Centre(r.inner);
+    return { c.x + 2, r.inner.max.y + 1, c.z };
+}
+glm::ivec3 FloodLever(const Room& r) { return { r.inner.min.x - 1, r.inner.min.y + 1, r.inner.min.z + 1 }; }
 // A room's extra open part beyond its main space (sunken or raised), if it has one: it
 // gets a shell and is hollowed out with the room.
 bool Annex(const Room& r, Box& out) {
@@ -275,11 +282,15 @@ void Furnish(Stamper& s, const Room& r, const std::vector<Box>& corridors) {
 
     case RoomType::FloodChamber: {
         // A reservoir over the ceiling behind sluice gates, and a pressure plate in the
-        // middle of the floor that opens them (on a channel: FloodChamberSignals).
+        // middle of the floor. The plate sets a latch gate in the ceiling, which opens
+        // the gates and keeps them open; a lever hidden in a wall resets it (and, left
+        // on, disarms the trap). Wired on channels: FloodChamberSignals.
         s.Fill(Reservoir(r), [&](const glm::ivec3& p) { s.Set(p, kFullWater); });
         for (int x = c.x - 1; x <= c.x + 1; x++)
             for (int z = c.z - 1; z <= c.z + 1; z++) s.Set({ x, y1 + 1, z }, Block(BlockType::SLUICE));
         s.Set({ c.x, y0, c.z }, Block::PressurePlate());
+        s.Set(FloodLatch(r), Block(BlockType::LOGIC_GATE));
+        s.SetIfWall(FloodLever(r), Block(BlockType::LEVER));
         s.Fill(Expand(in, 1), [&](const glm::ivec3& p) {
             if (s.IsWall(p) && rnd(p, 6) < 0.5f) s.At(p) = Block(BlockType::MOSSY_BRICK); // damp
         });
@@ -619,15 +630,28 @@ std::vector<std::pair<glm::ivec3, Signals::Config>> FloodChamberSignals(const Te
     for (const auto& r : layout.rooms) {
         if (r.type != RoomType::FloodChamber || !Expand(r.inner, 1).Contains(pos)) continue;
         const glm::ivec3 c = Centre(r.inner);
-        // A channel from the room's seed, high up out of the way of players' own.
-        const uint8_t channel = static_cast<uint8_t>(200 + r.seed % 56);
+        // Channels from the room's seed, high up out of the way of players' own: the
+        // plate's (setting the latch), the lever's (resetting it), and the latch's (to
+        // the sluice gates).
+        auto channel = [&](uint32_t n) { return static_cast<uint8_t>(200 + (r.seed + n) % 56); };
         Signals::Config plate;
         plate.kind = Signals::Kind::Plate;
-        plate.out = channel;
+        plate.out = channel(0);
         out.emplace_back(glm::ivec3(c.x, r.inner.min.y, c.z), plate);
+        Signals::Config lever;
+        lever.kind = Signals::Kind::Lever;
+        lever.out = channel(1);
+        out.emplace_back(FloodLever(r), lever);
+        Signals::Config latch;
+        latch.kind = Signals::Kind::Gate;
+        latch.mode = Signals::Mode::Latch;
+        latch.a = channel(0);
+        latch.b = channel(1);
+        latch.out = channel(2);
+        out.emplace_back(FloodLatch(r), latch);
         Signals::Config gate;
         gate.kind = Signals::Kind::Sluice;
-        gate.a = channel;
+        gate.a = channel(2);
         for (int x = c.x - 1; x <= c.x + 1; x++)
             for (int z = c.z - 1; z <= c.z + 1; z++) out.emplace_back(glm::ivec3(x, r.inner.max.y + 1, z), gate);
     }

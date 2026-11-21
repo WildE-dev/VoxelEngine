@@ -2254,7 +2254,8 @@ void Application::DrawSignalEditor() {
         ImGui::TextDisabled("Channels 1-255 (0: none). Signals reach %.0f blocks.", Signals::kRange);
         if (kind == Signals::Kind::Gate) {
             const char* modes[] = { "AND (on while A and B are)", "OR (on while A or B is)", "XOR (on while just one of A, B is)", "NOT (on while A isn't)",
-                                    "RELAY (sends A on again, further)", "CLOCK (on and off each second while A is on, or always)" };
+                                    "RELAY (sends A on again, further)", "CLOCK (on and off each second while A is on, or always)",
+                                    "LATCH (A turns it on, and it stays on until B turns it off)" };
             ImGui::SetNextItemWidth(360.0f);
             ImGui::Combo("Does", &signalModeIndex, modes, IM_ARRAYSIZE(modes));
             channel("Input A", signalA);

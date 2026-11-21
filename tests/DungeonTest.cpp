@@ -103,7 +103,7 @@ int main() {
     bool interiors = true, corners = true, connected = true, sealed = true, deep = true, shafts = true, pumps = true;
     bool gardens = true, archives = true; // furnished all over, whatever the chunk borders
     bool pitsOk = true, vaultsOk = true, vaultChestsOk = true, floodsOk = true, floodWired = true;
-    int coveredPits = 0, openPits = 0, vaults = 0, floods = 0;
+    int coveredPits = 0, openPits = 0, vaults = 0, floods = 0, floodLevers = 0;
     int checked = 0, withShaft = 0, pumpRooms = 0, rooms = 0;
     std::map<std::string, int> typeCounts;
     for (const auto& entry : dungeons) {
@@ -176,16 +176,26 @@ int main() {
                 if (world.Get({ c.x, lo.y, c.z }).type != BlockType::PRESSURE_PLATE || world.Get({ c.x, hi.y + 1, c.z }).type != BlockType::SLUICE ||
                     !world.Get({ c.x, hi.y + 2, c.z }).IsFullWater() || !world.Get({ lo.x + 1, hi.y + 4, lo.z + 1 }).IsFullWater())
                     floodsOk = false;
-                // Wired: the plate sends on a channel, and each of the 9 sluice gates
-                // (where they really are) listens to it.
+                // Wired: the plate sets a latch gate (really there, in the ceiling), a
+                // lever resets it, and each of the 9 sluice gates (where they really
+                // are) listens to the latch.
                 const auto wiring = Dungeons::FloodChamberSignals(world.terrain, { c.x, lo.y, c.z });
-                int plates = 0, gates = 0;
-                uint8_t channel = 0;
+                int plates = 0, latches = 0, gates = 0;
+                uint8_t plateChannel = 0, leverChannel = 0, latchChannel = 0;
+                for (const auto& [p, config] : wiring) {
+                    if (config.kind == Signals::Kind::Plate && p == glm::ivec3(c.x, lo.y, c.z)) plates++, plateChannel = config.out;
+                    if (config.kind == Signals::Kind::Lever) leverChannel = config.out;
+                }
                 for (const auto& [p, config] : wiring)
-                    if (config.kind == Signals::Kind::Plate && p == glm::ivec3(c.x, lo.y, c.z)) plates++, channel = config.out;
+                    if (config.kind == Signals::Kind::Gate && config.mode == Signals::Mode::Latch && config.a == plateChannel && config.b == leverChannel &&
+                        p.y == hi.y + 1 && world.Get(p).type == BlockType::LOGIC_GATE)
+                        latches++, latchChannel = config.out;
                 for (const auto& [p, config] : wiring)
-                    if (config.kind == Signals::Kind::Sluice && config.a == channel && world.Get(p).type == BlockType::SLUICE) gates++;
-                if (plates != 1 || channel == 0 || gates != 9) floodWired = false;
+                    if (config.kind == Signals::Kind::Sluice && config.a == latchChannel && world.Get(p).type == BlockType::SLUICE) gates++;
+                const std::set<uint8_t> channels{ plateChannel, leverChannel, latchChannel };
+                if (plates != 1 || latches != 1 || gates != 9 || channels.size() != 3 || channels.count(0)) floodWired = false;
+                for (const auto& [p, config] : wiring)
+                    if (config.kind == Signals::Kind::Lever && world.Get(p).type == BlockType::LEVER) floodLevers++;
             }
             // Well below the ground at the room's corners.
             for (const glm::ivec2 c : { glm::ivec2(lo.x, lo.z), glm::ivec2(hi.x, hi.z), glm::ivec2(lo.x, hi.z), glm::ivec2(hi.x, lo.z) })
@@ -278,7 +288,8 @@ int main() {
         Check(Dungeons::LootFor(world.terrain, any) == Dungeons::LootFor(world.terrain, any), "the same chest always rolls the same loot");
     }
     Check(floodsOk && floods > 0, std::to_string(floods) + " flood chambers with a plate, sluice gates and a full reservoir");
-    Check(floodWired, "each flood chamber's plate sends on a channel its 9 sluice gates listen to");
+    Check(floodWired, "each flood chamber's plate sets a latch gate in the ceiling, which its 9 sluice gates listen to, and a lever resets it");
+    Check(floodLevers * 2 >= floods, std::to_string(floodLevers) + " of them have the lever in the wall (a doorway can take its place)");
     Check(gardens, "gardens are planted all over");
     Check(archives, "archive shelves are exactly where the layout puts them (all along the walls, gaps and doorways aside)");
     Check(pumps && pumpRooms > 0, std::to_string(pumpRooms) + " pump rooms have a pump under water with a pipe beside it");

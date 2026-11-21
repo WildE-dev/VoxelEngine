@@ -193,6 +193,28 @@ int main() {
             return sawOn && sawOff && lit(clockLamp);
         });
         Check(sawOn && sawOff, "and its lamp blinks");
+        const glm::ivec3 latch{ 8, 0, 19 }, latchLamp{ 10, 0, 19 };
+        fill(latch, "logic_gate");
+        fill(latchLamp, "signal_lamp");
+        pump(10.0, [&] { return blockAt(latchLamp) == BlockType::SIGNAL_LAMP; });
+        goTo(8.5f, 12.5f);
+        Check(configure(latch, Signals::Kind::Gate, 5, 2, 10, Signals::Mode::Latch) && configure(latchLamp, Signals::Kind::Lamp, 10, 0, 0),
+              "a latch (set by 5, reset by 2) sends on 10");
+        flip(lever2, false);
+        wait(0.5);
+        Check(!lit(latchLamp), "it starts off");
+        flip(lever1, true);
+        Check(pump(5.0, [&] { return lit(latchLamp); }), "5 sets it");
+        flip(lever1, false);
+        wait(0.5);
+        Check(lit(latchLamp), "and it stays on after 5 goes off");
+        flip(lever2, true);
+        Check(pump(5.0, [&] { return !lit(latchLamp); }), "2 resets it");
+        flip(lever1, true);
+        wait(0.5);
+        Check(!lit(latchLamp), "and while 2 is on, 5 can't set it");
+        flip(lever1, false);
+        goTo(8.5f, 17.5f);
 
         std::cout << "Valves" << std::endl;
         const glm::ivec3 valve{ 8, 0, 20 }, handValve{ 9, 0, 20 };

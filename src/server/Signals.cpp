@@ -163,7 +163,7 @@ void Server::UpdateSignals() {
                 else if (now >= s.clockAt) next = !s.on, s.clockAt = now + Signals::kClockSeconds;
                 else next = s.on;
             }
-            else next = Signals::Evaluate(c.mode, a, hears(c.b, pos));
+            else next = Signals::Evaluate(c.mode, a, hears(c.b, pos), s.on);
             if (next != s.on) gateOutputs.emplace_back(pos, next);
             break;
         }

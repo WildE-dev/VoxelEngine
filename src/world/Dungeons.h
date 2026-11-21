@@ -92,7 +92,9 @@ Layout LayoutFor(const TerrainGenerator& terrain, int regionX, int regionZ);
 std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos);
 
 // A flood chamber's wiring (world/Signals.h): if `pos` is in one, its pressure plate
-// sends on a channel of its own and its sluice gates listen to it. Empty elsewhere.
+// sets a latch gate (in the ceiling) that opens its sluice gates and keeps them open,
+// and a lever in a wall resets the latch, each on channels of the room's own. Empty
+// elsewhere.
 // The server sets these up the first time the plate is stepped on.
 std::vector<std::pair<glm::ivec3, Signals::Config>> FloodChamberSignals(const TerrainGenerator& terrain, const glm::ivec3& pos);
 

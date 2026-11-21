@@ -1,4 +1,5 @@
 #include "net/Protocol.h"
+#include "world/Signals.h"
 
 #include <algorithm>
 #include <cmath>
@@ -295,7 +296,7 @@ std::vector<uint8_t> Encode(const SignalInfo& m, bool configure) {
 
 bool Decode(ByteReader& in, SignalInfo& m) {
     return in.IVec3(m.pos) && in.U8(m.kind) && in.U8(m.mode) && in.U8(m.a) && in.U8(m.b) && in.U8(m.out) && in.U8(m.on) && in.U8(m.erased) &&
-           m.kind <= 6 && m.mode < 6 && m.on <= 1 && m.erased <= 1 && in.AtEnd();
+           m.kind <= 6 && m.mode < static_cast<uint8_t>(Signals::Mode::Count) && m.on <= 1 && m.erased <= 1 && in.AtEnd();
 }
 
 std::vector<uint8_t> Encode(const Machines& m) {
