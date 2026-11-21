@@ -98,7 +98,7 @@ bool CreatureSystem::Damage(uint16_t id, int damage, const glm::vec3& from, doub
     c.velocity.z = away.y * 6.0f;
     c.velocity.y = 5.0f;
     c.onGround = false;
-    if (c.type == CreatureType::Deer) {
+    if (c.type == CreatureType::Deer || c.type == CreatureType::Bat) {
         c.fleeUntil = now + 5.0;
         c.fleeFrom = eye;
     }
@@ -207,6 +207,18 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
         return;
     }
 
+    if (c.type == CreatureType::Bat) {
+        // Flits: a new direction every second or so (never resting).
+        if (now >= c.nextDecision) {
+            c.nextDecision = now + 0.6 + unit(rng);
+            const float a = unit(rng) * 6.2831853f;
+            c.wander = glm::vec2(std::cos(a), std::sin(a));
+        }
+        move = c.wander;
+        speed = now < c.fleeUntil ? spec.runSpeed : spec.walkSpeed;
+        return;
+    }
+
     if (c.type == CreatureType::Deer) {
         if (now < c.fleeUntil) {
             glm::vec2 away(c.feet.x - c.fleeFrom.x, c.feet.z - c.fleeFrom.z);
@@ -260,6 +272,25 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
 
 void CreatureSystem::Move(ServerWorld& world, Creature& c, const glm::vec2& move, float speed, float dt) {
     const CreatureSpec& spec = SpecOf(c.type);
+    if (c.type == CreatureType::Bat) {
+        // Flies: no gravity, a fluttering wander in three dimensions, bouncing off what
+        // it meets.
+        std::uniform_real_distribution<float> unit(-1.0f, 1.0f);
+        const glm::vec3 want(move.x * speed, std::sin(static_cast<float>(clock) * 2.3f + c.id) * 1.2f + unit(rng) * 0.6f, move.y * speed);
+        c.velocity += (want - c.velocity) * std::min(1.0f, dt * 3.0f);
+        if (glm::length(move) > 0.1f) c.yaw = glm::degrees(std::atan2(move.y, move.x));
+        for (int axis = 0; axis < 3; axis++) {
+            glm::vec3 next = c.feet;
+            next[axis] += c.velocity[axis] * dt;
+            if (Collision::BoxBlocked(world, BoxAt(next, spec))) {
+                c.velocity[axis] = -c.velocity[axis] * 0.5f;
+                if (axis != 1) c.wander = -c.wander;
+            }
+            else c.feet = next;
+        }
+        c.onGround = false;
+        return;
+    }
     // Steer toward the wanted velocity: firmly on the ground, barely in the air (so a
     // knockback carries).
     const glm::vec2 want = move * speed;
@@ -369,7 +400,10 @@ void CreatureSystem::SpawnNaturally(ServerWorld& world, const std::vector<Player
                 const float light = std::max(static_cast<float>(block), sky * (daylight > 0.5f ? 1.0f : 0.25f));
                 const glm::vec3 at(x + 0.5f, static_cast<float>(y), z + 0.5f);
                 if (light <= 4.0f && farFromPlayers(at)) {
-                    Spawn(unit(rng) < 0.3f ? CreatureType::Skeleton : CreatureType::Ghoul, at); // three in ten are skeletons
+                    // Underground (no sky at all), now and then bats instead; three in
+                    // ten of the rest are skeletons.
+                    if (sky == 0 && unit(rng) < 0.3f) Spawn(CreatureType::Bat, at + glm::vec3(0.0f, 1.0f, 0.0f));
+                    else Spawn(unit(rng) < 0.3f ? CreatureType::Skeleton : CreatureType::Ghoul, at);
                     hostiles++;
                 }
                 break;

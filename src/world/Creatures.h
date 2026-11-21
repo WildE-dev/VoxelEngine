@@ -7,6 +7,7 @@
 //    survival players nearby. Daylight burns them.
 //  - Skeletons come out in the dark too, but keep their distance and shoot arrows.
 //    Daylight burns them as well.
+//  - Bats flutter about in the dark of caves, harmless.
 //  - Wolves roam in pairs and leave you be unless you hit one. Fed raw venison, a wolf
 //    is tamed: it follows its owner and fights the ghouls and skeletons near them.
 #include <cstdint>
@@ -14,7 +15,7 @@
 
 #include "world/Mining.h"
 
-enum class CreatureType : uint8_t { Deer, Ghoul, Skeleton, Wolf, Count };
+enum class CreatureType : uint8_t { Deer, Ghoul, Skeleton, Wolf, Bat, Count };
 
 struct CreatureSpec {
     const char* name;  // "Deer"
@@ -35,6 +36,7 @@ inline const CreatureSpec& SpecOf(CreatureType type) {
         { "Ghoul", "ghoul", 0.3f, 1.8f, 12, 1.2f, 3.4f, true, 3, 0.9f },
         { "Skeleton", "skeleton", 0.3f, 1.8f, 10, 1.2f, 3.0f, true, 0, 0.0f }, // (shoots instead)
         { "Wolf", "wolf", 0.32f, 0.85f, 16, 1.6f, 5.2f, false, 3, 0.8f },     // (bites when provoked, or for its owner)
+        { "Bat", "bat", 0.2f, 0.4f, 4, 2.5f, 4.0f, false, 0, 0.0f },          // (flutters about caves)
     };
     const int t = static_cast<int>(type);
     return specs[t >= 0 && t < static_cast<int>(CreatureType::Count) ? t : 0];

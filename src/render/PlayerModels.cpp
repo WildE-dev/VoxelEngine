@@ -268,6 +268,16 @@ void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const gl
             }
             box(base, { -0.58f, 0.98f, 0.0f }, { 0.08f, 0.14f, 0.12f }, pale);         // tail
         }
+        else if (c.type == 4) { // Bat: a little dark body, ears, and wings flapping fast
+            const glm::vec3 fur(0.18f, 0.15f, 0.14f), wing(0.12f, 0.1f, 0.1f);
+            box(base, { 0.0f, 0.2f, 0.0f }, { 0.18f, 0.16f, 0.14f }, fur);
+            for (float z : { -0.04f, 0.04f }) box(base, { 0.06f, 0.31f, z }, { 0.03f, 0.06f, 0.03f }, fur);
+            const float flap = std::sin(time * 28.0f + c.feet.x) * 0.7f;
+            for (float side : { -1.0f, 1.0f }) {
+                const glm::mat4 w = glm::rotate(glm::translate(base, { 0.0f, 0.22f, side * 0.07f }), side * flap, glm::vec3(1, 0, 0));
+                box(w, { 0.0f, 0.0f, side * 0.16f }, { 0.16f, 0.02f, 0.32f }, wing);
+            }
+        }
         else if (c.type == 3) { // Wolf: grey, low and long, with a snout, ears and a bushy tail
             const glm::vec3 fur(0.55f, 0.55f, 0.56f), darkFur(0.4f, 0.4f, 0.42f), pale(0.8f, 0.8f, 0.78f);
             box(base, { 0.0f, 0.55f, 0.0f }, { 0.8f, 0.34f, 0.36f }, fur);           // body

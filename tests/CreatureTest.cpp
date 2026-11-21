@@ -183,6 +183,15 @@ int main() {
         server.QueueConsoleCommand("gamemode creative Hunter");
         both(20.0, [&] { return a.client.GetCreatures().empty() && a.client.IsCreative(); });
 
+        std::cout << "Bats" << std::endl;
+        server.QueueConsoleCommand("summon bat 12.5 6 12.5");
+        Check(both(20.0, [&] { return a.Find(CreatureType::Bat) != nullptr; }), "a bat is summoned in mid air");
+        both(3.0, [] { return false; });
+        Check(a.Find(CreatureType::Bat) && a.Find(CreatureType::Bat)->feet.y > 1.0f, "and flies about rather than falling (at " +
+                                                                                      std::to_string(a.Find(CreatureType::Bat) ? a.Find(CreatureType::Bat)->feet.y : -1.0f) + ")");
+        server.QueueConsoleCommand("creatures clear");
+        both(20.0, [&] { return a.client.GetCreatures().empty(); });
+
         std::cout << "Wolves" << std::endl;
         server.QueueConsoleCommand("time noon");
         server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");

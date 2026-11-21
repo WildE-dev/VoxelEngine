@@ -636,6 +636,10 @@ seconds, aimed high enough to allow for its drop. Their arrows hurt whatever the
 (PvP or not). A skeleton has 5 hearts, and killing one leaves you two arrows.
 `/summon skeleton` brings one.
 
+**Bats** flutter about in the dark of caves (three in ten creatures spawned where no
+sky reaches), flitting in a new direction every second or so and darting away when
+hit. They're harmless. `/summon bat` brings one.
+
 **Wolves** roam grassland in pairs (now and then in place of a herd of deer) and leave
 you alone, unless you hit one: then it goes for you for twenty seconds (1.5 hearts a
 bite). Right-click a wild wolf with raw venison in your hand to tame it (it eats one).
