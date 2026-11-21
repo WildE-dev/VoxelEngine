@@ -145,7 +145,7 @@ private:
     std::unique_ptr<Audio> audio;
     bool joined = false; // Welcome received and handled
     // Sounds: where our feet were and how far they've walked since the last step,
-    // others' steps likewise, creature states (hurt, next groan).
+    // others' steps likewise, creature states (hurt, next grunt).
     glm::vec3 lastFeet{ 0.0f };
     float stepDistance = 0.0f;
     bool wasSwimming = false;

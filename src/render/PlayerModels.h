@@ -97,7 +97,7 @@ public:
     PlayerModels& operator=(const PlayerModels&) = delete;
 
     void Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<PlayerModel>& players);
-    // Creatures, from boxes too: a deer, a ghoul. `time` swings their legs.
+    // Creatures, from boxes too: deer, wolves, bats and dwarves. `time` swings their legs.
     void DrawArrows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ArrowModel>& arrows);
     void DrawGlows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GlowModel>& glows);
     void DrawWheels(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<WheelModel>& wheels);

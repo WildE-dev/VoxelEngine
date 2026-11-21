@@ -352,7 +352,7 @@ int main() {
         Check(pump(5.0, [&] { return !lit(dayLamp); }), "and goes off with a roof over it");
 
         std::cout << "Creatures" << std::endl;
-        // A ghoul penned on a pressure plate, with a creature-sensing player sensor and a
+        // A dwarf penned on a pressure plate, with a creature-sensing player sensor and a
         // players-only one beside the pen; another penned on spikes.
         server.QueueConsoleCommand("time midnight");
         server.QueueConsoleCommand("fill 39 0 39 41 1 41 stone");
@@ -375,16 +375,16 @@ int main() {
         goTo(42.5f, 56.5f);
         auto ghouls = [&] {
             int n = 0;
-            for (const auto& c : a.client.GetCreatures()) n += c.type == CreatureType::Ghoul;
+            for (const auto& c : a.client.GetCreatures()) n += c.type == CreatureType::DwarfWarrior;
             return n;
         };
-        server.QueueConsoleCommand("summon ghoul 40.5 0 40.5");
-        Check(pump(5.0, [&] { return ghouls() == 1; }), "a ghoul is penned on the plate");
+        server.QueueConsoleCommand("summon dwarf 40.5 0 40.5");
+        Check(pump(5.0, [&] { return ghouls() == 1; }), "a dwarf is penned on the plate");
         Check(pump(5.0, [&] { return lit(plateLamp2); }), "it presses the plate: its lamp lights");
         Check(pump(5.0, [&] { return lit(creatureLamp); }), "the sensor set to sense creatures sees it");
         wait(0.5);
         Check(!lit(playerOnlyLamp), "the players-only sensor doesn't");
-        server.QueueConsoleCommand("summon ghoul 46.5 0 40.5");
+        server.QueueConsoleCommand("summon dwarf 46.5 0 40.5");
         Check(pump(5.0, [&] { return ghouls() == 2; }), "another is penned on spikes");
         Check(pump(10.0, [&] { return ghouls() == 1; }), "the spikes kill it");
 

@@ -247,8 +247,14 @@ enum class BlockType : uint8_t {
     REFINERY,
     ENGINE,
     FLUID_OUTLET,
+    // A mining post: a chest that hires dwarf miners. Put cooked food in it (their
+    // pay) and up to two dwarves come to work it, digging the ore within reach of it
+    // and putting it in the post (see Server::UpdateMiningPosts).
+    MINING_POST,
     COUNT
 };
+// Blocks that hold things like a chest (opened, filled, emptied, broken open).
+inline bool IsStorageType(BlockType t) { return t == BlockType::CHEST || t == BlockType::MINING_POST; }
 
 // Solid blocks drawn by a model of their own (turning wheels and shafts), and pipes
 // drawn as thin tubes: neither hides what's beside it or blocks light.

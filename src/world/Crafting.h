@@ -94,6 +94,7 @@ inline const std::vector<Recipe>& Recipes() {
         { "air_pipe", "4 air pipes", { { BlockType::STONE, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::AIR_PIPE, 4 * kBlock },
         { "smelter", "Smelter", { { BlockType::STONE_BRICK, 4 * kBlock }, { BlockType::IRON_INGOT, kBlock } }, BlockType::SMELTER, kBlock },
         { "item_pipe", "4 item pipes", { { BlockType::PLANKS, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::ITEM_PIPE, 4 * kBlock },
+        { "mining_post", "Mining post", { { BlockType::PLANKS, 4 * kBlock }, { BlockType::IRON_INGOT, kBlock } }, BlockType::MINING_POST, kBlock },
         // Oil and fluids (world/Fluids.h).
         { "fluid_pipe", "4 fluid pipes", { { BlockType::IRON_INGOT, kBlock / 4 }, { BlockType::GLASS, kBlock / 4 } }, BlockType::FLUID_PIPE, 4 * kBlock },
         { "fluid_tank", "Fluid tank", { { BlockType::IRON_INGOT, 2 * kBlock }, { BlockType::GLASS, kBlock } }, BlockType::FLUID_TANK, kBlock },

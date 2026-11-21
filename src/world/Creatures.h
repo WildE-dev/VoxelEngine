@@ -3,19 +3,24 @@
 // runs them, see server/Creatures.h) and the client (which draws them and aims at
 // them).
 //  - Deer wander grassland in herds and run from whoever hits them.
-//  - Ghouls come out in the dark (caves, dungeons, the surface at night) and go for
-//    survival players nearby. Daylight burns them.
-//  - Skeletons come out in the dark too, but keep their distance and shoot arrows.
-//    Daylight burns them as well.
+//  - Dwarves are the enemies, all of them: they live in camps on the surface and in
+//    mines underground (world/Dwarves.h), guard them, and go for survival players
+//    who come near. Dwarf warriors fight with axes; dwarf crossbowmen keep their
+//    distance and shoot bolts; a dwarf chieftain, big and tough, holds each camp. On a
+//    horde night a war band comes looking for players.
+//  - Dwarf miners don't fight: hired at a mining post, they dig ore for you.
 //  - Bats flutter about in the dark of caves, harmless.
 //  - Wolves roam in pairs and leave you be unless you hit one. Fed raw venison, a wolf
-//    is tamed: it follows its owner and fights the ghouls and skeletons near them.
+//    is tamed: it follows its owner and fights the hostile dwarves near them.
 #include <cstdint>
 #include <string>
 
 #include "world/Mining.h"
 
-enum class CreatureType : uint8_t { Deer, Ghoul, Skeleton, Wolf, Bat, Count };
+enum class CreatureType : uint8_t { Deer, DwarfWarrior, DwarfCrossbow, Wolf, Bat, DwarfChief, DwarfMiner, Count };
+inline bool IsDwarf(CreatureType t) {
+    return t == CreatureType::DwarfWarrior || t == CreatureType::DwarfCrossbow || t == CreatureType::DwarfChief || t == CreatureType::DwarfMiner;
+}
 
 struct CreatureSpec {
     const char* name;  // "Deer"
@@ -33,10 +38,12 @@ struct CreatureSpec {
 inline const CreatureSpec& SpecOf(CreatureType type) {
     static const CreatureSpec specs[] = {
         { "Deer", "deer", 0.45f, 1.3f, 8, 1.6f, 5.5f, false, 0, 0.0f },
-        { "Ghoul", "ghoul", 0.3f, 1.8f, 12, 1.2f, 3.4f, true, 3, 0.9f },
-        { "Skeleton", "skeleton", 0.3f, 1.8f, 10, 1.2f, 3.0f, true, 0, 0.0f }, // (shoots instead)
-        { "Wolf", "wolf", 0.32f, 0.85f, 16, 1.6f, 5.2f, false, 3, 0.8f },     // (bites when provoked, or for its owner)
-        { "Bat", "bat", 0.2f, 0.4f, 4, 2.5f, 4.0f, false, 0, 0.0f },          // (flutters about caves)
+        { "Dwarf warrior", "dwarf", 0.36f, 1.4f, 14, 1.1f, 3.3f, true, 3, 0.9f },
+        { "Dwarf crossbowman", "crossbow_dwarf", 0.36f, 1.4f, 10, 1.1f, 2.9f, true, 0, 0.0f }, // (shoots instead)
+        { "Wolf", "wolf", 0.32f, 0.85f, 16, 1.6f, 5.2f, false, 3, 0.8f },                    // (bites when provoked, or for its owner)
+        { "Bat", "bat", 0.2f, 0.4f, 4, 2.5f, 4.0f, false, 0, 0.0f },                         // (flutters about caves)
+        { "Dwarf chieftain", "dwarf_chief", 0.42f, 1.6f, 32, 1.0f, 3.0f, true, 5, 1.0f },
+        { "Dwarf miner", "dwarf_miner", 0.36f, 1.4f, 14, 1.2f, 2.5f, false, 0, 0.0f },       // (works a mining post)
     };
     const int t = static_cast<int>(type);
     return specs[t >= 0 && t < static_cast<int>(CreatureType::Count) ? t : 0];

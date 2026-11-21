@@ -81,7 +81,7 @@ struct Config {
 inline bool IsSensor(Kind k) { return k == Kind::WaterSensor || k == Kind::PressureSensor || k == Kind::DaylightSensor || k == Kind::PlayerSensor; }
 inline bool Sends(Kind k) { return k == Kind::Lever || k == Kind::Plate || k == Kind::Gate || IsSensor(k); }
 inline bool Listens(Kind k) { return k == Kind::Lamp || k == Kind::Valve || k == Kind::Sluice || k == Kind::Gate || k == Kind::Piston; }
-// A player sensor whose mode is Or senses hostile creatures (ghouls, skeletons) too.
+// A player sensor whose mode is Or senses hostile dwarves too.
 inline bool SensesCreatures(const Config& c) { return c.kind == Kind::PlayerSensor && c.mode == Mode::Or; }
 // Whether a kind has a setting in b (besides a gate's second input).
 inline bool HasSetting(Kind k) { return k == Kind::PressureSensor || k == Kind::PlayerSensor; }

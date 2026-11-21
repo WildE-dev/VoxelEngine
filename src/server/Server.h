@@ -68,7 +68,7 @@ class WorldStorage;
 // Crafting (world/Crafting.h): survival players turn resources into other blocks and
 // make tools, which they need to have to use.
 //
-// Creatures (server/Creatures.h): deer and ghouls, run here and sent to the players
+// Creatures (server/Creatures.h): deer, wolves, bats and dwarves, run here and sent to the players
 // near them every tick; players hit them with Attack.
 //
 // Mining (HandleMineStart, HandleBreak): in survival breaking a block takes time
@@ -489,6 +489,24 @@ private:
     std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> plateSignal; // plates sending until then
     double nextSignalUpdate = 0.0;
     void UpdateSignals();
+    // Mining posts (world/Block.h; the code is in Miners.cpp): while a post holds pay
+    // (cooked food), up to kMaxMiners dwarf miners come and work it, each digging the
+    // nearest ore within kPostRadius of it every kMinerInterval seconds into the post,
+    // for kMinerPay units of food. Unpaid for kUnpaidLeave seconds, they leave.
+    static constexpr int kMaxMiners = 2;
+    static constexpr int kPostRadius = 12;
+    static constexpr double kMinerInterval = 5.0;
+    static constexpr uint32_t kMinerPay = 16; // a quarter of a block of food for each ore
+    static constexpr double kUnpaidLeave = 30.0;
+    struct MiningPost {
+        std::vector<uint16_t> miners;
+        std::vector<double> nextDig;
+        double nextArrival = 0.0, unpaidSince = -1.0;
+        Power::DrillState state = Power::DrillState::Idle; // Working, NoPressure (no pay), Done (no ore left in reach)
+    };
+    std::unordered_map<glm::ivec3, MiningPost, Coords::IVec3Hash> miningPosts;
+    double nextMinersUpdate = 0.0;
+    void UpdateMiningPosts();
     // VOXEL_BENCH timings (Tick): seconds in each part this second, ticks, the worst.
     double benchSections[6] = {};
     int benchTicks = 0;

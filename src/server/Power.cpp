@@ -26,6 +26,7 @@ bool StopsDrill(const Block& b) {
     if (b.IsLiquid() || b.HasWater()) return true;
     switch (b.type) {
     case BlockType::CHEST:
+    case BlockType::MINING_POST:
     case BlockType::BED:
     case BlockType::DOOR:
     case BlockType::DOOR_OPEN:
@@ -351,7 +352,7 @@ std::vector<glm::ivec3> Server::ChestsJoined(const glm::ivec3& pos, BlockType ty
             Block b;
             if (seen.count(n) || !world->GetBlock(n.x, n.y, n.z, b)) continue;
             seen.insert(n);
-            if (b.type == BlockType::CHEST) chestsFound.push_back(n);
+            if (IsStorageType(b.type)) chestsFound.push_back(n);
             else if (b.type == BlockType::ITEM_PIPE) pipes.push_back(n);
             else if (b.type == BlockType::FILTER_PIPE && (b.FilterType() == BlockType::AIR || (type != BlockType::COUNT && b.FilterType() == type))) pipes.push_back(n);
         }
@@ -361,7 +362,7 @@ std::vector<glm::ivec3> Server::ChestsJoined(const glm::ivec3& pos, BlockType ty
 bool Server::Extract(const glm::ivec3& pos, const Block& extractor, Worker& w) {
     const glm::ivec3 from = pos + extractor.Facing(), back = -extractor.Facing();
     Block source;
-    if (!world->GetBlock(from.x, from.y, from.z, source) || source.type != BlockType::CHEST) {
+    if (!world->GetBlock(from.x, from.y, from.z, source) || !IsStorageType(source.type)) {
         w.state = Power::DrillState::NoChest;
         return false;
     }
@@ -657,6 +658,7 @@ bool Server::Movable(const glm::ivec3& pos, const Block& b) const {
     if (signalBlocks.count(pos) || Signals::KindOf(b.type) != Signals::Kind::None) return false;
     switch (b.type) {
     case BlockType::CHEST:
+    case BlockType::MINING_POST:
     case BlockType::BED:
     case BlockType::DOOR:
     case BlockType::DOOR_OPEN:
@@ -759,6 +761,12 @@ void Server::SendMachines() {
                     info.pressure = fn.capacity > 0 ? ToByte(static_cast<float>(fn.amount) / fn.capacity) : 0;
                     info.depth = static_cast<uint8_t>(fn.kind);
                 }
+            }
+            else if (auto mp = miningPosts.find(pos); mp != miningPosts.end()) {
+                // state: working, unpaid (NoPressure) or no ore; depth: how many miners.
+                info.type = static_cast<uint8_t>(BlockType::MINING_POST);
+                info.state = static_cast<uint8_t>(mp->second.state);
+                info.depth = static_cast<uint8_t>(mp->second.miners.size());
             }
             else if (Block ft; world->GetBlock(pos.x, pos.y, pos.z, ft) && ft.type == BlockType::FLUID_TANK) {
                 // pressure: how full; depth: of what.

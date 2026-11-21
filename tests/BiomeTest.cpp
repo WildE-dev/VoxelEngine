@@ -10,6 +10,8 @@
 //  - frozen seas have ice over water, swamps have shallow standing water,
 //  - nothing floats: trunks and cacti stand on something, plants on their ground,
 //  - pebbles lie about on solid ground,
+//  - dwarf camps and mines are built whole (a camp's fire, chest and palisade; a
+//    mine's shaft, ladder, tunnels and chests),
 //  - lakes overflow from springs, whose rivers run in sandy, watered channels to
 //    drains.
 #include <algorithm>
@@ -23,6 +25,7 @@
 #include <unordered_map>
 
 #include "world/Coords.h"
+#include "world/Dwarves.h"
 #include "world/TerrainGenerator.h"
 
 namespace {
@@ -245,6 +248,36 @@ int main() {
     Check(riverColumns > 50 && riverRight * 10 >= riverColumns * 9,
           "river pools have sand beds with water over them (" + std::to_string(riverRight) + " of " + std::to_string(riverColumns) + " pool columns looked at)");
     std::cout << "        " << world.generated << " chunks generated, " << world.seconds * 1000.0 / world.generated << " ms each" << std::endl;
+
+    // Dwarf camps and mines: a camp's fire, chest and palisade; a mine's open shaft with
+    // its ladder, its tunnels, and a chest at each tunnel's end.
+    int camps = 0, mines = 0, campsRight = 0, minesRight = 0;
+    for (int rx = -6; rx <= 6; rx++)
+        for (int rz = -6; rz <= 6; rz++) {
+            const auto r = Dwarves::SiteIn(t, rx, rz);
+            if (!r.exists) continue;
+            const glm::ivec3 c = r.site.centre;
+            bool right = true;
+            for (const auto& chest : r.site.chests) right = right && world.Get(chest).type == BlockType::CHEST;
+            if (r.site.kind == Dwarves::SiteKind::Camp) {
+                if (camps >= 4) continue;
+                camps++;
+                right = right && world.Get(c).type == BlockType::CAMPFIRE;
+                int logs = 0;
+                for (int d = -7; d <= 7; d++) logs += (world.Get(c + glm::ivec3(d, 0, 7)).type == BlockType::LOG) + (world.Get(c + glm::ivec3(7, 0, d)).type == BlockType::LOG);
+                right = right && logs >= 3;
+                campsRight += right;
+            }
+            else {
+                if (mines >= 4) continue;
+                mines++;
+                right = right && world.Get({ c.x, r.bottom, c.z }).IsAir() && world.Get({ c.x - 1, r.bottom, c.z }).type == BlockType::LADDER;
+                for (const auto& [d, length] : r.tunnels) right = right && world.Get(glm::ivec3(c.x, r.bottom + 1, c.z) + d * (2 + length / 2)).IsAir();
+                minesRight += right;
+            }
+        }
+    Check(camps > 0 && campsRight == camps, "dwarf camps have their fire, chest and palisade (" + std::to_string(campsRight) + " of " + std::to_string(camps) + ")");
+    Check(mines > 0 && minesRight == mines, "dwarf mines have an open shaft with a ladder, tunnels and chests (" + std::to_string(minesRight) + " of " + std::to_string(mines) + ")");
 
     std::cout << (failures ? "BIOME TEST FAILED (" : "ALL BIOME CHECKS PASSED (") << failures << " failures)" << std::endl;
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;

@@ -324,6 +324,7 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* REFINERY    */ {{ "refinery_out", "refinery_in", "refinery_side", "refinery_side", "refinery_side", "refinery_side" }},
     /* ENGINE      */ {{ "engine_top", "engine_top", "engine_side", "engine_side", "engine_side", "engine_side" }},
     /* FLUID_OUTLET */ {{ "outlet_face", "outlet_back", "outlet_side", "outlet_side", "outlet_side", "outlet_side" }},
+    /* MINING_POST */ {{ "mining_post_top", "planks", "mining_post_side", "mining_post_side", "mining_post_side", "mining_post_side" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -359,7 +360,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "piston", "piston_head", "water_sensor", "pressure_sensor", "daylight_sensor", "player_sensor",
     "item_pipe", "smelter", "smelter_lit", "spring", "steel_ingot",
     "extractor", "filter_pipe", "crafter", "harvester", "drain", "sinkhole", "pressure_gauge",
-    "oil_shale", "tar", "fluid_pipe", "fluid_tank", "oil_derrick", "refinery", "engine", "fluid_outlet",
+    "oil_shale", "tar", "fluid_pipe", "fluid_tank", "oil_derrick", "refinery", "engine", "fluid_outlet", "mining_post",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");

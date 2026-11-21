@@ -104,7 +104,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Operator, "/gamemode <creative|survival> [player] - creative: anything, unhurt; survival: collect what you build with" },
     { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64), or /give <tool|cap|tunic|boots> [player]" },
     { Level::Operator, "/fill <x1 y1 z1> <x2 y2 z2> <block> - fill a box with a block (air clears it; up to 32768 cells)" },
-    { Level::Operator, "/summon <deer|ghoul|skeleton> [x y z] - bring a creature (default: a few blocks ahead of you)" },
+    { Level::Operator, "/summon <deer|wolf|bat|dwarf|crossbow_dwarf|dwarf_chief|dwarf_miner> [x y z] - bring a creature (default: a few blocks ahead of you)" },
     { Level::Operator, "/locate <spring|sinkhole|oil> - where the nearest spring (a lake's overflow), sinkhole (where its river ends) or oil is" },
     { Level::Everyone, "/horde - whether tonight is a horde night" },
     { Level::Operator, "/horde <on|off> - start or end a horde night" },
@@ -363,9 +363,9 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
                 for (int z = lo.z; z <= hi.z; z++) {
                     Block old;
                     if (!world->GetBlock(x, y, z, old)) continue;
-                    if (old.type == BlockType::CHEST) RemoveChest({ x, y, z }, nullptr);
+                    if (IsStorageType(old.type)) RemoveChest({ x, y, z }, nullptr);
                     world->SetBlock(x, y, z, block);
-                    if (type == BlockType::CHEST) chests[{ x, y, z }] = ChestItems{};
+                    if (IsStorageType(type)) chests[{ x, y, z }] = ChestItems{};
                 }
         reply(Kind::Info, "Filled " + std::to_string(size.x * size.y * size.z) + " cells with " + BlockId(type));
     }
@@ -431,7 +431,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
     }
     else if (command == "summon") {
         const CreatureType type = words.size() > 1 ? CreatureFromId(Lower(words[1])) : CreatureType::Count;
-        if (type == CreatureType::Count) return usage("/summon <deer|ghoul|skeleton> [x y z]");
+        if (type == CreatureType::Count) return usage("/summon <deer|wolf|bat|dwarf|crossbow_dwarf|dwarf_chief|dwarf_miner> [x y z]");
         glm::vec3 at;
         if (words.size() >= 5) {
             const glm::vec3 base = sender ? sender->feet : glm::vec3(0.0f);
@@ -440,7 +440,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
                 const std::string& w = words[2 + a];
                 const bool relative = !w.empty() && w[0] == '~';
                 if ((relative && w.size() > 1 && !ParseNumber(w.substr(1), v)) || (!relative && !ParseNumber(w, v)))
-                    return usage("/summon <deer|ghoul|skeleton> [x y z]");
+                    return usage("/summon <deer|wolf|bat|dwarf|crossbow_dwarf|dwarf_chief|dwarf_miner> [x y z]");
                 at[a] = static_cast<float>(relative ? base[a] + v : v);
             }
         }

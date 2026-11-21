@@ -5,6 +5,7 @@
 
 #include "world/Caves.h"
 #include "world/Dungeons.h"
+#include "world/Dwarves.h"
 #include "world/Features.h"
 #include "world/Noise.h"
 
@@ -614,6 +615,7 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
         }
     }
     Dungeons::Stamp(*this, coords, out);
+    Dwarves::Stamp(*this, coords, out);
 }
 
 void TerrainGenerator::PlacePlants(const glm::ivec3& coords, const ColumnHeights& heights, const SurfaceRows& rows, Blocks& out) const {

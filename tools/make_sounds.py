@@ -107,18 +107,18 @@ def main():
     save("hit", envelope(mix(tone(160, 60, 0.12), lowpass(noise(secs(0.12), rng), 800)), 0.001, 0.11, 3.0))
     # Splash into water.
     save("splash", envelope(mix(lowpass(noise(secs(0.6), rng), 2500), highpass(noise(secs(0.6), rng), 3000)), 0.01, 0.55, 2.0))
-    # A ghoul's groan: a wavering, rasping low tone.
+    # A dwarf's grunt: a short, gruff "hrah", a buzzing low voice rising then falling.
     for v in range(1, 3):
-        n = secs(1.1)
-        base = 85 + 15 * v
-        groan, phase = [], 0.0
+        n = secs(0.4)
+        base = 95 + 20 * v
+        grunt, phase = [], 0.0
         for i in range(n):
             t = i / RATE
-            f = base * (1.0 + 0.15 * math.sin(2 * math.pi * 3.0 * t)) * (1.0 - 0.25 * t)
+            f = base * (1.0 + 0.35 * math.sin(math.pi * t / 0.4)) * (1.0 + 0.04 * math.sin(2 * math.pi * 30.0 * t))
             phase += 2 * math.pi * f / RATE
-            groan.append(((phase / (2 * math.pi)) % 1.0) * 2 - 1)
-        groan = lowpass(mix(groan, [0.4 * s for s in noise(n, rng)]), 700)
-        save(f"groan_{v}", envelope(groan, 0.15, 1.1, 1.2))
+            grunt.append(((phase / (2 * math.pi)) % 1.0) * 2 - 1)
+        grunt = lowpass(mix(grunt, [0.25 * s for s in noise(n, rng)]), 1100)
+        save(f"grunt_{v}", envelope(grunt, 0.03, 0.37, 1.6))
     # Rain: two seconds of hiss that loops seamlessly (the tail is crossfaded into the head).
     n, fade = secs(2.0), secs(0.25)
     hiss = highpass(lowpass(noise(n + fade, rng), 5000), 600)

@@ -395,35 +395,52 @@ void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const gl
             box(tail, { -0.18f, 0.0f, 0.0f }, { 0.38f, 0.12f, 0.12f }, fur);
             if (c.tame) box(base, { 0.4f, 0.74f, 0.0f }, { 0.06f, 0.3f, 0.34f }, glm::vec3(0.8f, 0.12f, 0.1f)); // collar
         }
-        else if (c.type == 2) { // Skeleton: thin bone-white limbs, a skull with dark sockets, a bow
-            const glm::vec3 bone(0.86f, 0.84f, 0.76f), dark(0.12f, 0.1f, 0.1f);
-            for (float z : { -0.1f, 0.1f })
-                limb({ 0.0f, 0.82f, z }, z < 0.0f ? swing : -swing, { 0.1f, 0.82f, 0.1f }, bone); // legs
-            box(base, { 0.0f, 1.12f, 0.0f }, { 0.18f, 0.6f, 0.42f }, bone);           // ribs
-            for (float y : { 0.95f, 1.1f, 1.25f }) box(base, { 0.0f, y, 0.0f }, { 0.2f, 0.03f, 0.46f }, glm::vec3(0.7f, 0.68f, 0.6f));
-            box(base, { 0.02f, 1.62f, 0.0f }, { 0.38f, 0.38f, 0.38f }, bone);         // skull
-            for (float z : { -0.08f, 0.08f }) box(base, { 0.2f, 1.66f, z }, { 0.02f, 0.08f, 0.08f }, dark); // sockets
-            for (float z : { -0.3f, 0.3f }) {
-                // Arms held out, the left with a bow.
-                const glm::mat4 arm = glm::translate(base, { 0.0f, 1.36f, z });
-                box(arm, { 0.28f, 0.0f, 0.0f }, { 0.56f, 0.08f, 0.08f }, bone);
+        else { // Dwarves (1 warrior, 2 crossbowman, 5 chieftain, 6 miner): short, stocky, bearded, helmeted
+            const int kind = c.type;
+            const float k = kind == 5 ? 1.15f : 1.0f; // a chieftain is bigger
+            const glm::mat4 frame = glm::scale(base, glm::vec3(k));
+            const glm::vec3 skin(0.86f, 0.66f, 0.52f), boots(0.22f, 0.15f, 0.1f), iron(0.55f, 0.56f, 0.6f), gold(0.85f, 0.68f, 0.2f), wood(0.5f, 0.34f, 0.18f);
+            const glm::vec3 tunic = kind == 1 ? glm::vec3(0.55f, 0.16f, 0.12f) : kind == 2 ? glm::vec3(0.22f, 0.36f, 0.2f) : kind == 5 ? glm::vec3(0.3f, 0.12f, 0.35f)
+                                                                                                                               : glm::vec3(0.36f, 0.3f, 0.22f);
+            const glm::vec3 beard = kind == 5 ? glm::vec3(0.85f, 0.85f, 0.82f) : kind == 2 ? glm::vec3(0.35f, 0.2f, 0.1f) : kind == 6 ? glm::vec3(0.2f, 0.18f, 0.16f)
+                                                                                                                            : glm::vec3(0.62f, 0.3f, 0.1f);
+            auto fbox = [&](const glm::vec3& centre, const glm::vec3& size, const glm::vec3& color) { box(frame, centre, size, color); };
+            auto flimb = [&](const glm::vec3& pivot, float angle, const glm::vec3& size, const glm::vec3& color) {
+                const glm::mat4 f = glm::rotate(glm::translate(frame, pivot), angle, glm::vec3(0, 0, 1));
+                box(f, glm::vec3(0.0f, -size.y * 0.5f, 0.0f), size, color);
+            };
+            for (float z : { -0.12f, 0.12f }) flimb({ 0.0f, 0.42f, z }, z < 0.0f ? swing : -swing, { 0.2f, 0.42f, 0.2f }, boots); // stout legs
+            fbox({ 0.0f, 0.72f, 0.0f }, { 0.44f, 0.6f, 0.6f }, tunic);                  // a broad body
+            fbox({ 0.0f, 0.5f, 0.0f }, { 0.46f, 0.08f, 0.62f }, kind == 5 ? gold : boots); // belt
+            fbox({ 0.02f, 1.17f, 0.0f }, { 0.34f, 0.34f, 0.34f }, skin);                // head
+            fbox({ 0.19f, 1.02f, 0.0f }, { 0.08f, 0.42f, 0.3f }, beard);                // the beard, down the chest
+            fbox({ 0.2f, 1.18f, 0.0f }, { 0.06f, 0.05f, 0.08f }, skin * 0.8f);          // nose
+            for (float z : { -0.07f, 0.07f }) fbox({ 0.2f, 1.24f, z }, { 0.02f, 0.04f, 0.05f }, glm::vec3(0.08f)); // eyes
+            fbox({ 0.02f, 1.38f, 0.0f }, { 0.38f, 0.12f, 0.38f }, kind == 6 ? glm::vec3(0.75f, 0.62f, 0.2f) : iron); // helmet
+            if (kind == 5) { // the chieftain's horns and crown band
+                for (float z : { -0.22f, 0.22f }) fbox({ 0.02f, 1.48f, z }, { 0.07f, 0.2f, 0.07f }, glm::vec3(0.9f, 0.88f, 0.8f));
+                fbox({ 0.02f, 1.33f, 0.0f }, { 0.4f, 0.04f, 0.4f }, gold);
             }
-            box(base, { 0.58f, 1.36f, -0.3f }, { 0.05f, 0.7f, 0.05f }, glm::vec3(0.5f, 0.34f, 0.18f)); // the bow
-        }
-        else { // Ghoul
-            const glm::vec3 skin(0.46f, 0.56f, 0.42f), rags(0.28f, 0.26f, 0.30f), eyes(1.0f, 0.85f, 0.2f);
-            for (float z : { -0.12f, 0.12f })
-                limb({ 0.0f, 0.82f, z }, z < 0.0f ? swing : -swing, { 0.2f, 0.82f, 0.2f }, rags); // legs
-            box(base, { 0.0f, 1.12f, 0.0f }, { 0.3f, 0.62f, 0.5f }, rags);             // body
-            box(base, { 0.02f, 1.62f, 0.0f }, { 0.4f, 0.4f, 0.4f }, skin);             // head
-            shader.SetUniform("glow", 1.0f);
-            for (float z : { -0.09f, 0.09f })
-                box(base, { 0.23f, 1.66f, z }, { 0.02f, 0.06f, 0.08f }, eyes);         // eyes, glowing
-            shader.SetUniform("glow", 0.0f);
-            for (float z : { -0.33f, 0.33f }) {
-                // Arms reaching forward, swaying.
-                const glm::mat4 arm = glm::rotate(glm::translate(base, { 0.0f, 1.36f, z }), (z < 0.0f ? -swing : swing) * 0.3f, glm::vec3(0, 1, 0));
-                box(arm, { 0.3f, 0.0f, 0.0f }, { 0.62f, 0.16f, 0.16f }, skin);
+            if (kind == 6) { // the miner's lamp, glowing
+                shader.SetUniform("glow", 1.0f);
+                fbox({ 0.2f, 1.4f, 0.0f }, { 0.04f, 0.07f, 0.08f }, glm::vec3(1.0f, 0.9f, 0.5f));
+                shader.SetUniform("glow", 0.0f);
+            }
+            // Arms: swinging as it walks; the right holds its weapon or tool forward.
+            for (float z : { -0.36f, 0.36f }) flimb({ 0.0f, 1.0f, z }, z < 0.0f ? -swing : swing, { 0.16f, 0.5f, 0.16f }, tunic);
+            const glm::mat4 hand = glm::rotate(glm::translate(frame, { 0.14f, 0.62f, 0.36f }), glm::radians(-70.0f) - swing * 0.4f, glm::vec3(0, 0, 1));
+            auto held = [&](const glm::vec3& centre, const glm::vec3& size, const glm::vec3& color) { box(hand, centre, size, color); };
+            if (kind == 1 || kind == 5) { // an axe
+                held({ 0.25f, 0.0f, 0.0f }, { 0.55f, 0.06f, 0.06f }, wood);
+                held({ 0.48f, 0.1f, 0.0f }, { 0.14f, 0.24f, 0.04f }, kind == 5 ? gold : iron);
+            }
+            else if (kind == 6) { // a pickaxe
+                held({ 0.25f, 0.0f, 0.0f }, { 0.55f, 0.05f, 0.05f }, wood);
+                held({ 0.5f, 0.0f, 0.0f }, { 0.06f, 0.06f, 0.4f }, iron);
+            }
+            else { // a crossbow, held level in both hands
+                fbox({ 0.38f, 0.92f, 0.0f }, { 0.5f, 0.07f, 0.08f }, wood);
+                fbox({ 0.55f, 0.94f, 0.0f }, { 0.05f, 0.05f, 0.5f }, wood);
             }
         }
     }

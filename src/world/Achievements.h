@@ -8,7 +8,7 @@ enum class Achievement : uint8_t {
     FirstBlock,     // break a block
     Toolmaker,      // make a tool
     Hunter,         // kill a deer
-    GhoulSlayer,    // kill a ghoul
+    DwarfSlayer,    // defeat a hostile dwarf
     Cook,           // cook venison
     FirstMeal,      // eat something
     Farmer,         // harvest ripe wheat
@@ -36,7 +36,7 @@ inline const char* Name(Achievement a) {
     case Achievement::FirstBlock: return "Breaking Ground";
     case Achievement::Toolmaker: return "Toolmaker";
     case Achievement::Hunter: return "Hunter";
-    case Achievement::GhoulSlayer: return "Ghoul Slayer";
+    case Achievement::DwarfSlayer: return "Dwarf Slayer";
     case Achievement::Cook: return "Cook";
     case Achievement::FirstMeal: return "First Meal";
     case Achievement::Farmer: return "Farmer";
@@ -58,7 +58,7 @@ inline const char* Description(Achievement a) {
     case Achievement::FirstBlock: return "break your first block";
     case Achievement::Toolmaker: return "make a tool";
     case Achievement::Hunter: return "bring down a deer";
-    case Achievement::GhoulSlayer: return "defeat a ghoul";
+    case Achievement::DwarfSlayer: return "defeat a hostile dwarf";
     case Achievement::Cook: return "cook some venison";
     case Achievement::FirstMeal: return "eat something";
     case Achievement::Farmer: return "harvest ripe wheat";

@@ -1,4 +1,5 @@
 #include "server/Server.h"
+#include "world/Dwarves.h"
 
 #include <algorithm>
 #include <chrono>
@@ -54,7 +55,7 @@ constexpr float kSafeFall = 3.0f;
 constexpr float kArrowSpeed = 32.0f, kArrowGravity = 18.0f;
 constexpr int kArrowDamage = 5;
 constexpr double kShotInterval = 0.6;
-constexpr uint16_t kCreatureShooter = 0xFFFF; // an arrow a skeleton shot
+constexpr uint16_t kCreatureShooter = 0xFFFF; // a bolt a dwarf crossbowman shot
 // TNT: seconds from lighting to the bang, and how far the blast reaches.
 constexpr double kTntFuse = 3.0;
 constexpr int kTntRadius = 3;
@@ -663,14 +664,15 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
             SendResources(client);
             spoils = " (+" + std::to_string(venison) + " raw venison, +1 hide)";
         }
-        // A skeleton leaves some of its arrows.
-        if (type == CreatureType::Skeleton) {
+        // A crossbowman leaves some of its bolts (arrows).
+        if (type == CreatureType::DwarfCrossbow) {
             client.resources[static_cast<size_t>(BlockType::ARROW)] += 2 * Block::kUnitsPerBlock;
             SendResources(client);
             spoils = " (+2 arrows)";
         }
         SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id + spoils);
-        if (type != CreatureType::Skeleton) Award(client, type == CreatureType::Deer ? Achievement::Hunter : Achievement::GhoulSlayer);
+        if (type == CreatureType::Deer) Award(client, Achievement::Hunter);
+        else if (SpecOf(type).hostile) Award(client, Achievement::DwarfSlayer);
     }
 }
 
@@ -781,7 +783,7 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
     }
     // Breaking a waterlogged block leaves its water behind.
     world->SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
-    if (block.type == BlockType::CHEST) RemoveChest(pos, &client);
+    if (IsStorageType(block.type)) RemoveChest(pos, &client);
     if (block.type == BlockType::CROP) crops.erase(pos);
     if (block.type == BlockType::SIGN && signs.erase(pos)) BroadcastSign(pos);
     // A door goes as a whole: the other half too (its worth is counted once, below).
@@ -860,7 +862,7 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
         }
     }
     world->SetBlock(pos.x, pos.y, pos.z, placed);
-    if (type == BlockType::CHEST) chests[pos] = ChestItems{}; // a new chest is empty
+    if (IsStorageType(type)) chests[pos] = ChestItems{}; // a new chest is empty
     if (type == BlockType::CROP || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING) crops.insert(pos);
     if (type == BlockType::DOOR) world->SetBlock(pos.x, pos.y + 1, pos.z, Block(BlockType::DOOR)); // its upper half (part of the one door)
     if (!Creative(client)) {
@@ -1285,7 +1287,7 @@ void Server::HandleEat(ClientState& client, BlockType food) {
 void Server::HandleOpenChest(ClientState& client, const glm::ivec3& pos, bool open) {
     client.openChest.reset();
     Block block;
-    if (open && InReach(client, pos, kChestReach) && world->GetBlock(pos.x, pos.y, pos.z, block) && block.type == BlockType::CHEST) {
+    if (open && InReach(client, pos, kChestReach) && world->GetBlock(pos.x, pos.y, pos.z, block) && IsStorageType(block.type)) {
         client.openChest = pos;
         const bool unopened = chests.count(pos) == 0;
         const ChestItems& chest = ChestAt(pos);
@@ -1298,7 +1300,7 @@ void Server::HandleOpenChest(ClientState& client, const glm::ivec3& pos, bool op
 void Server::HandleChestMove(ClientState& client, const glm::ivec3& pos, BlockType type, uint32_t units, bool intoChest) {
     // Only with that chest open, still there and in reach.
     Block block;
-    if (client.openChest != pos || !InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block) || block.type != BlockType::CHEST ||
+    if (client.openChest != pos || !InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block) || !IsStorageType(block.type) ||
         type == BlockType::AIR || block.IsLiquid())
         return SendResources(client);
     ChestItems& chest = chests[pos];
@@ -1336,6 +1338,7 @@ Server::ChestItems& Server::ChestAt(const glm::ivec3& pos) {
     ChestItems& chest = chests[pos];
     chest.fill(0);
     for (const auto& [type, units] : Dungeons::LootFor(terrain, pos)) chest[static_cast<size_t>(type)] += units;
+    for (const auto& [type, units] : Dwarves::LootFor(terrain, pos)) chest[static_cast<size_t>(type)] += units;
     return chest;
 }
 
@@ -1408,7 +1411,7 @@ void Server::Explode(const glm::ivec3& pos, int radius) {
                     LightTnt(p, 0.4 + 0.1 * (std::abs(x) + std::abs(z)));
                     continue;
                 }
-                if (b.type == BlockType::CHEST) RemoveChest(p, nullptr);
+                if (IsStorageType(b.type)) RemoveChest(p, nullptr);
                 if (b.type == BlockType::SIGN && signs.erase(p)) BroadcastSign(p);
                 world->SetBlock(p.x, p.y, p.z, Block());
             }
@@ -1538,7 +1541,8 @@ void Server::UpdateArrows() {
                         if (shooter.id == a.shooter) {
                             SendChat(shooter, net::ChatMessage::Kind::Info, std::string("You shot a ") + SpecOf(type).id);
                             Award(shooter, Achievement::Marksman);
-                            if (type != CreatureType::Skeleton) Award(shooter, type == CreatureType::Deer ? Achievement::Hunter : Achievement::GhoulSlayer);
+                            if (type == CreatureType::Deer) Award(shooter, Achievement::Hunter);
+                            else if (SpecOf(type).hostile) Award(shooter, Achievement::DwarfSlayer);
                         }
                 gone = true;
                 break;
@@ -1550,7 +1554,7 @@ void Server::UpdateArrows() {
                 if (target.id == a.shooter && now - a.born < 0.3) continue;
                 if (!inside(BodyAt(target.feet, 0.0f, (target.flags & net::kFlagCrouching) != 0))) continue;
                 if (options.pvp || target.id == a.shooter || a.shooter == kCreatureShooter) {
-                    std::string by = a.shooter == kCreatureShooter ? "a skeleton" : "someone";
+                    std::string by = a.shooter == kCreatureShooter ? "a dwarf crossbowman" : "someone";
                     for (const auto& [p2, s] : clients)
                         if (s.id == a.shooter) by = s.name;
                     const double before = target.invulnerableUntil;
@@ -1815,6 +1819,7 @@ void Server::Tick() {
     UpdateTnt();
     section(2);
     UpdatePower();
+    UpdateMiningPosts();
     section(3);
     UpdateSignals();
     section(4);

@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "server/ServerWorld.h"
+#include "world/Dwarves.h"
 #include "world/Collision.h"
 #include "world/Coords.h"
 
@@ -62,6 +63,88 @@ uint16_t CreatureSystem::Spawn(CreatureType type, const glm::vec3& feet) {
     c.yaw = std::uniform_real_distribution<float>(0.0f, 360.0f)(rng);
     creatures.push_back(c);
     return c.id;
+}
+
+uint16_t CreatureSystem::SpawnMiner(const glm::vec3& feet, const glm::ivec3& post) {
+    const uint16_t id = Spawn(CreatureType::DwarfMiner, feet);
+    for (auto& c : creatures)
+        if (c.id == id) {
+            c.hasHome = true;
+            c.home = glm::vec3(post) + glm::vec3(0.5f, 0.0f, 0.5f);
+            c.site = post;
+        }
+    return id;
+}
+
+void CreatureSystem::Remove(uint16_t id) {
+    creatures.erase(std::remove_if(creatures.begin(), creatures.end(), [&](const Creature& c) { return c.id == id; }), creatures.end());
+}
+
+void CreatureSystem::SpawnDwarves(ServerWorld& world, const std::vector<Player>& players) {
+    std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+    auto standable = [&](const glm::vec3& feet, CreatureType type) {
+        return !Collision::BoxBlocked(world, BoxAt(feet + glm::vec3(0.0f, 0.02f, 0.0f), SpecOf(type)));
+    };
+    auto nearPlayer = [&](const glm::vec3& p, float range) {
+        for (const auto& pl : players)
+            if (glm::distance(pl.feet, p) < range) return true;
+        return false;
+    };
+    // The sites near players: each fills up the first time, then gets one back now and
+    // then, at a spawn point no player is standing right by.
+    std::unordered_map<int64_t, bool> done;
+    for (const auto& player : players)
+        for (const Dwarves::Site& site : Dwarves::SitesNear(world.GetTerrain(), player.feet, 72.0f)) {
+            const int64_t key = (static_cast<int64_t>(site.centre.x) << 32) ^ static_cast<uint32_t>(site.centre.z);
+            if (done[key]) continue;
+            done[key] = true;
+            int warriors = 0, crossbows = 0, chiefs = 0;
+            for (const auto& c : creatures)
+                if (c.hasHome && c.site == site.centre) {
+                    warriors += c.type == CreatureType::DwarfWarrior;
+                    crossbows += c.type == CreatureType::DwarfCrossbow;
+                    chiefs += c.type == CreatureType::DwarfChief;
+                }
+            const bool first = !siteRefill.count(key);
+            if (!first && clock < siteRefill[key]) continue;
+            for (const glm::ivec3& spot : site.spawns) {
+                CreatureType type = CreatureType::Count;
+                if (chiefs < site.chiefs) type = CreatureType::DwarfChief;
+                else if (warriors < site.warriors) type = CreatureType::DwarfWarrior;
+                else if (crossbows < site.crossbows) type = CreatureType::DwarfCrossbow;
+                if (type == CreatureType::Count) break;
+                const glm::vec3 feet = glm::vec3(spot) + glm::vec3(0.5f, 0.0f, 0.5f);
+                Block ground;
+                if (!world.GetBlock(spot.x, spot.y - 1, spot.z, ground) || nearPlayer(feet, 6.0f) || !standable(feet, type)) continue;
+                const uint16_t id = Spawn(type, feet);
+                if (!id) break;
+                for (auto& c : creatures)
+                    if (c.id == id) c.hasHome = true, c.home = glm::vec3(site.centre) + glm::vec3(0.5f, 0.0f, 0.5f), c.site = site.centre;
+                (type == CreatureType::DwarfChief ? chiefs : type == CreatureType::DwarfWarrior ? warriors : crossbows)++;
+                if (!first) break; // (one at a time after the first fill)
+            }
+            siteRefill[key] = clock + kSiteRefill;
+        }
+    if (siteRefill.size() > 4096) siteRefill.clear();
+
+    // A war band on a horde night: raiders on open ground round each player.
+    if (!horde) return;
+    for (const auto& player : players) {
+        int raiders = 0;
+        for (const auto& c : creatures)
+            if (SpecOf(c.type).hostile && !c.hasHome && glm::distance(c.feet, player.feet) < kNearRange) raiders++;
+        for (int attempt = 0; attempt < 6 && raiders < 3 * kMaxHostilesNear; attempt++) {
+            const float a = unit(rng) * 6.2831853f, d = 24.0f + 16.0f * unit(rng);
+            const int x = static_cast<int>(std::floor(player.feet.x + std::cos(a) * d)), z = static_cast<int>(std::floor(player.feet.z + std::sin(a) * d));
+            for (int y = static_cast<int>(player.feet.y) + 16; y > static_cast<int>(player.feet.y) - 24; y--) {
+                bool grass = false;
+                if (!CanStand(world, { x, y, z }, 2, grass)) continue;
+                const glm::vec3 at(x + 0.5f, static_cast<float>(y), z + 0.5f);
+                if (!nearPlayer(at, kMinSpawnDistance) && Spawn(unit(rng) < 0.3f ? CreatureType::DwarfCrossbow : CreatureType::DwarfWarrior, at)) raiders++;
+                break;
+            }
+        }
+    }
 }
 
 const CreatureSystem::Creature* CreatureSystem::Find(uint16_t id) const {
@@ -128,13 +211,6 @@ bool CreatureSystem::Tame(uint16_t id, uint16_t player) {
             return true;
         }
     return false;
-}
-
-bool CreatureSystem::Burning(ServerWorld& world, const Creature& c, float daylight) const {
-    if (!SpecOf(c.type).hostile || daylight < 0.5f) return false;
-    uint8_t block = 0, sky = 0;
-    const glm::ivec3 head(glm::floor(c.feet + glm::vec3(0.0f, SpecOf(c.type).height - 0.2f, 0.0f)));
-    return LightAt(world, head, block, sky) && sky >= 14; // under the open sky
 }
 
 void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, double now, const HurtPlayer& hurt, glm::vec2& move, float& speed) {
@@ -229,20 +305,37 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
         return;
     }
 
-    // Ghoul: after the nearest survival player in sight range.
+    // At home (a dwarf with a home): wandering about it, heading back when strayed.
+    auto keepHome = [&](float range) {
+        const glm::vec2 back(c.home.x - c.feet.x, c.home.z - c.feet.z);
+        if (c.hasHome && glm::length(back) > range) {
+            move = glm::normalize(back);
+            speed = spec.walkSpeed;
+        }
+        else wander();
+    };
+    if (c.type == CreatureType::DwarfMiner) {
+        keepHome(4.0f);
+        return;
+    }
+
+    // A hostile dwarf: after the nearest survival player in sight, but not one who's
+    // led it too far from home (a war band's raiders have none).
+    constexpr float kLeash = 40.0f;
     const Player* target = nullptr;
-    float best = horde ? 2.0f * kSightRange : kSightRange;
+    float best = (horde || !c.hasHome) ? 2.0f * kSightRange : kSightRange;
     for (const auto& p : players) {
         if (!p.vulnerable || std::abs(p.feet.y - c.feet.y) > 8.0f) continue;
+        if (c.hasHome && HorizontalDistance(p.feet, c.home) > kLeash) continue;
         const float d = HorizontalDistance(p.feet, c.feet);
         if (d < best) best = d, target = &p;
     }
     if (!target) {
-        wander();
+        keepHome(10.0f);
         return;
     }
     glm::vec2 to(target->feet.x - c.feet.x, target->feet.z - c.feet.z);
-    if (c.type == CreatureType::Skeleton) {
+    if (c.type == CreatureType::DwarfCrossbow) {
         // Keeps 7 to 14 blocks off, edging sideways, and shoots every couple of seconds.
         const float d = glm::length(to);
         const glm::vec2 toward = d > 1e-3f ? to / d : glm::vec2(1.0f, 0.0f);
@@ -266,7 +359,7 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
     speed = glm::length(to) > reach * 0.7f ? spec.runSpeed : 0.0f;
     if (glm::length(to) <= reach && std::abs(target->feet.y - c.feet.y) < 1.8f && now >= c.nextAttack) {
         c.nextAttack = now + 1.0;
-        hurt(target->id, spec.attackDamage, "was killed by a ghoul");
+        hurt(target->id, spec.attackDamage, c.type == CreatureType::DwarfChief ? "was cut down by a dwarf chieftain" : "was cut down by a dwarf warrior");
     }
 }
 
@@ -359,9 +452,9 @@ void CreatureSystem::SpawnNaturally(ServerWorld& world, const std::vector<Player
         return true;
     };
     for (const auto& player : players) {
-        int animals = 0, hostiles = 0;
+        int animals = 0;
         for (const auto& c : creatures)
-            if (glm::distance(c.feet, player.feet) < kNearRange) (SpecOf(c.type).hostile ? hostiles : animals)++;
+            if (glm::distance(c.feet, player.feet) < kNearRange && !SpecOf(c.type).hostile && !IsDwarf(c.type) && c.type != CreatureType::Bat) animals++;
 
         // A herd of deer on grass somewhere around, with room to stand: a few tries.
         for (int attempt = 0; attempt < 4 && animals < kMaxAnimalsNear; attempt++) {
@@ -387,10 +480,11 @@ void CreatureSystem::SpawnNaturally(ServerWorld& world, const std::vector<Player
             }
         }
 
-        // Ghouls in the dark: a few tries at a dark floor within 40 blocks (more, for
-        // more of them, on a horde night).
-        const int maxHostiles = horde ? 3 * kMaxHostilesNear : kMaxHostilesNear;
-        for (int attempt = 0; attempt < (horde ? 9 : 3) && hostiles < maxHostiles; attempt++) {
+        // Bats in the dark of caves: a few tries at a dark floor within 40 blocks.
+        int bats = 0;
+        for (const auto& c : creatures)
+            if (c.type == CreatureType::Bat && glm::distance(c.feet, player.feet) < kNearRange) bats++;
+        for (int attempt = 0; attempt < 2 && bats < 4; attempt++) {
             const int x = static_cast<int>(std::floor(player.feet.x + (unit(rng) * 2.0f - 1.0f) * 40.0f));
             const int z = static_cast<int>(std::floor(player.feet.z + (unit(rng) * 2.0f - 1.0f) * 40.0f));
             const int start = static_cast<int>(std::floor(player.feet.y)) + static_cast<int>(unit(rng) * 32.0f) - 20;
@@ -401,12 +495,9 @@ void CreatureSystem::SpawnNaturally(ServerWorld& world, const std::vector<Player
                 if (!LightAt(world, { x, y, z }, block, sky)) break;
                 const float light = std::max(static_cast<float>(block), sky * (daylight > 0.5f ? 1.0f : 0.25f));
                 const glm::vec3 at(x + 0.5f, static_cast<float>(y), z + 0.5f);
-                if (light <= 4.0f && farFromPlayers(at)) {
-                    // Underground (no sky at all), now and then bats instead; three in
-                    // ten of the rest are skeletons.
-                    if (sky == 0 && unit(rng) < 0.3f) Spawn(CreatureType::Bat, at + glm::vec3(0.0f, 1.0f, 0.0f));
-                    else Spawn(unit(rng) < 0.3f ? CreatureType::Skeleton : CreatureType::Ghoul, at);
-                    hostiles++;
+                if (light <= 4.0f && sky == 0 && farFromPlayers(at)) {
+                    Spawn(CreatureType::Bat, at + glm::vec3(0.0f, 1.0f, 0.0f));
+                    bats++;
                 }
                 break;
             }
@@ -419,6 +510,7 @@ void CreatureSystem::Update(ServerWorld& world, const std::vector<Player>& playe
     if (naturalSpawning && !players.empty() && now >= nextSpawnCheck) {
         nextSpawnCheck = now + 1.0;
         SpawnNaturally(world, players, daylight);
+        SpawnDwarves(world, players);
     }
 
     for (auto it = creatures.begin(); it != creatures.end();) {
@@ -439,12 +531,6 @@ void CreatureSystem::Update(ServerWorld& world, const std::vector<Player>& playe
         float speed = 0.0f;
         Think(c, players, now, hurt, move, speed);
         Move(world, c, move, speed, dt);
-        // Ghouls burn in daylight.
-        if (now >= c.nextBurn && Burning(world, c, daylight)) {
-            c.nextBurn = now + 1.0;
-            c.health -= 2;
-            c.hurtUntil = now + 0.3;
-        }
         if (c.health <= 0) it = creatures.erase(it);
         else ++it;
     }

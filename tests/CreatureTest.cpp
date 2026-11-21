@@ -1,19 +1,20 @@
 // Creatures over real connections. Checks that
-//  - /summon brings deer and ghouls, the players near them see them, and they fall
+//  - /summon brings deer and dwarves, the players near them see them, and they fall
 //    onto the ground,
-//  - a ghoul comes for a survival player and hurts them, and leaves creative players
-//    alone,
+//  - a dwarf warrior comes for a survival player and hurts them, and leaves creative
+//    players alone; daylight doesn't hurt it,
+//  - a dwarf crossbowman shoots from a distance,
 //  - hitting a deer knocks it back and sends it running, enough hits kill it, and
 //    hits out of reach or too fast don't count,
-//  - ghouls burn up in daylight under the open sky,
 //  - /creatures counts and clears them,
-//  - in a normal world, deer turn up by themselves on grass, and ghouls come out at
-//    night,
+//  - in a normal world, deer turn up by themselves on grass, and dwarves come out at
+//    a dwarf camp or mine when a player comes near it,
 //  - PvP: players hit each other in reach (flashing red for others, knocked back), can be slain,
 //    and /pvp off stops it,
 //  - archery: an arrow hits a player ten blocks off, a bow's shots are spaced out,
 //    and arrows stick in the ground.
 #include <chrono>
+#include <optional>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -24,6 +25,8 @@
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "server/Server.h"
+#include "world/Dwarves.h"
+#include "world/TerrainGenerator.h"
 
 // Test clients ask for a short view (chunks): plenty for the checks, and light enough
 // to run every suite at once.
@@ -152,12 +155,12 @@ int main() {
         }
         Check(gone && both(5.0, [&] { return Has(a, "You defeated a deer"); }), "a second axe hit (8 health, 5 a hit) finishes it");
 
-        std::cout << "Ghouls" << std::endl;
+        std::cout << "Dwarf warriors" << std::endl;
         server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
         server.QueueConsoleCommand("tp Watcher 8.5 0 40.5");
         wait(1.0);
-        server.QueueConsoleCommand("summon ghoul 16.5 0 8.5");
-        Check(both(20.0, [&] { return a.Find(CreatureType::Ghoul) != nullptr; }), "a ghoul is summoned 8 blocks from the hunter");
+        server.QueueConsoleCommand("summon dwarf 16.5 0 8.5");
+        Check(both(20.0, [&] { return a.Find(CreatureType::DwarfWarrior) != nullptr; }), "a dwarf warrior is summoned 8 blocks from the hunter");
         Check(both(20.0, [&] { return a.client.GetHealth() < 20; }), "it comes for the hunter (in survival) and hurts them");
         server.QueueConsoleCommand("gamemode creative Hunter");
         both(20.0, [&] { return a.client.IsCreative(); });
@@ -165,20 +168,22 @@ int main() {
         wait(3.0);
         Check(a.client.GetHealth() >= health, "a creative player is left alone");
         server.QueueConsoleCommand("time noon");
-        Check(both(20.0, [&] { return a.Find(CreatureType::Ghoul) == nullptr; }), "at noon under the open sky the ghoul burns up");
+        wait(4.0);
+        Check(a.Find(CreatureType::DwarfWarrior) != nullptr, "daylight doesn't hurt it (dwarves don't burn)");
+        server.QueueConsoleCommand("creatures clear");
 
-        std::cout << "Skeletons" << std::endl;
+        std::cout << "Dwarf crossbowmen" << std::endl;
         server.QueueConsoleCommand("time midnight");
         server.QueueConsoleCommand("gamemode survival Hunter");
         server.QueueConsoleCommand("food 20 Hunter");
         server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
-        server.QueueConsoleCommand("summon skeleton 20.5 0 8.5");
-        Check(both(20.0, [&] { return a.Find(CreatureType::Skeleton) != nullptr && !a.client.IsCreative(); }), "a skeleton is summoned 12 blocks from the hunter");
+        server.QueueConsoleCommand("summon crossbow_dwarf 20.5 0 8.5");
+        Check(both(20.0, [&] { return a.Find(CreatureType::DwarfCrossbow) != nullptr && !a.client.IsCreative(); }), "a dwarf crossbowman is summoned 12 blocks from the hunter");
         both(4.0, [&] { return a.client.GetHealth() == 20; });
         const int beforeVolley = a.client.GetHealth();
         Check(both(20.0, [&] { return a.client.GetHealth() < beforeVolley; }), "it shoots the hunter from a distance");
-        const auto* skeleton = a.Find(CreatureType::Skeleton);
-        Check(skeleton && glm::distance(glm::vec2(skeleton->feet.x, skeleton->feet.z), glm::vec2(8.5f)) > 5.0f, "and keeps its distance");
+        const auto* bowman = a.Find(CreatureType::DwarfCrossbow);
+        Check(bowman && glm::distance(glm::vec2(bowman->feet.x, bowman->feet.z), glm::vec2(8.5f)) > 5.0f, "and keeps its distance");
         server.QueueConsoleCommand("creatures clear");
         server.QueueConsoleCommand("gamemode creative Hunter");
         both(20.0, [&] { return a.client.GetCreatures().empty() && a.client.IsCreative(); });
@@ -211,14 +216,14 @@ int main() {
         Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && glm::distance(glm::vec2(w->feet.x, w->feet.z), glm::vec2(22.5f, 8.5f)) < 5.0f; }),
               "it follows its owner");
         server.QueueConsoleCommand("time midnight");
-        server.QueueConsoleCommand("summon ghoul 26.5 0 8.5");
-        Check(both(20.0, [&] { return a.Find(CreatureType::Ghoul) != nullptr; }), "a ghoul turns up near them");
-        Check(both(30.0, [&] { return a.Find(CreatureType::Ghoul) == nullptr; }), "and the wolf sees it off");
+        server.QueueConsoleCommand("summon dwarf 26.5 0 8.5");
+        Check(both(20.0, [&] { return a.Find(CreatureType::DwarfWarrior) != nullptr; }), "a dwarf warrior turns up near them");
+        Check(both(30.0, [&] { return a.Find(CreatureType::DwarfWarrior) == nullptr; }), "and the wolf sees it off");
         server.QueueConsoleCommand("creatures clear");
         both(20.0, [&] { return a.client.GetCreatures().empty(); });
 
         server.QueueConsoleCommand("time midnight");
-        server.QueueConsoleCommand("summon ghoul 20 0 20");
+        server.QueueConsoleCommand("summon dwarf 20 0 20");
         server.QueueConsoleCommand("summon deer 22 0 20");
         server.QueueConsoleCommand("creatures");
         wait(1.0);
@@ -361,8 +366,27 @@ int main() {
         server.QueueConsoleCommand("gamemode creative Wanderer");
         server.QueueConsoleCommand("time noon");
         Check(Pump({ &a }, 60.0, [&] { return a.Find(CreatureType::Deer) != nullptr; }), "deer turn up by themselves around the player");
-        server.QueueConsoleCommand("time midnight");
-        Check(Pump({ &a }, 60.0, [&] { return a.Find(CreatureType::Ghoul) != nullptr; }), "ghouls come out at night");
+        // The nearest dwarf camp or mine: dwarves come out there when a player's near.
+        const TerrainGenerator terrain(TerrainGenerator::Type::Normal);
+        std::optional<Dwarves::Site> site;
+        for (int ring = 0; ring < 12 && !site; ring++)
+            for (int rx = -ring; rx <= ring && !site; rx++)
+                for (int rz = -ring; rz <= ring && !site; rz++) {
+                    if (std::max(std::abs(rx), std::abs(rz)) != ring) continue;
+                    const auto r = Dwarves::SiteIn(terrain, rx, rz);
+                    if (r.exists) site = r.site;
+                }
+        Check(site.has_value(), "there's a dwarf camp or mine within a few regions of spawn");
+        if (site) {
+            const glm::ivec3 c = site->centre;
+            server.QueueConsoleCommand("tp Wanderer " + std::to_string(c.x + 20) + " " + std::to_string(c.y + 4) + " " + std::to_string(c.z));
+            Check(Pump({ &a }, 60.0, [&] {
+                      for (const auto& cr : a.client.GetCreatures())
+                          if (SpecOf(cr.type).hostile && glm::distance(glm::vec2(cr.feet.x, cr.feet.z), glm::vec2(c.x, c.z)) < 30.0f) return true;
+                      return false;
+                  }),
+                  std::string("dwarves come out at the ") + (site->kind == Dwarves::SiteKind::Camp ? "camp" : "mine") + " when a player comes near");
+        }
         a.client.Disconnect();
         Pump({ &a }, 0.3, [] { return false; });
         server.Stop();

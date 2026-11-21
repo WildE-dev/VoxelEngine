@@ -57,7 +57,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP, BlockType::PIPE,
     BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::DRILL, BlockType::SMELTER, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::OIL_SHALE, BlockType::TAR, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::STEEL_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::MINING_POST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::OIL_SHALE, BlockType::TAR, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::STEEL_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -155,6 +155,7 @@ const char* BlockName(BlockType type) {
     case BlockType::REFINERY: return "Refinery";
     case BlockType::ENGINE: return "Engine";
     case BlockType::FLUID_OUTLET: return "Fluid outlet";
+    case BlockType::MINING_POST: return "Mining post";
     case BlockType::STEEL_INGOT: return "Steel ingot";
     case BlockType::EXTRACTOR: return "Extractor";
     case BlockType::FILTER_PIPE: return "Filter pipe";
@@ -926,6 +927,12 @@ void Application::DrawCrosshair() {
                 if (fluid) std::snprintf(text, sizeof text, "%s - %d%% full%s%s", target.type == BlockType::FLUID_TANK ? "Fluid tank" : "Gauge", pressure,
                                          pressure > 0 ? " of " : "", pressure > 0 ? what : "");
                 else std::snprintf(text, sizeof text, "Pressure gauge - air %d%%", pressure);
+            }
+            else if (target.type == BlockType::MINING_POST) {
+                const char* doing = state == Power::DrillState::NoPressure ? "waiting for pay (put cooked food in it)"
+                                  : state == Power::DrillState::Done        ? "no ore left within 12 blocks"
+                                                                            : "mining";
+                std::snprintf(text, sizeof text, "Mining post: %d miner%s - %s", m.depth, m.depth == 1 ? "" : "s", doing);
             }
             else if (target.type == BlockType::ENGINE)
                 std::snprintf(text, sizeof text, "Engine: %s - air %d%%", state == Power::DrillState::Working ? "running" : "stopped (no fuel)", pressure);
@@ -2158,7 +2165,7 @@ void Application::OnMouseButton(int button, int action) {
     if (button == GLFW_MOUSE_BUTTON_RIGHT && glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) != GLFW_PRESS) {
         Block target;
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
-            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && target.type == BlockType::CHEST) {
+            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && IsStorageType(target.type)) {
             client->OpenChest(at->block);
             SetInventoryOpen(true);
             chestMode = true;
@@ -2409,7 +2416,7 @@ void Application::DrawSignalEditor() {
                     bool creaturesToo = signalModeIndex == static_cast<int>(Signals::Mode::Or);
                     if (ImGui::Checkbox("Hostile creatures too", &creaturesToo)) signalModeIndex = creaturesToo ? static_cast<int>(Signals::Mode::Or) : 0;
                 }
-                ImGui::TextDisabled("Sends while a player (or, ticked, a ghoul or skeleton) is this near (0: %d blocks).", Signals::kPlayerRange);
+                ImGui::TextDisabled("Sends while a player (or, ticked, a hostile dwarf) is this near (0: %d blocks).", Signals::kPlayerRange);
                 break;
             default: break;
             }
@@ -2828,7 +2835,7 @@ void Application::UpdateSounds() {
     }
     for (auto it = walkers.begin(); it != walkers.end();) it = it->second.seen ? std::next(it) : walkers.erase(it);
 
-    // Creatures: a thump when hit, and now and then a ghoul's groan.
+    // Creatures: a thump when hit, and now and then a hostile dwarf's grunt.
     std::uniform_real_distribution<double> wait(4.0, 11.0);
     static std::mt19937 rng(99);
     for (auto& [id, c] : creatureSounds) c.seen = false;
@@ -2836,10 +2843,10 @@ void Application::UpdateSounds() {
         CreatureSound& s = creatureSounds[c.id];
         if (c.hurt && !s.hurt) audio->Play("hit", c.feet + glm::vec3(0.0f, 0.8f, 0.0f), 0.9f);
         s.hurt = c.hurt;
-        if (c.type == CreatureType::Ghoul) {
+        if (SpecOf(c.type).hostile) {
             if (s.nextGroan == 0.0) s.nextGroan = now + wait(rng) * 0.5;
             else if (now >= s.nextGroan) {
-                audio->Play("groan", c.feet + glm::vec3(0.0f, 1.6f, 0.0f), 0.8f, 0.15f);
+                audio->Play("grunt", c.feet + glm::vec3(0.0f, 1.2f, 0.0f), c.type == CreatureType::DwarfChief ? 1.0f : 0.7f, 0.15f);
                 s.nextGroan = now + wait(rng);
             }
         }

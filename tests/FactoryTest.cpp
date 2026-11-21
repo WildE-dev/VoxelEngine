@@ -14,7 +14,9 @@
 //  - a pressure gauge fixed to an air pipe reads its network's pressure,
 //  - an oil derrick pumps crude from oil shale into a tank, a refinery makes it fuel,
 //    and an engine burns the fuel to fill its own air network,
-//  - a drain takes water into fluid pipes, and an outlet lets it out elsewhere.
+//  - a drain takes water into fluid pipes, and an outlet lets it out elsewhere,
+//  - a mining post hires dwarf miners only while it holds pay, and they dig the ore
+//    in reach into it, paid a quarter of a block of food for each.
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -28,6 +30,7 @@
 #include "client/ClientWorld.h"
 #include "server/Server.h"
 #include "world/Crafting.h"
+#include "world/Creatures.h"
 #include "world/Fluids.h"
 #include "world/Power.h"
 
@@ -316,7 +319,7 @@ int main() {
         // outlet facing +x.
         server.QueueConsoleCommand("tp Builder 42.5 0 37.5");
         pump(10.0, [&] { return a.feet.z < 38.0f; });
-        const glm::ivec3 drain{ 40, 0, 40 }, cup{ 40, 1, 40 }, outlet{ 44, 0, 40 }, out{ 45, 0, 40 };
+        const glm::ivec3 drain{ 40, 0, 40 }, cup{ 40, 1, 40 }, outlet{ 44, 0, 40 };
         server.QueueConsoleCommand("fill 39 1 39 41 2 41 stone");
         fill(drain, drain, "drain");
         fill({ 41, 0, 40 }, { 41, 0, 40 }, "fluid_pipe");
@@ -339,6 +342,35 @@ int main() {
                   return around > 64;
               }),
               "and it comes out of the outlet (" + std::to_string(around) + " units out there)");
+
+        std::cout << "Mining posts" << std::endl;
+        // A mining post on the ground, with coal and iron ore buried within its reach.
+        server.QueueConsoleCommand("tp Builder 50.5 0 47.5");
+        pump(10.0, [&] { return a.feet.z < 48.0f; });
+        const glm::ivec3 post{ 50, 0, 50 }, coal{ 54, -3, 50 }, iron{ 47, -2, 52 };
+        fill(post, post, "mining_post");
+        fill(coal, coal, "coal_ore");
+        fill(iron, iron, "iron_ore");
+        Check(pump(10.0, [&] { return blockAt(post) == BlockType::MINING_POST && blockAt(iron) == BlockType::IRON_ORE; }), "a mining post, with coal and iron ore buried near it");
+        auto miners = [&] {
+            int n = 0;
+            for (const auto& cr : a.client.GetCreatures()) n += cr.type == CreatureType::DwarfMiner;
+            return n;
+        };
+        wait(3.0);
+        Check(miners() == 0 && machine(post) && machine(post)->state == static_cast<uint8_t>(Power::DrillState::NoPressure), "unpaid, no miners come");
+        server.QueueConsoleCommand("give bread 2 Builder");
+        pump(5.0, [&] { return a.client.GetResources(BlockType::BREAD) >= 2 * Crafting::kBlock; });
+        a.client.OpenChest(post);
+        Check(pump(10.0, [&] { return a.client.GetOpenChest() == post; }), "it opens like a chest");
+        a.client.MoveChestItems(BlockType::BREAD, Crafting::kBlock, true);
+        Check(pump(10.0, [&] { return miners() >= 1; }), "paid in bread, dwarf miners come to work it");
+        Check(pump(30.0, [&] { return a.client.GetChestUnits(BlockType::COAL) == Crafting::kBlock && a.client.GetChestUnits(BlockType::IRON_ORE) == Crafting::kBlock; }),
+              "they dig out the coal and the iron ore and put them in the post");
+        Check(blockAt(coal) == BlockType::AIR && blockAt(iron) == BlockType::AIR, "the ore is gone from the ground");
+        Check(a.client.GetChestUnits(BlockType::BREAD) == Crafting::kBlock - 2 * 16, "for a quarter of a block of bread each");
+        a.client.BreakBlock(post);
+        Check(pump(10.0, [&] { return miners() == 0; }), "breaking the post sends them away");
 
         a.client.Disconnect();
         Pump(a, 0.3, [] { return false; });

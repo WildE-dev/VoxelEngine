@@ -115,7 +115,7 @@ inline bool IsAirPart(BlockType t) {
 }
 // What item pipes join: each other, chests, and the machines that fill or empty them.
 inline bool IsItemPart(BlockType t) {
-    return t == BlockType::ITEM_PIPE || t == BlockType::FILTER_PIPE || t == BlockType::CHEST || t == BlockType::DRILL || t == BlockType::SMELTER ||
+    return t == BlockType::ITEM_PIPE || t == BlockType::FILTER_PIPE || IsStorageType(t) || t == BlockType::DRILL || t == BlockType::SMELTER ||
            t == BlockType::SMELTER_LIT || t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER;
 }
 // How much air a part holds when full.
@@ -131,7 +131,7 @@ inline bool IsMachine(BlockType t) {
     return t == BlockType::WATER_WHEEL || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
            t == BlockType::PISTON || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
            t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::PRESSURE_GAUGE ||
-           t == BlockType::FLUID_TANK || Fluids::IsMachine(t);
+           t == BlockType::FLUID_TANK || Fluids::IsMachine(t) || t == BlockType::MINING_POST;
 }
 
 // Whether a pipe (drawn as a thin tube) reaches across to this neighbour: water pipes

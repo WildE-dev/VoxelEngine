@@ -42,6 +42,7 @@ add_library(voxel_common STATIC
     src/world/Collision.h
     src/world/Coords.h
     src/world/Dungeons.cpp
+    src/world/Dwarves.cpp
     src/world/Dungeons.h
     src/world/Features.cpp
     src/world/Features.h
@@ -67,6 +68,7 @@ add_library(voxel_server STATIC
     src/server/Server.cpp
     src/server/Power.cpp
     src/server/Signals.cpp
+    src/server/Miners.cpp
     src/server/Server.h
     src/server/ServerCommands.cpp
     src/server/ServerWorld.cpp

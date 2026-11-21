@@ -1791,6 +1791,44 @@ iiiiiiiiiiiiiiii
 """
 OUTLET_COLOURS = {"i": (60, 62, 68), "I": (120, 124, 132), "w": (80, 84, 92), "b": (40, 70, 140), "B": (90, 150, 230)}
 
+MINING_POST_SIDE = """
+wwwwwwwwwwwwwwww
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+iiiiiiiiiiiiiiii
+wWWWWWWkkWWWWWWw
+wWWWWWkIIkWWWWWw
+wWWWWkIkkIkWWWWw
+wWWWWWWkkWWWWWWw
+wWWWWWWkkWWWWWWw
+wWWWWWWkkWWWWWWw
+wWWWWWWkkWWWWWWw
+wWWWWWWWWWWWWWWw
+iiiiiiiiiiiiiiii
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+wwwwwwwwwwwwwwww
+"""
+MINING_POST_TOP = """
+wwwwwwwwwwwwwwww
+wWWWWWWWWWWWWWWw
+wWyyyyyyyyyyyyWw
+wWyWWWWWWWWWWyWw
+wWyWkkWWWWkkWyWw
+wWyWkIkWWkIkWyWw
+wWyWWkIkkIkWWyWw
+wWyWWWkIIkWWWyWw
+wWyWWWkIIkWWWyWw
+wWyWWkIkkIkWWyWw
+wWyWkIkWWkIkWyWw
+wWyWkkWWWWkkWyWw
+wWyWWWWWWWWWWyWw
+wWyyyyyyyyyyyyWw
+wWWWWWWWWWWWWWWw
+wwwwwwwwwwwwwwww
+"""
+MINING_POST_COLOURS = {"w": (110, 78, 44), "W": (150, 110, 64), "i": (90, 92, 98), "k": (40, 30, 22), "I": (170, 172, 180), "y": (200, 160, 50)}
+
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
     draw("cooked_venison", VENISON, COOKED, seed=12)
@@ -1902,6 +1940,8 @@ def main():
     draw("outlet_face", OUTLET_FACE, OUTLET_COLOURS, jitter=4, seed=116)
     draw("outlet_back", FLUID_TANK_TOP, FLUID_TANK_COLOURS, jitter=4, seed=117)
     draw("outlet_side", FLUID_TANK_TOP, OUTLET_COLOURS | {"k": (30, 30, 34)}, jitter=4, seed=118)
+    draw("mining_post_side", MINING_POST_SIDE, MINING_POST_COLOURS, jitter=4, seed=119)
+    draw("mining_post_top", MINING_POST_TOP, MINING_POST_COLOURS, jitter=4, seed=120)
 
 
 if __name__ == "__main__":

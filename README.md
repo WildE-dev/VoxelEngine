@@ -2,7 +2,7 @@
 
 A small OpenGL voxel engine with sloped terrain, caves, trees, chunk streaming on a
 background thread, block lighting, ambient occlusion, finite flowing water and a
-skybox. Deer roam it and ghouls come out in the dark. Several players can share a
+skybox. Deer roam it, and dwarves hold camps and mines. Several players can share a
 world over the network. (A black hole lensing
 effect at spawn is turned off; `kDrawBlackHole` in `src/render/Renderer.cpp` brings it
 back.)
@@ -681,75 +681,115 @@ client.
 
 ## Creatures
 
-Two kinds of creature live in the world. The server runs them and the players near
-them see them, smoothed like other players.
+The server runs the world's creatures, and the players near them see them, smoothed
+like other players. The animals keep to themselves; **every enemy is a dwarf**.
 
 - **Deer** wander grassland in herds of one to three. Hit one and it's knocked back
   and bolts away from you for a few seconds.
-- **Ghouls** come out where it's dark: light 4 or less, with sky light counting for a
-  quarter at night. That means caves, dungeons and the surface after dusk. One goes
-  for the nearest survival player within 16 blocks and hits for one and a half
-  hearts a second while in reach. Creative players, and players in no-clip, are left
-  alone. Daylight under the open sky burns them up in about six seconds.
+- **Wolves** roam grassland in pairs (now and then in place of a herd of deer) and
+  leave you alone, unless you hit one: then it goes for you for twenty seconds (1.5
+  hearts a bite). Right-click a wild wolf with raw venison in your hand to tame it (it
+  eats one). A tame wolf wears a red collar and follows you, keeping close, catching up
+  if it falls far behind, and staying as long as you're here. It goes for the hostile
+  dwarf nearest you (within 10 blocks) and bites it until it's gone. Taming one is the
+  Best Friend achievement. `/summon wolf` brings one.
+- **Bats** flutter about in the dark of caves, flitting in a new direction every
+  second or so and darting away when hit. They're harmless. `/summon bat` brings one.
+
+### Dwarves
+
+Dwarves are short and stocky, bearded and helmeted, and they live in **camps** on the
+surface and **mines** underground (see [Dwarf camps and mines](#dwarf-camps-and-mines)).
+Each guards its home: it wanders about it, goes for the nearest survival player in
+sight (16 blocks), and gives up on anyone who leads it more than 40 blocks from home,
+heading back. Creative players, and players in no-clip, are left alone. Daylight
+doesn't trouble them, and they don't turn up just anywhere in the dark: they come from
+their camps and mines.
+
+- **Dwarf warriors** (red tunics, an axe) close in and hit for one and a half hearts a
+  second. 7 hearts. `/summon dwarf`.
+- **Dwarf crossbowmen** (green, a crossbow held level) keep their distance, 7 to 14
+  blocks off, backing away if you close in and edging sideways, and shoot a bolt every
+  couple of seconds, aimed high enough to allow for its drop. Bolts hurt whatever they
+  hit (PvP or not). 5 hearts; one leaves you two arrows. `/summon crossbow_dwarf`.
+- **Dwarf chieftains** (bigger, purple, a white beard, a horned helmet and gold) hold
+  each camp: two and a half hearts a hit, 16 hearts. `/summon dwarf_chief`.
+- **Dwarf miners** (a yellow helmet with a lamp, a pickaxe) don't fight: they work
+  for whoever pays them (see [Mining posts](#mining-posts)).
+
+A site fills up the first time a player comes within about 70 blocks of it (a camp
+with a chieftain, four warriors and two crossbowmen; a mine with four warriors and
+two crossbowmen), then gets one dwarf back every 30 seconds for any killed.
 
 Left click a creature in front of you (within 4.5 blocks) to hit it. A hand does
-1 heart, a shovel 1.5, a pickaxe 2, an axe 2.5 and a sword 3.5. Hits land at most about three
-times a second, and the server checks the reach. A deer has 4 hearts and a ghoul 6.
-Aiming at a creature doesn't mine the block behind it.
-
-**Skeletons** come out in the dark like ghouls (three in ten of the night's hostile
-creatures) and burn in daylight too, but they keep their distance: 7 to 14 blocks off,
-backing away if you close in, edging sideways, and shooting an arrow every couple of
-seconds, aimed high enough to allow for its drop. Their arrows hurt whatever they hit
-(PvP or not). A skeleton has 5 hearts, and killing one leaves you two arrows.
-`/summon skeleton` brings one.
-
-**Bats** flutter about in the dark of caves (three in ten creatures spawned where no
-sky reaches), flitting in a new direction every second or so and darting away when
-hit. They're harmless. `/summon bat` brings one.
-
-**Wolves** roam grassland in pairs (now and then in place of a herd of deer) and leave
-you alone, unless you hit one: then it goes for you for twenty seconds (1.5 hearts a
-bite). Right-click a wild wolf with raw venison in your hand to tame it (it eats one).
-A tame wolf wears a red collar and follows you, keeping close, catching up if it falls
-far behind, and staying as long as you're here. It goes for the ghoul or skeleton
-nearest you (within 10 blocks) and bites it until it's gone. Taming one is the Best
-Friend achievement. Tame wolves aren't saved: like all creatures, they're gone after
-a restart. `/summon wolf` brings one. `CreatureTest` checks that an empty hand doesn't
-tame a wolf, venison does, a tame wolf follows, and it sees off a ghoul.
-
-In normal worlds they spawn by themselves around each player:
-
-- deer on open grass 20 to 48 blocks away, up to 6 nearby;
-- ghouls in the dark within 40 blocks, up to 5 nearby, never closer than 12.
+1 heart, a shovel 1.5, a pickaxe 2, an axe 2.5 and a sword 3.5. Hits land at most
+about three times a second, and the server checks the reach. A deer has 4 hearts.
+Aiming at a creature doesn't mine the block behind it. Defeating a hostile dwarf is
+the Dwarf Slayer achievement.
 
 **Horde nights.** One night in four (decided at dusk, and announced: "The ground
-stirs... a horde is coming tonight"), there are three times the hostile creatures
-around each player, they turn up faster, and ghouls hunt from 32 blocks instead of 16.
-It ends at dawn. Walls, gates, traps and lamps are worth having. `/horde` says
-whether tonight is one; operators can start or end one with `/horde on` and
-`/horde off`.
+stirs... a horde is coming tonight"), a dwarf **war band** comes for the players:
+warriors and crossbowmen turning up on open ground 24 to 40 blocks from each player,
+up to fifteen at a time, with no home to go back to, hunting from 32 blocks off. It
+ends at dawn. Walls, gates, traps and lamps are worth having. `/horde` says whether
+tonight is one; operators can start or end one with `/horde on` and `/horde off`.
 
 **Traps work on creatures too** (all but bats, which fly): they press pressure plates
 (setting off whatever's on the plate's channel, a dungeon flood chamber included),
 spikes hurt them as they hurt players, and crumbling bricks give way under them. A
-player sensor can be set to sense hostile creatures as well as players (see
-[Signals](#signals)), so a ghoul at the gate can shut it or light a warning lamp.
+player sensor can be set to sense hostile dwarves as well as players (see
+[Signals](#signals)), so a dwarf at the gate can shut it or light a warning lamp.
 
-They go when no player is within 96 blocks. They aren't saved: a world fills with
-them again as you play. Empty worlds have none of their own; `/summon deer` or
-`/summon ghoul` brings one anywhere. Their models are boxes like the players': a deer
-with antlers, and a ghoul with outstretched arms and glowing eyes. Their legs swing as
-they move, and they flash red when hit. The rules are in `src/world/Creatures.h` and
-the server side in `src/server/Creatures.cpp`.
+In normal worlds creatures spawn by themselves around each player: deer (or wolves) on
+open grass 20 to 48 blocks away, up to 6 nearby; bats in dark caves; dwarves at the
+camps and mines nearby. They go when no player is within 96 blocks, and they aren't
+saved: a world fills with them again as you play. Empty worlds have none of their
+own; `/summon` brings any of them. Their models are boxes like the players'; their
+legs swing as they move, and they flash red when hit. Hostile dwarves grunt now and
+then. The rules are in `src/world/Creatures.h` and the server side in
+`src/server/Creatures.cpp`.
 
 `CreatureTest` checks:
 
 - summoning, and that both players see creatures fall onto the ground;
 - hits: out of reach, too fast, knockback and fleeing, kills;
-- a ghoul hunting a survival player and ignoring a creative one;
-- burning at noon, and `/creatures clear`;
-- in a normal world, deer turning up by day and ghouls at night.
+- a dwarf warrior hunting a survival player, ignoring a creative one, and not minding
+  daylight; a crossbowman shooting from a distance and keeping it;
+- a tame wolf seeing off a dwarf warrior, and `/creatures clear`;
+- in a normal world, deer turning up by day, and dwarves coming out at the nearest camp
+  or mine when a player comes near it.
+
+### Dwarf camps and mines
+
+The world is split into 160 by 160 regions, and about a third hold a dwarf **camp**
+and a quarter a **mine**, on dry ground that's flat enough, below the bare peaks.
+
+- A **camp** is a ring of trodden earth inside a palisade of log posts (two or three
+  high) with a gap for its gate, three plank huts round a campfire, and a chest of
+  camp loot (bread, venison, arrows, iron, hide, sometimes steel).
+- A **mine** is a timber headframe over a shaft three blocks across with a ladder down
+  20 blocks, and two to four tunnels three wide and three high running out from its
+  foot, framed every five blocks by log posts in the walls and a beam overhead, a lamp
+  in every other beam, coal and iron ore showing in the walls, and a chest at the end
+  of each tunnel (coal, iron ore and ingots, TNT, sometimes steel).
+
+The layouts are in `src/world/Dwarves.cpp`; like dungeons, each chunk stamps just the
+part of a site inside it. `BiomeTest` checks camps have their fire, chest and
+palisade, and mines their open shaft, ladder, tunnels and chests.
+
+### Mining posts
+
+Dwarves can be hired. A **mining post** (4 planks and an iron ingot) is a chest:
+right-click to open it, and put their pay in it: cooked food (bread, cooked fish or
+cooked venison). While it holds pay, up to two **dwarf miners** come to work it, one
+every few seconds, and wander about it. Every five seconds each digs out the nearest
+coal or iron ore within 12 blocks of the post (in any direction, underground too) and
+puts it in the post, for a quarter of a block of food. Left unpaid for 30 seconds,
+they leave; break the post and they go at once. Look at a post to see how many miners
+it has and what they're doing. A post joins item pipes like a chest, so an extractor
+can carry the ore away. `FactoryTest` checks an unpaid post gets no miners, a paid one
+does, and they dig the ore near it into the post for a quarter of a block of bread
+each, and leave when it's broken.
 
 ## PvP
 
@@ -1142,7 +1182,7 @@ channel is heard by everything listening to it within **64 blocks**.
 | **Water sensor** | sends while water touches it (an eighth of a block or more, on any side) |
 | **Pressure sensor** | joined to air pipes, sends while their pressure is at least its setting (a percentage; 0 for any air at all) |
 | **Daylight sensor** | sends by day, while the sky is open above it |
-| **Player sensor** | sends while a player is within its range (4 blocks unless set, up to 16); tick "Hostile creatures too" and ghouls and skeletons count as well |
+| **Player sensor** | sends while a player is within its range (4 blocks unless set, up to 16); tick "Hostile creatures too" and hostile dwarves count as well |
 
 Placing a lever, a logic gate, a signal lamp, a piston or a sensor opens a small
 window to set its channels (and a pressure or player sensor's setting); right-click a gate or a lamp (with an empty hand or a tool), or crouch and
@@ -1161,7 +1201,7 @@ sensor) and a quarter of an iron ingot, with a quarter of sand (water), glass
 The server runs it ten times a second (`Server::UpdateSignals`,
 `src/server/Signals.cpp`; the rules are in `src/world/Signals.h`), keeps every
 block's channels and saves them with the world (world format 11), and tells everyone
-about each block's channels and state as they change (`SignalInfo`, protocol 45).
+about each block's channels and state as they change (`SignalInfo`, protocol 46).
 `SignalTest` checks:
 
 - a lamp lights and goes out with a lever on its channel, and one on another channel
@@ -1179,7 +1219,7 @@ about each block's channels and state as they change (`SignalInfo`, protocol 45)
   stays put, a chest in the row stops it, and breaking a piston takes its head;
 - player, water, pressure and daylight sensors each come on and go off when they
   should;
-- a ghoul penned on a pressure plate presses it, a player sensor set to sense
+- a dwarf penned on a pressure plate presses it, a player sensor set to sense
   creatures sees it (and a players-only one doesn't), spikes kill another, and
   `/horde on`, `/horde` and `/horde off` do what they say;
 - (and `DungeonTest`, that every flood chamber's plate sets a latch gate in its
@@ -1337,7 +1377,7 @@ to check:
 ## Achievements
 
 Survival players earn achievements for milestones, once each: breaking a first block,
-making a tool, bringing down a deer, defeating a ghoul, cooking venison, eating,
+making a tool, bringing down a deer, defeating a hostile dwarf, cooking venison, eating,
 harvesting wheat, baking bread, digging out iron ore, the iron upgrade, a full set of
 armour, opening a dungeon chest, sleeping through a night, and taking something down
 with an arrow, catching a fish, and taming a wolf (sixteen in all). Earning one shows a banner under the compass for a
@@ -1377,7 +1417,7 @@ ones you're allowed to use:
 | `/pressurise <x y z>` | operators | fill the air network with a pipe or machine there with air |
 | `/locate <spring\|sinkhole\|oil>` | operators | where the nearest spring (a lake's overflow), sinkhole (where its river ends) or oil is |
 | `/horde [on\|off]` | anyone to ask; operators to set | whether tonight is a horde night, or start or end one |
-| `/summon <deer\|ghoul> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
+| `/summon <deer\|wolf\|bat\|dwarf\|crossbow_dwarf\|dwarf_chief\|dwarf_miner> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
 | `/creatures [clear]` | operators | count the creatures, or remove them all |
 | `/pvp`, `/food` | everyone | whether players can hurt each other; how fed you are |
 | `/achievements` | everyone | the milestones you've reached, and those still to come |
@@ -1499,7 +1539,7 @@ they happen and fade with distance.
 - What **other players** build and break is heard too (at most a few at once, so a
   collapse or the laser isn't a din). The server's block changes are compared with
   what was there.
-- **Hurt** grunts, splashes into water, a **thump** when a creature is hit, a ghoul's
+- **Hurt** grunts, splashes into water, a **thump** when a creature is hit, a dwarf's
   groan now and then, a chime when crafting, and **rain** while it rains where you
   are. Under a roof it's quiet.
 

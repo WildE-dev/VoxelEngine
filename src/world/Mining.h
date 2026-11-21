@@ -137,6 +137,7 @@ inline float Hardness(BlockType type) {
     case BlockType::SINKHOLE:
     case BlockType::OIL_SHALE: return 4.0f;
     case BlockType::TAR: return 1.0f;
+    case BlockType::MINING_POST: return 1.5f;
     case BlockType::FLUID_PIPE:
     case BlockType::FLUID_TANK:
     case BlockType::OIL_DERRICK:
