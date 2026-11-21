@@ -1108,6 +1108,11 @@ Sky light depends on which way a face points: full on faces turned up, half on w
 and 40% on faces turned down, so the underside of an overhang or a tree canopy is
 lit by the sky around it instead of going black.
 
+
+Carrying light: with a lamp or a campfire selected in the hotbar (and some to hold),
+the world around you lights up as you walk, falling off a level a block like placed
+light. Other players carrying one light their surroundings too (up to eight lights at
+once), and figures and creatures near a carried light are lit by it.
 ## Block textures
 
 Every PNG in `Resources/Textures/Blocks/` is packed into a texture atlas at

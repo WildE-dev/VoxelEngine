@@ -233,6 +233,11 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
     worldShader.SetUniform("aoStrength", params.ambientOcclusion ? 1.0f : 0.0f);
     worldShader.SetUniform("sunBrightness", params.sunBrightness);
     worldShader.SetUniform("blockLightColor", kBlockLightColor);
+    {
+        const int count = static_cast<int>(std::min<size_t>(params.handLights.size(), 8));
+        worldShader.SetUniform("handLightCount", count);
+        if (count > 0) glUniform4fv(worldShader.GetLocation("handLights"), count, &params.handLights[0][0]);
+    }
     worldShader.SetUniform("cameraPos", params.cameraPosition);
     SetFogUniforms(worldShader, params, 1);
     world.Render(worldShader, params.view, params.projection, params.time);

@@ -522,6 +522,16 @@ void Application::Run() {
                 params.breakBoxSize = hi - lo;
             }
         }
+        // Light carried in hand: ours (a lamp or campfire selected, and some to hold), and
+        // other players'.
+        {
+            const BlockType mine = SelectedTool() == Tool::None ? SelectedBlock() : BlockType::AIR;
+            if (GetLightEmission(mine) > 0 && (client->IsCreative() || client->GetResources(mine) > 0))
+                params.handLights.push_back(glm::vec4(player.GetEyePosition() - glm::vec3(0.0f, 0.4f, 0.0f), static_cast<float>(GetLightEmission(mine))));
+            for (const auto& other : client->GetRemotePlayers())
+                if (GetLightEmission(other.heldBlock) > 0)
+                    params.handLights.push_back(glm::vec4(other.feet + glm::vec3(0.0f, 1.2f, 0.0f), static_cast<float>(GetLightEmission(other.heldBlock))));
+        }
         // Figures are lit by the light where they stand: the brighter of their feet's
         // cell (which may hold a slope or a plant) and the one above.
         auto lightAt = [&](const glm::vec3& feet) {
@@ -536,7 +546,10 @@ void Application::Run() {
                 best = glm::max(best, glm::vec2(skyLight, blockLight));
                 any = true;
             }
-            return any ? best : glm::vec2(15.0f, 0.0f);
+            if (!any) best = glm::vec2(15.0f, 0.0f);
+            // (And by lights carried nearby.)
+            for (const auto& h : params.handLights) best.y = std::max(best.y, h.w - glm::distance(feet + glm::vec3(0.0f, 0.9f, 0.0f), glm::vec3(h)));
+            return best;
         };
         for (const auto& c : client->GetCreatures())
             params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet), c.tame });

@@ -9,6 +9,10 @@ uniform mat4 projection;
 uniform float aoStrength;     // 0 = off, 1 = full
 uniform float sunBrightness;  // 0 = night, 1 = day
 uniform vec3 blockLightColor; // colour of light from emitting blocks
+// Lights carried in hand (a lamp, a campfire): where (xyz) and how strong (w, a light
+// level), falling off a level a block like placed light.
+uniform int handLightCount;
+uniform vec4 handLights[8];
 
 out vec2 TexCoord;
 out vec3 Light;
@@ -70,6 +74,10 @@ void main()
     // Light levels: each is ~85% as bright as the one above, level 0 is dark.
     float sky = data.skyLight > 0.0f ? pow(0.85f, 15.0f - data.skyLight) : 0.0f;
     float block = data.blockLight > 0.0f ? pow(0.85f, 15.0f - data.blockLight) : 0.0f;
+    for (int i = 0; i < handLightCount; i++) {
+        float level = handLights[i].w - distance(WorldPos, handLights[i].xyz);
+        if (level > 0.0f) block = max(block, pow(0.85f, 15.0f - level));
+    }
 
     // Sky: brightest on faces turned up toward it, half on walls. Faces turned down
     // still see the bright sky and ground around them (skylight bounces), so the
