@@ -35,7 +35,7 @@ GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
 `FoodTest` (see [Food and hunger](#food-and-hunger)), `ChestTest` (see
 [Chests](#chests)), `BedTest` (see [Beds](#beds)), `PowerTest` (see
 [Air power](#air-power)), `FactoryTest` (see [Air power](#air-power)), `SignalTest`
-(see [Signals](#signals)), `ModelEditor` (see [The model editor](#the-model-editor)), `DataTest` (see [Editing blocks and creatures](#editing-blocks-and-creatures)) and `SoundTest` (see
+(see [Signals](#signals)), `SyncTest` (two players: structures, chests, fluids, miners, the king and hired guards look the same to both), `ModelEditor` (see [The model editor](#the-model-editor)), `DataTest` (see [Editing blocks and creatures](#editing-blocks-and-creatures)) and `SoundTest` (see
 [Sound](#sound)).
 
 `ctest` in the build directory runs them all, and `ctest -j15` runs them all at
