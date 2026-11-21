@@ -244,7 +244,8 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                     out[Index(x, y, z)] = Block(under);
                 }
                 else if (blockY < m) {
-                    out[Index(x, y, z)] = Block(OreAt(coords.x * S + x, blockY, coords.z * S + z, m - blockY));
+                    // (Empty worlds are plain: no ore.)
+                    out[Index(x, y, z)] = Block(type == Type::Empty ? BlockType::STONE : OreAt(coords.x * S + x, blockY, coords.z * S + z, m - blockY));
                 }
             }
         }
