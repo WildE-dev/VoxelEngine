@@ -701,6 +701,15 @@ it out with `/give cap|tunic|boots [player]`. The rules are in `src/world/Armour
 damage sums, and that they're kept after a restart; `CreatureTest` checks that armour
 takes a sword hit from 3.5 hearts down to 2.
 
+## Ladders
+
+A **ladder** (three from a plank) is a see-through frame of rungs filling its cell.
+Walk into one to climb: moving or holding jump takes you up, crouching holds you
+where you are, and letting go slides you down slowly. A ladder ends a fall (no fall
+damage on one), water doesn't wash it away, and it's fastest to break with an axe.
+Stack them up a shaft or against a wall. `ShapeTest` checks climbing, holding on and
+sliding.
+
 ## Chests
 
 A **chest** (crafted from 2 planks) stores things. Right-click one within 6 blocks
@@ -794,6 +803,7 @@ makes four.
 | Cooked venison | 1 raw venison + 0.25 log |
 | Sword | 0.5 planks + 2 stone |
 | Chest | 2 planks |
+| 3 ladders | 1 planks |
 | Bed | 3 planks + 1 hide |
 | Iron ingot | 1 iron ore + 0.25 coal |
 | Lamp (with coal) | 0.5 glass + 0.25 coal |

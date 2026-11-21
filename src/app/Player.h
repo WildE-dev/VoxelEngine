@@ -45,6 +45,7 @@ public:
     bool IsFlying() const { return flying; }
     bool IsOnGround() const { return onGround; }
     bool IsSwimming() const { return inWater; }
+    bool IsClimbing() const { return onLadder; }
     bool IsHeadUnderwater(const BlockAccess& world) const;
 
     // Moves the player (a server correction or the spawn point) and stops it.
@@ -78,6 +79,7 @@ private:
     void MoveHorizontal(const BlockAccess& world, int axis, float distance);
     void MoveVertical(const BlockAccess& world, float distance, bool wasOnGround);
     bool InWater(const BlockAccess& world) const;
+    bool OnLadder(const BlockAccess& world) const; // any cell the body is in is a ladder
 
     glm::vec3 feet;
     glm::vec3 velocity{0.0f};
@@ -86,6 +88,7 @@ private:
     bool spawned = false;
     bool resumeHere = false;
     bool inWater = false;
+    bool onLadder = false;
     bool blockedHorizontally = false; // set by MoveHorizontal during a step
     float accumulator = 0.0f;
     bool crouching = false;

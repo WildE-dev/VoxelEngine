@@ -18,6 +18,8 @@ const float kJumpSpeed = std::sqrt(2.0f * kGravity * kJumpHeight);
 constexpr float kWalkSpeed = 4.5f;
 constexpr float kSprintSpeed = 7.0f;
 constexpr float kCrouchSpeedFactor = 0.3f; // crouching walks at this share of walking speed
+constexpr float kClimbSpeed = 3.0f;        // up a ladder
+constexpr float kLadderSlide = 1.5f;       // down one, letting go
 constexpr float kGroundAcceleration = 60.0f;
 constexpr float kAirAcceleration = 12.0f;
 
@@ -49,6 +51,17 @@ glm::vec2 Approach(glm::vec2 current, glm::vec2 target, float maxDelta) {
 bool Player::InWater(const BlockAccess& world) const {
     // Feet or waist below the water surface counts as swimming.
     return world.IsUnderwater(feet + glm::vec3(0.0f, 0.1f, 0.0f)) || world.IsUnderwater(feet + glm::vec3(0.0f, 0.9f, 0.0f));
+}
+
+bool Player::OnLadder(const BlockAccess& world) const {
+    const auto box = GetBounds();
+    for (int x = static_cast<int>(std::floor(box.min.x)); x <= static_cast<int>(std::floor(box.max.x)); x++)
+        for (int y = static_cast<int>(std::floor(box.min.y)); y <= static_cast<int>(std::floor(box.max.y)); y++)
+            for (int z = static_cast<int>(std::floor(box.min.z)); z <= static_cast<int>(std::floor(box.max.z)); z++) {
+                Block b;
+                if (world.GetBlock(x, y, z, b) && b.type == BlockType::LADDER) return true;
+            }
+    return false;
 }
 
 bool Player::IsHeadUnderwater(const BlockAccess& world) const {
@@ -165,7 +178,16 @@ void Player::Step(const BlockAccess& world, const PlayerInput& input, float dt) 
     velocity.x = horizontal.x;
     velocity.z = horizontal.y;
 
-    if (inWater) {
+    onLadder = !inWater && OnLadder(world);
+    if (onLadder) {
+        // Climbing: moving or jumping goes up, crouching holds on, otherwise a slow slide
+        // down (no falling off a ladder).
+        if (input.jump || glm::length(input.move) > 0.1f) velocity.y = kClimbSpeed;
+        else if (input.crouch) velocity.y = 0.0f;
+        else velocity.y = std::max(velocity.y - kGravity * dt, -kLadderSlide);
+        if (velocity.y < -kLadderSlide) velocity.y = -kLadderSlide;
+    }
+    else if (inWater) {
         // Buoyant and damped; holding jump swims up.
         velocity.y -= kGravity * kWaterGravityFactor * dt;
         velocity.y *= std::exp(-kWaterDrag * dt);

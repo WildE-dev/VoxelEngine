@@ -140,6 +140,9 @@ enum class BlockType : uint8_t {
     RIPE_WHEAT, // plant: ready to harvest
     WHEAT,      // items
     BREAD,
+    // A ladder: a see-through frame of rungs you walk into and climb (passable like a
+    // plant; drawn as a cube).
+    LADDER,
     COUNT
 };
 
@@ -151,7 +154,8 @@ inline bool IsItemType(BlockType type) {
 
 inline bool IsPlantType(BlockType type) {
     return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW || type == BlockType::SPIKES ||
-           type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES || type == BlockType::CROP || type == BlockType::RIPE_WHEAT;
+           type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES || type == BlockType::CROP || type == BlockType::RIPE_WHEAT ||
+           type == BlockType::LADDER;
 }
 
 // The resource a block counts as in survival (see Block::ResourceUnits): its own type,
@@ -416,7 +420,7 @@ struct Block {
     // Air, a plant or water: nothing to stand on or bump into.
     bool IsPassable() const { return IsAir() || IsPlant() || IsLiquid(); }
     // Water may flow into this cell (washing away any plant).
-    bool IsReplaceableByWater() const { return IsAir() || IsPlant(); }
+    bool IsReplaceableByWater() const { return IsAir() || (IsPlant() && type != BlockType::LADDER); }
     uint8_t GetLightEmission() const { return ::GetLightEmission(type); }
 
     // Height of the block's top surface (0..1) at a point inside its footprint,
@@ -451,6 +455,7 @@ inline Block Block::Placed(BlockType t, int heightEighths, int faceAxis) {
     if (t == BlockType::WATER) return Water(kMaxWaterVolume);
     if (t == BlockType::PRESSURE_PLATE) return PressurePlate();
     if (t == BlockType::BED) return Bed();
+    if (t == BlockType::LADDER) return Block(t); // (a whole cell, not a sprite's drop)
     if (IsPlantType(t)) return Plant(t, 0);
     if (heightEighths >= 8 || heightEighths <= 0 || !CanShape(t)) return Block(t).Turned(faceAxis);
     EdgeData slab;

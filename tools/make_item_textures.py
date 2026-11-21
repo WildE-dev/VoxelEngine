@@ -401,6 +401,26 @@ BREAD = """
 """
 BREAD_COLOURS = {"o": (110, 64, 26), "B": (200, 140, 64), "b": (226, 176, 100), "d": (160, 104, 44)}
 
+LADDER = """
+.rr..........rr.
+.rR..........rR.
+.rrwwwwwwwwwwrr.
+.rRWWWWWWWWWWrR.
+.rr..........rr.
+.rR..........rR.
+.rr..........rr.
+.rRwwwwwwwwwwrR.
+.rrWWWWWWWWWWrr.
+.rR..........rR.
+.rr..........rr.
+.rR..........rR.
+.rrwwwwwwwwwwrr.
+.rRWWWWWWWWWWrR.
+.rr..........rr.
+.rR..........rR.
+"""
+LADDER_COLOURS = {"r": (120, 82, 42), "R": (146, 104, 58), "w": (150, 108, 60), "W": (110, 76, 38)}
+
 
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
@@ -423,6 +443,7 @@ def main():
     draw("ripe_wheat", RIPE, RIPE_COLOURS, jitter=10, seed=28)
     draw("wheat", WHEAT_BUNDLE, WHEAT_COLOURS, jitter=8, seed=29)
     draw("bread", BREAD, BREAD_COLOURS, jitter=6, seed=30)
+    draw("ladder", LADDER, LADDER_COLOURS, jitter=6, seed=31)
 
 
 if __name__ == "__main__":
