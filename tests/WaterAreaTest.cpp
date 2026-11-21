@@ -3,8 +3,11 @@
 //  - water within the simulation distance of a player falls,
 //  - water beyond it (but loaded) waits where it is, parked, with its volume intact,
 //  - it carries on once the player moves close enough,
-//  - parked water in chunks that unload is forgotten.
+//  - parked water in chunks that unload is forgotten,
+//  - water flows into a carved notch lower than the block's average height (stepped
+//    and sloped), filling the lowest part first.
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
@@ -84,6 +87,43 @@ int main() {
     Check(WaterAt(world, farPos) == Block::kMaxWaterVolume, "water outside the simulation distance stays put");
     Check(sim.GetParkedCount() > 0, "it's parked (" + std::to_string(sim.GetParkedCount()) + " cells)");
     Check(ColumnWater(world, farPos) == farTotal, "with its volume intact");
+
+    // Carved blocks: a walled trough, half a block of water next to a block carved
+    // down in one place. The block's average height is above the water, but the notch
+    // reaches the floor: the water must flow in.
+    {
+        const Block wall(BlockType::STONE_BRICK);
+        auto trough = [&](int z, const Block& carved) {
+            for (int x = 0; x <= 5; x++)
+                for (int dz = -1; dz <= 1; dz++) {
+                    world.SetBlock(x, 43, z + dz, wall);                    // floor
+                    if (dz != 0 || x == 0 || x >= 3) world.SetBlock(x, 44, z + dz, wall); // walls
+                }
+            world.SetBlock(1, 44, z, Block::Water(Block::kMaxWaterVolume / 2));
+            world.SetBlock(2, 44, z, carved);
+        };
+        const Block notched = Block(BlockType::STONE_BRICK).Chiselled(3, -8); // one quarter cut to the floor
+        Block slope(BlockType::DIRT);
+        slope = slope.Chiselled(0, -8);                                        // one corner of a slope cut down
+        Check(notched.WaterFloor() > Block::kMaxWaterVolume / 2 && slope.WaterFloor() > Block::kMaxWaterVolume / 2,
+              "the carved blocks' average heights are above half a block");
+        Check(notched.WaterLevelFor(0) == 0 && notched.WaterVolumeAt(64) == 16 && notched.WaterLevelFor(16) >= 64 && notched.WaterLevelFor(16) < 68 && notched.WaterLevelFor(notched.WaterCapacity()) == 128 &&
+                  notched.WaterVolumeAt(128) == notched.WaterCapacity(),
+              "a notched block fills its notch first (half a block deep: 16 units, a quarter of the cell)");
+        trough(4, notched);
+        trough(8, slope);
+        for (int i = 0; i < 60; i++) sim.Tick(world);
+        Block a, b;
+        world.GetBlock(1, 44, 4, a);
+        world.GetBlock(2, 44, 4, b);
+        Check(b.WaterVolume() > 0 && std::abs(a.WaterLevel() - b.WaterLevel()) <= 2 && a.WaterVolume() + b.WaterVolume() == 64,
+              "water flows into a stepped block's notch and levels with the pool (" + std::to_string(a.WaterLevel()) + " / " +
+                  std::to_string(b.WaterLevel()) + ", " + std::to_string(b.WaterVolume()) + " units in the notch)");
+        world.GetBlock(1, 44, 8, a);
+        world.GetBlock(2, 44, 8, b);
+        Check(b.WaterVolume() > 0 && std::abs(a.WaterLevel() - b.WaterLevel()) <= 3 && a.WaterVolume() + b.WaterVolume() == 64,
+              "and into a slope's lowered corner (" + std::to_string(a.WaterLevel()) + " / " + std::to_string(b.WaterLevel()) + ")");
+    }
 
     // The player walks over to it.
     world.Update({ glm::ivec3(5, 0, 0) });

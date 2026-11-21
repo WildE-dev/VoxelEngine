@@ -465,6 +465,58 @@ void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, i
     }
 }
 
+namespace {
+// A partial block's four floor columns for water (see Block::WaterVolumeAt): heights
+// in units and weights (out of `total`).
+struct WaterColumns {
+    int height[4];
+    int weight[4];
+    int total;
+};
+WaterColumns ColumnsOf(const Block& b) {
+    constexpr int unitsPerEighth = Block::kMaxWaterVolume / 8;
+    WaterColumns c;
+    if (b.IsStepped()) {
+        for (int e = 0; e < 4; e++) c.height[e] = b.edgeData.GetTopY(e) * unitsPerEighth, c.weight[e] = 1;
+        c.total = 4;
+        return c;
+    }
+    // Corners (edge 2 is (0,0), 1 is (1,0), 0 is (0,1), 3 is (1,1)); the surface is
+    // split along the (0,1)-(1,0) diagonal, so those two corners count twice.
+    const int weights[4] = { 2, 2, 1, 1 }; // edges 0, 1, 2, 3
+    for (int e = 0; e < 4; e++) c.height[e] = b.edgeData.GetTopY(e) * unitsPerEighth, c.weight[e] = weights[e];
+    c.total = 6;
+    return c;
+}
+} // namespace
+
+int Block::WaterVolumeAt(int level) const {
+    const int capacity = WaterCapacity();
+    if (!IsPartial()) return std::clamp(level, 0, capacity);
+    if (level >= kMaxWaterVolume) return capacity;
+    const WaterColumns c = ColumnsOf(*this);
+    int sum = 0;
+    for (int e = 0; e < 4; e++) sum += c.weight[e] * std::clamp(level - c.height[e], 0, kMaxWaterVolume - c.height[e]);
+    return std::min(capacity, sum / c.total);
+}
+
+int Block::WaterLevelFor(int volume) const {
+    if (!IsPartial()) return volume;
+    const WaterColumns c = ColumnsOf(*this);
+    int lo = kMaxWaterVolume;
+    for (int e = 0; e < 4; e++) lo = std::min(lo, c.height[e]);
+    if (volume <= 0) return lo; // dry: its lowest point, where water would go first
+    if (volume >= WaterCapacity()) return kMaxWaterVolume;
+    // The highest level this much water still reaches: in a narrow notch one unit of
+    // water spans several levels, and it stands at the top of them.
+    int hi = kMaxWaterVolume;
+    while (lo < hi) {
+        const int mid = (lo + hi + 1) / 2;
+        if (WaterVolumeAt(mid) <= volume) lo = mid; else hi = mid - 1;
+    }
+    return lo;
+}
+
 uint8_t Block::WaterFloor() const {
     if (!IsPartial()) return 0;
     constexpr int unitsPerEighth = kMaxWaterVolume / 8;

@@ -413,7 +413,11 @@ Shape blocks yourself with the chisel: **C** lowers the quarter you're looking a
 a quarter of a block, **Shift+C** raises it again. Raising every quarter to the top
 makes the block whole; lowering them all removes it. Machines (pumps, pipes, sluice
 gates, pressure plates), water and plants can't be chiselled. Shaped blocks hold
-water above their quarters like the terrain's slopes do.
+water above their quarters like the terrain's slopes do, and fill their lowest parts
+first. The water treats a cell as four columns: a stepped block's quarters, or a
+slope's corners weighted like its two triangles. So a notch carved down to the floor
+in one quarter takes water from a pool beside it, even though the block as a whole
+stands higher than the pool's surface.
 
 Where a slope climbs past the top of its block (its corner clipped at the block's
 top), the column next to it holds the rest of the slope in the row above. The mesher

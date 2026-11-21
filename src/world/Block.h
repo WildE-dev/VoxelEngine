@@ -316,10 +316,18 @@ struct Block {
     // with a raised floor at the slope's average height, so the capacity is right.
     uint8_t WaterFloor() const;
     uint8_t WaterCapacity() const { return static_cast<uint8_t>(kMaxWaterVolume - WaterFloor()); }
-    // Height of the water surface within the cell, in units (floor + volume).
-    int WaterLevel() const { return WaterFloor() + water; }
-    // Level of the water as drawn, in units (floor + shown volume).
-    int WaterShownLevel() const { return WaterFloor() + shown; }
+    // Water in a partial block fills its lowest parts first. The cell is treated as
+    // four columns: a stepped block's quarters, or a slope's corners (weighted like
+    // the two triangles its surface is drawn as, so they hold what WaterCapacity
+    // says). A notch cut into one quarter takes water before the rest of the block is
+    // covered. WaterVolumeAt: the water that fits below `level` (units, 0..128 in the
+    // cell); WaterLevelFor: the surface `volume` reaches (the lowest floor when dry).
+    int WaterVolumeAt(int level) const;
+    int WaterLevelFor(int volume) const;
+    // Height of the water surface within the cell, in units.
+    int WaterLevel() const { return WaterLevelFor(water); }
+    // Level of the water as drawn, in units.
+    int WaterShownLevel() const { return WaterLevelFor(shown); }
     // Height of the water surface as drawn, in 32nds of a block (when nothing is above
     // it): the shown level rounded. On dry ground at least an eighth, so a thin film's
     // small changes don't count as visible; on top of other water (`onWater`, the top

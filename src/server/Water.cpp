@@ -447,7 +447,7 @@ void WaterSimulation::UpdateCell(ServerWorld& world, const glm::ivec3& pos) {
     struct Member {
         glm::ivec3 pos;
         Block cell;
-        int floor; // effective floor: the cell's floor minus the room below it
+        int drop; // room below it (a cell over a drop counts as that much lower)
     };
     auto roomBelow = [&](const glm::ivec3& p, const Block& cell) {
         if (cell.IsPartial()) return 0; // solid bottom
@@ -455,12 +455,16 @@ void WaterSimulation::UpdateCell(ServerWorld& world, const glm::ivec3& pos) {
         if (!world.GetBlock(p.x, p.y - 1, p.z, b) || !b.CanHoldWater()) return 0;
         return static_cast<int>(b.WaterCapacity()) - b.WaterVolume();
     };
-    auto member = [&](const glm::ivec3& p, const Block& cell) { return Member{ p, cell, cell.WaterFloor() - roomBelow(p, cell) }; };
+    auto member = [&](const glm::ivec3& p, const Block& cell) { return Member{ p, cell, roomBelow(p, cell) }; };
+    // The water a member holds below level t, and the level its water stands at. A
+    // partial block fills its low parts first (Block::WaterVolumeAt).
+    auto volumeAt = [](const Member& m, int t) { return m.cell.WaterVolumeAt(t + m.drop); };
+    auto levelOf = [](const Member& m, int volume) { return m.cell.WaterLevelFor(volume) - m.drop; };
 
     Member group[1 + 4 * kReach];
     int count = 0;
     group[count++] = member(pos, block);
-    const int level = group[0].floor + volume;
+    const int level = levelOf(group[0], volume);
     // Thin water only flows onto dry ground with enough head, or when deep water right
     // behind it keeps it fed (a lake pouring over a low slope); a puddle edge stays put.
     bool backed = volume >= kMinSpreadVolume;
@@ -476,7 +480,7 @@ void WaterSimulation::UpdateCell(ServerWorld& world, const glm::ivec3& pos) {
             Block n;
             if (!world.GetBlock(np.x, np.y, np.z, n) || !n.CanHoldWater()) break; // unloaded or solid: a wall
             const Member m = member(np, n);
-            const int head = level - (m.floor + n.WaterVolume());
+            const int head = level - levelOf(m, n.WaterVolume());
             if (!n.HasWater()) {
                 if (step == 1 && head >= 2 && (backed || head >= kMinSpreadVolume)) group[count++] = m;
                 break;
@@ -494,7 +498,7 @@ void WaterSimulation::UpdateCell(ServerWorld& world, const glm::ivec3& pos) {
     // a time (this cell first) to members that can still take more at level T.
     int total = 0;
     for (int i = 0; i < count; i++) total += group[i].cell.WaterVolume();
-    auto share = [&](const Member& m, int t) { return std::clamp(t - m.floor, 0, static_cast<int>(m.cell.WaterCapacity())); };
+    auto share = [&](const Member& m, int t) { return volumeAt(m, t); };
     auto filled = [&](int t) {
         int sum = 0;
         for (int i = 0; i < count; i++) sum += share(group[i], t);
@@ -510,7 +514,7 @@ void WaterSimulation::UpdateCell(ServerWorld& world, const glm::ivec3& pos) {
     for (int i = 0; i < count; i++) {
         const Member& m = group[i];
         target[i] = share(m, lo);
-        if (remainder > 0 && target[i] < m.cell.WaterCapacity() && lo >= m.floor) { target[i]++; remainder--; }
+        if (remainder > 0 && target[i] < m.cell.WaterCapacity() && volumeAt(m, lo + 1) > target[i]) { target[i]++; remainder--; }
     }
 
     bool moved = false;
