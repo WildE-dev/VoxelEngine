@@ -520,6 +520,10 @@ void Client::Interact(uint16_t creature) {
     if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::Interact{ creature }));
 }
 
+void Client::Trade(uint16_t trader, uint8_t offer) {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::Trade{ trader, offer }));
+}
+
 void Client::AttackPlayer(uint16_t player, Tool tool) {
     if (!welcomed) return;
     net.Send(net::kChannelReliable, net::Encode(net::AttackPlayer{ player, tool }));

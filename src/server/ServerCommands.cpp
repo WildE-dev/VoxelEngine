@@ -16,6 +16,7 @@
 
 #include "server/ServerWorld.h"
 #include "server/WorldStorage.h"
+#include "world/Dwarves.h"
 
 namespace {
 
@@ -412,7 +413,26 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
     }
     else if (command == "locate") {
         const std::string what = words.size() == 2 ? Lower(words[1]) : "";
-        if (what != "spring" && what != "sinkhole" && what != "oil") return usage("/locate <spring|sinkhole|oil>");
+        if (what != "spring" && what != "sinkhole" && what != "oil" && what != "camp" && what != "mine" && what != "market")
+            return usage("/locate <spring|sinkhole|oil|camp|mine|market>");
+        if (what == "camp" || what == "mine" || what == "market") {
+            // The nearest dwarf site of that kind, region by region.
+            const glm::vec3 at = sender ? sender->feet : glm::vec3(0.0f);
+            const Dwarves::SiteKind kind = what == "camp" ? Dwarves::SiteKind::Camp : what == "mine" ? Dwarves::SiteKind::Mine : Dwarves::SiteKind::Market;
+            const int rx = static_cast<int>(std::floor(at.x / Dwarves::kRegionSize)), rz = static_cast<int>(std::floor(at.z / Dwarves::kRegionSize));
+            std::optional<glm::ivec3> found;
+            float bestDistance = 1e9f;
+            for (int dx = -8; dx <= 8; dx++)
+                for (int dz = -8; dz <= 8; dz++) {
+                    const auto r = Dwarves::SiteIn(world->GetTerrain(), rx + dx, rz + dz);
+                    if (!r.exists || r.site.kind != kind) continue;
+                    const float d = glm::distance(glm::vec2(at.x, at.z), glm::vec2(r.site.centre.x, r.site.centre.z));
+                    if (d < bestDistance) bestDistance = d, found = r.site.centre;
+                }
+            if (!found) return reply(Kind::Info, "No dwarf " + what + " within " + std::to_string(8 * Dwarves::kRegionSize) + " blocks");
+            return reply(Kind::Info, "The nearest dwarf " + what + " is at " + std::to_string(found->x) + " " + std::to_string(found->y) + " " + std::to_string(found->z) +
+                                         ", " + std::to_string(static_cast<int>(bestDistance)) + " blocks away");
+        }
         if (what == "oil") {
             const glm::vec3 at = sender ? sender->feet : glm::vec3(0.0f);
             const auto oil = world->GetTerrain().OilNear(static_cast<int>(std::floor(at.x)), static_cast<int>(std::floor(at.z)), 600);
@@ -439,7 +459,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
     }
     else if (command == "summon") {
         const CreatureType type = words.size() > 1 ? CreatureFromId(Lower(words[1])) : CreatureType::Count;
-        if (type == CreatureType::Count) return usage("/summon <deer|wolf|bat|dwarf|crossbow_dwarf|dwarf_chief|dwarf_miner> [x y z]");
+        if (type == CreatureType::Count) return usage("/summon <deer|wolf|bat|dwarf|crossbow_dwarf|dwarf_chief|dwarf_miner|dwarf_trader|dwarf_guard> [x y z]");
         glm::vec3 at;
         if (words.size() >= 5) {
             const glm::vec3 base = sender ? sender->feet : glm::vec3(0.0f);
@@ -448,7 +468,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
                 const std::string& w = words[2 + a];
                 const bool relative = !w.empty() && w[0] == '~';
                 if ((relative && w.size() > 1 && !ParseNumber(w.substr(1), v)) || (!relative && !ParseNumber(w, v)))
-                    return usage("/summon <deer|wolf|bat|dwarf|crossbow_dwarf|dwarf_chief|dwarf_miner> [x y z]");
+                    return usage("/summon <deer|wolf|bat|dwarf|crossbow_dwarf|dwarf_chief|dwarf_miner|dwarf_trader|dwarf_guard> [x y z]");
                 at[a] = static_cast<float>(relative ? base[a] + v : v);
             }
         }
@@ -456,8 +476,11 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
             const float yaw = glm::radians(sender->yaw);
             at = sender->feet + glm::vec3(std::cos(yaw), 0.0f, std::sin(yaw)) * 4.0f + glm::vec3(0.0f, 0.5f, 0.0f);
         }
-        else return usage("summon <deer|ghoul|skeleton> <x> <y> <z>");
-        if (!creatures.Spawn(type, at)) return reply(Kind::Error, "Too many creatures already");
+        else return usage("summon <creature> [<x> <y> <z>]");
+        const uint16_t id = creatures.Spawn(type, at);
+        if (!id) return reply(Kind::Error, "Too many creatures already");
+        // (Market dwarves summoned at one spot make a market of their own there.)
+        if (IsMarketDwarf(type)) creatures.SetHome(id, at);
         char where[64];
         std::snprintf(where, sizeof where, "%.1f, %.1f, %.1f", at.x, at.y, at.z);
         reply(Kind::Info, std::string("Summoned a ") + SpecOf(type).id + " at " + where);

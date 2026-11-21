@@ -184,6 +184,7 @@ public:
     void AttackPlayer(uint16_t player, Tool tool);
     // Right-clicked a creature (with raw venison in hand, a wild wolf is tamed).
     void Interact(uint16_t creature);
+    void Trade(uint16_t trader, uint8_t offer);
     // Right-clicked part of an air network: the server answers in chat.
     void Inspect(const glm::ivec3& pos);
     // Signal blocks' channels and states, as the server last said (world/Signals.h),

@@ -17,10 +17,13 @@
 
 #include "world/Mining.h"
 
-enum class CreatureType : uint8_t { Deer, DwarfWarrior, DwarfCrossbow, Wolf, Bat, DwarfChief, DwarfMiner, Count };
+enum class CreatureType : uint8_t { Deer, DwarfWarrior, DwarfCrossbow, Wolf, Bat, DwarfChief, DwarfMiner, DwarfTrader, DwarfGuard, Count };
 inline bool IsDwarf(CreatureType t) {
-    return t == CreatureType::DwarfWarrior || t == CreatureType::DwarfCrossbow || t == CreatureType::DwarfChief || t == CreatureType::DwarfMiner;
+    return t == CreatureType::DwarfWarrior || t == CreatureType::DwarfCrossbow || t == CreatureType::DwarfChief || t == CreatureType::DwarfMiner ||
+           t == CreatureType::DwarfTrader || t == CreatureType::DwarfGuard;
 }
+// The dwarves of a market (friendly, unless you hit one of them).
+inline bool IsMarketDwarf(CreatureType t) { return t == CreatureType::DwarfTrader || t == CreatureType::DwarfGuard; }
 
 struct CreatureSpec {
     const char* name;  // "Deer"
@@ -44,6 +47,8 @@ inline const CreatureSpec& SpecOf(CreatureType type) {
         { "Bat", "bat", 0.2f, 0.4f, 4, 2.5f, 4.0f, false, 0, 0.0f },                         // (flutters about caves)
         { "Dwarf chieftain", "dwarf_chief", 0.42f, 1.6f, 32, 1.0f, 3.0f, true, 5, 1.0f },
         { "Dwarf miner", "dwarf_miner", 0.36f, 1.4f, 14, 1.2f, 2.5f, false, 0, 0.0f },       // (works a mining post)
+        { "Dwarf trader", "dwarf_trader", 0.38f, 1.4f, 20, 1.0f, 2.6f, false, 0, 0.0f },     // (trades at a market)
+        { "Dwarf guard", "dwarf_guard", 0.38f, 1.45f, 24, 1.1f, 3.5f, false, 4, 1.0f },      // (guards a market, or whoever hired it)
     };
     const int t = static_cast<int>(type);
     return specs[t >= 0 && t < static_cast<int>(CreatureType::Count) ? t : 0];

@@ -773,9 +773,42 @@ and a quarter a **mine**, on dry ground that's flat enough, below the bare peaks
   in every other beam, coal and iron ore showing in the walls, and a chest at the end
   of each tunnel (coal, iron ore and ingots, TNT, sometimes steel).
 
+- One camp in four is a **market** instead: the same palisade, huts and fire, with a
+  lamp on a post either side of the gate and no loot, where friendly dwarves live (see
+  [Markets](#markets)).
+
 The layouts are in `src/world/Dwarves.cpp`; like dungeons, each chunk stamps just the
 part of a site inside it. `BiomeTest` checks camps have their fire, chest and
 palisade, and mines their open shaft, ladder, tunnels and chests.
+
+### Markets
+
+Not every dwarf is out for blood. A market's dwarves (a **trader** in green with a
+broad hat, and three **guards** in blue with shields and spears) are friendly: the
+guards keep to the market and cut down hostile dwarves that come within 16 blocks of it.
+
+Right-click the trader to trade (from within 6 blocks):
+
+| You give | You get |
+|---|---|
+| 4 bread | 1 iron ingot |
+| 8 coal | 1 iron ingot |
+| 3 iron ingots | 1 steel ingot |
+| 2 hides | 8 arrows |
+| 2 iron ingots | 2 TNT |
+| 1 steel ingot | 6 bread |
+| 4 iron ingots | a guard for ten minutes |
+
+A **hired guard** wears a yellow band. They follow you (catching up if left behind)
+and fight the hostile dwarf nearest you within 12 blocks, until their ten minutes are
+up and they go home. You can have two at once.
+
+Hit any of a market's dwarves and the whole market turns on you for five minutes: the
+guards come after you (within 40 blocks of it) and the trader won't deal with you.
+`/locate market` (or `camp`, or `mine`) says where the nearest one is. The offers are
+in `src/world/Trades.h`; `/summon dwarf_trader` and `/summon dwarf_guard`
+bring them (a market of their own where they're summoned). `CreatureTest` checks a
+trade, a refused one, hiring a guard who follows and fights, and the grudge.
 
 ### Mining posts
 

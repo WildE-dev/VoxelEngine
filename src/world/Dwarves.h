@@ -8,6 +8,9 @@
 //
 //  - A camp: a ring of trodden earth inside a palisade of log posts with a gap for a
 //    gate, huts of planks round a campfire, and a chest of loot.
+//  - A market: a camp of friendly dwarves (the same palisade, huts and fire, lamps
+//    either side of the gate and no loot): a trader (world/Trades.h) and guards, who
+//    fight hostile dwarves that come near, and anyone who hits one of them.
 //  - A mine: a timber headframe over a shaft three blocks across, with a ladder down
 //    to kMineDepth below the ground, and tunnels three wide and three high running out
 //    from its foot, framed every few blocks by log posts in the walls and a beam
@@ -31,7 +34,7 @@ constexpr int kRegionSize = 160;
 constexpr int kCampRadius = 7;
 constexpr int kMineDepth = 20;
 
-enum class SiteKind : uint8_t { Camp, Mine };
+enum class SiteKind : uint8_t { Camp, Mine, Market };
 
 struct Site {
     SiteKind kind = SiteKind::Camp;
@@ -39,6 +42,7 @@ struct Site {
     std::vector<glm::ivec3> spawns;    // where dwarves stand (feet)
     std::vector<glm::ivec3> chests;
     int warriors = 0, crossbows = 0, chiefs = 0; // how many live there
+    int traders = 0, guards = 0;                 // (a market's)
 };
 
 // The site in a region, if any (exists = false: none).

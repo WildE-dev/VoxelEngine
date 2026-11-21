@@ -1,4 +1,5 @@
 #include "server/Server.h"
+#include "world/Trades.h"
 #include <filesystem>
 #include "world/BlockData.h"
 #include "world/Dwarves.h"
@@ -363,6 +364,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
         if ((ok = net::Decode(in, m))) HandleInteract(client, m.creature);
         break;
     }
+    case net::MsgType::Trade: {
+        net::Trade m;
+        if ((ok = net::Decode(in, m))) HandleTrade(client, m.creature, m.offer);
+        break;
+    }
     case net::MsgType::AttackPlayer: {
         net::AttackPlayer m;
         if ((ok = net::Decode(in, m))) HandleAttackPlayer(client, m.player, m.tool);
@@ -701,6 +707,39 @@ void Server::HandleInteract(ClientState& client, uint16_t creature) {
     Award(client, Achievement::BestFriend);
 }
 
+void Server::HandleTrade(ClientState& client, uint16_t trader, uint8_t offerIndex) {
+    const double now = Now();
+    const CreatureSystem::Creature* c = creatures.Find(trader);
+    if (!c || c->type != CreatureType::DwarfTrader) return;
+    if (glm::distance(c->feet, client.feet) > Trades::kReach) return SendChat(client, net::ChatMessage::Kind::Error, "Come closer to the trader to trade");
+    if (creatures.AngryAt(*c, client.id, now)) return SendChat(client, net::ChatMessage::Kind::Error, "The trader won't deal with you, after what you did here");
+    const auto& offers = Trades::Offers();
+    if (offerIndex >= offers.size()) return;
+    const Trades::Offer& o = offers[offerIndex];
+    auto name = [](BlockType t) { return std::string(BlockData::NameOr(t, BlockId(t))); };
+    const uint32_t cost = static_cast<uint32_t>(o.giveCount) * Block::kUnitsPerBlock;
+    uint32_t& have = client.resources[static_cast<size_t>(o.give)];
+    if (!Creative(client) && have < cost)
+        return SendChat(client, net::ChatMessage::Kind::Error, "You need " + std::to_string(o.giveCount) + " " + name(o.give) + " for that");
+    const glm::vec3 at = c->feet; // (c may move once a creature is added)
+    if (o.hire) {
+        if (creatures.HiredBy(client.id) >= Trades::kMaxHired)
+            return SendChat(client, net::ChatMessage::Kind::Error, "You already have " + std::to_string(Trades::kMaxHired) + " guards");
+        glm::vec2 toward(client.feet.x - at.x, client.feet.z - at.z);
+        toward = glm::length(toward) > 1e-3f ? glm::normalize(toward) : glm::vec2(1.0f, 0.0f);
+        if (!creatures.Hire(at + glm::vec3(toward.x, 0.2f, toward.y), client.id, now, Trades::kHireSeconds))
+            return SendChat(client, net::ChatMessage::Kind::Error, "No guard is free just now");
+        SendChat(client, net::ChatMessage::Kind::Info, "A dwarf guard will follow you and fight for you for ten minutes");
+    }
+    else {
+        client.resources[static_cast<size_t>(o.get)] += static_cast<uint32_t>(o.getCount) * Block::kUnitsPerBlock;
+        SendChat(client, net::ChatMessage::Kind::Info,
+                 "Traded " + std::to_string(o.giveCount) + " " + name(o.give) + " for " + std::to_string(o.getCount) + " " + name(o.get));
+    }
+    if (!Creative(client)) have -= cost;
+    SendResources(client);
+}
+
 void Server::HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool) {
     tool = Usable(client, tool);
     const double now = Now();
@@ -745,6 +784,9 @@ void Server::UpdateCreatures() {
         for (auto& [peer, client] : clients)
             if (client.id == playerId) Hurt(client, damage, deathMessage);
     });
+    for (uint16_t owner : creatures.TakeEndedHires())
+        for (auto& [peer, client] : clients)
+            if (client.id == owner) SendChat(client, net::ChatMessage::Kind::Info, "Your hired guard's time is up: they've gone home");
 }
 
 void Server::SendCreatures() {

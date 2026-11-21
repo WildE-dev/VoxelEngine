@@ -103,18 +103,22 @@ void CreatureSystem::SpawnDwarves(ServerWorld& world, const std::vector<Player>&
             const int64_t key = (static_cast<int64_t>(site.centre.x) << 32) ^ static_cast<uint32_t>(site.centre.z);
             if (done[key]) continue;
             done[key] = true;
-            int warriors = 0, crossbows = 0, chiefs = 0;
+            int warriors = 0, crossbows = 0, chiefs = 0, traders = 0, guards = 0;
             for (const auto& c : creatures)
-                if (c.hasHome && c.site == site.centre) {
+                if (c.hasHome && c.site == site.centre && c.owner == 0) {
                     warriors += c.type == CreatureType::DwarfWarrior;
                     crossbows += c.type == CreatureType::DwarfCrossbow;
                     chiefs += c.type == CreatureType::DwarfChief;
+                    traders += c.type == CreatureType::DwarfTrader;
+                    guards += c.type == CreatureType::DwarfGuard;
                 }
             const bool first = !siteRefill.count(key);
             if (!first && clock < siteRefill[key]) continue;
             for (const glm::ivec3& spot : site.spawns) {
                 CreatureType type = CreatureType::Count;
-                if (chiefs < site.chiefs) type = CreatureType::DwarfChief;
+                if (traders < site.traders) type = CreatureType::DwarfTrader;
+                else if (guards < site.guards) type = CreatureType::DwarfGuard;
+                else if (chiefs < site.chiefs) type = CreatureType::DwarfChief;
                 else if (warriors < site.warriors) type = CreatureType::DwarfWarrior;
                 else if (crossbows < site.crossbows) type = CreatureType::DwarfCrossbow;
                 if (type == CreatureType::Count) break;
@@ -125,7 +129,11 @@ void CreatureSystem::SpawnDwarves(ServerWorld& world, const std::vector<Player>&
                 if (!id) break;
                 for (auto& c : creatures)
                     if (c.id == id) c.hasHome = true, c.home = glm::vec3(site.centre) + glm::vec3(0.5f, 0.0f, 0.5f), c.site = site.centre;
-                (type == CreatureType::DwarfChief ? chiefs : type == CreatureType::DwarfWarrior ? warriors : crossbows)++;
+                (type == CreatureType::DwarfTrader  ? traders
+                 : type == CreatureType::DwarfGuard ? guards
+                 : type == CreatureType::DwarfChief ? chiefs
+                 : type == CreatureType::DwarfWarrior ? warriors
+                                                      : crossbows)++;
                 if (!first) break; // (one at a time after the first fill)
             }
             siteRefill[key] = clock + kSiteRefill;
@@ -200,11 +208,35 @@ bool CreatureSystem::Damage(uint16_t id, int damage, const glm::vec3& from, doub
 Collision::AABB CreatureSystem::Box(const Creature& c) { return BoxAt(c.feet, SpecOf(c.type)); }
 
 void CreatureSystem::Provoke(uint16_t id, uint16_t player, double now) {
+    glm::ivec3 market{ 0 };
+    bool marketHit = false;
     for (auto& c : creatures)
         if (c.id == id && c.type == CreatureType::Wolf && c.owner == 0) {
             c.angryAt = player;
             c.angryUntil = now + 20.0;
         }
+        else if (c.id == id && IsMarketDwarf(c.type) && c.owner == 0 && c.hasHome)
+            market = c.site, marketHit = true;
+    // Hit one of a market's dwarves, and the whole market turns on you.
+    if (marketHit)
+        for (auto& c : creatures)
+            if (IsMarketDwarf(c.type) && c.owner == 0 && c.hasHome && c.site == market) {
+                c.angryAt = player;
+                c.angryUntil = now + kMarketGrudge;
+            }
+}
+
+uint16_t CreatureSystem::Hire(const glm::vec3& feet, uint16_t player, double now, double seconds) {
+    const uint16_t id = Spawn(CreatureType::DwarfGuard, feet);
+    for (auto& c : creatures)
+        if (c.id == id) c.owner = player, c.hiredUntil = now + seconds;
+    return id;
+}
+
+int CreatureSystem::HiredBy(uint16_t player) const {
+    int n = 0;
+    for (const auto& c : creatures) n += c.type == CreatureType::DwarfGuard && c.owner == player;
+    return n;
 }
 
 bool CreatureSystem::Tame(uint16_t id, uint16_t player) {
@@ -320,8 +352,65 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
         }
         else wander();
     };
-    if (c.type == CreatureType::DwarfMiner) {
-        keepHome(4.0f);
+    if (c.type == CreatureType::DwarfMiner || c.type == CreatureType::DwarfTrader) {
+        keepHome(c.type == CreatureType::DwarfTrader ? 3.0f : 4.0f);
+        return;
+    }
+    if (c.type == CreatureType::DwarfGuard) {
+        // Strikes what it's after, once in reach.
+        auto strike = [&](const glm::vec3& at, auto hit) {
+            glm::vec2 to(at.x - c.feet.x, at.z - c.feet.z);
+            const float reach = spec.halfWidth + 0.3f + spec.attackReach;
+            if (glm::length(to) > 0.5f) move = glm::normalize(to);
+            speed = glm::length(to) > reach * 0.7f ? spec.runSpeed : 0.0f;
+            if (glm::length(to) > 0.2f) c.yaw = glm::degrees(std::atan2(to.y, to.x));
+            if (glm::length(to) <= reach && std::abs(at.y - c.feet.y) < 1.8f && now >= c.nextAttack) {
+                c.nextAttack = now + 1.0;
+                c.act = 1, c.actedAt = now;
+                hit();
+            }
+        };
+        const Player* owner = nullptr;
+        for (const auto& p : players)
+            if (p.id == c.owner) owner = &p;
+        // The hostile dwarf nearest what it guards: its market, or whoever hired it.
+        const glm::vec3 guarding = c.owner != 0 ? (owner ? owner->feet : c.feet) : c.home;
+        Creature* foe = nullptr;
+        float best = c.owner != 0 ? 12.0f : 16.0f;
+        for (auto& other : creatures)
+            if (SpecOf(other.type).hostile && other.health > 0) {
+                const float d = glm::distance(other.feet, guarding);
+                if (d < best) best = d, foe = &other;
+            }
+        if (foe) {
+            strike(foe->feet, [&] {
+                foe->health -= spec.attackDamage + 1;
+                foe->hurtUntil = now + 0.3;
+            });
+            return;
+        }
+        if (c.owner != 0) {
+            // Hired: keeps close to whoever hired it (and catches up).
+            if (!owner) return;
+            const float d = HorizontalDistance(owner->feet, c.feet);
+            if (d > 24.0f) {
+                c.feet = owner->feet + glm::vec3(1.0f, 0.5f, -1.0f);
+                c.velocity = glm::vec3(0.0f);
+            }
+            if (d > 3.0f) {
+                move = glm::normalize(glm::vec2(owner->feet.x - c.feet.x, owner->feet.z - c.feet.z));
+                speed = d > 8.0f ? spec.runSpeed : spec.walkSpeed * 1.5f;
+            }
+            return;
+        }
+        // A market's guard: after anyone who hit one of its dwarves (not too far from it).
+        if (c.angryAt != 0 && now < c.angryUntil)
+            for (const auto& p : players)
+                if (p.id == c.angryAt && p.vulnerable && HorizontalDistance(p.feet, c.home) < 40.0f) {
+                    strike(p.feet, [&] { hurt(p.id, spec.attackDamage, "was cut down by a market guard"); });
+                    return;
+                }
+        keepHome(6.0f);
         return;
     }
 
@@ -532,6 +621,11 @@ void CreatureSystem::Update(ServerWorld& world, const std::vector<Player>& playe
             for (const auto& p : players)
                 if (p.id == c.owner) nearest = 0.0f;
         if (nearest > kDespawnDistance || c.feet.y < -1000.0f) {
+            it = creatures.erase(it);
+            continue;
+        }
+        if (c.hiredUntil > 0.0 && now >= c.hiredUntil) {
+            endedHires.push_back(c.owner);
             it = creatures.erase(it);
             continue;
         }

@@ -1,4 +1,5 @@
 #include "app/Application.h"
+#include "world/Trades.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -2008,7 +2009,7 @@ void Application::SetInventoryOpen(bool open) {
         client->CloseChest();
         chestMode = chestSeenOpen = false;
     }
-    if (!open) signMode = false, signalMode = false;
+    if (!open) signMode = false, signalMode = false, tradeMode = false;
     // The cursor is needed to click blocks; give it back to the game on closing.
     if (open) cursorBeforeInventory = captureCursor;
     captureCursor = open ? false : cursorBeforeInventory;
@@ -2016,11 +2017,69 @@ void Application::SetInventoryOpen(bool open) {
     camera.ResetLook();
 }
 
+void Application::DrawTrade() {
+    // Gone, or walked away from: closed.
+    bool near = false;
+    for (const auto& c : client->GetCreatures())
+        if (c.id == tradeWith) near = glm::distance(c.feet, camera.GetPosition()) < Trades::kReach + 2.0f;
+    if (!near) return SetInventoryOpen(false);
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.42f),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowBgAlpha(0.88f);
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize;
+    bool keepOpen = true;
+    if (ImGui::Begin("Dwarf trader", &keepOpen, flags)) {
+        const TextureAtlas& atlas = renderer->GetAtlas();
+        const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
+        constexpr float kIcon = 32.0f;
+        auto icon = [&](BlockType t) {
+            glm::vec2 uv0, uv1;
+            atlas.GetTileUV(IconTile(t), uv0, uv1);
+            ImGui::Image(texture, ImVec2(kIcon, kIcon), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
+            ImGui::SetItemTooltip("%s", BlockName(t));
+        };
+        ImGui::TextDisabled("\"Good iron, fair prices. What'll it be?\"");
+        const auto& offers = Trades::Offers();
+        for (size_t i = 0; i < offers.size(); i++) {
+            const Trades::Offer& o = offers[i];
+            ImGui::PushID(static_cast<int>(i));
+            const uint32_t have = client->GetResources(o.give) / Block::kUnitsPerBlock;
+            const bool can = client->IsCreative() || have >= static_cast<uint32_t>(o.giveCount);
+            icon(o.give);
+            ImGui::SameLine();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(can ? ImVec4(1, 1, 1, 1) : ImVec4(1.0f, 0.5f, 0.45f, 1.0f), "%d %s", o.giveCount, BlockName(o.give));
+            ImGui::SameLine(250.0f);
+            ImGui::TextUnformatted("->");
+            ImGui::SameLine();
+            if (o.hire) {
+                ImGui::TextUnformatted("a guard for ten minutes");
+                ImGui::SetItemTooltip("Follows you and fights hostile dwarves (at most %d at once)", Trades::kMaxHired);
+            } else {
+                icon(o.get);
+                ImGui::SameLine();
+                ImGui::Text("%d %s", o.getCount, BlockName(o.get));
+            }
+            ImGui::SameLine(560.0f);
+            ImGui::BeginDisabled(!can);
+            if (ImGui::Button(o.hire ? "Hire" : "Trade")) client->Trade(tradeWith, static_cast<uint8_t>(i));
+            ImGui::EndDisabled();
+            ImGui::PopID();
+        }
+        ImGui::TextDisabled("You have what's in white. I or Esc closes.");
+    }
+    ImGui::End();
+    if (!keepOpen) SetInventoryOpen(false);
+}
+
 void Application::DrawInventory() {
     if (!inventoryOpen) return;
     if (chestMode) return DrawChest();
     if (signMode) return DrawSignEditor();
     if (signalMode) return DrawSignalEditor();
+    if (tradeMode) return DrawTrade();
     constexpr int kColumns = 7;
     constexpr float kIcon = 44.0f;
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -2298,6 +2357,14 @@ void Application::OnMouseButton(int button, int action) {
     if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         const FightTarget target = TargetInView();
         if (target.creature) {
+            // A trader: its offers. (Anything else: fed, or tamed.)
+            for (const auto& c : client->GetCreatures())
+                if (c.id == target.creature && c.type == CreatureType::DwarfTrader) {
+                    SetInventoryOpen(true);
+                    tradeMode = true;
+                    tradeWith = c.id;
+                    return;
+                }
             client->Interact(target.creature);
             return;
         }

@@ -380,6 +380,18 @@ bool Decode(ByteReader& in, Interact& m) {
     return in.U16(m.creature) && in.AtEnd();
 }
 
+std::vector<uint8_t> Encode(const Trade& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Trade);
+    w.U16(m.creature);
+    w.U8(m.offer);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Trade& m) {
+    return in.U16(m.creature) && in.U8(m.offer) && in.AtEnd();
+}
+
 std::vector<uint8_t> Encode(const CreatureSnapshot& m) {
     ByteWriter w;
     Begin(w, MsgType::CreatureSnapshot);

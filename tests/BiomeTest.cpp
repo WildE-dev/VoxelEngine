@@ -251,7 +251,7 @@ int main() {
 
     // Dwarf camps and mines: a camp's fire, chest and palisade; a mine's open shaft with
     // its ladder, its tunnels, and a chest at each tunnel's end.
-    int camps = 0, mines = 0, campsRight = 0, minesRight = 0;
+    int camps = 0, mines = 0, campsRight = 0, minesRight = 0, markets = 0, marketsRight = 0;
     for (int rx = -6; rx <= 6; rx++)
         for (int rz = -6; rz <= 6; rz++) {
             const auto r = Dwarves::SiteIn(t, rx, rz);
@@ -268,6 +268,15 @@ int main() {
                 right = right && logs >= 3;
                 campsRight += right;
             }
+            else if (r.site.kind == Dwarves::SiteKind::Market) {
+                // A market: a fire, lamps by the gate, and no loot.
+                if (markets >= 2) continue;
+                markets++;
+                const glm::ivec3 side(r.gate.z, 0, -r.gate.x);
+                right = world.Get(c).type == BlockType::CAMPFIRE && r.site.chests.empty() && r.site.traders == 1 &&
+                        world.Get(c + r.gate * 6 + side * 2 + glm::ivec3(0, 3, 0)).type == BlockType::LAMP;
+                marketsRight += right;
+            }
             else {
                 if (mines >= 4) continue;
                 mines++;
@@ -277,6 +286,7 @@ int main() {
             }
         }
     Check(camps > 0 && campsRight == camps, "dwarf camps have their fire, chest and palisade (" + std::to_string(campsRight) + " of " + std::to_string(camps) + ")");
+    Check(marketsRight == markets, "dwarf markets have their fire and lamps by the gate, and no loot (" + std::to_string(marketsRight) + " of " + std::to_string(markets) + ")");
     Check(mines > 0 && minesRight == mines, "dwarf mines have an open shaft with a ladder, tunnels and chests (" + std::to_string(minesRight) + " of " + std::to_string(mines) + ")");
 
     std::cout << (failures ? "BIOME TEST FAILED (" : "ALL BIOME CHECKS PASSED (") << failures << " failures)" << std::endl;

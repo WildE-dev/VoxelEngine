@@ -25,6 +25,7 @@
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "server/Server.h"
+#include "world/Trades.h"
 #include "world/Dwarves.h"
 #include "world/TerrainGenerator.h"
 
@@ -219,6 +220,52 @@ int main() {
         server.QueueConsoleCommand("summon dwarf 26.5 0 8.5");
         Check(both(20.0, [&] { return a.Find(CreatureType::DwarfWarrior) != nullptr; }), "a dwarf warrior turns up near them");
         Check(both(30.0, [&] { return a.Find(CreatureType::DwarfWarrior) == nullptr; }), "and the wolf sees it off");
+        server.QueueConsoleCommand("creatures clear");
+        both(20.0, [&] { return a.client.GetCreatures().empty(); });
+
+        std::cout << "Markets" << std::endl;
+        server.QueueConsoleCommand("gamemode survival Hunter");
+        server.QueueConsoleCommand("time noon");
+        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+        server.QueueConsoleCommand("summon dwarf_trader 11.5 0 8.5");
+        server.QueueConsoleCommand("give bread 4 Hunter");
+        server.QueueConsoleCommand("give iron_ingot 4 Hunter");
+        Check(both(20.0, [&] { return a.Find(CreatureType::DwarfTrader) != nullptr; }), "a dwarf trader is summoned beside the hunter");
+        both(20.0, [&] { return a.client.GetResources(BlockType::IRON_INGOT) == 4 * Block::kUnitsPerBlock; });
+        const uint16_t trader = a.Find(CreatureType::DwarfTrader)->id;
+        a.client.Trade(trader, 0); // 4 bread for an iron ingot
+        Check(both(20.0, [&] { return a.client.GetResources(BlockType::IRON_INGOT) == 5 * Block::kUnitsPerBlock && a.client.GetResources(BlockType::BREAD) == 0; }),
+              "4 bread trade for an iron ingot");
+        a.client.Trade(trader, 0);
+        Check(both(20.0, [&] { return Has(a, "You need 4"); }) && a.client.GetResources(BlockType::IRON_INGOT) == 5 * Block::kUnitsPerBlock,
+              "a trade without the goods is refused");
+        a.client.Trade(trader, static_cast<uint8_t>(Trades::Offers().size() - 1)); // a guard, for 4 ingots
+        Check(both(20.0, [&] { const auto* g = a.Find(CreatureType::DwarfGuard); return g && g->tame; }) && a.client.GetResources(BlockType::IRON_INGOT) == Block::kUnitsPerBlock,
+              "4 iron ingots hire a guard (wearing a band)");
+        server.QueueConsoleCommand("tp Hunter 22.5 0 8.5");
+        Check(both(20.0, [&] { const auto* g = a.Find(CreatureType::DwarfGuard); return g && glm::distance(glm::vec2(g->feet.x, g->feet.z), glm::vec2(22.5f, 8.5f)) < 5.0f; }),
+              "the guard follows whoever hired them");
+        server.QueueConsoleCommand("time midnight");
+        server.QueueConsoleCommand("gamemode creative Hunter");
+        server.QueueConsoleCommand("summon dwarf 27.5 0 8.5");
+        Check(both(20.0, [&] { return a.Find(CreatureType::DwarfWarrior) != nullptr; }), "a dwarf warrior turns up");
+        Check(both(30.0, [&] { return a.Find(CreatureType::DwarfWarrior) == nullptr; }), "and the guard cuts it down");
+        // Hit a market's dwarf, and the market won't deal with you.
+        server.QueueConsoleCommand("gamemode survival Hunter");
+        if (const auto* t = a.Find(CreatureType::DwarfTrader)) {
+            char tp[96];
+            std::snprintf(tp, sizeof tp, "tp Hunter %.2f 0 %.2f", t->feet.x - 1.5f, t->feet.z);
+            server.QueueConsoleCommand(tp);
+        }
+        both(20.0, [&] {
+            const auto* t = a.Find(CreatureType::DwarfTrader);
+            return t && !a.client.IsCreative() && glm::distance(glm::vec2(t->feet.x, t->feet.z), glm::vec2(a.feet.x, a.feet.z)) < 2.5f;
+        });
+        a.client.Attack(trader, Tool::None);
+        both(1.0, [] { return false; });
+        a.client.Trade(trader, 1);
+        Check(both(20.0, [&] { return Has(a, "won't deal with you"); }), "hit, the trader won't trade with you");
+        server.QueueConsoleCommand("gamemode survival Hunter");
         server.QueueConsoleCommand("creatures clear");
         both(20.0, [&] { return a.client.GetCreatures().empty(); });
 

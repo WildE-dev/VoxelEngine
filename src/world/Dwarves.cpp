@@ -58,8 +58,14 @@ RegionSite SiteIn(const TerrainGenerator& terrain, int rx, int rz) {
             s.spawns.push_back(s.centre + glm::ivec3(static_cast<int>(std::lround(std::cos(a) * 3.0f)), 0, static_cast<int>(std::lround(std::sin(a) * 3.0f))));
         }
         const glm::ivec3 side(out.gate.z, 0, -out.gate.x);
-        s.chests.push_back(s.centre - out.gate * 2 + side * 2);
-        s.warriors = 4, s.crossbows = 2, s.chiefs = 1;
+        // One camp in four is a market, of friendly dwarves (and no loot).
+        if ((out.seed >> 24) % 4 == 0) {
+            s.kind = SiteKind::Market;
+            s.traders = 1, s.guards = 3;
+        } else {
+            s.chests.push_back(s.centre - out.gate * 2 + side * 2);
+            s.warriors = 4, s.crossbows = 2, s.chiefs = 1;
+        }
     }
     else {
         s.kind = SiteKind::Mine;
@@ -111,7 +117,7 @@ void Stamp(const TerrainGenerator& terrain, const glm::ivec3& coords, Blocks& ou
             if (!r.exists) continue;
             const Site& s = r.site;
             const glm::ivec3 c = s.centre;
-            if (s.kind == SiteKind::Camp) {
+            if (s.kind != SiteKind::Mine) {
                 if (c.x + 9 < lo.x || c.x - 9 > hi.x || c.z + 9 < lo.z || c.z - 9 > hi.z || c.y + 6 < lo.y || c.y - 4 > hi.y) continue;
                 const glm::vec2 gate(r.gate.x, r.gate.z);
                 for (int dx = -8; dx <= 8; dx++)
@@ -148,6 +154,15 @@ void Stamp(const TerrainGenerator& terrain, const glm::ivec3& coords, Blocks& ou
                 }
                 set(c, Block::Plant(BlockType::CAMPFIRE, 0));
                 for (const auto& chest : s.chests) set(chest, kChest);
+                if (s.kind == SiteKind::Market) {
+                    // Lamps on posts either side of the gate.
+                    const glm::ivec3 side(r.gate.z, 0, -r.gate.x);
+                    for (int k : { -2, 2 }) {
+                        const glm::ivec3 post = c + r.gate * 6 + side * k;
+                        for (int y = 0; y < 3; y++) set(post + glm::ivec3(0, y, 0), kLog);
+                        set(post + glm::ivec3(0, 3, 0), kLamp);
+                    }
+                }
             }
             else {
                 const int bottom = r.bottom;

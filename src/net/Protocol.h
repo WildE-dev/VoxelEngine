@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 46;
+constexpr uint32_t kProtocolVersion = 47;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -58,6 +58,7 @@ enum class MsgType : uint8_t {
     Interact,      // right-clicked a creature (feeding a wolf tames it)
     Inspect,       // right-clicked part of an air network: tell me how it's doing
     ConfigureSignal, // set a signal block's channels (and a gate's mode)
+    Trade,         // take a dwarf trader's offer (world/Trades.h)
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -375,6 +376,10 @@ constexpr uint8_t kCreatureWorking = 1 << 3;   // a miner just dug (its "work" a
 struct Interact {
     uint16_t creature = 0;
 };
+struct Trade {
+    uint16_t creature = 0; // the trader
+    uint8_t offer = 0;     // which of Trades::Offers()
+};
 // Right-clicked a pipe, wheel or machine (world/Power.h): the server answers in chat.
 struct Inspect {
     glm::ivec3 pos{0};
@@ -496,6 +501,7 @@ std::vector<uint8_t> Encode(const EditBreak& m);
 std::vector<uint8_t> Encode(const MineStart& m);
 std::vector<uint8_t> Encode(const Attack& m);
 std::vector<uint8_t> Encode(const Interact& m);
+std::vector<uint8_t> Encode(const Trade& m);
 std::vector<uint8_t> Encode(const Inspect& m);
 // `configure`: as a ConfigureSignal (client to server), else a SignalInfo.
 std::vector<uint8_t> Encode(const SignalInfo& m, bool configure);
@@ -549,6 +555,7 @@ bool Decode(ByteReader& in, EditBreak& m);
 bool Decode(ByteReader& in, MineStart& m);
 bool Decode(ByteReader& in, Attack& m);
 bool Decode(ByteReader& in, Interact& m);
+bool Decode(ByteReader& in, Trade& m);
 bool Decode(ByteReader& in, Inspect& m);
 bool Decode(ByteReader& in, SignalInfo& m);
 bool Decode(ByteReader& in, Machines& m);

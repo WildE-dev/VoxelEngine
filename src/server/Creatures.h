@@ -54,6 +54,8 @@ public:
         // What it last did (1 attacked, 2 worked) and when: the clients animate it.
         uint8_t act = 0;
         double actedAt = -1e9;
+        // A hired guard (owner: who hired it) goes home then.
+        double hiredUntil = 0.0;
     };
     // How long a creature counts as attacking or working after it did, for the clients.
     static constexpr double kAttackShown = 0.6, kWorkShown = 0.9;
@@ -103,6 +105,23 @@ public:
     void Provoke(uint16_t id, uint16_t player, double now);
     // Tames a wild wolf for this player (false if it isn't one, or already has an owner).
     bool Tame(uint16_t id, uint16_t player);
+    // A market's dwarves turned on a player who hit one of them, for kMarketGrudge.
+    static constexpr double kMarketGrudge = 300.0;
+    bool AngryAt(const Creature& c, uint16_t player, double now) const { return c.angryAt == player && now < c.angryUntil; }
+    // A dwarf guard hired by a player, standing here (0: too many creatures).
+    uint16_t Hire(const glm::vec3& feet, uint16_t player, double now, double seconds);
+    int HiredBy(uint16_t player) const;
+    // Gives it a home (and a site, the block it's in) to keep to.
+    void SetHome(uint16_t id, const glm::vec3& home) {
+        for (auto& c : creatures)
+            if (c.id == id) c.hasHome = true, c.home = home, c.site = glm::ivec3(glm::floor(home));
+    }
+    // The players whose hired guards have gone home since last asked.
+    std::vector<uint16_t> TakeEndedHires() {
+        std::vector<uint16_t> out;
+        out.swap(endedHires);
+        return out;
+    }
     // Its box, for hit tests.
     static Collision::AABB Box(const Creature& c);
 
@@ -120,6 +139,7 @@ private:
     std::unordered_map<int64_t, double> siteRefill; // when each site gets its next dwarf back
 
     std::vector<Creature> creatures;
+    std::vector<uint16_t> endedHires;
     uint16_t nextId = 1;
     std::mt19937 rng;
     bool naturalSpawning = true;

@@ -272,6 +272,10 @@ private:
     int signalKind = 0, signalModeIndex = 0, signalA = 0, signalB = 0, signalOut = 0;
     void OpenSignalEditor(const glm::ivec3& pos, BlockType type);
     void DrawSignalEditor();
+    // A dwarf trader's offers (world/Trades.h), while trading with it.
+    bool tradeMode = false;
+    uint16_t tradeWith = 0;
+    void DrawTrade();
     void DrawSigns(const glm::mat4& viewProjection); // the texts, floating over their signs
     double chestAskedAt = 0.0;
     void DrawChest();
