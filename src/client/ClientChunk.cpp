@@ -5,11 +5,56 @@
 void ClientChunk::BuildMesh(const Neighbours& neighbours) {
     std::vector<uint32_t> vertices, waterVertices;
     ChunkMesher::Build(*this, neighbours, vertices, waterVertices);
+    ComputeConnectivity();
 
     std::lock_guard<std::mutex> lock(meshMutex);
     pendingMesh = std::move(vertices);
     pendingWaterMesh = std::move(waterVertices);
     hasPendingMesh = true;
+}
+
+void ClientChunk::ComputeConnectivity() {
+    // Flood fill each region of open cells, noting which faces of the chunk it
+    // touches; every pair of those faces sees each other.
+    thread_local Blocks blocks;
+    thread_local std::vector<uint8_t> seen;
+    thread_local std::vector<int> stack;
+    CopyBlocks(blocks);
+    seen.assign(VOLUME, 0);
+    constexpr int N = CHUNK_SIZE;
+    uint64_t result = 0;
+    for (int start = 0; start < VOLUME; start++) {
+        if (seen[start] || blocks[start].HidesNeighbours()) continue;
+        seen[start] = 1;
+        stack.clear();
+        stack.push_back(start);
+        unsigned faces = 0;
+        while (!stack.empty()) {
+            const int i = stack.back();
+            stack.pop_back();
+            const int x = i % N, y = (i / N) % N, z = i / (N * N); // Index: x + N * (y + N * z)
+            if (x == N - 1) faces |= 1u << 0;
+            if (x == 0) faces |= 1u << 1;
+            if (y == N - 1) faces |= 1u << 2;
+            if (y == 0) faces |= 1u << 3;
+            if (z == N - 1) faces |= 1u << 4;
+            if (z == 0) faces |= 1u << 5;
+            for (const auto& d : kFaceDirections) {
+                const int nx = x + d[0], ny = y + d[1], nz = z + d[2];
+                if (nx < 0 || ny < 0 || nz < 0 || nx >= N || ny >= N || nz >= N) continue;
+                const int j = Index(nx, ny, nz);
+                if (seen[j] || blocks[j].HidesNeighbours()) continue;
+                seen[j] = 1;
+                stack.push_back(j);
+            }
+        }
+        for (int a = 0; a < 6; a++)
+            if (faces & (1u << a))
+                for (int b = 0; b < 6; b++)
+                    if (faces & (1u << b)) result |= 1ull << (a * 6 + b);
+        if (result == (1ull << 36) - 1) break; // all connected already
+    }
+    connectivity.store(result, std::memory_order_release);
 }
 
 namespace {

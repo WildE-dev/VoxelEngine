@@ -130,4 +130,12 @@ private:
     std::vector<DrawItem> visible;  // those in the frustum, nearest first
     bool drawListDirty = false;
     bool visibleWater = false;
+    // Render's flood through the chunks (scratch).
+    struct FloodStep {
+        glm::ivec3 coords;
+        int8_t entry;       // the face it was entered by (-1: the camera's chunk)
+        uint8_t directions; // the directions stepped so far
+    };
+    std::vector<uint8_t> floodSeen;
+    std::vector<FloodStep> floodQueue;
 };

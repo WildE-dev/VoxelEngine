@@ -265,23 +265,60 @@ void ClientWorld::Render(Shader& shader, const glm::mat4& view, const glm::mat4&
     // A chunk's mesh stays inside its cube, give or take a block (see Block.cpp).
     constexpr float kMargin = 1.0f;
     constexpr float kSize = Chunk::CHUNK_SIZE;
-    visible.clear();
-    visibleWater = false;
-    for (const auto& item : drawList) {
-        const glm::vec3 lo = item.origin - kMargin, hi = item.origin + kSize + kMargin;
-        bool inside = true;
+    auto inFrustum = [&](const glm::vec3& origin) {
+        const glm::vec3 lo = origin - kMargin, hi = origin + kSize + kMargin;
         for (const auto& plane : planes) {
             // The box corner furthest along the plane's normal.
             const glm::vec3 corner(plane.x >= 0.0f ? hi.x : lo.x, plane.y >= 0.0f ? hi.y : lo.y, plane.z >= 0.0f ? hi.z : lo.z);
-            if (glm::dot(glm::vec3(plane), corner) + plane.w < 0.0f) {
-                inside = false;
-                break;
-            }
+            if (glm::dot(glm::vec3(plane), corner) + plane.w < 0.0f) return false;
         }
-        if (!inside) continue;
-        const glm::vec3 d = item.origin + kSize * 0.5f - camera;
-        visible.push_back({ item.chunk, item.origin, glm::dot(d, d) });
-        visibleWater = visibleWater || item.chunk->HasWater();
+        return true;
+    };
+    visible.clear();
+    visibleWater = false;
+    auto see = [&](ClientChunk* chunk, const glm::vec3& origin) {
+        if (!chunk->HasGeometry() && !chunk->HasWater()) return;
+        const glm::vec3 d = origin + kSize * 0.5f - camera;
+        visible.push_back({ chunk, origin, glm::dot(d, d) });
+        visibleWater = visibleWater || chunk->HasWater();
+    };
+
+    // Which chunks can be seen at all: a flood out from the camera's chunk, through
+    // the frustum, only on through a chunk from the face it was entered by to faces it
+    // connects to through open cells (ClientChunk::GetConnectivity), and never back
+    // toward the camera. Caves under solid ground, which the frustum alone would keep,
+    // are left out. (Chunks not here yet count as open.)
+    const glm::ivec3 home = Coords::ChunkOf(glm::ivec3(glm::floor(camera)));
+    const int reachH = renderDistance + 2, reachV = std::max(verticalRenderDistance, renderDistance) + 2;
+    const int sizeH = 2 * reachH + 1, sizeV = 2 * reachV + 1;
+    floodSeen.assign(static_cast<size_t>(sizeH) * sizeH * sizeV, 0);
+    auto seenIndex = [&](const glm::ivec3& c) -> int {
+        const glm::ivec3 o = c - home;
+        if (std::abs(o.x) > reachH || std::abs(o.z) > reachH || std::abs(o.y) > reachV) return -1;
+        return (o.x + reachH) + sizeH * ((o.z + reachH) + sizeH * (o.y + reachV));
+    };
+    floodQueue.clear();
+    floodQueue.push_back({ home, -1, 0 });
+    floodSeen[seenIndex(home)] = 1;
+    for (size_t head = 0; head < floodQueue.size(); head++) {
+        const FloodStep step = floodQueue[head];
+        const auto it = chunks.find(step.coords);
+        ClientChunk* chunk = it != chunks.end() && it->second->IsLoaded() ? it->second.get() : nullptr;
+        const glm::vec3 origin(step.coords * Chunk::CHUNK_SIZE);
+        if (chunk) see(chunk, origin);
+        const uint64_t connectivity = chunk ? chunk->GetConnectivity() : ~0ull;
+        for (int face = 0; face < 6; face++) {
+            const int opposite = face ^ 1;
+            if (step.directions & (1u << opposite)) continue; // back toward the camera
+            if (step.entry >= 0 && !ClientChunk::Connects(connectivity, step.entry, face)) continue;
+            const glm::ivec3 next = step.coords + glm::ivec3(ClientChunk::kFaceDirections[face][0], ClientChunk::kFaceDirections[face][1],
+                                                             ClientChunk::kFaceDirections[face][2]);
+            const int index = seenIndex(next);
+            if (index < 0 || floodSeen[index]) continue;
+            if (!inFrustum(glm::vec3(next * Chunk::CHUNK_SIZE))) continue;
+            floodSeen[index] = 1;
+            floodQueue.push_back({ next, static_cast<int8_t>(opposite), static_cast<uint8_t>(step.directions | (1u << face)) });
+        }
     }
     std::sort(visible.begin(), visible.end(), [](const DrawItem& a, const DrawItem& b) { return a.distance < b.distance; });
 

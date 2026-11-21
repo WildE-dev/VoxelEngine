@@ -26,6 +26,7 @@
 
 #include "app/Player.h"
 #include "client/ChunkMesher.h"
+#include "client/ClientChunk.h"
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "server/Server.h"
@@ -438,6 +439,37 @@ int main() {
         }
         Check(lake[Chunk::Index(4, 4, 4)].IsPartial() && sides == 0,
               "a waterlogged slope a little off the lake's level joins its surface, no little steps (" + std::to_string(sides) + " side vertices)");
+    }
+
+    std::cout << "Seeing through chunks (cave culling)" << std::endl;
+    {
+        // Which faces of a chunk see each other through it: none through solid stone,
+        // all through air, and through a tunnel only its two ends. Glass and slopes
+        // don't block the view.
+        constexpr int N = Chunk::CHUNK_SIZE;
+        auto connectivityOf = [](const std::function<Block(int, int, int)>& at) {
+            ClientChunk chunk({ 0, 0, 0 });
+            Chunk::Blocks blocks;
+            for (int x = 0; x < N; x++)
+                for (int y = 0; y < N; y++)
+                    for (int z = 0; z < N; z++) blocks[Chunk::Index(x, y, z)] = at(x, y, z);
+            chunk.SetGenerated(blocks);
+            chunk.ComputeConnectivity();
+            return chunk.GetConnectivity();
+        };
+        const uint64_t solid = connectivityOf([](int, int, int) { return Block(BlockType::STONE); });
+        const uint64_t open = connectivityOf([](int, int, int) { return Block(); });
+        const uint64_t tunnel = connectivityOf([](int, int y, int z) { return y == 5 && z == 5 ? Block() : Block(BlockType::STONE); });
+        const uint64_t glassWall = connectivityOf([](int x, int, int) { return x == 7 ? Block(BlockType::GLASS) : Block(); });
+        const uint64_t stoneWall = connectivityOf([](int x, int, int) { return x == 7 ? Block(BlockType::STONE) : Block(); });
+        Check(solid == 0, "nothing is seen through a chunk of solid stone");
+        Check(open == (1ull << 36) - 1, "everything through a chunk of air");
+        Check(ClientChunk::Connects(tunnel, 0, 1) && ClientChunk::Connects(tunnel, 1, 0) && !ClientChunk::Connects(tunnel, 0, 2) &&
+                  !ClientChunk::Connects(tunnel, 2, 3) && !ClientChunk::Connects(tunnel, 4, 5),
+              "through a tunnel along x, only its two ends see each other");
+        Check(ClientChunk::Connects(glassWall, 0, 1), "a glass wall doesn't block the view");
+        Check(!ClientChunk::Connects(stoneWall, 0, 1) && ClientChunk::Connects(stoneWall, 0, 2) && ClientChunk::Connects(stoneWall, 1, 4),
+              "a stone wall does, but each side still sees out its other faces");
     }
 
     std::cout << "Aiming and outlines" << std::endl;

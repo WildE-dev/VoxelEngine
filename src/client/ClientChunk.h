@@ -39,6 +39,15 @@ public:
     bool HasGeometry() const { return vertexCount > 0; }
     bool HasWater() const { return waterVertexCount > 0; }
 
+    // Which of the chunk's six faces can be seen from which through it (through cells
+    // that don't hide what's behind them: air, water, plants, partial blocks, glass),
+    // for culling chunks hidden behind solid ground (caves under the surface). Bit
+    // a * 6 + b is set when face a connects to face b; faces in kFaceDirections order.
+    // All set until the first mesh is built (unknown: assume open).
+    uint64_t GetConnectivity() const { return connectivity.load(std::memory_order_acquire); }
+    static bool Connects(uint64_t connectivity, int a, int b) { return (connectivity >> (a * 6 + b)) & 1u; }
+    static constexpr int kFaceDirections[6][3] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+
 private:
     // Mesh hand-off from the worker to the GL thread.
     std::mutex meshMutex;
@@ -50,4 +59,9 @@ private:
     GLsizei vertexCount = 0, waterVertexCount = 0;
 
     std::atomic_bool dirty{false};
+    std::atomic<uint64_t> connectivity{ ~0ull };
+
+public:
+    // Works out GetConnectivity from the blocks (BuildMesh does it; tests call it).
+    void ComputeConnectivity();
 };
