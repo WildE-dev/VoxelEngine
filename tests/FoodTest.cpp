@@ -7,7 +7,9 @@
 //  - killing a deer gives raw venison, which cooks (with a little wood) into cooked
 //    venison,
 //  - items can't be placed as blocks,
-//  - creative players don't get hungry.
+//  - creative players don't get hungry,
+//  - farming: seeds grow only on soil, ripen into wheat, harvest into wheat and seeds,
+//    and 3 wheat bake into bread.
 #include <chrono>
 #include <cstdlib>
 #include <functional>
@@ -88,6 +90,7 @@ int main() {
     options.defaultMode = net::GameMode::Survival;
     options.dayLengthSeconds = 100000.0f;
     options.hungerRate = 10.0f; // a point every 5 s; starving hurts every 0.4 s
+    options.cropGrowthRate = 200.0f; // crops ripen within a second or two
     if (!server.Start(options)) return EXIT_FAILURE;
     server.RunInBackground();
 
@@ -166,6 +169,36 @@ int main() {
               a.client.GetResources(BlockType::RAW_VENISON) == raw - Block::kUnitsPerBlock &&
               a.client.GetResources(BlockType::LOG) == Block::kUnitsPerBlock * 3 / 4,
           "raw venison and a quarter log cook into cooked venison");
+
+    std::cout << "Farming" << std::endl;
+    server.QueueConsoleCommand("tp Eater 7.5 0 7.5");
+    server.QueueConsoleCommand("give seeds 2 Eater");
+    server.QueueConsoleCommand("food 10 Eater");
+    sync();
+    Pump(a, 20.0, [&] { return a.feet.y < 0.5f; });
+    a.client.PlaceBlock({ 9, 3, 7 }, BlockType::CROP);
+    wait(1.0);
+    Block planted;
+    Check(a.world.GetBlock(9, 3, 7, planted) && planted.IsAir() && a.client.GetResources(BlockType::SEEDS) == 2 * Block::kUnitsPerBlock,
+          "seeds won't grow in mid air");
+    a.client.PlaceBlock({ 9, 0, 7 }, BlockType::CROP);
+    Check(Pump(a, 20.0, [&] { return a.world.GetBlock(9, 0, 7, planted) && planted.type == BlockType::CROP; }) &&
+              a.client.GetResources(BlockType::SEEDS) == Block::kUnitsPerBlock,
+          "a seed planted on grass comes up as a crop");
+    Check(Pump(a, 20.0, [&] { return a.world.GetBlock(9, 0, 7, planted) && planted.type == BlockType::RIPE_WHEAT; }), "which ripens into wheat");
+    a.client.BreakBlock({ 9, 0, 7 });
+    // (The client counts the wheat at once; the seeds come with the server's answer.)
+    Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::WHEAT) == Block::kUnitsPerBlock && a.client.GetResources(BlockType::SEEDS) >= 2 * Block::kUnitsPerBlock; }),
+          "harvested, it gives wheat and seeds to plant again (wheat " + std::to_string(a.client.GetResources(BlockType::WHEAT)) + ", seeds " +
+              std::to_string(a.client.GetResources(BlockType::SEEDS)) + ")");
+    server.QueueConsoleCommand("give wheat 2 Eater");
+    sync();
+    a.client.Craft(Crafting::Find("bread"), 1);
+    Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::BREAD) == Block::kUnitsPerBlock && a.client.GetResources(BlockType::WHEAT) == 0; }),
+          "3 wheat bake into bread");
+    const int beforeBread = a.client.GetFood();
+    a.client.Eat(BlockType::BREAD);
+    Check(Pump(a, 20.0, [&] { return a.client.GetFood() >= beforeBread + 5; }), "which is good for 6 food");
 
     std::cout << "Creative" << std::endl;
     server.QueueConsoleCommand("gamemode creative Eater");

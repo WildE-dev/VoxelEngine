@@ -27,6 +27,7 @@ inline int FoodValue(BlockType type) {
     switch (type) {
     case BlockType::RAW_VENISON: return 3;
     case BlockType::COOKED_VENISON: return 8;
+    case BlockType::BREAD: return 6;
     default: return 0;
     }
 }

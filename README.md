@@ -664,6 +664,18 @@ make mines faster (6 times a hand's speed on what it's for, instead of 4) and hi
 heart harder (a sword does 4.5 hearts). It's kept like tools are. `MiningTest` checks
 where ore lies, what it breaks into, and what the upgrade does.
 
+## Farming
+
+Breaking tall grass now and then gives **seeds** (three times in ten). With seeds in
+hand, right-click the top of a dirt or grass block to plant one: a young **crop**
+comes up, and ripens into **wheat** on its own, after about a minute and a half on
+average (while its chunk is loaded, which it is near a player). Break ripe wheat to
+harvest it: you get the wheat and one or two seeds to plant again. Breaking a young
+crop just gives its seed back, and water washes crops away. Three wheat bake into
+**bread** (6 food). The server keeps a list of growing crops, saved with the world
+(format 9). `FoodTest` checks planting (not in mid air), ripening, harvesting, bread
+and eating it.
+
 ## Swords and armour
 
 The **sword** is a tool made for fighting: 3.5 hearts a hit, against creatures or
@@ -742,6 +754,7 @@ To eat, put food in the hotbar and right-click with it, looking anywhere:
 | --- | --- | --- |
 | Raw venison | 3 | killing a deer (one or two each, and a hide) |
 | Cooked venison | 8 | crafting: 1 raw venison + 0.25 log |
+| Bread | 6 | crafting: 3 wheat (see [Farming](#farming)) |
 
 Food is an item: it lives in the inventory and the hotbar like blocks do, but can't be
 placed. You can't eat when you're full. Creative players don't get hungry. Your food
@@ -785,6 +798,7 @@ makes four.
 | Iron ingot | 1 iron ore + 0.25 coal |
 | Lamp (with coal) | 0.5 glass + 0.25 coal |
 | Iron upgrade | 3 iron ingots + 1 planks |
+| Bread | 3 wheat |
 | Hide cap / tunic / boots | 2 / 4 / 2 hide |
 
 Amounts are in blocks, using the same resource units as building (a block is 64).

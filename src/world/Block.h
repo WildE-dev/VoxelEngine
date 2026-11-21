@@ -132,25 +132,39 @@ enum class BlockType : uint8_t {
     IRON_ORE,
     COAL,       // items
     IRON_INGOT,
+    // Farming: seeds (from tall grass) planted on dirt or grass grow into a crop that
+    // ripens into wheat (the server grows them: Server::UpdateCrops); wheat bakes into
+    // bread.
+    SEEDS,      // item
+    CROP,       // plant: young
+    RIPE_WHEAT, // plant: ready to harvest
+    WHEAT,      // items
+    BREAD,
     COUNT
 };
 
 // Things held in the inventory that aren't blocks: they can't be placed.
 inline bool IsItemType(BlockType type) {
     return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE || type == BlockType::COAL ||
-           type == BlockType::IRON_INGOT;
+           type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD;
 }
 
 inline bool IsPlantType(BlockType type) {
     return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW || type == BlockType::SPIKES ||
-           type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES;
+           type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES || type == BlockType::CROP || type == BlockType::RIPE_WHEAT;
 }
 
 // The resource a block counts as in survival (see Block::ResourceUnits): its own type,
 // except pebbles, which are stone.
 // What breaking a block gives: pebbles are stone, coal ore is coal.
 inline BlockType ResourceTypeOf(BlockType type) {
-    return type == BlockType::PEBBLES ? BlockType::STONE : type == BlockType::COAL_ORE ? BlockType::COAL : type;
+    switch (type) {
+    case BlockType::PEBBLES: return BlockType::STONE;
+    case BlockType::COAL_ORE: return BlockType::COAL;
+    case BlockType::CROP: return BlockType::SEEDS;       // (an unripe crop gives its seed back; planting costs one)
+    case BlockType::RIPE_WHEAT: return BlockType::WHEAT; // (and the server adds seeds)
+    default: return type;
+    }
 }
 
 // Grass of any biome (plants grow on it).

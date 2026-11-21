@@ -126,6 +126,8 @@ public:
         bool creatures = true;
         // Survival players who die leave half of what they carry in a chest there.
         bool dropOnDeath = true;
+        // How fast crops ripen (1: normal, a minute and a half on average; tests speed it up).
+        float cropGrowthRate = 1.0f;
         // How fast players get hungry (1: normal; tests speed it up).
         float hungerRate = 1.0f;
         // Players can hurt each other (operators switch it with /pvp).
@@ -331,6 +333,10 @@ private:
     TerrainGenerator terrain;
     CreatureSystem creatures;
     std::unordered_map<glm::ivec3, ChestItems, Coords::IVec3Hash> chests;
+    // Planted crops still growing (saved with the world), and when they're next looked at.
+    std::unordered_set<glm::ivec3, Coords::IVec3Hash> crops;
+    double nextCropUpdate = 0.0;
+    void UpdateCrops();
     double lastCreatureTime = 0.0;
     std::unique_ptr<WorldStorage> storage; // declared before `world`, which uses it
     std::unique_ptr<ServerWorld> world;

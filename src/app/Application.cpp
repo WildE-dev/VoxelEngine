@@ -53,7 +53,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -141,6 +141,11 @@ const char* BlockName(BlockType type) {
     case BlockType::IRON_ORE: return "Iron ore";
     case BlockType::COAL: return "Coal";
     case BlockType::IRON_INGOT: return "Iron ingot";
+    case BlockType::SEEDS: return "Seeds";
+    case BlockType::CROP: return "Young crop";
+    case BlockType::RIPE_WHEAT: return "Ripe wheat";
+    case BlockType::WHEAT: return "Wheat";
+    case BlockType::BREAD: return "Bread";
     default:               return "Air";
     }
 }
@@ -1328,7 +1333,9 @@ void Application::DrawInventory() {
         int column = 0;
         for (BlockType type : kInventoryBlocks) {
             const uint32_t held = client->GetResources(type);
-            if (survival && (held == 0 || type == BlockType::PEBBLES)) continue; // survival: only what you have (pebbles are stone)
+            // Survival: only what you have (and not what's counted as something else:
+            // pebbles are stone, coal ore is coal).
+            if (survival && (held == 0 || ResourceTypeOf(type) != type)) continue;
             if (column++ % kColumns != 0) ImGui::SameLine();
             const ImVec2 corner = ImGui::GetCursorScreenPos();
             glm::vec2 uv0, uv1;
@@ -1539,6 +1546,17 @@ void Application::OnMouseButton(int button, int action) {
     // items are never placed.
     if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::None && IsItemType(SelectedBlock())) {
         const BlockType item = SelectedBlock();
+        // Seeds are planted on the dirt or grass you're looking at.
+        if (item == BlockType::SEEDS) {
+            Block soil;
+            if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach());
+                at && at->normal == glm::ivec3(0, 1, 0) && world->GetBlock(at->block.x, at->block.y, at->block.z, soil) &&
+                (soil.type == BlockType::DIRT || IsGrassType(soil.type)) && client->CanAfford(BlockType::CROP, 8)) {
+                client->PlaceBlock(at->block + at->normal, BlockType::CROP);
+                PlayAt("place", at->block + at->normal, 0.5f);
+            }
+            return;
+        }
         if (Hunger::IsFood(item) && !client->IsCreative() && client->GetResources(item) >= Block::kUnitsPerBlock &&
             client->GetFood() < client->GetMaxFood()) {
             client->Eat(item);

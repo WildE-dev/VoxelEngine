@@ -63,6 +63,8 @@ inline float Hardness(BlockType type) {
     case BlockType::FLOWER_RED:
     case BlockType::FLOWER_YELLOW:
     case BlockType::DEAD_BUSH:
+    case BlockType::CROP:
+    case BlockType::RIPE_WHEAT:
     case BlockType::PEBBLES: return 0.0f;
     case BlockType::LEAVES:
     case BlockType::PINE_LEAVES: return 0.3f;

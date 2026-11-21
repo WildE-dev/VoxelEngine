@@ -10,6 +10,7 @@
 #include "server/WorldStorage.h"
 #include "world/Collision.h"
 #include "world/Dungeons.h"
+#include "world/Noise.h"
 
 namespace {
 
@@ -137,8 +138,10 @@ bool Server::Start(const Options& opts) {
     defaultMode = storage ? static_cast<net::GameMode>(storage->GetDefaultMode()) : options.defaultMode;
     LoadOperators();
     for (const auto& name : options.operators) SetOperator(name, true);
-    if (storage)
+    if (storage) {
         for (const auto& [pos, held] : storage->GetChests()) chests[pos] = held;
+        for (const auto& pos : storage->GetCrops()) crops.insert(pos);
+    }
     weatherSeed ^= static_cast<uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
     weatherMode = options.weather;
     raining = options.weather == Options::Weather::Rain;
@@ -230,6 +233,7 @@ void Server::Save(bool shuttingDown) {
     for (const auto& [peer, client] : clients) StorePlayer(client);
     storage->SetTimeOfDay(static_cast<float>(timeOfDay));
     storage->SetChests({ chests.begin(), chests.end() });
+    storage->SetCrops({ crops.begin(), crops.end() });
     const size_t saved = world->SaveAll();
     const bool ok = storage->Flush();
     lastSaveTime = Now();
@@ -666,6 +670,15 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
     // Breaking a waterlogged block leaves its water behind.
     world->SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
     if (block.type == BlockType::CHEST) RemoveChest(pos, &client);
+    if (block.type == BlockType::CROP) crops.erase(pos);
+    if (!Creative(client)) {
+        // Ripe wheat also gives seeds (one or two); tall grass now and then a seed.
+        const float roll = Noise::Random01(pos.x, pos.y, pos.z, static_cast<uint32_t>(tickCount));
+        uint32_t seeds = 0;
+        if (block.type == BlockType::RIPE_WHEAT) seeds = roll < 0.5f ? 1 : 2;
+        if (block.type == BlockType::TALL_GRASS && roll < 0.3f) seeds = 1;
+        client.resources[static_cast<size_t>(BlockType::SEEDS)] += seeds * Block::kUnitsPerBlock;
+    }
     // Survival: the block's worth goes to the player.
     if (!Creative(client)) {
         uint32_t& held = client.resources[static_cast<size_t>(block.ResourceType())]; // (pebbles are stone)
@@ -684,6 +697,14 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
         return Echo(client, pos);
     }
 
+    // Seeds are planted on dirt or grass.
+    if (type == BlockType::CROP) {
+        Block soil;
+        if (!world->GetBlock(pos.x, pos.y - 1, pos.z, soil) || !(soil.type == BlockType::DIRT || IsGrassType(soil.type)) || !soil.IsFullBlock()) {
+            if (!Creative(client)) SendResources(client);
+            return Echo(client, pos);
+        }
+    }
     const Block placed = Block::Placed(type, height, faceAxis);
     // Survival: it costs its worth, which the player must have. Water can't be
     // collected (only moved, with pumps), so it can't be placed either.
@@ -704,6 +725,7 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
     }
     world->SetBlock(pos.x, pos.y, pos.z, placed);
     if (type == BlockType::CHEST) chests[pos] = ChestItems{}; // a new chest is empty
+    if (type == BlockType::CROP) crops.insert(pos);
     if (!Creative(client)) {
         held -= cost;
         SendResources(client);
@@ -1083,6 +1105,26 @@ void Server::RemoveChest(const glm::ivec3& pos, ClientState* breaker) {
         }
 }
 
+void Server::UpdateCrops() {
+    // Once a second, each crop (in a loaded chunk) may ripen: on average after 90 s.
+    const double now = Now();
+    if (now < nextCropUpdate) return;
+    nextCropUpdate = now + 1.0;
+    const float chance = std::min(1.0f, options.cropGrowthRate / 90.0f);
+    for (auto it = crops.begin(); it != crops.end();) {
+        Block b;
+        const glm::ivec3 p = *it;
+        if (!world->GetBlock(p.x, p.y, p.z, b)) { ++it; continue; } // not loaded: waits
+        if (b.type != BlockType::CROP) { it = crops.erase(it); continue; } // trampled, washed away
+        if (Noise::Random01(p.x, p.y, p.z, static_cast<uint32_t>(tickCount) * 2654435761u) < chance) {
+            world->SetBlock(p.x, p.y, p.z, Block::Plant(BlockType::RIPE_WHEAT, b.edgeData.edges[0]));
+            it = crops.erase(it);
+            continue;
+        }
+        ++it;
+    }
+}
+
 void Server::UpdateTraps() {
     const double now = Now();
     // Breath goes by real time, not ticks: on a slow, overloaded machine ticks run late,
@@ -1173,6 +1215,7 @@ void Server::Tick() {
     UpdateSky();
     UpdateTraps();
     UpdateCreatures();
+    UpdateCrops();
     if (storage && options.autosaveSeconds > 0.0f && Now() - lastSaveTime >= options.autosaveSeconds) Save(false);
 
     std::vector<glm::ivec3> centers;

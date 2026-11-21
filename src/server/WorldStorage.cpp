@@ -187,6 +187,17 @@ bool WorldStorage::ReadWorldFile() {
         }
         chests.emplace_back(pos, held);
     }
+    // Crops (format 9 on): positions.
+    uint32_t cropCount = 0;
+    if (version >= 9 && !r.VarU32(cropCount)) cropCount = 0;
+    for (uint32_t c = 0; c < cropCount; c++) {
+        glm::ivec3 pos;
+        if (!r.IVec3(pos)) {
+            std::cerr << "[storage] " << path.string() << " is truncated (crops)" << std::endl;
+            return false;
+        }
+        crops.push_back(pos);
+    }
     return true;
 }
 
@@ -329,6 +340,17 @@ void WorldStorage::SetChests(Chests c) {
     playersDirty = true; // world.dat needs writing
 }
 
+std::vector<glm::ivec3> WorldStorage::GetCrops() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return crops;
+}
+
+void WorldStorage::SetCrops(std::vector<glm::ivec3> c) {
+    std::lock_guard<std::mutex> lock(mutex);
+    crops = std::move(c);
+    playersDirty = true;
+}
+
 size_t WorldStorage::GetStoredChunkCount() const {
     std::lock_guard<std::mutex> lock(mutex);
     return chunks.size();
@@ -402,6 +424,8 @@ bool WorldStorage::Flush() {
                         w.VarU32(held[t]);
                     }
             }
+            w.VarU32(static_cast<uint32_t>(crops.size()));
+            for (const auto& pos : crops) w.IVec3(pos);
             files.emplace_back(directory / "world.dat", std::move(w.data));
             writePlayers = true;
             playersDirty = false;
