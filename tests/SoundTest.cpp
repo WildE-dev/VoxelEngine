@@ -66,7 +66,7 @@ int main() {
     const std::string dir = "Resources/Sounds";
     // Everything Application plays, by name (variants: name_N).
     const char* names[] = { "step_soft", "step_hard", "step_sand", "step_wood", "dig_soft", "dig_hard", "break_soft", "break_hard",
-                            "break_wood", "break_glass", "place", "pickup", "craft", "hurt", "hit", "splash", "groan", "rain_loop", "eat", "thunder", "bow" };
+                            "break_wood", "break_glass", "place", "pickup", "craft", "hurt", "hit", "splash", "groan", "rain_loop", "eat", "thunder", "bow", "birds", "crickets" };
     bool all = true;
     std::string missing;
     for (const char* name : names) {

@@ -2139,6 +2139,20 @@ void Application::UpdateSounds() {
         audio->PlayHere("hurt", 0.8f);
     }
 
+    // Ambience outdoors (open sky, not raining hard): birds by day, crickets at night,
+    // now and then, from somewhere around.
+    if (now >= nextAmbience) {
+        static std::mt19937 ambienceRng(808);
+        std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+        nextAmbience = now + 5.0 + 9.0 * unit(ambienceRng);
+        const float sun = std::sin(client->GetTimeOfDay() * 6.2831853f);
+        if (!sheltered && client->GetRain() < 0.3f && std::abs(sun) > 0.15f) {
+            const float a = unit(ambienceRng) * 6.2831853f;
+            const glm::vec3 at = camera.GetPosition() + glm::vec3(std::cos(a) * 9.0f, 2.0f + 3.0f * unit(ambienceRng), std::sin(a) * 9.0f);
+            audio->Play(sun > 0.0f ? "birds" : "crickets", at, 0.35f, 0.08f);
+        }
+    }
+
     // What others broke and built (a few at a time: a collapse or the laser makes many).
     int played = 0;
     for (const auto& event : client->TakeBlockEvents()) {

@@ -148,6 +148,7 @@ private:
     float stepDistance = 0.0f;
     bool wasSwimming = false;
     double lastHurtHeard = 0.0, nextDig = 0.0, nextChip = 0.0;
+    double nextAmbience = 0.0; // birdsong by day, crickets at night
     // Bits of broken blocks, flying and falling (client-side only: just for show).
     struct Particle {
         glm::vec3 position, velocity;

@@ -1084,6 +1084,9 @@ handy for unattended screenshots. The code is in `src/audio/Audio.cpp`.
 - that blocks sound like their material;
 - that a player gets events for another player's edits, and not their own.
 
+
+Outdoors, under the open sky and not in heavy rain, you hear birdsong now and then by
+day and crickets at night, from somewhere around you.
 ## Menus and settings
 
 Run with no options, the game opens at a title screen:

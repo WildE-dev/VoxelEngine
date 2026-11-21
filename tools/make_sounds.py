@@ -152,6 +152,20 @@ def main():
     twang = envelope(tone(330, 250, 0.18, "saw"), 0.002, 0.17, 2.5)
     whoosh = envelope(highpass(noise(secs(0.18), bow_rng), 2000), 0.03, 0.15, 1.5)
     save("bow", mix([0.6 * s for s in lowpass(twang, 1800)], [0.4 * s for s in whoosh]))
+    # Birdsong: a few quick chirps, rising then falling (variants), and crickets: a
+    # high chirring in short bursts.
+    for v in range(1, 4):
+        song = []
+        for k in range(3 + v):
+            f0 = 2200 + 400 * ((k * 7 + v) % 3)
+            chirp = envelope(tone(f0, f0 * (1.35 if k % 2 == 0 else 0.8), 0.07 + 0.01 * v), 0.005, 0.06, 2.0)
+            song += chirp + [0.0] * secs(0.05 + 0.02 * ((k + v) % 2))
+        save(f"birds_{v}", [0.5 * s for s in song])
+    cricket = []
+    for k in range(4):
+        pulse = [0.4 * math.sin(2 * math.pi * 4200 * i / RATE) * (1 if (i // secs(0.012)) % 2 == 0 else 0) for i in range(secs(0.15))]
+        cricket += envelope(pulse, 0.01, 0.14, 1.0) + [0.0] * secs(0.18)
+    save("crickets", cricket)
     save("thunder", mix(crack + [0.0] * (len(rumble) - len(crack)), [1.6 * s for s in rumble]))
     print("sounds written to", os.path.normpath(OUT))
 
