@@ -370,6 +370,8 @@ struct AttackPlayer {
 };
 constexpr uint8_t kCreatureHurt = 1 << 0; // flashes red
 constexpr uint8_t kCreatureTame = 1 << 1; // a wolf with an owner (wears a collar)
+constexpr uint8_t kCreatureAttacking = 1 << 2; // just struck or shot (its "attack" animation)
+constexpr uint8_t kCreatureWorking = 1 << 3;   // a miner just dug (its "work" animation)
 struct Interact {
     uint16_t creature = 0;
 };

@@ -17,10 +17,15 @@
 //   "flap": {"axis": "x", "speed": 28, "amount": 0.7}   flapped all the time
 //   "when": "tame"            only drawn then (a tame wolf's collar)
 //   "parts": [ ... ]          parts inside this frame
+//   "name": "right_arm"       its label (for animations, and the editor's tree)
 // A model may say "scale" (all of it bigger or smaller), "colors" (names for colours),
 // and "inherits": another model, whose colours and parts it starts from (a model of
 // the same name replacing the colour, its own parts added after). Models no creature
 // is called (like "dwarf_base") are only there to inherit from.
+// A model's "animations", by name: "attack" (played as it strikes or shoots), "work" (a
+// miner digging) and "idle" (all the time, if it has one), each {"length": seconds,
+// "loop": true or not, "parts": {label: [keys]}}, a key {"t": seconds, "rotate": [x, y,
+// z] degrees more, "move": [x, y, z] in its parent's frame}, eased from key to key.
 {
   "deer": {
     "colors": {
@@ -729,6 +734,7 @@
         "color": "helmet"
       },
       {
+        "name": "left_arm",
         "at": [
           0,
           1.0,
@@ -751,6 +757,7 @@
         "color": "tunic"
       },
       {
+        "name": "right_arm",
         "at": [
           0,
           1.0,
@@ -772,7 +779,217 @@
         ],
         "color": "tunic"
       }
-    ]
+    ],
+    "animations": {
+      "attack": {
+        "length": 0.5,
+        "parts": {
+          "right_arm": [
+            {
+              "t": 0,
+              "rotate": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "t": 0.15,
+              "rotate": [
+                0,
+                0,
+                150
+              ]
+            },
+            {
+              "t": 0.3,
+              "rotate": [
+                0,
+                0,
+                40
+              ]
+            },
+            {
+              "t": 0.5,
+              "rotate": [
+                0,
+                0,
+                0
+              ]
+            }
+          ],
+          "weapon": [
+            {
+              "t": 0,
+              "rotate": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "t": 0.15,
+              "rotate": [
+                0,
+                0,
+                150
+              ],
+              "move": [
+                -0.071,
+                0.779,
+                0
+              ]
+            },
+            {
+              "t": 0.3,
+              "rotate": [
+                0,
+                0,
+                40
+              ],
+              "move": [
+                0.211,
+                0.179,
+                0
+              ]
+            },
+            {
+              "t": 0.5,
+              "rotate": [
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      },
+      "work": {
+        "length": 0.9,
+        "parts": {
+          "right_arm": [
+            {
+              "t": 0,
+              "rotate": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "t": 0.25,
+              "rotate": [
+                0,
+                0,
+                150
+              ]
+            },
+            {
+              "t": 0.45,
+              "rotate": [
+                0,
+                0,
+                30
+              ]
+            },
+            {
+              "t": 0.65,
+              "rotate": [
+                0,
+                0,
+                120
+              ]
+            },
+            {
+              "t": 0.8,
+              "rotate": [
+                0,
+                0,
+                30
+              ]
+            },
+            {
+              "t": 0.9,
+              "rotate": [
+                0,
+                0,
+                0
+              ]
+            }
+          ],
+          "weapon": [
+            {
+              "t": 0,
+              "rotate": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "t": 0.25,
+              "rotate": [
+                0,
+                0,
+                150
+              ],
+              "move": [
+                -0.071,
+                0.779,
+                0
+              ]
+            },
+            {
+              "t": 0.45,
+              "rotate": [
+                0,
+                0,
+                30
+              ],
+              "move": [
+                0.171,
+                0.121,
+                0
+              ]
+            },
+            {
+              "t": 0.65,
+              "rotate": [
+                0,
+                0,
+                120
+              ],
+              "move": [
+                0.119,
+                0.691,
+                0
+              ]
+            },
+            {
+              "t": 0.8,
+              "rotate": [
+                0,
+                0,
+                30
+              ],
+              "move": [
+                0.171,
+                0.121,
+                0
+              ]
+            },
+            {
+              "t": 0.9,
+              "rotate": [
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    }
   },
   "dwarf": {
     "inherits": "dwarf_base",
@@ -782,6 +999,7 @@
     },
     "parts": [
       {
+        "name": "weapon",
         "at": [
           0.14,
           0.62,
@@ -860,7 +1078,82 @@
         ],
         "color": "wood"
       }
-    ]
+    ],
+    "animations": {
+      "attack": {
+        "length": 0.6,
+        "parts": {
+          "right_arm": [
+            {
+              "t": 0,
+              "rotate": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "t": 0.08,
+              "rotate": [
+                0,
+                0,
+                80
+              ]
+            },
+            {
+              "t": 0.45,
+              "rotate": [
+                0,
+                0,
+                80
+              ]
+            },
+            {
+              "t": 0.6,
+              "rotate": [
+                0,
+                0,
+                0
+              ]
+            }
+          ],
+          "left_arm": [
+            {
+              "t": 0,
+              "rotate": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "t": 0.08,
+              "rotate": [
+                0,
+                0,
+                80
+              ]
+            },
+            {
+              "t": 0.45,
+              "rotate": [
+                0,
+                0,
+                80
+              ]
+            },
+            {
+              "t": 0.6,
+              "rotate": [
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    }
   },
   "dwarf_chief": {
     "inherits": "dwarf_base",
@@ -911,6 +1204,7 @@
         "color": "gold"
       },
       {
+        "name": "weapon",
         "at": [
           0.14,
           0.62,
@@ -979,6 +1273,7 @@
         "glow": true
       },
       {
+        "name": "weapon",
         "at": [
           0.14,
           0.62,

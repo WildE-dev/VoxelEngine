@@ -757,7 +757,9 @@ void Server::SendCreatures() {
         for (const auto& c : creatures.All()) {
             if (glm::distance(c.feet, client.feet) > kSendRange) continue;
             m.creatures.push_back({ c.id, c.type, c.feet, c.yaw,
-                                    static_cast<uint8_t>((now < c.hurtUntil ? net::kCreatureHurt : 0) | (c.owner != 0 ? net::kCreatureTame : 0)) });
+                                    static_cast<uint8_t>((now < c.hurtUntil ? net::kCreatureHurt : 0) | (c.owner != 0 ? net::kCreatureTame : 0) |
+                                                         (c.act == 1 && now - c.actedAt < CreatureSystem::kAttackShown ? net::kCreatureAttacking : 0) |
+                                                         (c.act == 2 && now - c.actedAt < CreatureSystem::kWorkShown ? net::kCreatureWorking : 0)) });
         }
         net.Send(peer, net::kChannelUnreliable, net::Encode(m));
     }

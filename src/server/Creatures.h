@@ -51,7 +51,14 @@ public:
         bool hasHome = false;
         glm::vec3 home{ 0.0f };
         glm::ivec3 site{ 0 };
+        // What it last did (1 attacked, 2 worked) and when: the clients animate it.
+        uint8_t act = 0;
+        double actedAt = -1e9;
     };
+    // How long a creature counts as attacking or working after it did, for the clients.
+    static constexpr double kAttackShown = 0.6, kWorkShown = 0.9;
+    // A creature did something (1 attacked, 2 worked).
+    void Act(uint16_t id, uint8_t what, double now);
 
     // A player as the creatures see them.
     struct Player {

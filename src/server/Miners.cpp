@@ -93,6 +93,7 @@ void Server::UpdateMiningPosts() {
             Block ore;
             world->GetBlock(best->x, best->y, best->z, ore);
             world->SetBlock(best->x, best->y, best->z, Block());
+            creatures.Act(post.miners[i], 2, now);
             held[static_cast<size_t>(ore.ResourceType())] += static_cast<uint32_t>(ore.ResourceUnits());
             uint32_t owed = kMinerPay;
             for (BlockType t : kPay) {

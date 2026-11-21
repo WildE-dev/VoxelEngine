@@ -13,7 +13,8 @@
 // For unattended checks: VOXEL_AUTO_SCREENSHOT="seconds:path.png" saves a screenshot
 // that long after starting and quits; VOXEL_EDITOR_PART="0,1" picks a part (by its place
 // in the tree), VOXEL_EDITOR_CLICK="x,y" clicks the view there (window coordinates), and
-// VOXEL_EDITOR_TOOL (0 move box, 1 move frame, 2 size) picks the handles.
+// VOXEL_EDITOR_TOOL (0 move box, 1 move frame, 2 size) picks the handles, and
+// VOXEL_EDITOR_ANIM="attack:0.15" shows an animation (held at that time).
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -61,7 +62,7 @@ constexpr float kLeftWidth = 270.0f, kRightWidth = 360.0f;
 
 // The order keys are written in, so the files stay easy to read.
 int KeyRank(const std::string& k) {
-    static const char* order[] = { "name", "inherits", "scale", "colors", "at", "rotate", "swing", "flap", "box", "size", "color", "texture", "tile", "glow", "when", "parts" };
+    static const char* order[] = { "name", "inherits", "scale", "colors", "at", "rotate", "swing", "flap", "box", "size", "color", "texture", "tile", "glow", "when", "parts", "animations" };
     for (int i = 0; i < static_cast<int>(std::size(order)); i++)
         if (k == order[i]) return i;
     return 100;
@@ -71,7 +72,7 @@ void Tidy(Value& v) {
     if (v.IsObject()) {
         std::stable_sort(v.object.begin(), v.object.end(), [](const auto& a, const auto& b) { return KeyRank(a.first) < KeyRank(b.first); });
         for (auto& [k, child] : v.object)
-            if (k != "colors") Tidy(child);
+            if (k != "colors" && k != "animations") Tidy(child); // (animations keep the order they're written in)
     } else if (v.IsArray())
         for (auto& child : v.array) Tidy(child);
 }
@@ -188,6 +189,10 @@ public:
     // (For unattended checks: a click in the view, in window coordinates, and a tool.)
     void ClickAt(float x, float y) { PickAt({ x, y }); }
     void SetTool(int t) { tool = static_cast<Tool>(std::clamp(t, 0, 2)); }
+    void ShowAnimation(const std::string& name, float at) {
+        openAnimTab = true, anim = name;
+        if (at >= 0.0f) animNow = at, playing = false;
+    }
     void OpenNamed(const std::string& name) {
         for (int i = 0; i < kFileCount; i++)
             if (name == kFiles[i] || name + ".json" == kFiles[i]) Open(i);
@@ -246,6 +251,12 @@ private:
     bool Structures() const { return file == 1; }
     bool Blocks() const { return file == 2; }
     std::string blockFilter;
+    // Animations: the one picked (shown while its tab is open), playing or held at a time.
+    std::string anim, trackLabel, newAnimName;
+    bool animTab = false, playing = true, openAnimTab = false;
+    float animNow = 0.0f;
+    const PlayerModels::Animation* previewAnim = nullptr;
+    void AnimationsTab(Value& m, float time);
     void ResetView() {
         yaw = -50.0f, pitch = 22.0f, distance = Structures() ? 9.0f : Blocks() ? 3.2f : 4.0f;
         target = glm::vec3(0.0f, Structures() ? 1.6f : Blocks() ? 0.5f : 0.8f, 0.0f);
@@ -405,7 +416,19 @@ void Editor::Frame(int fbWidth, int fbHeight, int winWidth, int winHeight, float
     swingNow = walk ? std::sin(time * 6.0f) * 0.6f : 0.0f;
     if (rebuild) Rebuild();
     placed.clear();
-    if (auto it = shapes.find(model); it != shapes.end()) PlayerModels::Place(it->second, Base(), time, swingNow, working, placed);
+    previewAnim = nullptr;
+    if (auto it = shapes.find(model); it != shapes.end()) {
+        if (animTab && !anim.empty())
+            if (auto a = it->second.animations.find(anim); a != it->second.animations.end()) {
+                previewAnim = &a->second;
+                // Played over and over, with a breath between (a looping one without).
+                if (playing) {
+                    const float cycle = a->second.length + (a->second.loop ? 0.0f : 0.4f);
+                    animNow = std::min(std::fmod(time, cycle), a->second.length);
+                }
+            }
+        PlayerModels::Place(it->second, Base(), time, swingNow, working, placed, previewAnim, animNow);
+    }
     if (!Blocks()) ViewTools(top);
     const ImVec2 mouse = io.MousePos;
     ViewInput(mouse.x > kLeftWidth && mouse.x < winWidth - kRightWidth && mouse.y > top);
@@ -491,7 +514,8 @@ void Editor::DrawScene(int x, int y, int w, int h, float time) {
 
     auto it = shapes.find(model);
     if (it != shapes.end()) {
-        models.DrawPreview(s, view, projection, it->second, base, time, swingNow, working, flash ? HighlightPart() : nullptr, glm::vec2(sky, block));
+        models.DrawPreview(s, view, projection, it->second, base, time, swingNow, working, flash ? HighlightPart() : nullptr, glm::vec2(sky, block), previewAnim,
+                           animNow);
     }
     // The handles on the picked part, over everything.
     glDisable(GL_DEPTH_TEST);
@@ -1010,6 +1034,23 @@ void Editor::RightPanel(float left, float top, float height) {
         ImGui::End();
         return;
     }
+    if (!ImGui::BeginTabBar("right tabs")) {
+        ImGui::End();
+        return;
+    }
+    bool animOpen = false;
+    if (ImGui::BeginTabItem("Animations", nullptr, openAnimTab ? ImGuiTabItemFlags_SetSelected : 0)) {
+        animOpen = true;
+        AnimationsTab(*m, ImGui::GetTime());
+        ImGui::EndTabItem();
+    }
+    animTab = animOpen;
+    openAnimTab = false;
+    if (!ImGui::BeginTabItem("Parts")) {
+        ImGui::EndTabBar();
+        ImGui::End();
+        return;
+    }
     Value& parts = PartsOf(*m);
 
     auto newPart = [] {
@@ -1090,7 +1131,185 @@ void Editor::RightPanel(float left, float top, float height) {
         ImGui::EndChild();
     } else
         ImGui::TextDisabled("Pick a part to change it.");
+    ImGui::EndTabItem();
+    ImGui::EndTabBar();
     ImGui::End();
+}
+
+void Editor::AnimationsTab(Value& m, float) {
+    auto it = shapes.find(model);
+    if (it == shapes.end()) {
+        ImGui::TextDisabled("The model has a problem (see the left).");
+        return;
+    }
+    const Shape& shape = it->second;
+    Value* own = const_cast<Value*>(m.Find("animations"));
+    auto ownAnim = [&](const std::string& name) -> Value* { return own && own->IsObject() ? const_cast<Value*>(own->Find(name)) : nullptr; };
+
+    // Which: its own, or one it inherits.
+    if (!anim.empty() && !shape.animations.count(anim) && !ownAnim(anim)) anim.clear();
+    if (anim.empty() && !shape.animations.empty()) anim = shape.animations.begin()->first;
+    if (ImGui::BeginCombo("Animation", anim.empty() ? "(none)" : anim.c_str())) {
+        for (const auto& [name, a] : shape.animations) {
+            const std::string label = name + (ownAnim(name) ? "" : "  (inherited)");
+            if (ImGui::Selectable(label.c_str(), name == anim)) anim = name;
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetNextItemWidth(150);
+    const bool add = ImGui::InputTextWithHint("##newanim", "attack, work, idle...", &newAnimName, ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::SameLine();
+    if ((ImGui::Button("New") || add) && !newAnimName.empty() && !ownAnim(newAnimName)) {
+        Value& list = Json::Member(m, "animations");
+        if (!list.IsObject()) list = Json::Object();
+        Value a = Json::Object();
+        Json::Member(a, "length") = Json::Number(1.0);
+        Json::Member(a, "parts") = Json::Object();
+        Json::Member(list, newAnimName) = a;
+        anim = newAnimName;
+        newAnimName.clear();
+        Changed();
+        return;
+    }
+    if (anim.empty()) {
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("No animations. \"attack\" plays as a creature strikes or shoots, \"work\" as a miner digs, and \"idle\" all the time.");
+        ImGui::PopTextWrapPos();
+        return;
+    }
+    Value* a = ownAnim(anim);
+    if (!a) {
+        ImGui::TextDisabled("Inherited from %s.", m.StringOr("inherits", "").c_str());
+        if (ImGui::Button("Copy it here to change it")) {
+            // From the model it comes from, nearest first.
+            std::string at = m.StringOr("inherits", "");
+            for (int d = 0; d < 8 && !at.empty(); d++) {
+                const Value* from = root.Find(at);
+                if (!from) break;
+                if (const Value* list = from->Find("animations"); list && list->Find(anim)) {
+                    Value& mine = Json::Member(m, "animations");
+                    if (!mine.IsObject()) mine = Json::Object();
+                    Json::Member(mine, anim) = *list->Find(anim);
+                    Changed();
+                    break;
+                }
+                at = from->StringOr("inherits", "");
+            }
+        }
+    } else {
+        ImGui::SameLine();
+        if (ImGui::Button("Delete")) {
+            Json::Remove(*own, anim);
+            anim.clear();
+            Changed();
+            return;
+        }
+    }
+
+    const auto& built = shape.animations.find(anim);
+    const float length = built != shape.animations.end() ? built->second.length : 1.0f;
+    if (a) {
+        float len = static_cast<float>(a->NumberOr("length", 1.0));
+        if (ImGui::DragFloat("Length", &len, 0.01f, 0.05f, 30.0f, "%.2f s")) {
+            Json::Member(*a, "length") = Json::Number(std::round(std::max(0.05f, len) * 100.0) / 100.0);
+            Changed();
+        }
+        bool loop = a->BoolOr("loop", false);
+        if (ImGui::Checkbox("Loops", &loop)) {
+            if (loop) Json::Member(*a, "loop") = Json::Bool(true);
+            else Json::Remove(*a, "loop");
+            Changed();
+        }
+    }
+    ImGui::Checkbox("Play", &playing);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::SliderFloat("##time", &animNow, 0.0f, length, "%.2f s")) playing = false;
+
+    // The labelled parts (its own and inherited): each one's keys.
+    ImGui::SeparatorText("Parts it moves");
+    std::vector<std::string> labels;
+    std::function<void(const std::vector<Part>&)> collect = [&](const std::vector<Part>& parts) {
+        for (const auto& p : parts) {
+            if (!p.name.empty() && std::find(labels.begin(), labels.end(), p.name) == labels.end()) labels.push_back(p.name);
+            collect(p.parts);
+        }
+    };
+    collect(shape.parts);
+    if (labels.empty()) {
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("No part has a label: give one a label (on the Parts tab) to animate it.");
+        ImGui::PopTextWrapPos();
+        return;
+    }
+    ImGui::BeginChild("labels", ImVec2(0, 120), ImGuiChildFlags_Borders);
+    for (const auto& l : labels) {
+        size_t keys = 0;
+        if (built != shape.animations.end())
+            if (auto t = built->second.tracks.find(l); t != built->second.tracks.end()) keys = t->second.size();
+        const std::string text = l + (keys ? "  (" + std::to_string(keys) + " keys)" : "");
+        if (ImGui::Selectable(text.c_str(), l == trackLabel)) trackLabel = l;
+    }
+    ImGui::EndChild();
+    if (trackLabel.empty() || !a) return;
+
+    Value& tracks = Json::Member(*a, "parts");
+    if (!tracks.IsObject()) tracks = Json::Object();
+    Value* keys = const_cast<Value*>(tracks.Find(trackLabel));
+    ImGui::SeparatorText(trackLabel.c_str());
+    if (ImGui::Button("Add a key here")) {
+        // Where it is now in the animation, to change from.
+        glm::vec3 rotate(0.0f), move(0.0f);
+        if (built != shape.animations.end()) PlayerModels::Sample(built->second, trackLabel, animNow, rotate, move);
+        Value k = Json::Object();
+        Json::Member(k, "t") = Json::Number(std::round(animNow * 100.0) / 100.0);
+        SetVec(k, "rotate", rotate);
+        if (move != glm::vec3(0.0f)) SetVec(k, "move", move);
+        Value& list = Json::Member(tracks, trackLabel);
+        if (!list.IsArray()) list = Json::Array();
+        size_t at = 0;
+        while (at < list.array.size() && list.array[at].NumberOr("t", 0.0) <= animNow) at++;
+        list.array.insert(list.array.begin() + static_cast<long>(at), k);
+        playing = false;
+        Changed();
+        return;
+    }
+    if (!keys || !keys->IsArray()) return;
+    for (size_t i = 0; i < keys->array.size(); i++) {
+        Value& k = keys->array[i];
+        ImGui::PushID(static_cast<int>(i));
+        float t = static_cast<float>(k.NumberOr("t", 0.0));
+        ImGui::SetNextItemWidth(70);
+        if (ImGui::DragFloat("##t", &t, 0.01f, 0.0f, length, "%.2f s")) {
+            Json::Member(k, "t") = Json::Number(std::round(std::clamp(t, 0.0f, 30.0f) * 100.0) / 100.0);
+            animNow = t, playing = false;
+            Changed();
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("go")) animNow = t, playing = false;
+        ImGui::SameLine();
+        if (ImGui::SmallButton("x")) {
+            keys->array.erase(keys->array.begin() + static_cast<long>(i));
+            if (keys->array.empty()) Json::Remove(tracks, trackLabel);
+            Changed();
+            ImGui::PopID();
+            break;
+        }
+        glm::vec3 rotate = GetVec(k, "rotate"), move = GetVec(k, "move");
+        if (ImGui::DragFloat3("Turn", &rotate.x, 0.5f, 0.0f, 0.0f, "%.1f")) {
+            SetVec(k, "rotate", rotate);
+            animNow = t, playing = false;
+            Changed();
+        }
+        if (ImGui::DragFloat3("Move", &move.x, 0.005f, 0.0f, 0.0f, "%.3f")) {
+            if (move == glm::vec3(0.0f)) Json::Remove(k, "move");
+            else SetVec(k, "move", move);
+            animNow = t, playing = false;
+            Changed();
+        }
+        ImGui::Separator();
+        ImGui::PopID();
+    }
 }
 
 void Editor::PartTree(Value& list, std::vector<int>& prefix) {
@@ -1586,6 +1805,12 @@ int main(int argc, char** argv) {
         float clickX = -1.0f, clickY = -1.0f;
         if (const char* c = std::getenv("VOXEL_EDITOR_CLICK")) std::sscanf(c, "%f,%f", &clickX, &clickY);
         if (const char* t = std::getenv("VOXEL_EDITOR_TOOL")) editor.SetTool(std::atoi(t));
+        if (const char* a = std::getenv("VOXEL_EDITOR_ANIM")) {
+            // "attack" or "attack:0.15" (held at that time).
+            const std::string spec = a;
+            const size_t colon = spec.find(':');
+            editor.ShowAnimation(spec.substr(0, colon), colon == std::string::npos ? -1.0f : static_cast<float>(std::atof(spec.c_str() + colon + 1)));
+        }
         int frames = 0;
         const double start = glfwGetTime();
         while (!glfwWindowShouldClose(window)) {

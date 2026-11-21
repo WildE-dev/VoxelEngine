@@ -38,6 +38,10 @@ struct CreatureModel {
     float speed = 0.0f;
     glm::vec2 light{ 15.0f, 0.0f }; // sky and block light where it stands (0..15)
     bool tame = false;               // a wolf with an owner: a red collar
+    // What it's doing (its model's animation of that name plays): 0 nothing, 1 attacking
+    // ("attack"), 2 working ("work"); and for how long it's been at it (seconds).
+    uint8_t action = 0;
+    float actionTime = 0.0f;
 };
 
 // A formed multiblock structure (world/Multiblocks.h), drawn from its model.
@@ -151,12 +155,28 @@ public:
         bool textured = false, tiled = false;
         glm::vec4 uv[3]{};
         std::string when;             // drawn only then ("tame")
+        std::string name;             // its label (animations move parts by label)
         std::vector<ShapePart> parts; // inside this frame
     };
+    // An animation: labelled parts turned and moved through keyframes, on top of how
+    // they're set up (and their swing and flap).
+    struct Key {
+        float t = 0.0f;               // seconds in
+        glm::vec3 rotate{ 0.0f };     // more turn (degrees about x, then y, then z)
+        glm::vec3 move{ 0.0f };       // its frame moved this far (in its parent's frame)
+    };
+    struct Animation {
+        float length = 1.0f;
+        bool loop = false;            // over and over (an "idle" one); else once
+        std::map<std::string, std::vector<Key>> tracks; // by part label, keys in time order
+    };
+    // A part's pose `time` seconds into an animation (false: the animation leaves it be).
+    static bool Sample(const Animation& a, const std::string& part, float time, glm::vec3& rotate, glm::vec3& move);
     struct CreatureShape {
         float scale = 1.0f;
         std::vector<ShapePart> parts;
         size_t ownStart = 0;          // where its own parts start (those before are inherited)
+        std::map<std::string, Animation> animations; // by name: "attack", "work", "idle" (and any)
     };
 
     // The block atlas, for models' textures (the Renderer sets it).
@@ -166,7 +186,7 @@ public:
     bool BuildShapes(const Json::Value& root, const std::vector<std::string>& names, std::map<std::string, CreatureShape>& out, std::string& error) const;
     // The model editor's preview: one model in `base`, one of its parts flashing.
     void DrawPreview(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const CreatureShape& shape, const glm::mat4& base, float time,
-                     float swing, bool working, const ShapePart* highlight, const glm::vec2& light);
+                     float swing, bool working, const ShapePart* highlight, const glm::vec2& light, const Animation* animation = nullptr, float animationTime = 0.0f);
 
     // Where each part of a model is, as DrawPreview draws it: its parent's frame and its
     // own (its box is at `box` in that, `size` big). For the model editor's picking.
@@ -174,7 +194,8 @@ public:
         const ShapePart* part;
         glm::mat4 parent, frame;
     };
-    static void Place(const CreatureShape& shape, const glm::mat4& base, float time, float swing, bool working, std::vector<PlacedPart>& out);
+    static void Place(const CreatureShape& shape, const glm::mat4& base, float time, float swing, bool working, std::vector<PlacedPart>& out,
+                      const Animation* animation = nullptr, float animationTime = 0.0f);
     // Plain glowing boxes, each a unit cube in its matrix (the editor's handles).
     void DrawBoxes(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<std::pair<glm::mat4, glm::vec3>>& boxes);
 
@@ -186,7 +207,7 @@ private:
     bool LoadShapes(const std::string& path, const std::vector<std::string>& names, std::map<std::string, CreatureShape>& out, std::string& error);
     // One model drawn in `base` (motion: how much its flaps move, 0..1; phase: offsets them).
     void DrawShape(Shader& shader, const glm::mat4& base, const CreatureShape& shape, float time, float swing, float motion, bool tame, bool working, bool hurt,
-                   float phase, const ShapePart* highlight = nullptr);
+                   float phase, const ShapePart* highlight = nullptr, const Animation* animation = nullptr, float animationTime = 0.0f);
     const class TextureAtlas* atlas = nullptr;
     std::map<std::string, CreatureShape> structureShapes;
     std::vector<CreatureShape> shapes; // by CreatureType (empty: not loaded)

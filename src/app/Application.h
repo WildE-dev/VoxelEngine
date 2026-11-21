@@ -83,6 +83,12 @@ private:
     // checked once a second.
     void WatchData(double now);
     double dataCheckedAt = 0.0;
+    // Creatures' actions as last seen, and when they began (for their animations).
+    struct CreatureAction {
+        uint8_t action = 0;
+        double since = 0.0, seen = 0.0;
+    };
+    std::map<uint16_t, CreatureAction> creatureActions;
     std::map<std::string, std::filesystem::file_time_type> dataTimes;
     void DrawHotbar();
     BlockType SelectedBlock() const;

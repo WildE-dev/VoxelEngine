@@ -65,6 +65,11 @@ uint16_t CreatureSystem::Spawn(CreatureType type, const glm::vec3& feet) {
     return c.id;
 }
 
+void CreatureSystem::Act(uint16_t id, uint8_t what, double now) {
+    for (auto& c : creatures)
+        if (c.id == id) c.act = what, c.actedAt = now;
+}
+
 uint16_t CreatureSystem::SpawnMiner(const glm::vec3& feet, const glm::ivec3& post) {
     const uint16_t id = Spawn(CreatureType::DwarfMiner, feet);
     for (auto& c : creatures)
@@ -238,6 +243,7 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
             speed = glm::length(to) > reach * 0.7f ? spec.runSpeed : 0.0f;
             if (glm::length(to) <= reach && std::abs(at.y - c.feet.y) < 1.8f && now >= c.nextAttack) {
                 c.nextAttack = now + 0.9;
+                c.act = 1, c.actedAt = now;
                 bite();
             }
         };
@@ -345,6 +351,7 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
         c.yaw = glm::degrees(std::atan2(toward.y, toward.x)); // (faces its target even backing off)
         if (d > 3.0f && d < 20.0f && now >= c.nextAttack && shooter) {
             c.nextAttack = now + 2.2 + unit(rng);
+            c.act = 1, c.actedAt = now;
             const glm::vec3 eye = c.feet + glm::vec3(0.0f, 1.55f, 0.0f);
             // Aimed high by as much as the arrow will drop on the way (its speed and
             // gravity are the server's: 25.6 and 18 blocks a second).
@@ -359,6 +366,7 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
     speed = glm::length(to) > reach * 0.7f ? spec.runSpeed : 0.0f;
     if (glm::length(to) <= reach && std::abs(target->feet.y - c.feet.y) < 1.8f && now >= c.nextAttack) {
         c.nextAttack = now + 1.0;
+        c.act = 1, c.actedAt = now;
         hurt(target->id, spec.attackDamage, c.type == CreatureType::DwarfChief ? "was cut down by a dwarf chieftain" : "was cut down by a dwarf warrior");
     }
 }

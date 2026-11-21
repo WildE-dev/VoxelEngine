@@ -715,7 +715,15 @@ void Application::Run() {
             return best;
         };
         for (const auto& c : client->GetCreatures())
-            params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet), c.tame });
+        {
+            // When each creature's action began (its animation plays from then).
+            CreatureAction& a = creatureActions[c.id];
+            if (c.action != a.action) a.action = c.action, a.since = now;
+            a.seen = now;
+            params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet), c.tame, c.action,
+                                         static_cast<float>(now - a.since) });
+        }
+        for (auto it = creatureActions.begin(); it != creatureActions.end();) it = now - it->second.seen > 5.0 ? creatureActions.erase(it) : std::next(it);
         for (const auto& b : bolts) params.bolts.push_back({ b.points, b.life / 0.35f });
         for (const auto& f : fireflies) {
             // Each blinks in its own rhythm, and fades in and out at the ends of its life.

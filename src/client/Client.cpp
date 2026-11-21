@@ -259,7 +259,8 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         for (const auto& c : m.creatures) {
             auto& samples = next[c.id];
             if (auto it = creatures.find(c.id); it != creatures.end()) samples = std::move(it->second);
-            samples.push_back({ now, { c.id, c.type, c.feet, c.yaw, (c.flags & net::kCreatureHurt) != 0, 0.0f, (c.flags & net::kCreatureTame) != 0 } });
+            const uint8_t action = (c.flags & net::kCreatureAttacking) ? 1 : (c.flags & net::kCreatureWorking) ? 2 : 0;
+            samples.push_back({ now, { c.id, c.type, c.feet, c.yaw, (c.flags & net::kCreatureHurt) != 0, 0.0f, (c.flags & net::kCreatureTame) != 0, action } });
             while (samples.size() > 2 && samples[1].time < now - 1.0) samples.pop_front();
         }
         creatures = std::move(next); // gone from the snapshot: gone (or out of range)

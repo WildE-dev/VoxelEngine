@@ -1590,8 +1590,10 @@ or a name from the model's `colors`, `glow`) and/or a frame for the parts inside
 about an axis as it walks; `flap`: flapped all the time; `when: "tame"`: only on a
 tame wolf; `parts`: the parts inside it). A box can wear a block texture, tinted by its
 colour: `"texture": "planks"` for every face, or `{"top", "bottom", "side"}`; with
-`"tile": true` it repeats once a block, otherwise each face shows it once, stretched. A
-model may set a `scale`, and `inherits`
+`"tile": true` it repeats once a block, otherwise each face shows it once, stretched. A part can have a `name` (a label), and a model `animations`: keyframes that turn
+and move labelled parts. `attack` plays as a creature strikes or shoots, `work` as a
+miner digs, and `idle` (with `"loop": true`) all the time; the dwarves' are in
+`dwarf_base`, swinging the `right_arm` and the `weapon`. A model may set a `scale`, and `inherits`
 another's colours and parts, adding its own: the dwarves all start from `dwarf_base`
 and change their colours and what they hold. The file explains itself at the top.
 
@@ -1619,6 +1621,11 @@ cd build && ./ModelEditor            # or: ./ModelEditor structures blast_furnac
   as a cube. Its name, textures (one for every face; top, bottom and sides; or each
   face), hardness, best tool, sound, light and map colour can be changed. Blocks
   themselves are made in the code, so none can be added here.
+- **Animations** (a tab beside the parts) picks one of the model's animations (or
+  makes one), sets its length and whether it loops, and plays it in the view, or holds
+  it at a time on the slider. Each labelled part (its own or inherited) has its keys:
+  "Add a key here" adds one at the slider's time, posed as the part is then, to change
+  its turn and move from. An inherited animation is copied into the model to change it.
 - **Click a part** in the view to pick it, and drag the handles on it: **1** moves its
   box, **2** moves its frame (the pivot, with everything inside it), **3** sizes the box
   by the face you drag (Shift: both ways). Hold Ctrl to snap to sixteenths of a block.
