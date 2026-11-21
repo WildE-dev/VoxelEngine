@@ -359,6 +359,22 @@ int main() {
         }
         Check(halfFace, "beside a dry carved brick, the pool's side covers the notch right down, a half-width face with a flat bottom");
 
+        // A pool only three quarters full beside the same dry brick, whose top stands
+        // well above the water: the water stays level up to the brick (it doesn't climb
+        // toward the brick's top), and nothing of it (no half side) pokes up above its
+        // surface, to be seen from across the pool.
+        for (int z = 1; z <= 7; z++) filling[Chunk::Index(5, 4, z)] = Block(BlockType::STONE_BRICK).Chiselled(2, -2); // notch floor 3/4 up
+        for (int x = 1; x <= 4; x++)
+            for (int z = 1; z <= 7; z++) filling[Chunk::Index(x, 4, z)] = Block::Water(Block::kMaxWaterVolume * 3 / 4);
+        v.clear();
+        w.clear();
+        Mesh(filling, v, w);
+        const auto pv = Positions(w, true);
+        float poolHigh = 0.0f;
+        for (const auto& p : pv)
+            if (p.x >= 1.0f && p.x <= 5.0f && p.z >= 2.0f && p.z <= 6.0f) poolHigh = std::max(poolHigh, p.y);
+        Check(poolHigh <= 4.76f, "a pool beside a carved block standing above it stays level, nothing poking up (highest " + std::to_string(poolHigh) + ")");
+
         // Water in a notch standing higher than the water in front of it, whose surface
         // sags at that corner toward a dry column beside it (surfaces average the columns
         // round a corner). The notch's side shows down to where that surface is drawn:

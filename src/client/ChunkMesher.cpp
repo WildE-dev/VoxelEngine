@@ -180,7 +180,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
         return kNoSurface; // a drop: don't sag toward it
     };
     auto cornerHeight = [&](const glm::ivec3& p, int cx, int cz) {
-        int sum = 0, n = 0;
+        int sum = 0, n = 0, wetSum = 0, wetN = 0, wetTop = kNoSurface, dry[4], dryN = 0;
         bool meetsLowerWater = false; // a column here is dry, with water just under it
         for (int dx = cx - 1; dx <= cx; dx++) {
             for (int dz = cz - 1; dz <= cz; dz++) {
@@ -193,10 +193,29 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 if (!hasWater(q) && inGrid(q) && !isOpaque(q) && hasWater(q - up)) meetsLowerWater = true;
                 const int surface = columnSurface(q);
                 if (surface == kNoSurface) continue;
-                sum += surface;
-                n++;
+                // Water's own surface (or the brink of a fall) counts as it is; dry ground
+                // only where it lies below that water (the edge tapers down to it).
+                const bool wet = hasWater(q) || (isOpaque(q) && hasWater(q + up));
+                if (wet) {
+                    wetSum += surface;
+                    wetN++;
+                    wetTop = std::max(wetTop, surface);
+                }
+                else {
+                    dry[dryN++] = surface;
+                }
             }
         }
+        // Dry ground above the water (the top of a carved block standing beside a pool)
+        // doesn't pull the water up the block: the water stays level up to it.
+        for (int i = 0; i < dryN; i++) {
+            if (wetN > 0 && dry[i] > wetTop) continue;
+            sum += dry[i];
+            n++;
+        }
+        sum += wetSum;
+        n += wetN;
+        if (n == 0) return 1;
         // Water lying on more water (a lake's top layer) comes right down to the water
         // below where it meets an empty column over it: a thin layer thins out to
         // nothing at its edges, instead of ending in a little wall (which shows as
@@ -291,14 +310,23 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     const int e = cx == 0 ? (cz == 0 ? 2 : 0) : (cz == 0 ? 1 : 3);
                     const uint32_t extra = y == top[e] ? fine[e] : 0u;
                     waterVertices[i + 1] = (waterVertices[i + 1] & ~(0x3u << 18)) | (extra << 18);
-                    // Half a side: the far corner's vertices move to the middle.
+                    // Half a side: the far corner's vertices move to the middle, and its
+                    // top comes down (or up) to the surface's height there, halfway
+                    // between the two corners (rounded down, so the side never pokes up
+                    // through the surface to be seen from the far side).
                     if (dropCorner >= 0 && e == dropCorner) {
                         const int shift = tangent == 0 ? 24 : 8;
                         const int at = static_cast<int>((position >> shift) & 0xFF) + (((tangent == 0 ? cx : cz) == 0) ? 4 : -4);
                         position = (position & ~(0xFFu << shift)) | (static_cast<uint32_t>(at & 0xFF) << shift);
+                        if (y == top[e] && top[e] > faceShape.edgeData.GetBottomY(e)) {
+                            const int mid32 = (top32[keepCorner] + top32[dropCorner]) / 2;
+                            const int y8 = std::max(static_cast<int>(faceShape.edgeData.GetBottomY(e)), (mid32 + 3) / 4);
+                            const int midFine = std::clamp(y8 * 4 - mid32, 0, 3);
+                            position = (position & ~(0xFFu << 16)) | (static_cast<uint32_t>((y8 + 8 + here.y * 8) & 0xFF) << 16);
+                            waterVertices[i + 1] = (waterVertices[i + 1] & ~(0x3u << 18)) | (static_cast<uint32_t>(midFine) << 18);
+                        }
                         waterVertices[i] = position;
                     }
-                    (void)keepCorner;
                 }
             };
             if (face != static_cast<int>(Face::Top) && face != static_cast<int>(Face::Bottom)) {
