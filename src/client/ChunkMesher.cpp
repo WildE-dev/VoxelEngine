@@ -94,8 +94,13 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
     // two edge neighbours and the diagonal neighbour in the layer in front of the face;
     // two solid edges fully occlude the corner. Smooth lighting: each corner averages
     // the light of the open cells among the same four (front, both edges, diagonal).
-    auto shadeFace = [&](const glm::ivec3& pos, int face, bool withAO) {
-        const glm::ivec3 front = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
+    // A partial block's faces lie inside its own cell (a slope's surface, a quarter's
+    // top): where the cell in front is solid (a block placed on top), they're lit by
+    // the open space in their own cell instead, not by the inside of that block (dark,
+    // and until the server's new light arrives, still lit as the air it was).
+    auto shadeFace = [&](const glm::ivec3& pos, int face, bool withAO, bool partial = false) {
+        glm::ivec3 front = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
+        if (partial && isOpaque(front)) front = pos;
         const auto& tangents = kFaceTangents[kFaceAxis[face]];
         FaceShading shading;
         for (int a = 0; a < 2; a++) {
@@ -276,8 +281,15 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
     // corner, joining the two. (Drawing only: walking uses the block's own shape.)
     constexpr int kEdgeAt[2][2] = { { 2, 0 }, { 1, 3 } }; // EdgeData index of corner [x][z]
     auto natural = [](const Block& b) { return !b.IsAir() && !b.IsPlant() && !b.IsLiquid() && !b.IsStepped(); };
+    // Only toward slopes: next to a full block there's no notch to hide, just a step
+    // (and joining up to blocks placed on the ground would stretch a slope beside them
+    // up to nearly two blocks). Nor under anything sitting on the slope itself.
     auto JoinSlope = [&](const glm::ivec3& pos, const Block& block) {
         Block drawn = block;
+        if (inGrid(pos + glm::ivec3(0, 1, 0))) {
+            const Block& onTop = cellAt(pos + glm::ivec3(0, 1, 0));
+            if (!onTop.IsAir() && !onTop.IsPlant() && !onTop.IsLiquid()) return drawn;
+        }
         for (int cx = 0; cx < 2; cx++)
             for (int cz = 0; cz < 2; cz++) {
                 const int e = kEdgeAt[cx][cz];
@@ -289,8 +301,8 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                         const glm::ivec3 q = pos + glm::ivec3(cx - 1 + i, 1, cz - 1 + j);
                         if (!inGrid(q)) continue;
                         const Block& above = cellAt(q);
-                        if (!natural(above)) continue;
-                        lift = std::max(lift, above.IsFullBlock() ? 7 : static_cast<int>(above.edgeData.GetTopY(kEdgeAt[1 - i][1 - j])));
+                        if (!natural(above) || above.IsFullBlock()) continue;
+                        lift = std::max(lift, static_cast<int>(above.edgeData.GetTopY(kEdgeAt[1 - i][1 - j])));
                     }
                 if (lift > 0) drawn.edgeData.SetTopYForDrawing(e, static_cast<uint8_t>(8 + std::min(lift, 7)));
             }
@@ -320,13 +332,13 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 for (int face = 0; face < kFaceCount; ++face) {
                     const glm::ivec3 front = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
                     if (stepped) {
-                        block.AddSteppedFaces(vertices, static_cast<Face>(face), x, y, z, shadeFace(pos, face, true), !isOpaque(front));
+                        block.AddSteppedFaces(vertices, static_cast<Face>(face), x, y, z, shadeFace(pos, face, true, true), !isOpaque(front));
                         continue;
                     }
                     if (full && isOpaque(front)) continue;
                     // Glass against glass: no face between them (a pane, not a stack of boxes).
                     if (full && block.type == BlockType::GLASS && cellAt(front).type == BlockType::GLASS) continue;
-                    drawn.AddFaceVertices(vertices, static_cast<Face>(face), x, y, z, shadeFace(pos, face, true));
+                    drawn.AddFaceVertices(vertices, static_cast<Face>(face), x, y, z, shadeFace(pos, face, true, !full));
                 }
 
                 // A waterlogged slope also gets the water above it.
