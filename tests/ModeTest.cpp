@@ -103,6 +103,9 @@ Server::Options ServerOptions(const fs::path& dir, net::GameMode mode) {
     options.worldType = TerrainGenerator::Type::Empty; // flat ground: the top of row -1 is at 0
     options.weather = Server::Options::Weather::Clear;
     options.defaultMode = mode;
+    // (Alice may die on the spikes; leaving things behind is TrapTest's and
+    // CreatureTest's to check, and would muddle the counts checked here.)
+    options.dropOnDeath = false;
     return options;
 }
 
@@ -254,7 +257,8 @@ int main() {
           "Alice comes back after a restart");
     Check(!a->client.IsCreative() && a->client.GetResources(BlockType::STONE_BRICK) == 32 && a->client.GetResources(BlockType::SPIKES) == 64 &&
               a->client.GetResources(groundType) == 32,
-          "still in survival, with what she had");
+          "still in survival, with what she had (bricks " + std::to_string(a->client.GetResources(BlockType::STONE_BRICK)) + ", spikes " +
+              std::to_string(a->client.GetResources(BlockType::SPIKES)) + ", ground " + std::to_string(a->client.GetResources(groundType)) + ")");
     Check(!c->client.IsCreative(), "a newcomer starts in the world's default mode (survival), not the server's new one");
     a->client.Disconnect();
     c->client.Disconnect();
