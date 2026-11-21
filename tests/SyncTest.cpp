@@ -188,8 +188,8 @@ int main() {
         both(10.0, [&] { return a.client.GetCreatures().empty(); });
 
         server.QueueConsoleCommand("summon dwarf_trader 22.5 0 15.5");
-        server.QueueConsoleCommand("give iron_ingot 4 Builder");
-        both(10.0, [&] { return a.Find(CreatureType::DwarfTrader) && a.client.GetResources(BlockType::IRON_INGOT) >= 4 * Crafting::kBlock; });
+        server.QueueConsoleCommand("give gold_ingot 3 Builder");
+        both(10.0, [&] { return a.Find(CreatureType::DwarfTrader) && a.client.GetResources(BlockType::GOLD_INGOT) >= 3 * Crafting::kBlock; });
         a.client.Trade(a.Find(CreatureType::DwarfTrader)->id, static_cast<uint8_t>(Trades::Offers().size() - 1));
         Check(both(10.0, [&] { const auto g = b.Find(CreatureType::DwarfGuard); return g && g->tame; }), "a guard the builder hires wears the band for the watcher too");
         server.QueueConsoleCommand("tp Builder 40.5 0 17.5");

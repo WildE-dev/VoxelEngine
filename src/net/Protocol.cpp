@@ -392,6 +392,24 @@ bool Decode(ByteReader& in, Trade& m) {
     return in.U16(m.creature) && in.U8(m.offer) && in.AtEnd();
 }
 
+std::vector<uint8_t> Encode(const TradePrices& m) {
+    ByteWriter w;
+    Begin(w, MsgType::TradePrices);
+    w.U16(m.creature);
+    w.VarU32(static_cast<uint32_t>(std::min<size_t>(m.give.size(), 64)));
+    for (size_t i = 0; i < m.give.size() && i < 64; i++) w.U16(m.give[i]);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, TradePrices& m) {
+    uint32_t n;
+    if (!in.U16(m.creature) || !in.VarU32(n) || n > 64) return false;
+    m.give.resize(n);
+    for (auto& g : m.give)
+        if (!in.U16(g)) return false;
+    return in.AtEnd();
+}
+
 std::vector<uint8_t> Encode(const CreatureSnapshot& m) {
     ByteWriter w;
     Begin(w, MsgType::CreatureSnapshot);

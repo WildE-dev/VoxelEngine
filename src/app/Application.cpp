@@ -2067,17 +2067,26 @@ void Application::DrawTrade() {
             ImGui::Image(texture, ImVec2(kIcon, kIcon), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
             ImGui::SetItemTooltip("%s", BlockName(t));
         };
-        ImGui::TextDisabled("\"Good iron, fair prices. What'll it be?\"");
+        ImGui::TextDisabled("\"Gold's what we deal in. Buying or selling?\"");
         const auto& offers = Trades::Offers();
+        const auto& prices = client->GetTradePrices();
         for (size_t i = 0; i < offers.size(); i++) {
             const Trades::Offer& o = offers[i];
+            if (i == 0) ImGui::SeparatorText("They sell");
+            if (i == 5) ImGui::SeparatorText("They buy");
+            if (i == 11) ImGui::SeparatorText("Barter");
             ImGui::PushID(static_cast<int>(i));
+            const int price = i < prices.size() ? prices[i] : o.giveCount;
             const uint32_t have = client->GetResources(o.give) / Block::kUnitsPerBlock;
-            const bool can = client->IsCreative() || have >= static_cast<uint32_t>(o.giveCount);
+            const bool can = client->IsCreative() || have >= static_cast<uint32_t>(price);
             icon(o.give);
             ImGui::SameLine();
             ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(can ? ImVec4(1, 1, 1, 1) : ImVec4(1.0f, 0.5f, 0.45f, 1.0f), "%d %s", o.giveCount, BlockName(o.give));
+            ImGui::TextColored(can ? ImVec4(1, 1, 1, 1) : ImVec4(1.0f, 0.5f, 0.45f, 1.0f), "%d %s", price, BlockName(o.give));
+            if (price > o.giveCount) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "(up from %d)", o.giveCount);
+            }
             ImGui::SameLine(250.0f);
             ImGui::TextUnformatted("->");
             ImGui::SameLine();
@@ -2390,6 +2399,8 @@ void Application::OnMouseButton(int button, int action) {
                     SetInventoryOpen(true);
                     tradeMode = true;
                     tradeWith = c.id;
+                    client->tradePrices.clear();
+                    client->Interact(c.id); // (the server answers with its prices)
                     return;
                 }
             client->Interact(target.creature);

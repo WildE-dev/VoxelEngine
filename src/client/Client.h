@@ -97,6 +97,7 @@ public:
     };
     void SendChat(const std::string& text);
     const std::deque<ChatLine>& GetChat() const { return chat; }
+    std::vector<uint16_t> tradePrices;
     // A line in this player's chat only (not sent anywhere).
     void Note(const std::string& text, net::ChatMessage::Kind kind = net::ChatMessage::Kind::Info) {
         chat.push_back({ kind, text, Now() });
@@ -186,6 +187,8 @@ public:
     // Right-clicked a creature (with raw venison in hand, a wild wolf is tamed).
     void Interact(uint16_t creature);
     void Trade(uint16_t trader, uint8_t offer);
+    // A trader's prices as the server last said (empty: not told yet).
+    const std::vector<uint16_t>& GetTradePrices() const { return tradePrices; }
     // Right-clicked part of an air network: the server answers in chat.
     void Inspect(const glm::ivec3& pos);
     // Signal blocks' channels and states, as the server last said (world/Signals.h),

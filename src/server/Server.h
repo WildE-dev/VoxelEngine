@@ -252,6 +252,11 @@ private:
     void HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool);
     void HandleInteract(ClientState& client, uint16_t creature);
     void HandleTrade(ClientState& client, uint16_t trader, uint8_t offer);
+    // Trade prices (world/Trades.h): how far each offer's price is pushed up, eased back
+    // a step every Trades::kPriceRecovery; and telling a player them.
+    std::vector<int> tradePressure;
+    double nextPriceRecovery = 0.0;
+    void SendTradePrices(ClientState& client, uint16_t trader);
     // A Dwarf King fell to this player: his hoard, an achievement, and everyone told.
     void KingSlain(ClientState& client);
     // The strongholds whose king has fallen, kept in the world's kings.txt.

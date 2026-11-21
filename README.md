@@ -819,17 +819,23 @@ Not every dwarf is out for blood. A market's dwarves (a **trader** in green with
 broad hat, and three **guards** in blue with shields and spears) are friendly: the
 guards keep to the market and cut down hostile dwarves that come within 16 blocks of it.
 
-Right-click the trader to trade (from within 6 blocks):
+Right-click the trader to trade (from within 6 blocks). **Gold** (gold ingots, smelted
+from the Deep's gold ore) is their money:
 
-| You give | You get |
-|---|---|
-| 4 bread | 1 iron ingot |
-| 8 coal | 1 iron ingot |
-| 3 iron ingots | 1 steel ingot |
-| 2 hides | 8 arrows |
-| 2 iron ingots | 2 TNT |
-| 1 steel ingot | 6 bread |
-| 4 iron ingots | a guard for ten minutes |
+| They sell | | They buy | | Barter | |
+|---|---|---|---|---|---|
+| 1 gold | 2 iron ingots | 8 glass | 1 gold | 4 bread | 1 iron ingot |
+| 2 gold | 1 steel ingot | 2 steel ingots | 1 gold | 3 iron ingots | 1 steel ingot |
+| 1 gold | 6 bread | 8 crushed iron | 1 gold | | |
+| 1 gold | 12 arrows | 4 coke | 1 gold | | |
+| 2 gold | 2 TNT | 16 coal | 1 gold | | |
+| 3 gold | a guard for ten minutes | 4 hides | 1 gold | | |
+
+**Prices drift.** Each time anyone takes an offer, what it costs goes up by a quarter
+of its first price (up to four times it), and comes back down a step every minute: sell
+them a lot of glass and they'll want more of it for their gold; buy up their steel and
+it costs more for a while. The trade window shows the prices as they are, marking those
+that have gone up.
 
 A **hired guard** wears a yellow band. They follow you (catching up if left behind)
 and fight the hostile dwarf nearest you within 12 blocks, until their ten minutes are
@@ -839,8 +845,9 @@ Hit any of a market's dwarves and the whole market turns on you for five minutes
 guards come after you (within 40 blocks of it) and the trader won't deal with you.
 `/locate market` (or `camp`, `mine` or `stronghold`) says where the nearest one is. The offers are
 in `src/world/Trades.h`; `/summon dwarf_trader` and `/summon dwarf_guard`
-bring them (a market of their own where they're summoned). `CreatureTest` checks a
-trade, a refused one, hiring a guard who follows and fights, and the grudge.
+bring them (a market of their own where they're summoned). `CreatureTest` checks the
+prices, buying and selling, a price going up, a refused trade, hiring a guard who
+follows and fights, and the grudge.
 
 ### Mining posts
 

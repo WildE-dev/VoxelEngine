@@ -228,20 +228,30 @@ int main() {
         server.QueueConsoleCommand("time noon");
         server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
         server.QueueConsoleCommand("summon dwarf_trader 11.5 0 8.5");
-        server.QueueConsoleCommand("give bread 4 Hunter");
-        server.QueueConsoleCommand("give iron_ingot 4 Hunter");
+        server.QueueConsoleCommand("give gold_ingot 1 Hunter");
+        server.QueueConsoleCommand("give glass 8 Hunter");
         Check(both(20.0, [&] { return a.Find(CreatureType::DwarfTrader) != nullptr; }), "a dwarf trader is summoned beside the hunter");
-        both(20.0, [&] { return a.client.GetResources(BlockType::IRON_INGOT) == 4 * Block::kUnitsPerBlock; });
+        both(20.0, [&] { return a.client.GetResources(BlockType::GLASS) == 8 * Block::kUnitsPerBlock; });
         const uint16_t trader = a.Find(CreatureType::DwarfTrader)->id;
-        a.client.Trade(trader, 0); // 4 bread for an iron ingot
-        Check(both(20.0, [&] { return a.client.GetResources(BlockType::IRON_INGOT) == 5 * Block::kUnitsPerBlock && a.client.GetResources(BlockType::BREAD) == 0; }),
-              "4 bread trade for an iron ingot");
+        a.client.Interact(trader);
+        Check(both(20.0, [&] { return a.client.GetTradePrices().size() == Trades::Offers().size() && a.client.GetTradePrices()[0] == 1; }),
+              "right-clicking the trader brings its prices");
+        a.client.Trade(trader, 0); // a gold ingot for 2 iron ingots
+        Check(both(20.0, [&] { return a.client.GetResources(BlockType::IRON_INGOT) == 2 * Block::kUnitsPerBlock && a.client.GetResources(BlockType::GOLD_INGOT) == 0; }),
+              "a gold ingot buys 2 iron ingots");
+        Check(both(20.0, [&] { return !a.client.GetTradePrices().empty() && a.client.GetTradePrices()[0] == 2; }), "and that offer's price goes up (2 gold now)");
         a.client.Trade(trader, 0);
-        Check(both(20.0, [&] { return Has(a, "You need 4"); }) && a.client.GetResources(BlockType::IRON_INGOT) == 5 * Block::kUnitsPerBlock,
+        Check(both(20.0, [&] { return Has(a, "You need 2"); }) && a.client.GetResources(BlockType::IRON_INGOT) == 2 * Block::kUnitsPerBlock,
               "a trade without the goods is refused");
-        a.client.Trade(trader, static_cast<uint8_t>(Trades::Offers().size() - 1)); // a guard, for 4 ingots
-        Check(both(20.0, [&] { const auto* g = a.Find(CreatureType::DwarfGuard); return g && g->tame; }) && a.client.GetResources(BlockType::IRON_INGOT) == Block::kUnitsPerBlock,
-              "4 iron ingots hire a guard (wearing a band)");
+        a.client.Trade(trader, 5); // 8 glass for a gold ingot
+        Check(both(20.0, [&] { return a.client.GetResources(BlockType::GOLD_INGOT) == Block::kUnitsPerBlock && a.client.GetResources(BlockType::GLASS) == 0; }),
+              "they buy 8 glass for a gold ingot");
+        Check(both(20.0, [&] { return a.client.GetTradePrices().size() > 5 && a.client.GetTradePrices()[5] == 10; }), "and want 10 glass the next time");
+        server.QueueConsoleCommand("give gold_ingot 2 Hunter");
+        both(20.0, [&] { return a.client.GetResources(BlockType::GOLD_INGOT) == 3 * Block::kUnitsPerBlock; });
+        a.client.Trade(trader, static_cast<uint8_t>(Trades::Offers().size() - 1)); // a guard, for 3 gold
+        Check(both(20.0, [&] { const auto* g = a.Find(CreatureType::DwarfGuard); return g && g->tame; }) && a.client.GetResources(BlockType::GOLD_INGOT) == 0,
+              "3 gold ingots hire a guard (wearing a band)");
         server.QueueConsoleCommand("tp Hunter 22.5 0 8.5");
         Check(both(20.0, [&] { const auto* g = a.Find(CreatureType::DwarfGuard); return g && glm::distance(glm::vec2(g->feet.x, g->feet.z), glm::vec2(22.5f, 8.5f)) < 5.0f; }),
               "the guard follows whoever hired them");

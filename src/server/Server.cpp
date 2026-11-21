@@ -693,8 +693,19 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
     }
 }
 
+void Server::SendTradePrices(ClientState& client, uint16_t trader) {
+    const auto& offers = Trades::Offers();
+    tradePressure.resize(offers.size(), 0);
+    net::TradePrices m;
+    m.creature = trader;
+    for (size_t i = 0; i < offers.size(); i++) m.give.push_back(static_cast<uint16_t>(Trades::Price(offers[i], tradePressure[i])));
+    net.Send(client.peer, net::kChannelReliable, net::Encode(m));
+}
+
 void Server::HandleInteract(ClientState& client, uint16_t creature) {
     const CreatureSystem::Creature* c = creatures.Find(creature);
+    // A trader: its prices (the trade window opens on the player's side).
+    if (c && c->type == CreatureType::DwarfTrader) return SendTradePrices(client, creature);
     if (!c || c->type != CreatureType::Wolf || c->owner != 0) return;
     const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
     const Collision::AABB box = CreatureSystem::Box(*c);
@@ -749,10 +760,12 @@ void Server::HandleTrade(ClientState& client, uint16_t trader, uint8_t offerInde
     if (offerIndex >= offers.size()) return;
     const Trades::Offer& o = offers[offerIndex];
     auto name = [](BlockType t) { return std::string(BlockData::NameOr(t, BlockId(t))); };
-    const uint32_t cost = static_cast<uint32_t>(o.giveCount) * Block::kUnitsPerBlock;
+    tradePressure.resize(offers.size(), 0);
+    const int price = Trades::Price(o, tradePressure[offerIndex]);
+    const uint32_t cost = static_cast<uint32_t>(price) * Block::kUnitsPerBlock;
     uint32_t& have = client.resources[static_cast<size_t>(o.give)];
     if (!Creative(client) && have < cost)
-        return SendChat(client, net::ChatMessage::Kind::Error, "You need " + std::to_string(o.giveCount) + " " + name(o.give) + " for that");
+        return SendChat(client, net::ChatMessage::Kind::Error, "You need " + std::to_string(price) + " " + name(o.give) + " for that");
     const glm::vec3 at = c->feet; // (c may move once a creature is added)
     if (o.hire) {
         if (creatures.HiredBy(client.id) >= Trades::kMaxHired)
@@ -766,10 +779,13 @@ void Server::HandleTrade(ClientState& client, uint16_t trader, uint8_t offerInde
     else {
         client.resources[static_cast<size_t>(o.get)] += static_cast<uint32_t>(o.getCount) * Block::kUnitsPerBlock;
         SendChat(client, net::ChatMessage::Kind::Info,
-                 "Traded " + std::to_string(o.giveCount) + " " + name(o.give) + " for " + std::to_string(o.getCount) + " " + name(o.get));
+                 "Traded " + std::to_string(price) + " " + name(o.give) + " for " + std::to_string(o.getCount) + " " + name(o.get));
     }
     if (!Creative(client)) have -= cost;
     SendResources(client);
+    // The price goes up (for everyone), and they're told the new prices.
+    tradePressure[offerIndex] = std::min(tradePressure[offerIndex] + 1, Trades::kMaxPressure);
+    SendTradePrices(client, trader);
 }
 
 void Server::HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool) {
@@ -817,6 +833,11 @@ void Server::UpdateCreatures() {
             if (client.id == playerId) Hurt(client, damage, deathMessage);
     });
     if (creatures.FallenKings().size() != fallenKingsSaved) SaveFallenKings();
+    // Trade prices ease back.
+    if (now >= nextPriceRecovery) {
+        nextPriceRecovery = now + Trades::kPriceRecovery;
+        for (int& p : tradePressure) p = std::max(0, p - 1);
+    }
     for (uint16_t owner : creatures.TakeEndedHires())
         for (auto& [peer, client] : clients)
             if (client.id == owner) SendChat(client, net::ChatMessage::Kind::Info, "Your hired guard's time is up: they've gone home");
