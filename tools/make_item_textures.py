@@ -242,6 +242,68 @@ dddddddddddddddd
 """
 BED_COLOURS = {"p": (210, 206, 196), "P": (238, 236, 228), "r": (168, 40, 38), "R": (196, 62, 56), "d": (74, 48, 24), "w": (156, 110, 60), "W": (176, 128, 74)}
 
+# Ores: stone with specks of coal or rust-coloured iron.
+ORE = """
+ssSsssssSssssSss
+sssssssssssssssS
+ssoossSssssoosss
+sooo osssssooosS
+ssoo ssssSssooss
+sssssssssssssss
+sSssssoossssssss
+sssssoooosSsssss
+ssssssooo ssssss
+sssSsssssssssSss
+ssssssssssssssss
+soossssSsssooss
+sooossssssooooss
+ssoossssssSoossS
+sssssSssssssssss
+ssssssssssssssss
+""".replace(" ", "s")
+ORE = "\n".join(r.ljust(16, "s")[:16] for r in ORE.strip("\n").split("\n"))
+COAL_ORE_COLOURS = {"s": (128, 128, 128), "S": (146, 146, 146), "o": (30, 30, 32)}
+IRON_ORE_COLOURS = {"s": (128, 128, 128), "S": (146, 146, 146), "o": (196, 140, 104)}
+
+COAL_LUMP = """
+................
+................
+.....kkk........
+...kkkKkkk......
+..kkKkkkkkk.....
+..kkkkkkKkkk....
+.kkkKkkkkkkkk...
+.kkkkkkkKkkkkk..
+.kKkkkkkkkkKkk..
+..kkkkKkkkkkk...
+..kkkkkkkkKk....
+...kkkKkkkk.....
+.....kkkk.......
+................
+................
+................
+"""
+COAL_COLOURS = {"k": (36, 36, 40), "K": (70, 70, 78)}
+INGOT = """
+................
+................
+................
+................
+......oooooooo..
+....oiiIiiiiio..
+...oiIiiiiiioo..
+..oiiiiiiiiooo..
+.oooooooooooio..
+.oiiiiiiiiioio..
+.oiiiIiiiiioo...
+.oiiiiiiiiio....
+.ooooooooooo....
+................
+................
+................
+"""
+INGOT_COLOURS = {"o": (90, 90, 96), "i": (196, 196, 204), "I": (236, 236, 242)}
+
 
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
@@ -255,6 +317,10 @@ def main():
     draw("chest_top", CHEST_TOP, CHEST_COLOURS, jitter=6, seed=19)
     draw("bed_top", BED_TOP, BED_COLOURS, jitter=6, seed=20)
     draw("bed_side", BED_SIDE, BED_COLOURS, jitter=6, seed=21)
+    draw("coal_ore", ORE, COAL_ORE_COLOURS, jitter=8, seed=22)
+    draw("iron_ore", ORE, IRON_ORE_COLOURS, jitter=8, seed=23)
+    draw("coal", COAL_LUMP, COAL_COLOURS, jitter=6, seed=24)
+    draw("iron_ingot", INGOT, INGOT_COLOURS, jitter=5, seed=25)
 
 
 if __name__ == "__main__":

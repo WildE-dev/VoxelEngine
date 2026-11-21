@@ -283,6 +283,7 @@ bool Client::CanCraft(int index, int count) const {
     const Recipe& recipe = recipes[index];
     if (recipe.tool != Tool::None && HasTool(recipe.tool)) return false;
     if (recipe.armour != ArmourPiece::Count && HasArmour(recipe.armour)) return false;
+    if (recipe.ironUpgrade && HasIron()) return false;
     return Crafting::TimesAffordable(recipe, resources) >= static_cast<uint32_t>(count);
 }
 
@@ -291,7 +292,8 @@ void Client::Craft(int index, int count) {
     // Predicted like edits; the server's answer (Resources) puts it right.
     const Recipe& recipe = Crafting::Recipes()[index];
     for (const auto& in : recipe.inputs) resources[static_cast<size_t>(in.type)] -= in.units * count;
-    if (recipe.tool != Tool::None) tools |= Crafting::ToolBit(recipe.tool);
+    if (recipe.ironUpgrade) tools |= Crafting::kIronBit;
+    else if (recipe.tool != Tool::None) tools |= Crafting::ToolBit(recipe.tool);
     else if (recipe.armour != ArmourPiece::Count) armour |= Armour::Bit(recipe.armour);
     else resources[static_cast<size_t>(recipe.output)] += recipe.outputUnits * count;
     net.Send(net::kChannelReliable, net::Encode(net::Craft{ static_cast<uint8_t>(index), static_cast<uint8_t>(count) }));

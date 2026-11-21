@@ -124,6 +124,8 @@ public:
     // Tools: whether we have one (creative: all of them; survival: those we've made).
     // Armour worn (survival; world/Armour.h).
     bool HasArmour(ArmourPiece piece) const { return (armour & Armour::Bit(piece)) != 0; }
+    // The iron upgrade (Crafting::kIronBit): faster tools, harder hits.
+    bool HasIron() const { return (tools & (1u << 7)) != 0; }
     uint8_t GetArmour() const { return armour; }
     bool HasTool(Tool tool) const { return tool == Tool::None || IsCreative() || (tools & (1u << static_cast<unsigned>(tool))); }
     // The tool we really work with: that one if we have it, a hand if not.

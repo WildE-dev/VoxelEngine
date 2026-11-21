@@ -54,4 +54,6 @@ inline int Damage(Tool tool) {
     default: return 2;
     }
 }
+// With the iron upgrade, every tool hits a heart harder.
+inline int Damage(Tool tool, bool iron) { return Damage(tool) + (iron && tool != Tool::None ? 2 : 0); }
 } // namespace Combat

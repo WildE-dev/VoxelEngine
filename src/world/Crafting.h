@@ -27,8 +27,9 @@ struct Recipe {
     uint32_t outputUnits = 0;
     Tool tool = Tool::None;
     ArmourPiece armour = ArmourPiece::Count; // a piece of armour (made once, then worn)
-    // Made once and kept: a tool or a piece of armour.
-    bool MadeOnce() const { return tool != Tool::None || armour != ArmourPiece::Count; }
+    bool ironUpgrade = false;                // the iron upgrade (made once: Crafting::kIronBit)
+    // Made once and kept: a tool, a piece of armour, or the upgrade.
+    bool MadeOnce() const { return tool != Tool::None || armour != ArmourPiece::Count || ironUpgrade; }
 };
 
 namespace Crafting {
@@ -59,6 +60,11 @@ inline const std::vector<Recipe>& Recipes() {
         { "cap", "Hide cap", { { BlockType::HIDE, 2 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Cap },
         { "tunic", "Hide tunic", { { BlockType::HIDE, 4 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Tunic },
         { "boots", "Hide boots", { { BlockType::HIDE, 2 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Boots },
+        // Smelting, and what iron is for.
+        { "iron_ingot", "Iron ingot", { { BlockType::IRON_ORE, kBlock }, { BlockType::COAL, kBlock / 4 } }, BlockType::IRON_INGOT, kBlock },
+        { "coal_lamp", "Lamp (with coal)", { { BlockType::GLASS, kBlock / 2 }, { BlockType::COAL, kBlock / 4 } }, BlockType::LAMP, kBlock },
+        { "iron_tools", "Iron upgrade (all tools)", { { BlockType::IRON_INGOT, 3 * kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::AIR, 0, Tool::None,
+          ArmourPiece::Count, true },
     };
     return recipes;
 }
@@ -69,6 +75,10 @@ inline int Find(const char* id) {
         if (std::string(id) == recipes[i].id) return static_cast<int>(i);
     return -1;
 }
+
+// The iron upgrade's bit in the tools mask (tools use bits 1..4): every tool you make
+// mines at Mining::kIronToolSpeed and hits a heart harder.
+constexpr uint8_t kIronBit = 1u << 7;
 
 // Tools held, one bit each (1 << Tool).
 inline uint8_t ToolBit(Tool tool) { return static_cast<uint8_t>(1u << static_cast<unsigned>(tool)); }

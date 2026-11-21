@@ -126,11 +126,20 @@ enum class BlockType : uint8_t {
     // A bed (a half-height block): right-click to make it where you respawn, and at
     // night to sleep (see Server::HandleUseBed).
     BED,
+    // Ores, in veins in the stone underground (iron deeper): coal ore breaks into
+    // coal; iron ore is smelted into iron ingots (see world/Crafting.h).
+    COAL_ORE,
+    IRON_ORE,
+    COAL,       // items
+    IRON_INGOT,
     COUNT
 };
 
 // Things held in the inventory that aren't blocks: they can't be placed.
-inline bool IsItemType(BlockType type) { return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE; }
+inline bool IsItemType(BlockType type) {
+    return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE || type == BlockType::COAL ||
+           type == BlockType::IRON_INGOT;
+}
 
 inline bool IsPlantType(BlockType type) {
     return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW || type == BlockType::SPIKES ||
@@ -139,7 +148,10 @@ inline bool IsPlantType(BlockType type) {
 
 // The resource a block counts as in survival (see Block::ResourceUnits): its own type,
 // except pebbles, which are stone.
-inline BlockType ResourceTypeOf(BlockType type) { return type == BlockType::PEBBLES ? BlockType::STONE : type; }
+// What breaking a block gives: pebbles are stone, coal ore is coal.
+inline BlockType ResourceTypeOf(BlockType type) {
+    return type == BlockType::PEBBLES ? BlockType::STONE : type == BlockType::COAL_ORE ? BlockType::COAL : type;
+}
 
 // Grass of any biome (plants grow on it).
 inline bool IsGrassType(BlockType type) {

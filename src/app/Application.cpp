@@ -53,7 +53,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -137,6 +137,10 @@ const char* BlockName(BlockType type) {
     case BlockType::HIDE: return "Hide";
     case BlockType::CHEST: return "Chest";
     case BlockType::BED: return "Bed";
+    case BlockType::COAL_ORE: return "Coal ore";
+    case BlockType::IRON_ORE: return "Iron ore";
+    case BlockType::COAL: return "Coal";
+    case BlockType::IRON_INGOT: return "Iron ingot";
     default:               return "Air";
     }
 }
@@ -1369,7 +1373,8 @@ void Application::DrawInventory() {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     glm::vec2 uv0, uv1;
-                    const int icon = recipe.tool != Tool::None              ? ToolTile(atlas, recipe.tool)
+                    const int icon = recipe.ironUpgrade                     ? atlas.GetIndex("iron_ingot")
+                                     : recipe.tool != Tool::None              ? ToolTile(atlas, recipe.tool)
                                      : recipe.armour != ArmourPiece::Count ? atlas.GetIndex(Armour::Texture(recipe.armour))
                                                                            : IconTile(recipe.output);
                     atlas.GetTileUV(icon, uv0, uv1);
@@ -1381,7 +1386,7 @@ void Application::DrawInventory() {
                     std::string needs;
                     for (const auto& in : recipe.inputs)
                         needs += (needs.empty() ? "" : " + ") + FormatBlocks(in.units) + " " + BlockName(in.type);
-                    const bool owned = (recipe.tool != Tool::None && client->HasTool(recipe.tool)) ||
+                    const bool owned = (recipe.ironUpgrade && client->HasIron()) || (recipe.tool != Tool::None && client->HasTool(recipe.tool)) ||
                                        (recipe.armour != ArmourPiece::Count && client->HasArmour(recipe.armour));
                     if (owned) ImGui::TextDisabled(recipe.armour != ArmourPiece::Count ? "worn" : "made");
                     else if (client->CanCraft(r)) ImGui::TextUnformatted(needs.c_str());
@@ -1644,7 +1649,7 @@ void Application::UpdateMining() {
         miningStart = now;
         client->StartMining(miningPos, tool);
     }
-    const double needed = Mining::Seconds(block, tool), elapsed = now - miningStart;
+    const double needed = Mining::Seconds(block, tool, client->HasIron() && !client->IsCreative()), elapsed = now - miningStart;
     mineProgress = needed > 0.0 ? static_cast<float>(std::min(1.0, elapsed / needed)) : 1.0f;
     // A tap on the block every so often while mining it.
     if (needed > 0.0 && now >= nextDig) {

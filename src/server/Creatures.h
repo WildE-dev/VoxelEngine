@@ -63,7 +63,7 @@ public:
 
     // A player at `eye` hits creature `id` with `tool`. Returns whether it landed
     // (exists, in reach); `killed` says if it died.
-    bool Attack(uint16_t id, const glm::vec3& eye, Tool tool, double now, bool& killed);
+    bool Attack(uint16_t id, const glm::vec3& eye, Tool tool, bool iron, double now, bool& killed);
 
     const std::vector<Creature>& All() const { return creatures; }
     const Creature* Find(uint16_t id) const;

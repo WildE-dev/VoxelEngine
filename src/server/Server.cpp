@@ -539,13 +539,16 @@ void Server::HandleCraft(ClientState& client, int recipeIndex, int count) {
     if (Creative(client) || recipeIndex < 0 || recipeIndex >= static_cast<int>(recipes.size())) return;
     const Recipe& recipe = recipes[recipeIndex];
     if (recipe.MadeOnce()) {
-        const bool made = recipe.tool != Tool::None ? (client.tools & Crafting::ToolBit(recipe.tool)) != 0 : (client.armour & Armour::Bit(recipe.armour)) != 0;
+        const bool made = recipe.ironUpgrade       ? (client.tools & Crafting::kIronBit) != 0
+                          : recipe.tool != Tool::None ? (client.tools & Crafting::ToolBit(recipe.tool)) != 0
+                                                      : (client.armour & Armour::Bit(recipe.armour)) != 0;
         if (made) return SendResources(client); // made already
         count = 1;
     }
     if (Crafting::TimesAffordable(recipe, client.resources) < static_cast<uint32_t>(count)) return SendResources(client); // can't afford
     for (const auto& in : recipe.inputs) client.resources[static_cast<size_t>(in.type)] -= in.units * count;
-    if (recipe.tool != Tool::None) client.tools |= Crafting::ToolBit(recipe.tool);
+    if (recipe.ironUpgrade) client.tools |= Crafting::kIronBit;
+    else if (recipe.tool != Tool::None) client.tools |= Crafting::ToolBit(recipe.tool);
     else if (recipe.armour != ArmourPiece::Count) client.armour |= Armour::Bit(recipe.armour);
     else client.resources[static_cast<size_t>(recipe.output)] += recipe.outputUnits * count;
     SendResources(client);
@@ -560,7 +563,7 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
     const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
     const CreatureSystem::Creature* target = creatures.Find(creature);
     const CreatureType type = target ? target->type : CreatureType::Count;
-    if (creatures.Attack(creature, eye, tool, now, killed) && killed) {
+    if (creatures.Attack(creature, eye, tool, (client.tools & Crafting::kIronBit) != 0, now, killed) && killed) {
         std::string spoils;
         // A deer gives venison (one or two).
         if (type == CreatureType::Deer) {
@@ -591,7 +594,7 @@ void Server::HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool)
         // Knocked back, away from the hitter and a little up (as creatures are). The
         // target moves itself, so it's told to; a slain player respawns instead.
         const double before = target.invulnerableUntil;
-        Hurt(target, Combat::Damage(tool), "was slain by " + client.name);
+        Hurt(target, Combat::Damage(tool, (client.tools & Crafting::kIronBit) != 0), "was slain by " + client.name);
         if (target.health > 0 && target.lastHurt >= now && target.invulnerableUntil == before) {
             glm::vec2 away(target.feet.x - client.feet.x, target.feet.z - client.feet.z);
             away = glm::length(away) > 1e-3f ? glm::normalize(away) : glm::vec2(1.0f, 0.0f);
@@ -651,7 +654,7 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
     }
     // Survival: only once it's been mined for long enough, with that tool.
     if (!Creative(client)) {
-        const double needed = Mining::Seconds(block, tool);
+        const double needed = Mining::Seconds(block, tool, (client.tools & Crafting::kIronBit) != 0);
         const bool started = client.mining && client.miningPos == pos && client.miningTool == tool;
         const double mined = started ? Now() - client.miningSince : 0.0;
         if (needed > 0.0 && mined < needed * (1.0 - Mining::kSlackShare) - Mining::kSlackSeconds) {

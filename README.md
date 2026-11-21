@@ -651,6 +651,19 @@ names, held items and armour reaching other players, reach, damage, the red flas
 knockback, `/pvp off`, being slain, and the killer finding half the victim's things in
 a chest where they died.
 
+## Ores and iron
+
+The stone underground holds veins of ore: **coal ore** from 8 blocks below the surface
+(about 3% of the stone) and **iron ore** from 24 down (about 1%, in smaller veins).
+Both want a pickaxe (iron ore is harder). Coal ore breaks into **coal**; iron ore is
+smelted into **iron ingots** (1 iron ore + 0.25 coal). Coal also makes a lamp more
+cheaply (0.5 glass + 0.25 coal).
+
+Three ingots and a plank make the **iron upgrade**, once: from then on every tool you
+make mines faster (6 times a hand's speed on what it's for, instead of 4) and hits a
+heart harder (a sword does 4.5 hearts). It's kept like tools are. `MiningTest` checks
+where ore lies, what it breaks into, and what the upgrade does.
+
 ## Swords and armour
 
 The **sword** is a tool made for fighting: 3.5 hearts a hit, against creatures or
@@ -769,6 +782,9 @@ makes four.
 | Sword | 0.5 planks + 2 stone |
 | Chest | 2 planks |
 | Bed | 3 planks + 1 hide |
+| Iron ingot | 1 iron ore + 0.25 coal |
+| Lamp (with coal) | 0.5 glass + 0.25 coal |
+| Iron upgrade | 3 iron ingots + 1 planks |
 | Hide cap / tunic / boots | 2 / 4 / 2 hide |
 
 Amounts are in blocks, using the same resource units as building (a block is 64).

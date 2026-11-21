@@ -18,6 +18,7 @@ enum class Tool : uint8_t { None, Pickaxe, Axe, Shovel, Sword, Count };
 namespace Mining {
 
 constexpr float kToolSpeed = 4.0f;
+constexpr float kIronToolSpeed = 6.0f; // with the iron upgrade (see world/Crafting.h)
 // A carved block takes time by its volume, but no less than this share of a full one.
 constexpr float kMinVolumeShare = 0.3f;
 // The server lets a break through this much early (network jitter), in seconds plus
@@ -87,6 +88,8 @@ inline float Hardness(BlockType type) {
     case BlockType::PIPE:
     case BlockType::SLUICE: return 3.0f;
     case BlockType::STONE: return 4.0f;
+    case BlockType::COAL_ORE: return 4.5f;
+    case BlockType::IRON_ORE: return 6.0f;
     case BlockType::STONE_BRICK:
     case BlockType::MOSSY_BRICK: return 5.0f;
     default: return 1.0f;
@@ -97,6 +100,8 @@ inline float Hardness(BlockType type) {
 inline Tool BestTool(BlockType type) {
     switch (type) {
     case BlockType::STONE:
+    case BlockType::COAL_ORE:
+    case BlockType::IRON_ORE:
     case BlockType::STONE_BRICK:
     case BlockType::MOSSY_BRICK:
     case BlockType::CRUMBLING_BRICK:
@@ -126,11 +131,11 @@ inline Tool BestTool(BlockType type) {
 }
 
 // Seconds it takes to break this block with this tool (in survival).
-inline float Seconds(const Block& block, Tool tool) {
+inline float Seconds(const Block& block, Tool tool, bool iron = false) {
     float seconds = Hardness(block.type);
     if (seconds <= 0.0f) return 0.0f;
     const Tool best = BestTool(block.type);
-    if (best != Tool::None && tool == best) seconds /= kToolSpeed;
+    if (best != Tool::None && tool == best) seconds /= iron ? kIronToolSpeed : kToolSpeed;
     if (!block.IsFullBlock() && block.CanChisel())
         seconds *= std::max(kMinVolumeShare, block.ResourceUnits() / static_cast<float>(Block::kUnitsPerBlock));
     return seconds;

@@ -10,6 +10,20 @@
 
 namespace {
 
+// Stone, or ore in veins through it: blobs of 3D noise, coal from 8 blocks down,
+// iron (rarer, in smaller veins) from 24 down. A function of position, so chunks agree.
+BlockType OreAt(int x, int y, int z, int depth) {
+    if (depth >= 8) {
+        const float coal = Noise::Perlin3(x * 0.18f, y * 0.18f, z * 0.18f, 0xC0A1u);
+        if (coal > 0.48f) return BlockType::COAL_ORE;
+    }
+    if (depth >= 24) {
+        const float iron = Noise::Perlin3(x * 0.22f, y * 0.22f, z * 0.22f, 0x1205u);
+        if (iron > 0.56f) return BlockType::IRON_ORE;
+    }
+    return BlockType::STONE;
+}
+
 constexpr int S = TerrainGenerator::S;
 constexpr float kSmoothness = 8.0f; // surface heights snap to eighths of a block
 
@@ -230,7 +244,7 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                     out[Index(x, y, z)] = Block(under);
                 }
                 else if (blockY < m) {
-                    out[Index(x, y, z)] = Block(BlockType::STONE);
+                    out[Index(x, y, z)] = Block(OreAt(coords.x * S + x, blockY, coords.z * S + z, m - blockY));
                 }
             }
         }

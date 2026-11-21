@@ -70,7 +70,7 @@ const CreatureSystem::Creature* CreatureSystem::Find(uint16_t id) const {
     return nullptr;
 }
 
-bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, double now, bool& killed) {
+bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, bool iron, double now, bool& killed) {
     killed = false;
     auto it = std::find_if(creatures.begin(), creatures.end(), [&](const Creature& c) { return c.id == id; });
     if (it == creatures.end()) return false;
@@ -81,7 +81,7 @@ bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, double
     const glm::vec3 nearest = glm::clamp(eye, box.min, box.max);
     if (glm::distance(eye, nearest) > Combat::kReach + 0.5f) return false; // (slack for movement in flight)
 
-    c.health -= Combat::Damage(tool);
+    c.health -= Combat::Damage(tool, iron);
     c.hurtUntil = now + 0.3;
     // Knocked back, away from the hitter.
     glm::vec2 away(c.feet.x - eye.x, c.feet.z - eye.z);
