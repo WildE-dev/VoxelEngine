@@ -46,6 +46,8 @@ constexpr float kSurvivalReach = 7.5f;
 constexpr float kChestReach = kSurvivalReach;
 // Players count as asleep for this long after getting into bed (so everyone can get in).
 constexpr double kSleepWindow = 6.0;
+// Falls up to this many blocks are safe; each block beyond costs half a heart.
+constexpr float kSafeFall = 3.0f;
 
 // A player's body; a crouching player's is shorter (net::kFlagCrouching).
 constexpr float kCrouchHeight = 1.45f; // as Player::kCrouchHeight
@@ -474,7 +476,9 @@ void Server::HandlePlayerState(ClientState& client, const net::PlayerState& stat
     client.blockedStates = blocked ? client.blockedStates + 1 : 0;
     if (client.blockedStates >= kBlockedStatesBeforeCorrection) return correct(client.lastValid, "inside solid blocks");
 
+    const bool first = !client.hasState;
     client.hasState = true;
+    UpdateFall(client, state, first || flying);
     client.feet = state.feet;
     client.yaw = state.yaw;
     client.pitch = state.pitch;
@@ -483,6 +487,33 @@ void Server::HandlePlayerState(ClientState& client, const net::PlayerState& stat
     client.heldBlock = state.heldBlock;
     client.lastStateTime = now;
     if (!blocked) client.lastValid = state.feet;
+}
+
+void Server::UpdateFall(ClientState& client, const net::PlayerState& state, bool reset) {
+    // Falls count from the highest point since last on the ground (or in water); a
+    // landing more than kSafeFall below it hurts. Teleports, respawns, flying, swimming
+    // and creative start the count afresh.
+    // On the ground: as the server sees it (ground just under the feet), not as the
+    // client says, so a client can't skip landing.
+    bool unknown = false;
+    const bool grounded = Collision::GroundHeight(*world, BodyAt(state.feet, 0.05f, (state.flags & net::kFlagCrouching) != 0), 0.05f, 0.1f, unknown).has_value() || unknown;
+    Block at;
+    const glm::ivec3 cell(glm::floor(state.feet + glm::vec3(0.0f, 0.1f, 0.0f)));
+    const bool swimming = (state.flags & net::kFlagSwimming) != 0 || (world->GetBlock(cell.x, cell.y, cell.z, at) && at.HasWater());
+    if (reset || swimming || Creative(client)) {
+        client.fallPeak = state.feet.y;
+        client.falling = false;
+        return;
+    }
+    if (!grounded) {
+        client.fallPeak = client.falling ? std::max(client.fallPeak, state.feet.y) : std::max(client.feet.y, state.feet.y);
+        client.falling = true;
+        return;
+    }
+    const float fall = client.falling ? client.fallPeak - state.feet.y : 0.0f;
+    client.falling = false;
+    client.fallPeak = state.feet.y;
+    if (fall > kSafeFall + 0.5f) Hurt(client, static_cast<int>(std::lround(fall - kSafeFall)), "fell from a high place", false);
 }
 
 float Server::EditReach(const ClientState& client) const {

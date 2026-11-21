@@ -167,6 +167,22 @@ int main() {
     Check(TypeAt(b, { 50, 3, 7 }) == BlockType::SLUICE, "but not one out of its reach");
     Check(both(20.0, [&] { Block w; return b.world.GetBlock(30, 4, 7, w) && !w.HasWater(); }), "and the water it held pours out");
 
+    std::cout << "Falling" << std::endl;
+    server.QueueConsoleCommand("tp Tester 60.5 0 7.5");
+    both(20.0, [&] { return std::abs(a.player.GetFeetPosition().x - 60.5f) < 0.2f && a.player.IsOnGround(); });
+    both(6.0, [&] { return a.client.GetHealth() == 20; }); // (healed up from the traps)
+    const int beforeFall = a.client.GetHealth();
+    server.QueueConsoleCommand("tp Tester 60.5 3 7.5"); // a 3-block drop is safe
+    both(20.0, [&] { return a.player.GetFeetPosition().y < 0.5f && a.player.IsOnGround(); });
+    both(1.0, [] { return false; });
+    Check(a.client.GetHealth() == beforeFall, "a 3-block drop doesn't hurt");
+    server.QueueConsoleCommand("tp Tester 60.5 11 7.5");
+    both(20.0, [&] { return a.player.GetFeetPosition().y < 0.5f && a.player.IsOnGround(); });
+    both(1.0, [] { return false; });
+    Check(std::abs(a.client.GetHealth() - (beforeFall - 8)) <= 1, "an 11-block fall costs 4 hearts (health " + std::to_string(a.client.GetHealth()) + ")");
+    server.QueueConsoleCommand("food 20 Tester"); // (healing needs food)
+    both(40.0, [&] { return a.client.GetHealth() == 20; }); // (healed again before the checks below)
+
     std::cout << "No-clip and the laser" << std::endl;
     a.client.SendChat("/noclip");
     Check(both(20.0, [&] { return Has(a, "Only operators can do that"); }) && !(a.client.GetAbilities() & net::kAbilityNoclip), "a player can't turn on no-clip");
@@ -183,7 +199,7 @@ int main() {
     const glm::ivec3 here(glm::floor(a.player.GetFeetPosition()));
     a.client.PlaceBlock(here, BlockType::SPIKES);
     both(2.0, [] { return false; });
-    Check(a.client.GetHealth() == 20, "spikes can't hurt a player in no-clip");
+    Check(a.client.GetHealth() == 20, "spikes can't hurt a player in no-clip (health " + std::to_string(a.client.GetHealth()) + ")");
     server.QueueConsoleCommand("deop Tester");
     Check(both(20.0, [&] { return !(a.client.GetAbilities() & (net::kAbilityNoclip | net::kAbilityOperator)) && !a.player.IsFlying(); }),
           "losing operator status ends no-clip too");

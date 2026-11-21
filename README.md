@@ -540,6 +540,11 @@ work the same for everyone:
 - **Crumbling bricks** give way 0.4 seconds after you stand on them, and the collapse
   spreads to the crumbling bricks touching them, so a whole pit cover falls in.
 - **Pressure plates** open every sluice gate within 8 blocks.
+- **Falls** of more than 3 blocks cost half a heart for each block beyond that (an
+  11-block drop is four hearts). Landing in water is safe. The server measures the
+  fall from the highest point since you were last on the ground, deciding "on the
+  ground" from the world rather than from what your client says. Teleports, respawns,
+  flying and creative start the count afresh. Armour doesn't help.
 
 The screen flashes red when you're hurt. Hearts come back one every 4 seconds once
 nothing has hurt you for 5, as long as you're well fed (see
@@ -551,7 +556,8 @@ the chat tells you where; anyone can open it, so a killer can take it. Your tool
 armour aren't dropped. In no-clip
 nothing can hurt you. All four blocks are in the inventory, for building traps of
 your own. `TrapTest` checks spikes, death and respawn, crumbling floors, pressure
-plates and sluice gates, and that no-clip and the laser are operators' only.
+plates and sluice gates, falls (safe from 3 blocks, four hearts from 11), and that
+no-clip and the laser are operators' only.
 
 ## Mining
 

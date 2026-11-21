@@ -186,6 +186,8 @@ private:
         std::optional<glm::ivec3> openChest; // the chest they have open
         std::optional<glm::ivec3> bed;       // where they respawn (if it's still a bed)
         double sleptAt = -1000.0;            // when they last got into bed at night
+        float fallPeak = 0.0f;               // highest point since last on the ground (UpdateFall)
+        bool falling = false;
         Tool heldTool = Tool::None;          // in their hand, for others to see
         BlockType heldBlock = BlockType::AIR;
 
@@ -291,6 +293,10 @@ private:
     void RemoveChest(const glm::ivec3& pos, ClientState* breaker); // gone: contents to whoever broke it
     void DropOnDeath(ClientState& client); // half of what they carry, into a chest where they died
     void HandleUseBed(ClientState& client, const glm::ivec3& pos);
+    // Fall damage, from each accepted position: landing far below the highest point
+    // since last on the ground hurts. `reset`: start counting from here (teleports,
+    // the first position, flying).
+    void UpdateFall(ClientState& client, const net::PlayerState& state, bool reset);
     // Where they come back after dying: on (or beside) their bed if it's still there and
     // there's room, otherwise the world's spawn point (`why` says what was wrong).
     glm::vec3 RespawnPoint(const ClientState& client, std::string& why) const;

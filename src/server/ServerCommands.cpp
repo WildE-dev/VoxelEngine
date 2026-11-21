@@ -222,6 +222,8 @@ void Server::Teleport(ClientState& client, const glm::vec3& feet) {
     client.correctionId++;
     client.feet = client.lastValid = feet;
     client.blockedStates = 0;
+    client.falling = false; // (a fall from here on counts from here)
+    client.fallPeak = feet.y;
     net.Send(client.peer, net::kChannelReliable, net::Encode(net::Correction{ client.correctionId, feet }));
 }
 
