@@ -463,10 +463,26 @@ void Application::Run() {
                 params.breakBoxSize = hi - lo;
             }
         }
+        // Figures are lit by the light where they stand: the brighter of their feet's
+        // cell (which may hold a slope or a plant) and the one above.
+        auto lightAt = [&](const glm::vec3& feet) {
+            glm::vec2 best(0.0f);
+            bool any = false;
+            for (int dy = 0; dy <= 1; dy++) {
+                int blockLight = 0, skyLight = 0;
+                const glm::ivec3 cell(glm::floor(feet + glm::vec3(0.0f, 0.1f + dy, 0.0f)));
+                Block b;
+                if (!world->GetLight(cell.x, cell.y, cell.z, blockLight, skyLight)) continue;
+                if (world->GetBlock(cell.x, cell.y, cell.z, b) && b.IsFullBlock()) continue; // (inside a wall: no light there)
+                best = glm::max(best, glm::vec2(skyLight, blockLight));
+                any = true;
+            }
+            return any ? best : glm::vec2(15.0f, 0.0f);
+        };
         for (const auto& c : client->GetCreatures())
-            params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed });
+            params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet) });
         for (const auto& other : client->GetRemotePlayers()) {
-            params.players.push_back({ other.feet, other.yaw, other.pitch, PlayerModels::ColorFor(other.id) });
+            params.players.push_back({ other.feet, other.yaw, other.pitch, PlayerModels::ColorFor(other.id), (other.flags & net::kFlagHurt) != 0, lightAt(other.feet) });
         }
 
         lap(2);
@@ -1299,8 +1315,13 @@ void Application::OnMouseButton(int button, int action) {
 
     // A creature in the way: hit it (with whatever's in hand).
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        if (const uint16_t creature = CreatureInView()) {
-            client->Attack(creature, client->Usable(SelectedTool()));
+        const FightTarget target = TargetInView();
+        if (target.creature) {
+            client->Attack(target.creature, client->Usable(SelectedTool()));
+            return;
+        }
+        if (target.player >= 0) {
+            client->AttackPlayer(static_cast<uint16_t>(target.player), client->Usable(SelectedTool()));
             return;
         }
     }
@@ -1337,7 +1358,7 @@ void Application::OnMouseButton(int button, int action) {
     }
 }
 
-uint16_t Application::CreatureInView() const {
+Application::FightTarget Application::TargetInView() const {
     const glm::vec3 origin = camera.GetPosition(), dir = camera.GetDirection();
     float blockDistance = Combat::kReach;
     if (auto hit = Raycast(*world, origin, dir, Combat::kReach)) {
@@ -1351,17 +1372,12 @@ uint16_t Application::CreatureInView() const {
         }
         blockDistance = tNear;
     }
-    uint16_t best = 0;
-    float bestT = blockDistance;
-    for (const auto& c : client->GetCreatures()) {
-        const CreatureSpec& spec = SpecOf(c.type);
-        const glm::vec3 lo = c.feet - glm::vec3(spec.halfWidth, 0.0f, spec.halfWidth);
-        const glm::vec3 hi = c.feet + glm::vec3(spec.halfWidth, spec.height, spec.halfWidth);
+    // Where the ray enters a box, or -1 if it misses.
+    auto enters = [&](const glm::vec3& lo, const glm::vec3& hi) {
         float tNear = 0.0f, tFar = 1e9f;
-        bool miss = false;
-        for (int a = 0; a < 3 && !miss; a++) {
+        for (int a = 0; a < 3; a++) {
             if (std::abs(dir[a]) < 1e-6f) {
-                miss = origin[a] < lo[a] || origin[a] > hi[a];
+                if (origin[a] < lo[a] || origin[a] > hi[a]) return -1.0f;
                 continue;
             }
             float t0 = (lo[a] - origin[a]) / dir[a], t1 = (hi[a] - origin[a]) / dir[a];
@@ -1369,7 +1385,18 @@ uint16_t Application::CreatureInView() const {
             tNear = std::max(tNear, t0);
             tFar = std::min(tFar, t1);
         }
-        if (!miss && tNear <= tFar && tNear < bestT) bestT = tNear, best = c.id;
+        return tNear <= tFar ? tNear : -1.0f;
+    };
+    FightTarget best;
+    float bestT = blockDistance;
+    for (const auto& c : client->GetCreatures()) {
+        const CreatureSpec& spec = SpecOf(c.type);
+        const float t = enters(c.feet - glm::vec3(spec.halfWidth, 0.0f, spec.halfWidth), c.feet + glm::vec3(spec.halfWidth, spec.height, spec.halfWidth));
+        if (t >= 0.0f && t < bestT) bestT = t, best = FightTarget{ c.id, -1 };
+    }
+    for (const auto& p : client->GetRemotePlayers()) {
+        const float t = enters(p.feet - glm::vec3(0.3f, 0.0f, 0.3f), p.feet + glm::vec3(0.3f, 1.8f, 0.3f));
+        if (t >= 0.0f && t < bestT) bestT = t, best = FightTarget{ 0, p.id };
     }
     return best;
 }
@@ -1378,7 +1405,7 @@ void Application::UpdateMining() {
     mineProgress = 0.0f;
     const bool held = (captureCursor && !chatOpen && !inventoryOpen && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) || holdMine;
     // Not while aiming at a creature (that's a fight, not mining).
-    auto hit = held && client->IsWelcomed() && !client->IsCreative() && !CreatureInView()
+    auto hit = held && client->IsWelcomed() && !client->IsCreative() && !TargetInView().Any()
                    ? Raycast(*world, camera.GetPosition(), camera.GetDirection(), kReach)
                    : std::nullopt;
     Block block;
@@ -1471,6 +1498,10 @@ void Application::UpdateSounds() {
     for (auto& [id, w] : walkers) w.seen = false;
     for (const auto& other : client->GetRemotePlayers()) {
         Walker& w = walkers[other.id];
+        // A thump when they're hit (by us, or anything else).
+        const bool hurt = (other.flags & net::kFlagHurt) != 0;
+        if (hurt && !w.hurt) audio->Play("hit", other.feet + glm::vec3(0.0f, 1.0f, 0.0f), 0.9f);
+        w.hurt = hurt;
         const float step = glm::length(glm::vec2(other.feet.x - w.feet.x, other.feet.z - w.feet.z));
         if (w.seen || w.distance > 0.0f || step < 2.0f) {
             if ((other.flags & net::kFlagOnGround) && step < 2.0f) w.distance += step;

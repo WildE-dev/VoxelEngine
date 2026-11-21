@@ -13,12 +13,14 @@ std::vector<float> CubeVertices() {
     const glm::vec3 normals[6] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
     std::vector<float> v;
     for (const auto& n : normals) {
-        // Two tangents spanning the face, ordered so the face winds counter-clockwise.
+        // Two tangents spanning the face; a, b runs counter-clockwise seen from outside,
+        // so the corners are taken the other way round: the renderer treats clockwise
+        // as the front (glFrontFace(GL_CW), as the chunk meshes wind), and culls backs.
         const glm::vec3 a = std::abs(n.y) > 0.5f ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
         const glm::vec3 b = glm::cross(n, a);
         const glm::vec3 c = n * 0.5f;
         const glm::vec3 corners[4] = { c - a * 0.5f - b * 0.5f, c + a * 0.5f - b * 0.5f, c + a * 0.5f + b * 0.5f, c - a * 0.5f + b * 0.5f };
-        for (int i : { 0, 1, 2, 0, 2, 3 }) {
+        for (int i : { 0, 2, 1, 0, 3, 2 }) {
             v.insert(v.end(), { corners[i].x, corners[i].y, corners[i].z, n.x, n.y, n.z });
         }
     }
@@ -70,15 +72,18 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
         glDrawArrays(GL_TRIANGLES, 0, 36);
     };
 
+    const glm::vec3 kRed(0.9f, 0.15f, 0.1f);
     for (const auto& p : players) {
+        shader.SetUniform("lightLevels", p.light);
+        const glm::vec3 color = p.hurt ? glm::mix(p.color, kRed, 0.55f) : p.color;
         // Yaw follows the camera convention: 0 degrees looks along +x, 90 along +z.
         const glm::mat4 base = glm::rotate(glm::translate(glm::mat4(1.0f), p.feet), -glm::radians(p.yaw), glm::vec3(0, 1, 0));
 
         const float bodyHeight = kEyeHeight - kHead * 0.5f;
-        box(glm::scale(glm::translate(base, glm::vec3(0, bodyHeight * 0.5f, 0)), glm::vec3(kWidth * 0.5f, bodyHeight, kWidth)), p.color);
+        box(glm::scale(glm::translate(base, glm::vec3(0, bodyHeight * 0.5f, 0)), glm::vec3(kWidth * 0.5f, bodyHeight, kWidth)), color);
 
         const glm::mat4 head = glm::rotate(glm::translate(base, glm::vec3(0, kEyeHeight, 0)), glm::radians(p.pitch), glm::vec3(0, 0, 1));
-        box(glm::scale(head, glm::vec3(kHead)), p.color * 1.1f);
+        box(glm::scale(head, glm::vec3(kHead)), color * 1.1f);
         // Visor on the front (+x in the head's frame).
         box(glm::scale(glm::translate(head, glm::vec3(kHead * 0.5f, 0.03f, 0)), glm::vec3(0.04f, kHead * 0.3f, kHead * 0.8f)), glm::vec3(0.1f));
     }
@@ -94,6 +99,7 @@ void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const gl
     const glm::vec3 kRed(0.9f, 0.15f, 0.1f);
     shader.SetUniform("glow", 0.0f);
     for (const auto& c : creatures) {
+        shader.SetUniform("lightLevels", c.light);
         auto tint = [&](const glm::vec3& color) { return c.hurt ? glm::mix(color, kRed, 0.55f) : color; };
         // A box of `size` centred at `centre` in the creature's frame (+x forward).
         const glm::mat4 base = glm::rotate(glm::translate(glm::mat4(1.0f), c.feet), -glm::radians(c.yaw), glm::vec3(0, 1, 0));

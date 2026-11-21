@@ -243,6 +243,7 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
     playerShader.Use();
     playerShader.SetUniform("sunDirection", params.sunDirection);
     playerShader.SetUniform("sunBrightness", params.sunBrightness);
+    playerShader.SetUniform("blockLightColor", kBlockLightColor);
     playerShader.SetUniform("cameraPos", params.cameraPosition);
     SetFogUniforms(playerShader, params, 1);
     playerModels.Draw(playerShader, params.view, params.projection, params.players);

@@ -122,6 +122,8 @@ public:
         // Creatures spawn by themselves around players (normal worlds only; /summon
         // works anywhere).
         bool creatures = true;
+        // Players can hurt each other (operators switch it with /pvp).
+        bool pvp = true;
         // Chunks loaded and sent around each player (2..12): less is lighter on the
         // machine. Players who ask for less get less.
         int viewDistance = 12;
@@ -210,6 +212,7 @@ private:
     void HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool);
     void HandleMineStart(ClientState& client, const glm::ivec3& pos, Tool tool);
     void HandleAttack(ClientState& client, uint16_t creature, Tool tool);
+    void HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool);
     void HandleCraft(ClientState& client, int recipe, int count);
     // The tool a player really works with: theirs if they have it, a bare hand if not.
     static Tool Usable(const ClientState& client, Tool tool);

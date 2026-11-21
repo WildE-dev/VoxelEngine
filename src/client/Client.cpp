@@ -377,6 +377,11 @@ std::vector<Client::BlockEvent> Client::TakeBlockEvents() {
     return events;
 }
 
+void Client::AttackPlayer(uint16_t player, Tool tool) {
+    if (!welcomed) return;
+    net.Send(net::kChannelReliable, net::Encode(net::AttackPlayer{ player, tool }));
+}
+
 void Client::Attack(uint16_t creature, Tool tool) {
     if (!welcomed) return;
     net.Send(net::kChannelReliable, net::Encode(net::Attack{ creature, tool }));

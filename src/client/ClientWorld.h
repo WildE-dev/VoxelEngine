@@ -73,6 +73,8 @@ public:
     void SetBlock(int x, int y, int z, const Block& block);
 
     bool GetBlock(int x, int y, int z, Block& block) const override;
+    // The light in a cell (0..15 each), or false if its chunk isn't here.
+    bool GetLight(int x, int y, int z, int& blockLight, int& skyLight) const;
 
     void RebuildAllChunks();
 

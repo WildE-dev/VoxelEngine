@@ -100,6 +100,9 @@ public:
     // Client: light received from the server. Returns which cells changed (empty if
     // none), so neighbours whose meshes sample them can be rebuilt.
     void SetLightData(const Light& values, std::vector<int>* changedCells = nullptr);
+    // Client, any thread: the light received for one cell (block light in the low
+    // nibble, sky light in the high one).
+    uint8_t GetReceivedLight(int x, int y, int z) const;
 
     // Copies all blocks out under a single lock.
     void CopyBlocks(Blocks& out) const;

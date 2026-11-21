@@ -102,6 +102,8 @@ constexpr HelpLine kHelp[] = {
     { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64), or /give <tool> [player]" },
     { Level::Operator, "/summon <deer|ghoul> [x y z] - bring a creature (default: a few blocks ahead of you)" },
     { Level::Operator, "/creatures [clear] - count the creatures, or remove them all" },
+    { Level::Everyone, "/pvp - whether players can hurt each other" },
+    { Level::Operator, "/pvp <on|off> - let players hurt each other, or not" },
     { Level::Console, "/stop - shut the server down" },
 };
 
@@ -112,7 +114,7 @@ Level RequiredLevel(const std::string& command, size_t argumentCount) {
     if (command == "tp" || command == "teleport" || command == "save" || command == "kick" || command == "op" || command == "deop" ||
         command == "noclip" || command == "give" || command == "summon" || command == "creatures")
         return Level::Operator;
-    if ((command == "time" || command == "weather" || command == "gamemode") && argumentCount > 0) return Level::Operator;
+    if ((command == "time" || command == "weather" || command == "gamemode" || command == "pvp") && argumentCount > 0) return Level::Operator;
     return Level::Everyone;
 }
 
@@ -360,6 +362,13 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         for (int t = 0; t < static_cast<int>(CreatureType::Count); t++)
             text += std::string(t ? ", " : ": ") + std::to_string(counts[t]) + " " + SpecOf(static_cast<CreatureType>(t)).id;
         reply(Kind::Info, text);
+    }
+    else if (command == "pvp") {
+        if (words.size() == 1) return reply(Kind::Info, std::string("PvP is ") + (options.pvp ? "on" : "off"));
+        const std::string w = Lower(words[1]);
+        if (w != "on" && w != "off") return usage("/pvp [on|off]");
+        options.pvp = w == "on";
+        Broadcast(Kind::Info, std::string("PvP is now ") + (options.pvp ? "on: players can hurt each other" : "off"));
     }
     else if (command == "ops") {
         std::vector<std::string> names(operators.begin(), operators.end());

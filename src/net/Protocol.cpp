@@ -200,6 +200,14 @@ std::vector<uint8_t> Encode(const Attack& m) {
     return std::move(w.data);
 }
 
+std::vector<uint8_t> Encode(const AttackPlayer& m) {
+    ByteWriter w;
+    Begin(w, MsgType::AttackPlayer);
+    w.U16(m.player);
+    w.U8(static_cast<uint8_t>(m.tool));
+    return std::move(w.data);
+}
+
 std::vector<uint8_t> Encode(const CreatureSnapshot& m) {
     ByteWriter w;
     Begin(w, MsgType::CreatureSnapshot);
@@ -479,6 +487,10 @@ bool Decode(ByteReader& in, MineStart& m) {
 
 bool Decode(ByteReader& in, Attack& m) {
     return in.U16(m.creature) && ReadTool(in, m.tool) && in.AtEnd();
+}
+
+bool Decode(ByteReader& in, AttackPlayer& m) {
+    return in.U16(m.player) && ReadTool(in, m.tool) && in.AtEnd();
 }
 
 bool Decode(ByteReader& in, CreatureSnapshot& m) {

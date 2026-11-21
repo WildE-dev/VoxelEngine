@@ -80,7 +80,14 @@ private:
     void PlayAt(const char* name, const glm::ivec3& block, float volume = 1.0f);
     static const char* BreakSound(BlockType type);
     // The creature the view ray meets within reach, before any block (0: none).
-    uint16_t CreatureInView() const;
+    // What's in the crosshair to hit, nearer than any block: a creature or another
+    // player (at most one is set; 0 and -1 when neither).
+    struct FightTarget {
+        uint16_t creature = 0;
+        int player = -1;
+        bool Any() const { return creature != 0 || player >= 0; }
+    };
+    FightTarget TargetInView() const;
     void SelectSlot(int slot);
     // Inventory (I): pick which block goes in each hotbar slot; kept in hotbar.txt.
     void DrawInventory();
@@ -135,7 +142,7 @@ private:
     float stepDistance = 0.0f;
     bool wasSwimming = false;
     double lastHurtHeard = 0.0, nextDig = 0.0;
-    struct Walker { glm::vec3 feet{ 0.0f }; float distance = 0.0f; bool seen = false; };
+    struct Walker { glm::vec3 feet{ 0.0f }; float distance = 0.0f; bool seen = false; bool hurt = false; };
     std::unordered_map<uint16_t, Walker> walkers;
     struct CreatureSound { bool hurt = false; double nextGroan = 0.0; bool seen = false; };
     std::unordered_map<uint16_t, CreatureSound> creatureSounds;

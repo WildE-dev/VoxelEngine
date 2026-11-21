@@ -146,6 +146,7 @@ public:
     std::vector<BlockEvent> TakeBlockEvents();
     // Hit a creature (the server checks the reach).
     void Attack(uint16_t creature, Tool tool);
+    void AttackPlayer(uint16_t player, Tool tool);
 
     struct Stats {
         uint32_t roundTripMs = 0;

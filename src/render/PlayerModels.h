@@ -13,6 +13,8 @@ struct PlayerModel {
     glm::vec3 feet{0.0f};
     float yaw = 0.0f, pitch = 0.0f;
     glm::vec3 color{1.0f};
+    bool hurt = false;
+    glm::vec2 light{ 15.0f, 0.0f }; // sky and block light where they stand (0..15)
 };
 
 // A creature as drawn (world/Creatures.h): what it is, where, which way it faces,
@@ -23,6 +25,7 @@ struct CreatureModel {
     float yaw = 0.0f;
     bool hurt = false;
     float speed = 0.0f;
+    glm::vec2 light{ 15.0f, 0.0f }; // sky and block light where it stands (0..15)
 };
 
 // Draws other players as simple box figures: a body, and a head that turns and tilts

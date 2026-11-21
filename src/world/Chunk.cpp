@@ -62,6 +62,11 @@ void Chunk::CopyPublishedLight(Light& out) const {
     out = publishedLight;
 }
 
+uint8_t Chunk::GetReceivedLight(int x, int y, int z) const {
+    std::lock_guard<std::mutex> lock(blockMutex);
+    return light[Index(x, y, z)];
+}
+
 void Chunk::SetLightData(const Light& values, std::vector<int>* changedCells) {
     std::lock_guard<std::mutex> lock(blockMutex);
     if (changedCells) {

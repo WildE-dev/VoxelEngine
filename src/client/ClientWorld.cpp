@@ -54,6 +54,16 @@ bool ClientWorld::GetBlock(int x, int y, int z, Block& block) const {
     return true;
 }
 
+bool ClientWorld::GetLight(int x, int y, int z, int& blockLight, int& skyLight) const {
+    auto chunk = FindChunkShared(Coords::ChunkOf({ x, y, z }));
+    if (!chunk || !chunk->IsLoaded()) return false;
+    const glm::ivec3 local = Coords::LocalOf({ x, y, z });
+    const uint8_t v = chunk->GetReceivedLight(local.x, local.y, local.z);
+    blockLight = v & 0x0F;
+    skyLight = v >> 4;
+    return true;
+}
+
 void ClientWorld::SetBlock(int x, int y, int z, const Block& block) {
     const glm::ivec3 chunkCoords = Coords::ChunkOf({ x, y, z });
     auto chunk = FindChunk(chunkCoords);

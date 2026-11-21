@@ -8,7 +8,9 @@
 //  - ghouls burn up in daylight under the open sky,
 //  - /creatures counts and clears them,
 //  - in a normal world, deer turn up by themselves on grass, and ghouls come out at
-//    night.
+//    night,
+//  - PvP: players hit each other in reach (flashing red for others), can be slain,
+//    and /pvp off stops it.
 #include <chrono>
 #include <cstdlib>
 #include <functional>
@@ -167,6 +169,58 @@ int main() {
         wait(1.0);
         server.QueueConsoleCommand("creatures clear");
         Check(both(20.0, [&] { return a.client.GetCreatures().empty(); }), "/creatures clear removes them all");
+        a.client.Disconnect();
+        b.client.Disconnect();
+        Pump({ &a, &b }, 0.3, [] { return false; });
+        server.Stop();
+    }
+
+    std::cout << "PvP" << std::endl;
+    {
+        Server server;
+        if (!server.Start(BaseOptions(TerrainGenerator::Type::Empty))) return EXIT_FAILURE;
+        server.RunInBackground();
+        TestClient a, b;
+        std::string error;
+        a.client.Connect("127.0.0.1", server.GetPort(), "Duelist", error, kTestViewDistance);
+        b.client.Connect("127.0.0.1", server.GetPort(), "Rival", error, kTestViewDistance);
+        auto both = [&](double s, const std::function<bool()>& done) { return Pump({ &a, &b }, s, done); };
+        auto wait = [&](double s) { both(s, [] { return false; }); };
+        Check(both(20.0, [&] { return a.joined && b.joined; }), "two survival players join");
+        const uint16_t rival = b.client.GetPlayerId();
+        auto rivalSeenHurt = [&] {
+            for (const auto& p : a.client.GetRemotePlayers())
+                if (p.id == rival && (p.flags & net::kFlagHurt)) return true;
+            return false;
+        };
+        server.QueueConsoleCommand("tp Duelist 8.5 0 8.5");
+        server.QueueConsoleCommand("tp Rival 30.5 0 8.5");
+        both(20.0, [&] { return std::abs(b.feet.x - 30.5f) < 0.1f && std::abs(a.feet.x - 8.5f) < 0.1f; });
+        wait(0.5);
+        a.client.AttackPlayer(rival, Tool::None);
+        wait(1.0);
+        Check(b.client.GetHealth() == 20, "a hit from 22 blocks away doesn't count");
+        server.QueueConsoleCommand("tp Rival 10.5 0 8.5");
+        both(20.0, [&] { return std::abs(b.feet.x - 10.5f) < 0.1f; });
+        wait(0.5);
+        a.client.AttackPlayer(rival, Tool::None);
+        Check(both(20.0, [&] { return b.client.GetHealth() == 18; }), "a bare-handed hit in reach takes a heart");
+        Check(both(5.0, rivalSeenHurt), "and the hitter sees them flash red");
+        server.QueueConsoleCommand("pvp off");
+        wait(1.0);
+        a.client.AttackPlayer(rival, Tool::None);
+        wait(1.0);
+        Check(b.client.GetHealth() == 18 && Has(a, "PvP is off"), "with /pvp off, hits do nothing (and the hitter is told)");
+        server.QueueConsoleCommand("pvp on");
+        wait(0.5);
+        for (int i = 0; i < 12 && b.client.GetHealth() > 0 && !Has(b, "slain"); i++) {
+            server.QueueConsoleCommand("tp Rival " + std::to_string(a.feet.x + 2.0f) + " 0 8.5");
+            wait(0.5);
+            a.client.AttackPlayer(rival, Tool::Axe);
+            wait(0.5);
+        }
+        Check(both(5.0, [&] { return Has(b, "Rival was slain by Duelist"); }), "enough axe hits slay them (and everyone's told)");
+        Check(both(5.0, [&] { return b.client.GetHealth() == 20; }), "and they're back at full health");
         a.client.Disconnect();
         b.client.Disconnect();
         Pump({ &a, &b }, 0.3, [] { return false; });

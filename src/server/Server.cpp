@@ -277,6 +277,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
         if ((ok = net::Decode(in, m))) HandleAttack(client, m.creature, m.tool);
         break;
     }
+    case net::MsgType::AttackPlayer: {
+        net::AttackPlayer m;
+        if ((ok = net::Decode(in, m))) HandleAttackPlayer(client, m.player, m.tool);
+        break;
+    }
     case net::MsgType::Craft: {
         net::Craft m;
         if ((ok = net::Decode(in, m))) HandleCraft(client, m.recipe, m.count);
@@ -470,6 +475,25 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
     const CreatureType type = target ? target->type : CreatureType::Count;
     if (creatures.Attack(creature, eye, tool, now, killed) && killed)
         SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id);
+}
+
+void Server::HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool) {
+    tool = Usable(client, tool);
+    const double now = Now();
+    if (now < client.nextAttack || player == client.id) return;
+    client.nextAttack = now + Combat::kCooldown * 0.8; // (a little slack for timing)
+    if (!options.pvp) return SendChat(client, net::ChatMessage::Kind::Error, "PvP is off on this server");
+    for (auto& [peer, target] : clients) {
+        if (target.id != player) continue;
+        if (!target.welcomed || !target.hasState || (target.noclip && (target.flags & net::kFlagFlying))) return;
+        // Within reach: from the hitter's eye to the target's box (with slack for
+        // movement in flight).
+        const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
+        const glm::vec3 lo = target.feet - glm::vec3(0.3f, 0.0f, 0.3f), hi = target.feet + glm::vec3(0.3f, 1.8f, 0.3f);
+        if (glm::distance(eye, glm::clamp(eye, lo, hi)) > Combat::kReach + 0.5f) return;
+        Hurt(target, Combat::Damage(tool), "was slain by " + client.name);
+        return;
+    }
 }
 
 void Server::UpdateCreatures() {
@@ -981,7 +1005,9 @@ void Server::BroadcastPlayers() {
     snapshot.rain = static_cast<uint8_t>(std::lround(rainLevel * 255.0f));
     for (const auto& [peer, client] : clients) {
         if (!client.welcomed || !client.hasState) continue;
-        snapshot.players.push_back({ client.id, client.feet, client.yaw, client.pitch, client.flags });
+        // Flashes red for others while just hurt.
+        const uint8_t flags = static_cast<uint8_t>((client.flags & ~net::kFlagHurt) | (Now() - client.lastHurt < 0.3 ? net::kFlagHurt : 0));
+        snapshot.players.push_back({ client.id, client.feet, client.yaw, client.pitch, flags });
     }
     const auto packet = net::Encode(snapshot);
     for (const auto& [peer, client] : clients)
