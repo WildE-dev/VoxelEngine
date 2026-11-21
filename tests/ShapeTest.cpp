@@ -375,10 +375,10 @@ int main() {
             if (p.x >= 1.0f && p.x <= 5.0f && p.z >= 2.0f && p.z <= 6.0f) poolHigh = std::max(poolHigh, p.y);
         Check(poolHigh <= 4.76f, "a pool beside a carved block standing above it stays level, nothing poking up (highest " + std::to_string(poolHigh) + ")");
 
-        // Water in a notch standing higher than the water in front of it, whose surface
-        // sags at that corner toward a dry column beside it (surfaces average the columns
-        // round a corner). The notch's side shows down to where that surface is drawn:
-        // no slit between the two.
+        // Water in a full notch beside full water in front of it, whose surface sags at
+        // that corner toward a dry column beside it (surfaces average the columns round
+        // a corner). The two stand at the same level, so they're one surface: the notch's
+        // water meets the water in front along their shared edge, with no step or slit.
         Chunk::Blocks slit{};
         for (int x = 0; x <= 8; x++)
             for (int z = 0; z <= 8; z++) {
@@ -395,15 +395,49 @@ int main() {
         w.clear();
         Mesh(slit, v, w);
         const auto sv = Positions(w, true);
-        float notchSideLow = 10.0f, notchSideHigh = 0.0f;
-        for (size_t i = 0; i < sv.size(); i++) {
-            const auto& p = sv[i];
-            const float nz = ((w[i * 2 + 1] >> 20) & 0xFu) / 7.5f - 1.0f;
-            if (nz < -0.5f && p.z == 5.0f && p.x >= 5.0f && p.x <= 5.5f) notchSideLow = std::min(notchSideLow, p.y), notchSideHigh = std::max(notchSideHigh, p.y);
+        std::map<float, float> frontTop, notchTop; // x -> height of the top along z = 5
+        int between = 0;
+        for (size_t f = 0; f + 6 <= sv.size(); f += 6) {
+            glm::vec3 lo(99.0f), hi(-99.0f);
+            for (size_t k = f; k < f + 6; k++) lo = glm::min(lo, sv[k]), hi = glm::max(hi, sv[k]);
+            const float ny = ((w[f * 2 + 1] >> 24) & 0xFu) / 7.5f - 1.0f;
+            if (lo.z == 5.0f && hi.z == 5.0f) between++;
+            if (ny < 0.5f) continue;
+            for (size_t k = f; k < f + 6; k++)
+                if (sv[k].z == 5.0f) (lo.z == 4.0f ? frontTop : notchTop)[sv[k].x] = sv[k].y;
         }
-        Check(notchSideHigh > 4.9f && notchSideLow < 4.6f,
-              "water in a notch above a sagging surface in front shows its side down to it (no slit; " + std::to_string(notchSideLow) + " to " +
-                  std::to_string(notchSideHigh) + ")");
+        bool meets = !frontTop.empty() && frontTop.size() == notchTop.size();
+        for (const auto& [x, y] : frontTop) meets &= notchTop.count(x) && std::abs(notchTop[x] - y) < 1e-4f;
+        Check(meets && between == 0, "water in a full notch meets the water in front as one surface (no step, no slit; " + std::to_string(between) + " faces between)");
+
+        // A lake over a waterlogged slope whose water is a little off the lake's level
+        // (as levels settle): still one smooth surface, with no little step or side
+        // between them.
+        Chunk::Blocks lake{};
+        for (int x = 0; x <= 8; x++)
+            for (int z = 0; z <= 8; z++) {
+                lake[Chunk::Index(x, 3, z)] = Block(BlockType::SAND);
+                lake[Chunk::Index(x, 4, z)] = Block::Water(Block::kMaxWaterVolume * 7 / 8);
+            }
+        {
+            Block slope = Block(BlockType::SAND);
+            slope.edgeData.SetTopY(0, 2);
+            slope.edgeData.SetTopY(1, 2);
+            slope.edgeData.SetTopY(2, 0);
+            slope.edgeData.SetTopY(3, 3);
+            lake[Chunk::Index(4, 4, 4)] = slope.WithWater(slope.WaterCapacity() - 10);
+        }
+        v.clear();
+        w.clear();
+        Mesh(lake, v, w);
+        const auto lv = Positions(w, true);
+        int sides = 0;
+        for (size_t i = 0; i < lv.size(); i++) {
+            const float ny = ((w[i * 2 + 1] >> 24) & 0xFu) / 7.5f - 1.0f;
+            if (std::abs(ny) < 0.5f && lv[i].x > 3.0f && lv[i].x < 6.0f && lv[i].z > 3.0f && lv[i].z < 6.0f) sides++;
+        }
+        Check(lake[Chunk::Index(4, 4, 4)].IsPartial() && sides == 0,
+              "a waterlogged slope a little off the lake's level joins its surface, no little steps (" + std::to_string(sides) + " side vertices)");
     }
 
     std::cout << "Aiming and outlines" << std::endl;

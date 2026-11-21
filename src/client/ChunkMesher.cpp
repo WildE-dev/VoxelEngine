@@ -152,11 +152,29 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
     // Height of a column's water surface relative to the base of row p.y, in units, or
     // -1000 if the column has no water to connect with near this row.
     constexpr int kNoSurface = -1000;
+    // Water in a partial block stands apart from the water beside it (flat at its own
+    // level, with a side showing between the two) only when the two levels really
+    // differ: a carved block's notch still filling beside a pool. Water at about the
+    // same level as its neighbours (a waterlogged slope in a lake, a little off from
+    // the water round it) is part of one smooth surface, with no little steps.
+    constexpr int kApartUnits = Block::kMaxWaterVolume / 8;
+    auto standsApart = [&](const glm::ivec3& q) {
+        if (!hasWater(q) || !cellAt(q).IsPartial() || hasWater(q + glm::ivec3(0, 1, 0))) return false;
+        const int level = cellAt(q).WaterShownLevel();
+        static const glm::ivec3 kSides[4] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+        for (const auto& d : kSides) {
+            const glm::ivec3 o = q + d;
+            if (!hasWater(o)) continue;
+            const int theirs = hasWater(o + glm::ivec3(0, 1, 0)) ? 2 * Block::kMaxWaterVolume : cellAt(o).WaterShownLevel();
+            if (std::abs(theirs - level) > kApartUnits) return true;
+        }
+        return false;
+    };
     auto columnSurface = [&](const glm::ivec3& q) -> int {
         // Water in a partial block stands flat at its own level, held in by the block:
         // the water around doesn't slope to meet it (a pool beside a carved block that's
         // still filling stays level up to it, its side showing down to the lower water).
-        if (hasWater(q) && cellAt(q).IsPartial()) return kNoSurface;
+        if (standsApart(q)) return kNoSurface;
         if (hasWater(q)) {
             if (!hasWater(q + up)) return cellAt(q).WaterShownLevel();
             if (!hasWater(q + up + up)) return kFullUnits + cellAt(q + up).WaterShownLevel();
@@ -244,11 +262,12 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
         bool visible = false;
         // With more water directly above, this cell is full and meets it exactly.
         const bool covered = hasWater(here + up);
+        const bool selfApart = standsApart(here);
         for (int e = 0; e < 4; e++) {
             // Water in a partial block stands flat at its own level (not sloping up to
             // the water beside it, over the block's quarters).
             top32[e] = covered ? 32
-                     : self.IsPartial() ? std::clamp((self.WaterShownLevel() + kUnitsPer32nd / 2) / kUnitsPer32nd, 1, kOpenSurfaceTop)
+                     : selfApart ? std::clamp((self.WaterShownLevel() + kUnitsPer32nd / 2) / kUnitsPer32nd, 1, kOpenSurfaceTop)
                                         : cornerHeight(here, kCornerOfEdge[e][0], kCornerOfEdge[e][1]);
             top[e] = static_cast<uint8_t>((top32[e] + 3) / 4);
             fine[e] = static_cast<uint8_t>(top[e] * 4 - top32[e]);
@@ -273,14 +292,14 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
             const bool besideWater = neighbour.HasWater();
             if (besideWater) {
                 if (face == static_cast<int>(Face::Top) || face == static_cast<int>(Face::Bottom)) continue;
-                if (!neighbour.IsPartial() && !self.IsPartial()) continue;
+                if (!standsApart(n) && !selfApart) continue;
             }
             // How high the neighbour's water is drawn at our corner `e` (32nds; -1 if it
             // has none): a partial block's flat level, or other water's surface there,
             // which averages the columns around that corner (not its own level).
             auto theirWater32 = [&](int e) {
                 if (!besideWater) return -1;
-                if (neighbour.IsPartial()) return std::clamp((neighbour.WaterShownLevel() + kUnitsPer32nd / 2) / kUnitsPer32nd, 1, kOpenSurfaceTop);
+                if (standsApart(n)) return std::clamp((neighbour.WaterShownLevel() + kUnitsPer32nd / 2) / kUnitsPer32nd, 1, kOpenSurfaceTop);
                 return cornerHeight(here, kCornerOfEdge[e][0], kCornerOfEdge[e][1]);
             };
             if (face == static_cast<int>(Face::Bottom) && self.IsPartial()) continue; // the slope is the floor
