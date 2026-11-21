@@ -199,6 +199,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
     };
     auto cornerHeight = [&](const glm::ivec3& p, int cx, int cz) {
         int sum = 0, n = 0, wetSum = 0, wetN = 0, wetTop = kNoSurface, dry[4], dryN = 0;
+        bool dryStepped[4] = {};
         bool meetsLowerWater = false; // a column here is dry, with water just under it
         for (int dx = cx - 1; dx <= cx; dx++) {
             for (int dz = cz - 1; dz <= cz; dz++) {
@@ -220,14 +221,17 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     wetTop = std::max(wetTop, surface);
                 }
                 else {
+                    dryStepped[dryN] = inGrid(q) && cellAt(q).IsPartial() && cellAt(q).IsStepped();
                     dry[dryN++] = surface;
                 }
             }
         }
-        // Dry ground above the water (the top of a carved block standing beside a pool)
-        // doesn't pull the water up the block: the water stays level up to it.
+        // A dry carved block standing above the water doesn't pull the water up toward
+        // its top: the water stays level up to its square sides. (A dry slope does: the
+        // water runs up the beach to meet it, so a shore follows the slopes smoothly
+        // instead of cutting across their triangles in a sawtooth.)
         for (int i = 0; i < dryN; i++) {
-            if (wetN > 0 && dry[i] > wetTop) continue;
+            if (wetN > 0 && dryStepped[i] && dry[i] > wetTop) continue;
             sum += dry[i];
             n++;
         }
