@@ -147,6 +147,7 @@ std::vector<uint8_t> Encode(const Hello& m) {
     Begin(w, MsgType::Hello);
     w.U32(m.version);
     w.Str(m.name.substr(0, kMaxNameLength));
+    w.U8(m.viewDistance);
     return std::move(w.data);
 }
 
@@ -187,6 +188,40 @@ std::vector<uint8_t> Encode(const EditBreak& m) {
     ByteWriter w;
     Begin(w, MsgType::EditBreak);
     w.IVec3(m.pos);
+    w.U8(static_cast<uint8_t>(m.tool));
+    return std::move(w.data);
+}
+
+std::vector<uint8_t> Encode(const Attack& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Attack);
+    w.U16(m.creature);
+    w.U8(static_cast<uint8_t>(m.tool));
+    return std::move(w.data);
+}
+
+std::vector<uint8_t> Encode(const CreatureSnapshot& m) {
+    ByteWriter w;
+    Begin(w, MsgType::CreatureSnapshot);
+    w.U32(m.tick);
+    const size_t n = std::min(m.creatures.size(), kMaxCreaturesSent);
+    w.VarU32(static_cast<uint32_t>(n));
+    for (size_t i = 0; i < n; i++) {
+        const auto& c = m.creatures[i];
+        w.U16(c.id);
+        w.U8(static_cast<uint8_t>(c.type));
+        w.Vec3(c.feet);
+        w.F32(c.yaw);
+        w.U8(c.flags);
+    }
+    return std::move(w.data);
+}
+
+std::vector<uint8_t> Encode(const MineStart& m) {
+    ByteWriter w;
+    Begin(w, MsgType::MineStart);
+    w.IVec3(m.pos);
+    w.U8(static_cast<uint8_t>(m.tool));
     return std::move(w.data);
 }
 
@@ -389,7 +424,11 @@ bool Finite(const glm::vec3& v) { return std::isfinite(v.x) && std::isfinite(v.y
 } // namespace
 
 bool Decode(ByteReader& in, Hello& m) {
-    return in.U32(m.version) && in.Str(m.name, kMaxNameLength);
+    // (The view distance is read only if it's there, so an older client still gets
+    // told its version is wrong instead of just being dropped.)
+    if (!in.U32(m.version) || !in.Str(m.name, kMaxNameLength)) return false;
+    m.viewDistance = 0;
+    return in.AtEnd() || in.U8(m.viewDistance);
 }
 
 bool Decode(ByteReader& in, Welcome& m) {
@@ -408,8 +447,40 @@ bool Decode(ByteReader& in, PlayerState& m) {
            std::isfinite(m.pitch);
 }
 
+namespace {
+bool ReadTool(ByteReader& in, Tool& tool) {
+    uint8_t t;
+    if (!in.U8(t) || t >= static_cast<uint8_t>(Tool::Count)) return false;
+    tool = static_cast<Tool>(t);
+    return true;
+}
+} // namespace
+
 bool Decode(ByteReader& in, EditBreak& m) {
-    return in.IVec3(m.pos);
+    return in.IVec3(m.pos) && ReadTool(in, m.tool);
+}
+
+bool Decode(ByteReader& in, MineStart& m) {
+    return in.IVec3(m.pos) && ReadTool(in, m.tool);
+}
+
+bool Decode(ByteReader& in, Attack& m) {
+    return in.U16(m.creature) && ReadTool(in, m.tool) && in.AtEnd();
+}
+
+bool Decode(ByteReader& in, CreatureSnapshot& m) {
+    uint32_t n;
+    if (!in.U32(m.tick) || !in.VarU32(n) || n > kMaxCreaturesSent) return false;
+    m.creatures.resize(n);
+    for (auto& c : m.creatures) {
+        uint8_t type;
+        if (!in.U16(c.id) || !in.U8(type) || type >= static_cast<uint8_t>(CreatureType::Count) || !in.Vec3(c.feet) || !in.F32(c.yaw) ||
+            !in.U8(c.flags))
+            return false;
+        c.type = static_cast<CreatureType>(type);
+        if (!std::isfinite(c.feet.x) || !std::isfinite(c.feet.y) || !std::isfinite(c.feet.z) || !std::isfinite(c.yaw)) return false;
+    }
+    return in.AtEnd();
 }
 
 bool Decode(ByteReader& in, EditPlace& m) {

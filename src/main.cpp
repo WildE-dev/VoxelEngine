@@ -19,7 +19,7 @@ void StopServer(int) {
 
 void PrintUsage(const char* program) {
     std::cout << "Usage:\n"
-              << "  " << program << "                      play singleplayer (runs a local server)\n"
+              << "  " << program << "                      the title screen: pick or make a world, join a server, settings\n"
               << "  " << program << " --server [port]      run a dedicated server, no window (default port "
               << net::kDefaultPort << ")\n"
               << "  " << program << " --connect host[:port] join a server\n"
@@ -164,6 +164,7 @@ int main(int argc, char** argv)
         }
         else if (arg == "--name" && i + 1 < argc) {
             client.name = argv[++i];
+            client.nameGiven = true;
         }
         else {
             PrintUsage(argv[0]);
@@ -182,6 +183,8 @@ int main(int argc, char** argv)
     if (!worldDirectory.empty()) client.worldDirectory = worldDirectory;
     if (noSave) client.worldDirectory.clear();
     if (!client.host.empty() && client.port == 0) client.port = net::kDefaultPort;
+    // No options at all: the title screen, to pick a world or a server there.
+    client.showMenu = argc == 1;
 
     Application app;
     if (!app.Init(client)) return EXIT_FAILURE;

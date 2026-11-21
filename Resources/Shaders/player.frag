@@ -5,6 +5,7 @@ in vec3 WorldPos;
 out vec4 FragColor;
 
 uniform vec3 cameraPos;
+uniform float glow; // 1: lit by itself (glowing eyes), 0: by the sun
 
 // Distance fog (set by Renderer::SetFogUniforms): towards the edge of the render
 // distance, things fade into the sky behind them, so the world's edge and chunks
@@ -32,6 +33,8 @@ uniform float sunBrightness;
 void main() {
     // Simple directional light plus ambient, so the boxes read as solid in the world.
     float sun = max(dot(normalize(normal), normalize(sunDirection)), 0.0);
-    float light = 0.35 + 0.65 * mix(0.25, 1.0, sunBrightness) * (0.4 + 0.6 * sun);
+    // Dim at night like the world (a little ambient so figures don't vanish).
+    float light = mix(0.1, 1.0, sunBrightness) * (0.45 + 0.55 * sun);
+    light = mix(light, 1.0, glow);
     FragColor = vec4(ApplyFog(color * light, WorldPos), 1.0);
 }

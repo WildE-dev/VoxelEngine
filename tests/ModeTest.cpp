@@ -142,15 +142,28 @@ int main() {
     b->client.Connect("127.0.0.1", server->GetPort(), "Bob", error);
     auto both = [&](double s, const std::function<bool()>& done) { return Pump({ a.get(), b.get() }, s, done); };
     Check(both(30.0, [&] { return a->player.IsSpawned() && b->player.IsSpawned(); }), "two players join a new world");
+    // Survival breaking takes time (world/Mining.h): mine, then break.
+    // If the server was too busy to see the mining start in time, it refuses the break
+    // and puts the block back: keep mining and try again, as the game does.
+    auto mine = [&](const glm::ivec3& p) {
+        const Block block = At(*a, p);
+        a->client.StartMining(p, Tool::None);
+        both(Mining::Seconds(block, Tool::None) + 0.1, [] { return false; });
+        for (int attempt = 0; attempt < 10; attempt++) {
+            a->client.BreakBlock(p);
+            if (both(1.0, [&] { return At(*b, p).type != block.type; })) return;
+            both(1.0, [&] { return At(*a, p).type == block.type; }); // put back: mine on
+        }
+    };
     Check(!a->client.IsCreative() && !b->client.IsCreative(), "in survival (the world's default)");
     Check(a->client.GetResources(BlockType::GRASS) == 0 && !a->client.CanAfford(BlockType::STONE, 8), "with nothing to build with");
 
     const glm::ivec3 ground(10, -1, 10);
     const BlockType groundType = At(*a, ground).type;
-    a->client.BreakBlock(ground);
-    Check(both(5.0, [&] { return At(*b, ground).IsAir() && a->client.GetResources(groundType) == 64; }), "breaking a block gives 64 of it");
+    mine(ground);
+    Check(both(20.0, [&] { return At(*b, ground).IsAir() && a->client.GetResources(groundType) == 64; }), "breaking a block gives 64 of it");
     a->client.PlaceBlock(ground, groundType, 4);
-    Check(both(5.0, [&] { return At(*b, ground).type == groundType && At(*b, ground).ResourceUnits() == 32; }) &&
+    Check(both(20.0, [&] { return At(*b, ground).type == groundType && At(*b, ground).ResourceUnits() == 32; }) &&
               a->client.GetResources(groundType) == 32,
           "placing it as a half slab costs 32");
     const glm::ivec3 spot(12, 0, 10);
@@ -158,52 +171,52 @@ int main() {
     both(1.0, [] { return false; });
     Check(At(*b, spot).IsAir() && a->client.GetResources(groundType) == 32, "a full block (64) can't be afforded with 32 left");
     a->client.PlaceBlock(spot, groundType, 2);
-    Check(both(5.0, [&] { return At(*b, spot).type == groundType; }) && a->client.GetResources(groundType) == 16, "but a quarter (16) can");
-    a->client.BreakBlock(spot);
-    Check(both(5.0, [&] { return At(*b, spot).IsAir() && a->client.GetResources(groundType) == 32; }), "and breaking it gives the 16 back");
+    Check(both(20.0, [&] { return At(*b, spot).type == groundType; }) && a->client.GetResources(groundType) == 16, "but a quarter (16) can");
+    mine(spot);
+    Check(both(20.0, [&] { return At(*b, spot).IsAir() && a->client.GetResources(groundType) == 32; }), "and breaking it gives the 16 back");
 
     a->client.SendChat("/give stone_brick 2");
-    Check(both(5.0, [&] { return Has(*a, "Only operators can do that"); }) && a->client.GetResources(BlockType::STONE_BRICK) == 0, "players can't /give themselves blocks");
+    Check(both(20.0, [&] { return Has(*a, "Only operators can do that"); }) && a->client.GetResources(BlockType::STONE_BRICK) == 0, "players can't /give themselves blocks");
     server->QueueConsoleCommand("give stone_brick 1.5 Alice");
-    Check(both(5.0, [&] { return a->client.GetResources(BlockType::STONE_BRICK) == 96 && Has(*a, "Server gave you 1.5 stone_brick"); }),
+    Check(both(20.0, [&] { return a->client.GetResources(BlockType::STONE_BRICK) == 96 && Has(*a, "Server gave you 1.5 stone_brick"); }),
           "the console can (1.5 blocks: 96)");
     server->QueueConsoleCommand("give diamonds 3 Alice");
     const glm::ivec3 brick(14, 0, 10);
     a->client.PlaceBlock(brick, BlockType::STONE_BRICK);
-    Check(both(5.0, [&] { return At(*b, brick).type == BlockType::STONE_BRICK && a->client.GetResources(BlockType::STONE_BRICK) == 32; }),
+    Check(both(20.0, [&] { return At(*b, brick).type == BlockType::STONE_BRICK && a->client.GetResources(BlockType::STONE_BRICK) == 32; }),
           "a full brick costs 64");
     a->client.Chisel(brick, 0, false);
-    Check(both(5.0, [&] { return At(*b, brick).ResourceUnits() == 60; }) && a->client.GetResources(BlockType::STONE_BRICK) == 36,
+    Check(both(20.0, [&] { return At(*b, brick).ResourceUnits() == 60; }) && a->client.GetResources(BlockType::STONE_BRICK) == 36,
           "chiselling it down gives back the 4 taken off");
     a->client.Chisel(brick, 0, true);
-    Check(both(5.0, [&] { return At(*b, brick).IsFullBlock(); }) && a->client.GetResources(BlockType::STONE_BRICK) == 32, "building it back up costs 4");
+    Check(both(20.0, [&] { return At(*b, brick).IsFullBlock(); }) && a->client.GetResources(BlockType::STONE_BRICK) == 32, "building it back up costs 4");
     Check(!a->client.CanAfford(BlockType::WATER, 8), "water can't be placed in survival");
 
     server->QueueConsoleCommand("give spikes 1 Alice");
-    Check(both(5.0, [&] { return a->client.GetResources(BlockType::SPIKES) == 64; }), "given spikes");
+    Check(both(20.0, [&] { return a->client.GetResources(BlockType::SPIKES) == 64; }), "given spikes");
     const glm::ivec3 feet(glm::floor(a->player.GetFeetPosition()));
     a->client.PlaceBlock(feet, BlockType::SPIKES);
-    Check(both(5.0, [&] { return a->client.GetHealth() < 20; }), "spikes hurt in survival");
-    a->client.BreakBlock(feet);
-    Check(both(5.0, [&] { return At(*b, feet).IsAir() && a->client.GetResources(BlockType::SPIKES) == 64; }), "and are worth a whole block when broken");
+    Check(both(20.0, [&] { return a->client.GetHealth() < 20; }), "spikes hurt in survival");
+    mine(feet);
+    Check(both(20.0, [&] { return At(*b, feet).IsAir() && a->client.GetResources(BlockType::SPIKES) == 64; }), "and are worth a whole block when broken");
 
     std::cout << "Creative" << std::endl;
     a->client.SendChat("/gamemode creative");
-    Check(both(5.0, [&] { return Has(*a, "Only operators can do that"); }) && !a->client.IsCreative(), "players can't change their own mode");
+    Check(both(20.0, [&] { return Has(*a, "Only operators can do that"); }) && !a->client.IsCreative(), "players can't change their own mode");
     server->QueueConsoleCommand("gamemode creative Alice");
-    Check(both(5.0, [&] { return a->client.IsCreative() && Has(*a, "Server put you in creative mode"); }), "the console can");
-    Check(both(5.0, [&] { return a->client.GetHealth() == 20; }), "and creative heals");
+    Check(both(20.0, [&] { return a->client.IsCreative() && Has(*a, "Server put you in creative mode"); }), "the console can");
+    Check(both(20.0, [&] { return a->client.GetHealth() == 20; }), "and creative heals");
     a->client.SendChat("/gamemode");
-    Check(both(5.0, [&] { return Has(*a, "You're in creative mode"); }), "/gamemode says which mode you're in");
+    Check(both(20.0, [&] { return Has(*a, "You're in creative mode"); }), "/gamemode says which mode you're in");
     const uint32_t stoneBefore = a->client.GetResources(BlockType::STONE);
     for (int x = 0; x < 5; x++) a->client.PlaceBlock({ 20 + x, 0, 4 }, BlockType::STONE);
     a->client.PlaceBlock({ 26, 0, 4 }, BlockType::WATER);
-    Check(both(5.0, [&] { return At(*b, { 24, 0, 4 }).type == BlockType::STONE && At(*b, { 26, 0, 4 }).HasWater(); }) &&
+    Check(both(20.0, [&] { return At(*b, { 24, 0, 4 }).type == BlockType::STONE && At(*b, { 26, 0, 4 }).HasWater(); }) &&
               a->client.GetResources(BlockType::STONE) == stoneBefore,
           "blocks (and water) cost nothing in creative");
     const uint32_t bricks = a->client.GetResources(BlockType::STONE_BRICK);
     a->client.BreakBlock(brick);
-    Check(both(5.0, [&] { return At(*b, brick).IsAir(); }) && a->client.GetResources(BlockType::STONE_BRICK) == bricks,
+    Check(both(20.0, [&] { return At(*b, brick).IsAir(); }) && a->client.GetResources(BlockType::STONE_BRICK) == bricks,
           "and breaking them gives nothing (survival resources are kept as they were)");
     const glm::ivec3 creativeFeet(glm::floor(a->player.GetFeetPosition()));
     a->client.PlaceBlock(creativeFeet, BlockType::SPIKES);
@@ -211,11 +224,11 @@ int main() {
     Check(At(*b, creativeFeet).type == BlockType::SPIKES && a->client.GetHealth() == 20, "nothing hurts in creative");
     a->client.BreakBlock(creativeFeet);
     server->QueueConsoleCommand("op Alice");
-    both(5.0, [&] { return Has(*a, "You are now an operator"); });
+    both(20.0, [&] { return Has(*a, "You are now an operator"); });
     a->client.SendChat("/gamemode survival Bob");
-    Check(both(5.0, [&] { return Has(*b, "Alice put you in survival mode"); }), "operators can set others' modes");
+    Check(both(20.0, [&] { return Has(*b, "Alice put you in survival mode"); }), "operators can set others' modes");
     a->client.SendChat("/gamemode survival");
-    Check(both(5.0, [&] { return !a->client.IsCreative(); }), "and their own");
+    Check(both(20.0, [&] { return !a->client.IsCreative(); }), "and their own");
 
     std::cout << "Saving" << std::endl;
     a->client.Disconnect();

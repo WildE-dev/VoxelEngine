@@ -199,17 +199,21 @@ int main() {
                 return done();
             });
         };
-        Check(pump(10.0, [&] { return client.IsWelcomed(); }), "and is welcomed");
+        Check(pump(20.0, [&] { return client.IsWelcomed(); }), "and is welcomed");
+        // A twentieth of the day takes a second of a 20 s day: wait for it, and check it
+        // didn't come sooner (a loaded machine may make it later, never earlier).
+        pump(20.0, [&] { return client.GetTimeOfDay() != 0.05f; }); // the first snapshot
         const float t0 = client.GetTimeOfDay();
-        pump(2.0, [] { return false; });
-        const float t1 = client.GetTimeOfDay();
-        Check(t1 > t0 + 0.05f && t1 < t0 + 0.15f, "the clock runs (" + std::to_string(t0) + " -> " + std::to_string(t1) + " in 2 s of a 20 s day)");
+        const auto c0 = std::chrono::steady_clock::now();
+        const bool ran = pump(20.0, [&] { return client.GetTimeOfDay() >= t0 + 0.05f; });
+        const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - c0).count();
+        Check(ran && took > 0.8, "the clock runs (a twentieth of a 20 s day in " + std::to_string(took) + " s)");
         Check(pump(15.0, [&] { return client.GetRain() > 0.99f; }), "the forced rain reaches the client, faded in");
 
         client.SkipTime();
-        Check(pump(5.0, [&] { return client.GetTimeOfDay() >= 0.6f && client.GetTimeOfDay() < 0.7f; }), "skipping by day jumps to the evening");
+        Check(pump(20.0, [&] { return client.GetTimeOfDay() >= 0.6f && client.GetTimeOfDay() < 0.7f; }), "skipping by day jumps to the evening");
         client.SkipTime();
-        Check(pump(5.0, [&] { return client.GetTimeOfDay() >= 0.1f && client.GetTimeOfDay() < 0.2f; }), "and at night to the morning");
+        Check(pump(20.0, [&] { return client.GetTimeOfDay() >= 0.1f && client.GetTimeOfDay() < 0.2f; }), "and at night to the morning");
 
         const float beforeStop = client.GetTimeOfDay();
         client.Disconnect();

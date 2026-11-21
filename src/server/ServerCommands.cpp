@@ -100,6 +100,8 @@ constexpr HelpLine kHelp[] = {
     { Level::Everyone, "/gamemode - show your game mode" },
     { Level::Operator, "/gamemode <creative|survival> [player] - creative: anything, unhurt; survival: collect what you build with" },
     { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64)" },
+    { Level::Operator, "/summon <deer|ghoul> [x y z] - bring a creature (default: a few blocks ahead of you)" },
+    { Level::Operator, "/creatures [clear] - count the creatures, or remove them all" },
     { Level::Console, "/stop - shut the server down" },
 };
 
@@ -108,7 +110,7 @@ constexpr HelpLine kHelp[] = {
 Level RequiredLevel(const std::string& command, size_t argumentCount) {
     if (command == "stop") return Level::Console;
     if (command == "tp" || command == "teleport" || command == "save" || command == "kick" || command == "op" || command == "deop" ||
-        command == "noclip" || command == "give")
+        command == "noclip" || command == "give" || command == "summon" || command == "creatures")
         return Level::Operator;
     if ((command == "time" || command == "weather" || command == "gamemode") && argumentCount > 0) return Level::Operator;
     return Level::Everyone;
@@ -311,6 +313,44 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         std::snprintf(amount, sizeof amount, "%g", count);
         if (target != sender) SendChat(*target, Kind::Info, who + " gave you " + amount + " " + BlockId(type));
         reply(Kind::Info, std::string("Gave ") + amount + " " + BlockId(type) + (target != sender ? " to " + target->name : ""));
+    }
+    else if (command == "summon") {
+        const CreatureType type = words.size() > 1 ? CreatureFromId(Lower(words[1])) : CreatureType::Count;
+        if (type == CreatureType::Count) return usage("/summon <deer|ghoul> [x y z]");
+        glm::vec3 at;
+        if (words.size() >= 5) {
+            const glm::vec3 base = sender ? sender->feet : glm::vec3(0.0f);
+            for (int a = 0; a < 3; a++) {
+                double v = 0.0;
+                const std::string& w = words[2 + a];
+                const bool relative = !w.empty() && w[0] == '~';
+                if ((relative && w.size() > 1 && !ParseNumber(w.substr(1), v)) || (!relative && !ParseNumber(w, v)))
+                    return usage("/summon <deer|ghoul> [x y z]");
+                at[a] = static_cast<float>(relative ? base[a] + v : v);
+            }
+        }
+        else if (sender) {
+            const float yaw = glm::radians(sender->yaw);
+            at = sender->feet + glm::vec3(std::cos(yaw), 0.0f, std::sin(yaw)) * 4.0f + glm::vec3(0.0f, 0.5f, 0.0f);
+        }
+        else return usage("summon <deer|ghoul> <x> <y> <z>");
+        if (!creatures.Spawn(type, at)) return reply(Kind::Error, "Too many creatures already");
+        char where[64];
+        std::snprintf(where, sizeof where, "%.1f, %.1f, %.1f", at.x, at.y, at.z);
+        reply(Kind::Info, std::string("Summoned a ") + SpecOf(type).id + " at " + where);
+    }
+    else if (command == "creatures") {
+        if (words.size() > 1 && Lower(words[1]) == "clear") {
+            const size_t n = creatures.Count();
+            creatures.Clear();
+            return reply(Kind::Info, "Removed " + std::to_string(n) + " creatures");
+        }
+        int counts[static_cast<int>(CreatureType::Count)] = {};
+        for (const auto& c : creatures.All()) counts[static_cast<int>(c.type)]++;
+        std::string text = std::to_string(creatures.Count()) + " creatures";
+        for (int t = 0; t < static_cast<int>(CreatureType::Count); t++)
+            text += std::string(t ? ", " : ": ") + std::to_string(counts[t]) + " " + SpecOf(static_cast<CreatureType>(t)).id;
+        reply(Kind::Info, text);
     }
     else if (command == "ops") {
         std::vector<std::string> names(operators.begin(), operators.end());

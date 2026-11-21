@@ -4,10 +4,13 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "app/Camera.h"
 #include "app/Player.h"
+#include "app/Settings.h"
 #include "world/Block.h"
+#include "world/Mining.h"
 
 struct GLFWwindow;
 class Client;
@@ -29,6 +32,10 @@ struct ClientOptions {
     float dayLengthSeconds = 1200.0f; // singleplayer's local server
     int weather = 0;                  // singleplayer: Server::Options::Weather (0 auto)
     int mode = -1;                    // singleplayer: a new world's net::GameMode (-1: survival, creative if empty)
+    // Start at the title screen (worlds, servers, settings) instead of straight in a
+    // game: what running with no command-line options does.
+    bool showMenu = false;
+    bool nameGiven = false; // --name: otherwise the name from the settings
 };
 
 class Application
@@ -45,9 +52,28 @@ public:
 
 private:
     void Shutdown();
+    // A game: connect (starting the local server for singleplayer), and leave it.
+    // StartGame returns false (with menuMessage set) if it couldn't.
+    bool StartGame(const ClientOptions& options);
+    void StopGame();
+    void SetCursorCaptured(bool captured);
+    void ApplySettings();
+    // Menus (app/Menu.cpp): the title screen and its pages, without a game; the pause
+    // menu (Esc) over one.
+    void RunMenuFrame(double now);
+    void DrawMenu();
+    void DrawPauseMenu();
+    void DrawSettingsPage(bool inGame);
+    void RefreshWorlds();
+    void PlayWorld(const std::string& directory, bool empty, int mode);
     void LoadBlockTextures();
     void DrawHotbar();
     BlockType SelectedBlock() const;
+    Tool SelectedTool() const { return hotbarTools[selectedSlot]; }
+    // Survival: holding the left button mines the block in view (world/Mining.h).
+    void UpdateMining();
+    // The creature the view ray meets within reach, before any block (0: none).
+    uint16_t CreatureInView() const;
     void SelectSlot(int slot);
     // Inventory (I): pick which block goes in each hotbar slot; kept in hotbar.txt.
     void DrawInventory();
@@ -96,6 +122,26 @@ private:
     bool joined = false; // Welcome received and handled
     std::string serverLabel;
 
+    // Menus. Without a game (client), the title screen shows one of these pages.
+    enum class Page { Title, Worlds, NewWorld, Multiplayer, Settings };
+    Page page = Page::Title;
+    bool paused = false;          // in a game: the pause menu is open
+    bool pendingStop = false;     // leave the game at the end of this frame
+    bool pauseSettings = false;   // ...showing the settings
+    Settings settings;
+    std::string menuMessage;      // e.g. why a game couldn't start
+    struct WorldInfo {
+        std::string name, directory;
+        bool empty = false;
+        int mode = 0;             // the world's default net::GameMode
+        long long modified = 0;   // world.dat's last write, for sorting (newest first)
+    };
+    std::vector<WorldInfo> worlds;
+    std::string deleteCandidate;  // a world waiting for "really delete?"
+    char newWorldName[64] = "New World";
+    int newWorldType = 0, newWorldMode = 0;
+    char serverAddress[128] = "";
+
     bool captureCursor = true;
     bool wireframe = false;
     bool ambientOcclusion = true;
@@ -109,7 +155,16 @@ private:
     static constexpr int kHotbarSlots = 10; // keys 1-9 and 0
     std::array<BlockType, kHotbarSlots> hotbar = { BlockType::DIRT, BlockType::STONE, BlockType::GRASS, BlockType::LAMP, BlockType::LOG,
                                                    BlockType::LEAVES, BlockType::SAND, BlockType::WATER, BlockType::STONE_BRICK, BlockType::PUMP };
+    // A slot holding a tool (not Tool::None) holds that instead of its block.
+    std::array<Tool, kHotbarSlots> hotbarTools{};
     int selectedSlot = 0; // index into the hotbar
+    // Mining (survival): the block being broken, with what, since when (glfwGetTime).
+    bool mining = false;
+    glm::ivec3 miningPos{ 0 };
+    Block miningBlock;
+    Tool miningTool = Tool::None;
+    double miningStart = 0.0, nextMineAt = 0.0;
+    float mineProgress = 0.0f; // 0..1
     int placeHeight = 8;  // eighths: how tall shapeable blocks are placed (V / Shift+V)
     bool inventoryOpen = false;
     bool cursorBeforeInventory = true;
@@ -119,6 +174,9 @@ private:
     // VOXEL_BENCH: per-section frame timing, printed once a second.
     bool bench = false;
     bool ignoreMouse = false; // VOXEL_NO_MOUSE
+    bool holdMine = false;    // VOXEL_HOLD_MINE: mine as if the left button were held
+    std::string startCommands; // VOXEL_RUN: chat lines sent once joined, ';' between them
+    double landedAt = 0.0;     // when we first stood on the ground (glfwGetTime)
     double benchSections[7] = {};
     double benchLast = 0.0;
     int benchFrames = 0;

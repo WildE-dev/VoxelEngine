@@ -6,10 +6,6 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
-namespace {
-constexpr float kMouseSensitivity = 0.1f;
-constexpr float kFovDegrees = 45.0f;
-}
 
 void Camera::UpdateLook(double xPos, double yPos) {
     if (firstMouse) {
@@ -18,8 +14,8 @@ void Camera::UpdateLook(double xPos, double yPos) {
         firstMouse = false;
     }
 
-    float xOffset = static_cast<float>(xPos - lastX) * kMouseSensitivity;
-    float yOffset = static_cast<float>(lastY - yPos) * kMouseSensitivity;
+    float xOffset = static_cast<float>(xPos - lastX) * sensitivity;
+    float yOffset = static_cast<float>(lastY - yPos) * sensitivity;
     lastX = xPos;
     lastY = yPos;
 
@@ -52,5 +48,5 @@ glm::mat4 Camera::GetViewMatrix() const {
 }
 
 glm::mat4 Camera::GetProjectionMatrix(float aspectRatio) const {
-    return glm::perspective(glm::radians(kFovDegrees), aspectRatio, 0.1f, 1000.0f);
+    return glm::perspective(glm::radians(fov), aspectRatio, 0.1f, 1000.0f);
 }

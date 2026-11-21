@@ -74,6 +74,21 @@ const char* HeightName(int eighths) {
     }
 }
 
+// The tools the inventory offers, and the icon (atlas tile) for one.
+constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel };
+int ToolTile(const TextureAtlas& atlas, Tool tool) {
+    const char* name = Mining::ToolTexture(tool);
+    return name ? atlas.GetIndex(name) : 0;
+}
+const char* ToolHint(Tool tool) {
+    switch (tool) {
+    case Tool::Pickaxe: return "fast on stone, bricks, ice and machines";
+    case Tool::Axe: return "fast on wood";
+    case Tool::Shovel: return "fast on dirt, grass, sand and snow";
+    default: return "";
+    }
+}
+
 int IconTile(BlockType type) {
     const TextureData t = GetTextureData(type);
     return IsPlantType(type) ? t.top : t.front;
@@ -136,6 +151,8 @@ Application::~Application() {
 }
 
 bool Application::Init(const ClientOptions& options) {
+    settings.Load(kSettingsFile);
+    vsync = settings.vsync;
     glfwSetErrorCallback(GlfwErrorCallback);
     if (!glfwInit()) {
         std::cerr << "ERROR: Failed to initialize GLFW" << std::endl;
@@ -178,6 +195,11 @@ bool Application::Init(const ClientOptions& options) {
     // VOXEL_NO_MOUSE=1 ignores mouse look, so automated screenshots from a saved
     // position always face the same way.
     ignoreMouse = std::getenv("VOXEL_NO_MOUSE") != nullptr;
+    // VOXEL_HOLD_MINE=1 mines whatever's in view, as if the left button were held
+    // (for unattended screenshots of mining).
+    holdMine = std::getenv("VOXEL_HOLD_MINE") != nullptr;
+    // VOXEL_RUN="/time noon;/summon deer" sends those chat lines (commands) once joined.
+    if (const char* run = std::getenv("VOXEL_RUN")) startCommands = run;
     // VOXEL_BENCH=1 turns vsync off and prints where frame time goes, once a second.
     if (std::getenv("VOXEL_BENCH")) {
         bench = true;
@@ -213,6 +235,27 @@ bool Application::Init(const ClientOptions& options) {
     LoadHotbar();
     // VOXEL_OPEN_INVENTORY=1 starts with the inventory open (for screenshots).
     if (std::getenv("VOXEL_OPEN_INVENTORY")) SetInventoryOpen(true);
+    ApplySettings();
+    if (options.showMenu) {
+        // The title screen first: nothing to connect to yet.
+        SetCursorCaptured(false);
+        RefreshWorlds();
+        std::snprintf(serverAddress, sizeof serverAddress, "%s", settings.lastServer.c_str());
+        // VOXEL_MENU_PAGE=worlds|new|multiplayer|settings opens that page (for screenshots).
+        if (const char* p = std::getenv("VOXEL_MENU_PAGE")) {
+            const std::string name = p;
+            page = name == "worlds" ? Page::Worlds : name == "new" ? Page::NewWorld : name == "multiplayer" ? Page::Multiplayer
+                 : name == "settings" ? Page::Settings : Page::Title;
+        }
+        return true;
+    }
+    ClientOptions start = options;
+    if (!start.nameGiven) start.name = settings.name;
+    return StartGame(start);
+}
+
+bool Application::StartGame(const ClientOptions& options) {
+    menuMessage.clear();
     world = std::make_unique<ClientWorld>();
     client = std::make_unique<Client>(*world);
 
@@ -233,7 +276,11 @@ bool Application::Init(const ClientOptions& options) {
         serverOptions.weather = static_cast<Server::Options::Weather>(options.weather);
         serverOptions.defaultMode = options.mode >= 0 ? static_cast<net::GameMode>(options.mode)
                                     : options.emptyWorld ? net::GameMode::Creative : net::GameMode::Survival;
-        if (!localServer->Start(serverOptions)) return false;
+        if (!localServer->Start(serverOptions)) {
+            menuMessage = "Couldn't open the world in " + options.worldDirectory;
+            StopGame();
+            return false;
+        }
         localServer->RunInBackground();
         host = "127.0.0.1";
         port = localServer->GetPort();
@@ -244,11 +291,74 @@ bool Application::Init(const ClientOptions& options) {
     }
 
     std::string error;
-    if (!client->Connect(host, port, options.name, error)) {
+    if (!client->Connect(host, port, options.name, error, settings.renderDistance)) {
         std::cerr << "ERROR: Could not connect to " << host << ":" << port << ": " << error << std::endl;
+        menuMessage = "Couldn't connect to " + host + ":" + std::to_string(port) + ": " + error;
+        StopGame();
         return false;
     }
+    paused = false;
+    SetCursorCaptured(true);
+    // VOXEL_PAUSE=1 starts with the pause menu open (for screenshots).
+    if (std::getenv("VOXEL_PAUSE")) {
+        paused = true;
+        SetCursorCaptured(false);
+    }
     return true;
+}
+
+void Application::StopGame() {
+    if (client) client->Disconnect();
+    client.reset();
+    world.reset();
+    if (localServer) localServer->Stop(); // (saves the world)
+    localServer.reset();
+    joined = false;
+    mining = false;
+    paused = pauseSettings = false;
+    chatOpen = inventoryOpen = false;
+    landedAt = 0.0;
+    player = Player(glm::vec3(7.0f, 7.0f, 7.0f));
+    camera = Camera();
+    ApplySettings();
+    SetCursorCaptured(false);
+}
+
+void Application::SetCursorCaptured(bool captured) {
+    captureCursor = captured;
+    if (window) glfwSetInputMode(window, GLFW_CURSOR, captured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    camera.ResetLook();
+}
+
+void Application::ApplySettings() {
+    settings.Clamp();
+    camera.SetFov(settings.fov);
+    camera.SetSensitivity(settings.sensitivity);
+    if (!bench) vsync = settings.vsync;
+}
+
+
+
+void Application::RunMenuFrame(double now) {
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(window, &width, &height);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, width, height);
+    glClearColor(0.42f, 0.62f, 0.86f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    DrawMenu();
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    if (!client && !autoScreenshotPath.empty() && now >= autoScreenshotAt) {
+        SaveScreenshot(autoScreenshotPath, width, height);
+        autoScreenshotPath.clear();
+    }
+    glfwSwapInterval(vsync ? 1 : 0);
+    glfwSwapBuffers(window);
 }
 
 void Application::LoadBlockTextures() {
@@ -294,6 +404,10 @@ void Application::Run() {
         lastFrame = now;
 
         glfwPollEvents();
+        if (!client) {
+            RunMenuFrame(now); // the title screen
+            continue;
+        }
 
         double mark = glfwGetTime();
         auto lap = [&](int section) {
@@ -324,6 +438,18 @@ void Application::Run() {
             Block target;
             if (world->GetBlock(hit->block.x, hit->block.y, hit->block.z, target)) params.highlightOutline = target.OutlineSegments();
         }
+        if (mining && mineProgress > 0.0f) {
+            // Cracks over the box the block's shape fills.
+            glm::vec3 lo(1.0f), hi(0.0f);
+            for (const glm::vec3& p : miningBlock.OutlineSegments()) lo = glm::min(lo, p), hi = glm::max(hi, p);
+            if (hi.x > lo.x) {
+                params.breakProgress = mineProgress;
+                params.breakBoxMin = glm::vec3(miningPos) + lo;
+                params.breakBoxSize = hi - lo;
+            }
+        }
+        for (const auto& c : client->GetCreatures())
+            params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed });
         for (const auto& other : client->GetRemotePlayers()) {
             params.players.push_back({ other.feet, other.yaw, other.pitch, PlayerModels::ColorFor(other.id) });
         }
@@ -350,6 +476,12 @@ void Application::Run() {
         DrawHealth();
         DrawInventory();
         if (showDebug) DrawDebugWindow(deltaTime);
+        // Dropped by the server: nothing to do but go back to the title screen.
+        if (!client->IsConnected() && !client->GetDisconnectReason().empty() && !paused) {
+            paused = true;
+            SetCursorCaptured(false);
+        }
+        if (paused) DrawPauseMenu();
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         lap(4);
@@ -367,6 +499,12 @@ void Application::Run() {
             screenshotRequested = false;
         }
 
+        if (pendingStop) {
+            pendingStop = false;
+            StopGame();
+            RefreshWorlds();
+            page = Page::Title;
+        }
         if (vsync != appliedVsync) {
             glfwSwapInterval(vsync ? 1 : 0);
             appliedVsync = vsync;
@@ -431,6 +569,19 @@ void Application::UpdateNetwork() {
         if (client->GetSpawnFlags() & net::kWelcomeResume) {
             player.ResumeAt(client->GetSpawn());
             camera.SetLook(client->GetSpawnYaw(), client->GetSpawnPitch());
+        }
+    }
+    // VOXEL_RUN: a second after landing (so the server knows where we are), its lines.
+    if (joined && !startCommands.empty() && (player.IsSpawned() || player.IsFlying())) {
+        if (landedAt == 0.0) landedAt = glfwGetTime();
+        if (glfwGetTime() - landedAt > 1.0) {
+            size_t start = 0;
+            while (start <= startCommands.size()) {
+                const size_t end = std::min(startCommands.find(';', start), startCommands.size());
+                if (end > start) client->SendChat(startCommands.substr(start, end - start));
+                start = end + 1;
+            }
+            startCommands.clear();
         }
     }
     if (auto correction = client->TakeCorrection()) {
@@ -647,7 +798,7 @@ void Application::HandleContinuousInput(float deltaTime) {
     if (noclip != player.IsFlying()) player.SetFlying(*world, noclip);
 
     PlayerInput input;
-    if (!chatOpen && !inventoryOpen) {
+    if (!chatOpen && !inventoryOpen && !paused) {
     input.move = glm::vec2((down(GLFW_KEY_D) ? 1.0f : 0.0f) - (down(GLFW_KEY_A) ? 1.0f : 0.0f),
                            (down(GLFW_KEY_W) ? 1.0f : 0.0f) - (down(GLFW_KEY_S) ? 1.0f : 0.0f));
     input.jump = down(GLFW_KEY_SPACE) || (player.IsFlying() && down(GLFW_KEY_E));
@@ -670,6 +821,8 @@ void Application::HandleContinuousInput(float deltaTime) {
         if (player.IsSwimming()) flags |= net::kFlagSwimming;
         client->SendPlayerState(player.GetFeetPosition(), player.GetVelocity(), camera.GetYaw(), camera.GetDirectionAngles().x, flags);
     }
+
+    UpdateMining();
 
     // Laser: carve a tunnel along the view ray while L is held.
     if (captureCursor && !chatOpen && (client->GetAbilities() & net::kAbilityOperator) && glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
@@ -697,19 +850,25 @@ void Application::DrawHotbar() {
         // Name of the selected block, centred above the slots, with the height it's
         // placed at (V) and, in survival, what that costs.
         const BlockType selected = SelectedBlock();
+        const Tool selectedTool = SelectedTool();
         const bool survival = !client->IsCreative();
         std::string label = BlockName(selected);
+        bool affordable = true;
+        if (selectedTool != Tool::None) label = std::string(Mining::ToolName(selectedTool)) + " - " + ToolHint(selectedTool);
+        else {
         const int height = Block::CanShape(selected) ? placeHeight : 8;
         if (Block::CanShape(selected)) label += std::string(" - ") + HeightName(height) + (height < 8 ? " height" : " block") + " (V)";
-        const bool affordable = client->CanAfford(selected, height);
+        affordable = client->CanAfford(selected, height);
         if (survival) {
             if (Block::Placed(selected, height).IsLiquid()) label += " - can't be placed in survival";
             else label += " - costs " + FormatBlocks(static_cast<uint32_t>(Block::Placed(selected, height).ResourceUnits())) + ", have " +
                           FormatBlocks(client->GetResources(selected));
         }
+        }
+        const bool affordableShown = selectedTool != Tool::None || affordable;
         const float nameWidth = ImGui::CalcTextSize(label.c_str()).x;
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (barWidth - nameWidth) * 0.5f));
-        ImGui::PushStyleColor(ImGuiCol_Text, affordable ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(1.0f, 0.55f, 0.5f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, affordableShown ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(1.0f, 0.55f, 0.5f, 1.0f));
         ImGui::TextUnformatted(label.c_str());
         ImGui::PopStyleColor();
 
@@ -731,9 +890,10 @@ void Application::DrawHotbar() {
             draw->AddRectFilled(slotMin, slotMax, selected ? IM_COL32(255, 255, 255, 60) : hovered ? IM_COL32(255, 255, 255, 30) : IM_COL32(0, 0, 0, 70), 4.0f);
             // The block's side texture, straight from the world's atlas.
             glm::vec2 uv0, uv1;
-            atlas.GetTileUV(IconTile(hotbar[i]), uv0, uv1);
-            const uint32_t held = client->GetResources(hotbar[i]);
-            const bool empty = survival && held == 0;
+            const bool isTool = hotbarTools[i] != Tool::None;
+            atlas.GetTileUV(isTool ? ToolTile(atlas, hotbarTools[i]) : IconTile(hotbar[i]), uv0, uv1);
+            const uint32_t held = isTool ? 0 : client->GetResources(hotbar[i]);
+            const bool empty = survival && !isTool && held == 0;
             draw->AddImage(atlasTexture, ImVec2(slotMin.x + kPad, slotMin.y + kPad), ImVec2(slotMax.x - kPad, slotMax.y - kPad),
                            ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y), empty ? IM_COL32(255, 255, 255, 70) : IM_COL32_WHITE);
             // Survival: how many we have, in the bottom right.
@@ -819,6 +979,23 @@ void Application::DrawDebugWindow(float deltaTime) {
 void Application::OnKey(int key, int action) {
     if (action != GLFW_PRESS) return;
 
+    // The title screen: Esc goes back a page.
+    if (!client) {
+        if (key == GLFW_KEY_ESCAPE && page != Page::Title) page = Page::Title;
+        return;
+    }
+    // Paused: Esc goes back (from the settings) or resumes.
+    if (paused) {
+        if (key == GLFW_KEY_ESCAPE) {
+            if (pauseSettings) pauseSettings = false;
+            else if (client->IsConnected()) {
+                paused = false;
+                SetCursorCaptured(true);
+            }
+        }
+        return;
+    }
+
     // While typing, keys belong to the chat line (ImGui gets them too); Esc closes it.
     if (chatOpen) {
         if (key == GLFW_KEY_ESCAPE) chatOpen = false;
@@ -856,7 +1033,8 @@ void Application::OnKey(int key, int action) {
         OpenChat(0);
         break;
     case GLFW_KEY_ESCAPE:
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
+        paused = true; // the pause menu: resume, settings, back to the title screen
+        SetCursorCaptured(false);
         break;
     case GLFW_KEY_R:
         renderer->ReloadShaders();
@@ -904,11 +1082,16 @@ void Application::LoadHotbar() {
     for (int i = 0, type; i < kHotbarSlots && file >> type; i++)
         if (std::find(std::begin(kInventoryBlocks), std::end(kInventoryBlocks), static_cast<BlockType>(type)) != std::end(kInventoryBlocks))
             hotbar[i] = static_cast<BlockType>(type);
+    // A second line: the tool in each slot (0 none).
+    for (int i = 0, tool; i < kHotbarSlots && file >> tool; i++)
+        if (tool > 0 && tool < static_cast<int>(Tool::Count)) hotbarTools[i] = static_cast<Tool>(tool);
 }
 
 void Application::SaveHotbar() const {
     std::ofstream file(kHotbarFile, std::ios::trunc);
     for (BlockType type : hotbar) file << static_cast<int>(type) << ' ';
+    file << "\n";
+    for (Tool tool : hotbarTools) file << static_cast<int>(tool) << ' ';
     file << "\n";
 }
 
@@ -936,12 +1119,30 @@ void Application::DrawInventory() {
     if (ImGui::Begin("Blocks", &open, flags)) {
         const char key = selectedSlot < 9 ? static_cast<char>('1' + selectedSlot) : '0';
         const bool survival = !client->IsCreative();
-        ImGui::Text("Click a block to put it in hotbar slot %c.", key);
+        ImGui::Text("Click a tool or block to put it in hotbar slot %c.", key);
         ImGui::TextDisabled("Pick the slot with 1-9, 0 or by clicking it below. I or Esc closes.");
         if (survival) ImGui::TextDisabled("Survival: these are the blocks you've collected. Break blocks to get more.");
         ImGui::Spacing();
         const TextureAtlas& atlas = renderer->GetAtlas();
         const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
+        // Tools first, a row of their own (free for now: there's no crafting yet).
+        for (size_t t = 0; t < std::size(kInventoryTools); t++) {
+            const Tool tool = kInventoryTools[t];
+            if (t > 0) ImGui::SameLine();
+            glm::vec2 uv0, uv1;
+            atlas.GetTileUV(ToolTile(atlas, tool), uv0, uv1);
+            ImGui::PushID(1000 + static_cast<int>(tool));
+            const bool inSlot = hotbarTools[selectedSlot] == tool;
+            if (inSlot) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(1.0f, 1.0f, 1.0f, 0.35f));
+            if (ImGui::ImageButton("tool", texture, ImVec2(kIcon, kIcon), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y))) {
+                hotbarTools[selectedSlot] = tool;
+                SaveHotbar();
+            }
+            if (inSlot) ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s: %s", Mining::ToolName(tool), ToolHint(tool));
+            ImGui::PopID();
+        }
+        ImGui::Separator();
         int column = 0;
         for (BlockType type : kInventoryBlocks) {
             const uint32_t held = client->GetResources(type);
@@ -951,10 +1152,11 @@ void Application::DrawInventory() {
             glm::vec2 uv0, uv1;
             atlas.GetTileUV(IconTile(type), uv0, uv1);
             ImGui::PushID(static_cast<int>(type));
-            const bool inSlot = hotbar[selectedSlot] == type;
+            const bool inSlot = hotbarTools[selectedSlot] == Tool::None && hotbar[selectedSlot] == type;
             if (inSlot) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(1.0f, 1.0f, 1.0f, 0.35f));
             if (ImGui::ImageButton("block", texture, ImVec2(kIcon, kIcon), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y))) {
                 hotbar[selectedSlot] = type;
+                hotbarTools[selectedSlot] = Tool::None;
                 SaveHotbar();
             }
             if (inSlot) ImGui::PopStyleColor();
@@ -1002,13 +1204,23 @@ void Application::OnMouseButton(int button, int action) {
     // With the cursor released, clicks belong to the UI.
     if (action != GLFW_PRESS || !captureCursor || chatOpen) return;
 
+    // A creature in the way: hit it (with whatever's in hand).
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (const uint16_t creature = CreatureInView()) {
+            client->Attack(creature, SelectedTool());
+            return;
+        }
+    }
+
     auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), kReach);
     if (!hit) return;
 
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        client->BreakBlock(hit->block);
+        // Creative breaks at once; survival mines while the button is held (UpdateMining).
+        if (client->IsCreative()) client->BreakBlock(hit->block);
     }
     else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+        if (SelectedTool() != Tool::None) return; // tools don't place anything
         const glm::ivec3 place = hit->block + hit->normal;
         // Don't build a solid block inside yourself when walking (water, sprites and
         // pressure plates are fine).
@@ -1024,6 +1236,77 @@ void Application::OnMouseButton(int button, int action) {
         // Logs lie along the axis of the face they're placed against.
         const int faceAxis = hit->normal.x != 0 ? 0 : hit->normal.z != 0 ? 2 : 1;
         client->PlaceBlock(place, placeBlock, height, faceAxis);
+    }
+}
+
+uint16_t Application::CreatureInView() const {
+    const glm::vec3 origin = camera.GetPosition(), dir = camera.GetDirection();
+    float blockDistance = Combat::kReach;
+    if (auto hit = Raycast(*world, origin, dir, Combat::kReach)) {
+        // Where the ray enters the block's cell.
+        const glm::vec3 lo(hit->block), hi = lo + glm::vec3(1.0f);
+        float tNear = 0.0f;
+        for (int a = 0; a < 3; a++) {
+            if (std::abs(dir[a]) < 1e-6f) continue;
+            const float t0 = (lo[a] - origin[a]) / dir[a], t1 = (hi[a] - origin[a]) / dir[a];
+            tNear = std::max(tNear, std::min(t0, t1));
+        }
+        blockDistance = tNear;
+    }
+    uint16_t best = 0;
+    float bestT = blockDistance;
+    for (const auto& c : client->GetCreatures()) {
+        const CreatureSpec& spec = SpecOf(c.type);
+        const glm::vec3 lo = c.feet - glm::vec3(spec.halfWidth, 0.0f, spec.halfWidth);
+        const glm::vec3 hi = c.feet + glm::vec3(spec.halfWidth, spec.height, spec.halfWidth);
+        float tNear = 0.0f, tFar = 1e9f;
+        bool miss = false;
+        for (int a = 0; a < 3 && !miss; a++) {
+            if (std::abs(dir[a]) < 1e-6f) {
+                miss = origin[a] < lo[a] || origin[a] > hi[a];
+                continue;
+            }
+            float t0 = (lo[a] - origin[a]) / dir[a], t1 = (hi[a] - origin[a]) / dir[a];
+            if (t0 > t1) std::swap(t0, t1);
+            tNear = std::max(tNear, t0);
+            tFar = std::min(tFar, t1);
+        }
+        if (!miss && tNear <= tFar && tNear < bestT) bestT = tNear, best = c.id;
+    }
+    return best;
+}
+
+void Application::UpdateMining() {
+    mineProgress = 0.0f;
+    const bool held = (captureCursor && !chatOpen && !inventoryOpen && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) || holdMine;
+    // Not while aiming at a creature (that's a fight, not mining).
+    auto hit = held && client->IsWelcomed() && !client->IsCreative() && !CreatureInView()
+                   ? Raycast(*world, camera.GetPosition(), camera.GetDirection(), kReach)
+                   : std::nullopt;
+    Block block;
+    if (!hit || !world->GetBlock(hit->block.x, hit->block.y, hit->block.z, block) || block.IsAir() || block.IsLiquid()) {
+        mining = false;
+        return;
+    }
+    const Tool tool = SelectedTool();
+    const double now = glfwGetTime();
+    // A new target (or tool, or the block changed under us): start over on it.
+    if (!mining || hit->block != miningPos || tool != miningTool || block != miningBlock) {
+        if (now < nextMineAt) return;
+        mining = true;
+        miningPos = hit->block;
+        miningBlock = block;
+        miningTool = tool;
+        miningStart = now;
+        client->StartMining(miningPos, tool);
+    }
+    const double needed = Mining::Seconds(block, tool), elapsed = now - miningStart;
+    mineProgress = needed > 0.0 ? static_cast<float>(std::min(1.0, elapsed / needed)) : 1.0f;
+    if (elapsed >= needed) {
+        client->BreakBlock(miningPos, tool);
+        mining = false;
+        mineProgress = 0.0f;
+        nextMineAt = now + 0.15; // a moment before starting on the next block
     }
 }
 

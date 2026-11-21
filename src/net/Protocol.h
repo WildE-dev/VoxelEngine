@@ -11,6 +11,8 @@
 #include <glm/glm.hpp>
 
 #include "world/Block.h"
+#include "world/Creatures.h"
+#include "world/Mining.h"
 #include "world/Chunk.h"
 
 // The client/server message protocol. Every packet is one message: a MsgType byte
@@ -26,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 13;
+constexpr uint32_t kProtocolVersion = 16;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -42,6 +44,8 @@ enum class MsgType : uint8_t {
     SkipTime,      // jump to the next dawn (at night) or dusk (by day)
     ChatSend,      // a chat line, or a command if it starts with '/'
     EditChisel,    // lower (or raise) one quarter of a block by a quarter of a block
+    MineStart,     // started mining a block (survival: breaking it takes time)
+    Attack,        // hit a creature
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -57,6 +61,7 @@ enum class MsgType : uint8_t {
     Health,        // your health changed (hurt, healing, or respawned)
     GameModeIs,    // you're in creative or survival
     Resources,     // what you hold (survival): units of each block type
+    CreatureSnapshot, // the creatures near you
 };
 
 // ---------------------------------------------------------------------------------
@@ -147,6 +152,9 @@ bool ReadBlock(ByteReader& in, Block& block);
 struct Hello {
     uint32_t version = kProtocolVersion;
     std::string name;
+    // How far the client wants to see, in chunks (0: as far as the server goes). The
+    // server sends no further than this, and no further than its own limit.
+    uint8_t viewDistance = 0;
 };
 
 struct Welcome {
@@ -186,6 +194,14 @@ struct PlayerState {
 
 struct EditBreak {
     glm::ivec3 pos{0};
+    Tool tool = Tool::None; // what it was mined with (see world/Mining.h)
+};
+
+// Survival: the client started mining this block, with this tool. The server times
+// it from here, and only lets the EditBreak through once it's had long enough.
+struct MineStart {
+    glm::ivec3 pos{0};
+    Tool tool = Tool::None;
 };
 
 struct EditPlace {
@@ -249,6 +265,26 @@ struct PlayerSnapshot {
 
 struct SkipTime {};
 
+// Creatures (world/Creatures.h): the client hits one; the server says where the ones
+// near each player are, every tick.
+struct Attack {
+    uint16_t creature = 0;
+    Tool tool = Tool::None;
+};
+constexpr uint8_t kCreatureHurt = 1 << 0; // flashes red
+struct CreatureInfo {
+    uint16_t id = 0;
+    CreatureType type = CreatureType::Deer;
+    glm::vec3 feet{0.0f};
+    float yaw = 0.0f;
+    uint8_t flags = 0;
+};
+struct CreatureSnapshot {
+    uint32_t tick = 0;
+    std::vector<CreatureInfo> creatures;
+};
+constexpr size_t kMaxCreaturesSent = 128;
+
 // What the server lets a player do. No-clip is switched with /noclip (operators); the
 // laser is for operators. The server enforces both.
 constexpr uint8_t kAbilityOperator = 1 << 0;
@@ -288,6 +324,9 @@ std::vector<uint8_t> Encode(const Welcome& m);
 std::vector<uint8_t> Encode(const Kick& m);
 std::vector<uint8_t> Encode(const PlayerState& m);
 std::vector<uint8_t> Encode(const EditBreak& m);
+std::vector<uint8_t> Encode(const MineStart& m);
+std::vector<uint8_t> Encode(const Attack& m);
+std::vector<uint8_t> Encode(const CreatureSnapshot& m);
 std::vector<uint8_t> Encode(const EditPlace& m);
 std::vector<uint8_t> Encode(const EditCarve& m);
 std::vector<uint8_t> Encode(const SkipTime& m);
@@ -317,6 +356,9 @@ bool Decode(ByteReader& in, Welcome& m);
 bool Decode(ByteReader& in, Kick& m);
 bool Decode(ByteReader& in, PlayerState& m);
 bool Decode(ByteReader& in, EditBreak& m);
+bool Decode(ByteReader& in, MineStart& m);
+bool Decode(ByteReader& in, Attack& m);
+bool Decode(ByteReader& in, CreatureSnapshot& m);
 bool Decode(ByteReader& in, EditPlace& m);
 bool Decode(ByteReader& in, EditCarve& m);
 bool DecodeChunkData(ByteReader& in, glm::ivec3& coords, ChunkBlocks& blocks, ChunkLight& light);

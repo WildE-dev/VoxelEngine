@@ -30,11 +30,12 @@ double Client::Now() {
     return duration<double>(steady_clock::now().time_since_epoch()).count();
 }
 
-bool Client::Connect(const std::string& host, uint16_t port, const std::string& name, std::string& error) {
+bool Client::Connect(const std::string& host, uint16_t port, const std::string& name, std::string& error, int viewDistance) {
     if (!net.Connect(host, port, 5000, error)) return false;
     disconnectReason.clear();
     net::Hello hello;
     hello.name = name;
+    hello.viewDistance = static_cast<uint8_t>(std::clamp(viewDistance, 0, 255));
     net.Send(net::kChannelReliable, net::Encode(hello));
     net.Flush();
     return true;
@@ -172,6 +173,22 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         remote = std::move(next); // players missing from the snapshot have left
         break;
     }
+    case net::MsgType::CreatureSnapshot: {
+        net::CreatureSnapshot m;
+        if (!(ok = net::Decode(in, m))) break;
+        if (m.tick <= lastCreatureTick) break; // out of order
+        lastCreatureTick = m.tick;
+        const double now = Now();
+        std::unordered_map<uint16_t, std::deque<CreatureSample>> next;
+        for (const auto& c : m.creatures) {
+            auto& samples = next[c.id];
+            if (auto it = creatures.find(c.id); it != creatures.end()) samples = std::move(it->second);
+            samples.push_back({ now, { c.id, c.type, c.feet, c.yaw, (c.flags & net::kCreatureHurt) != 0, 0.0f } });
+            while (samples.size() > 2 && samples[1].time < now - 1.0) samples.pop_front();
+        }
+        creatures = std::move(next); // gone from the snapshot: gone (or out of range)
+        break;
+    }
     case net::MsgType::Correction: {
         net::Correction m;
         if (!(ok = net::Decode(in, m))) break;
@@ -207,7 +224,12 @@ void Client::SendPlayerState(const glm::vec3& feet, const glm::vec3& velocity, f
     net.Send(net::kChannelUnreliable, net::Encode(m));
 }
 
-void Client::BreakBlock(const glm::ivec3& pos) {
+void Client::StartMining(const glm::ivec3& pos, Tool tool) {
+    if (!welcomed) return;
+    net.Send(net::kChannelReliable, net::Encode(net::MineStart{ pos, tool }));
+}
+
+void Client::BreakBlock(const glm::ivec3& pos, Tool tool) {
     if (!welcomed) return;
     Block block;
     if (world.GetBlock(pos.x, pos.y, pos.z, block)) {
@@ -215,7 +237,7 @@ void Client::BreakBlock(const glm::ivec3& pos) {
         world.SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
         if (!IsCreative()) resources[static_cast<size_t>(block.type)] += static_cast<uint32_t>(block.ResourceUnits());
     }
-    net.Send(net::kChannelReliable, net::Encode(net::EditBreak{ pos }));
+    net.Send(net::kChannelReliable, net::Encode(net::EditBreak{ pos, tool }));
 }
 
 bool Client::CanAfford(BlockType type, int heightEighths) const {
@@ -295,6 +317,35 @@ std::vector<Client::RemotePlayer> Client::GetRemotePlayers() const {
         result.push_back(p);
     }
     return result;
+}
+
+std::vector<Client::Creature> Client::GetCreatures() const {
+    const double t = Now() - kInterpolationDelay;
+    std::vector<Creature> result;
+    for (const auto& [id, samples] : creatures) {
+        if (samples.empty()) continue;
+        size_t i = 0;
+        while (i + 1 < samples.size() && samples[i + 1].time <= t) i++;
+        if (i + 1 >= samples.size() || t <= samples[i].time) {
+            result.push_back(samples[i].state);
+            continue;
+        }
+        const CreatureSample& a = samples[i];
+        const CreatureSample& b = samples[i + 1];
+        const float f = static_cast<float>((t - a.time) / (b.time - a.time));
+        Creature c = b.state;
+        c.feet = glm::mix(a.state.feet, b.state.feet, f);
+        c.yaw = LerpAngle(a.state.yaw, b.state.yaw, f);
+        const glm::vec3 d = b.state.feet - a.state.feet;
+        c.speed = static_cast<float>(glm::length(glm::vec2(d.x, d.z)) / std::max(1e-3, b.time - a.time));
+        result.push_back(c);
+    }
+    return result;
+}
+
+void Client::Attack(uint16_t creature, Tool tool) {
+    if (!welcomed) return;
+    net.Send(net::kChannelReliable, net::Encode(net::Attack{ creature, tool }));
 }
 
 Client::Stats Client::GetStats() const {

@@ -1,0 +1,131 @@
+#pragma once
+// Mining (survival): breaking a block takes time, holding the button on it. Each
+// type has a hardness, the seconds a full block takes by hand; the right tool (a
+// pickaxe for stone and bricks, an axe for wood, a shovel for earth) is kToolSpeed
+// times faster. A partly carved block takes less, by its volume. Plants break at
+// once. In creative everything breaks at once. The server times each break
+// (Server::HandleBreak), so a client can't skip it; the client uses the same rules
+// to show progress.
+#include <algorithm>
+#include <cstdint>
+#include <string>
+
+#include "world/Block.h"
+
+enum class Tool : uint8_t { None, Pickaxe, Axe, Shovel, Count };
+
+namespace Mining {
+
+constexpr float kToolSpeed = 4.0f;
+// A carved block takes time by its volume, but no less than this share of a full one.
+constexpr float kMinVolumeShare = 0.3f;
+// The server lets a break through this much early (network jitter), in seconds plus
+// a share of the time it takes.
+constexpr double kSlackSeconds = 0.2, kSlackShare = 0.1;
+
+inline const char* ToolName(Tool t) {
+    switch (t) {
+    case Tool::Pickaxe: return "Pickaxe";
+    case Tool::Axe: return "Axe";
+    case Tool::Shovel: return "Shovel";
+    default: return "Hand";
+    }
+}
+inline const char* ToolId(Tool t) {
+    switch (t) {
+    case Tool::Pickaxe: return "pickaxe";
+    case Tool::Axe: return "axe";
+    case Tool::Shovel: return "shovel";
+    default: return "hand";
+    }
+}
+// The tool's icon (a texture in Resources/Textures/Blocks).
+inline const char* ToolTexture(Tool t) {
+    switch (t) {
+    case Tool::Pickaxe: return "tool_pickaxe";
+    case Tool::Axe: return "tool_axe";
+    case Tool::Shovel: return "tool_shovel";
+    default: return nullptr;
+    }
+}
+
+// Seconds a full block of this type takes by hand (0: at once).
+inline float Hardness(BlockType type) {
+    switch (type) {
+    case BlockType::AIR:
+    case BlockType::WATER:
+    case BlockType::TALL_GRASS:
+    case BlockType::FLOWER_RED:
+    case BlockType::FLOWER_YELLOW:
+    case BlockType::DEAD_BUSH: return 0.0f;
+    case BlockType::LEAVES:
+    case BlockType::PINE_LEAVES: return 0.3f;
+    case BlockType::DIRT:
+    case BlockType::GRASS:
+    case BlockType::DRY_GRASS:
+    case BlockType::LUSH_GRASS:
+    case BlockType::SNOWY_GRASS:
+    case BlockType::SAND:
+    case BlockType::SNOW: return 0.6f;
+    case BlockType::CACTUS: return 0.6f;
+    case BlockType::ICE:
+    case BlockType::LAMP:
+    case BlockType::CRUMBLING_BRICK: return 1.0f;
+    case BlockType::PRESSURE_PLATE: return 1.5f;
+    case BlockType::LOG: return 2.0f;
+    case BlockType::SPIKES: return 2.0f;
+    case BlockType::PUMP:
+    case BlockType::PIPE:
+    case BlockType::SLUICE: return 3.0f;
+    case BlockType::STONE: return 4.0f;
+    case BlockType::STONE_BRICK:
+    case BlockType::MOSSY_BRICK: return 5.0f;
+    default: return 1.0f;
+    }
+}
+
+// The tool that's faster on this type (Tool::None: nothing helps).
+inline Tool BestTool(BlockType type) {
+    switch (type) {
+    case BlockType::STONE:
+    case BlockType::STONE_BRICK:
+    case BlockType::MOSSY_BRICK:
+    case BlockType::CRUMBLING_BRICK:
+    case BlockType::ICE:
+    case BlockType::LAMP:
+    case BlockType::SPIKES:
+    case BlockType::PUMP:
+    case BlockType::PIPE:
+    case BlockType::SLUICE:
+    case BlockType::PRESSURE_PLATE: return Tool::Pickaxe;
+    case BlockType::LOG:
+    case BlockType::CACTUS: return Tool::Axe;
+    case BlockType::DIRT:
+    case BlockType::GRASS:
+    case BlockType::DRY_GRASS:
+    case BlockType::LUSH_GRASS:
+    case BlockType::SNOWY_GRASS:
+    case BlockType::SAND:
+    case BlockType::SNOW: return Tool::Shovel;
+    default: return Tool::None;
+    }
+}
+
+// Seconds it takes to break this block with this tool (in survival).
+inline float Seconds(const Block& block, Tool tool) {
+    float seconds = Hardness(block.type);
+    if (seconds <= 0.0f) return 0.0f;
+    const Tool best = BestTool(block.type);
+    if (best != Tool::None && tool == best) seconds /= kToolSpeed;
+    if (!block.IsFullBlock() && block.CanChisel())
+        seconds *= std::max(kMinVolumeShare, block.ResourceUnits() / static_cast<float>(Block::kUnitsPerBlock));
+    return seconds;
+}
+
+inline Tool ToolFromId(const std::string& id) {
+    for (int t = 1; t < static_cast<int>(Tool::Count); t++)
+        if (id == ToolId(static_cast<Tool>(t))) return static_cast<Tool>(t);
+    return Tool::None;
+}
+
+} // namespace Mining

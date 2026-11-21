@@ -41,7 +41,8 @@ public:
 
     // Connects and sends Hello (blocks up to a few seconds). The server's Welcome
     // arrives through Poll.
-    bool Connect(const std::string& host, uint16_t port, const std::string& name, std::string& error);
+    // viewDistance: chunks we'd like to see (0: as far as the server sends).
+    bool Connect(const std::string& host, uint16_t port, const std::string& name, std::string& error, int viewDistance = 0);
     void Disconnect();
 
     // Handles everything that has arrived. Call once per frame.
@@ -65,7 +66,10 @@ public:
     void SendPlayerState(const glm::vec3& feet, const glm::vec3& velocity, float yaw, float pitch, uint8_t flags);
 
     // Edits (predicted locally).
-    void BreakBlock(const glm::ivec3& pos);
+    // In survival, breaking takes time (world/Mining.h): StartMining when starting on a
+    // block, BreakBlock once it's been long enough, with the same tool.
+    void StartMining(const glm::ivec3& pos, Tool tool);
+    void BreakBlock(const glm::ivec3& pos, Tool tool = Tool::None);
     // heightEighths: how tall a shapeable block is placed (8 full, see Block::Placed).
     // faceAxis: the axis of the face it's placed against (0 x, 1 y, 2 z); logs lie along it.
     void PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths = 8, int faceAxis = 1);
@@ -111,6 +115,20 @@ public:
     // smooth between snapshots.
     std::vector<RemotePlayer> GetRemotePlayers() const;
 
+    // Creatures near us, smoothed like other players. `moving`: walking speed now
+    // (blocks per second), for the legs.
+    struct Creature {
+        uint16_t id = 0;
+        CreatureType type = CreatureType::Deer;
+        glm::vec3 feet{0.0f};
+        float yaw = 0.0f;
+        bool hurt = false;
+        float speed = 0.0f;
+    };
+    std::vector<Creature> GetCreatures() const;
+    // Hit a creature (the server checks the reach).
+    void Attack(uint16_t creature, Tool tool);
+
     struct Stats {
         uint32_t roundTripMs = 0;
         uint64_t bytesReceived = 0;
@@ -145,6 +163,12 @@ private:
         RemotePlayer state;
     };
     std::unordered_map<uint16_t, std::deque<Sample>> remote;
+    struct CreatureSample {
+        double time;
+        Creature state;
+    };
+    std::unordered_map<uint16_t, std::deque<CreatureSample>> creatures;
+    uint32_t lastCreatureTick = 0;
     uint32_t lastSnapshotTick = 0;
     float timeOfDay = 0.05f, rain = 0.0f;
     uint8_t abilities = 0;

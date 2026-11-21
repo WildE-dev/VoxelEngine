@@ -119,6 +119,7 @@ bool Server::Start(const Options& opts) {
         }
     }
     terrain.SetType(storage ? static_cast<TerrainGenerator::Type>(storage->GetWorldType()) : options.worldType);
+    creatures.SetNaturalSpawning(options.creatures && terrain.GetType() == TerrainGenerator::Type::Normal);
     if (storage) timeOfDay = storage->GetTimeOfDay();
     defaultMode = storage ? static_cast<net::GameMode>(storage->GetDefaultMode()) : options.defaultMode;
     LoadOperators();
@@ -267,7 +268,17 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     }
     case net::MsgType::EditBreak: {
         net::EditBreak m;
-        if ((ok = net::Decode(in, m))) HandleBreak(client, m.pos);
+        if ((ok = net::Decode(in, m))) HandleBreak(client, m.pos, m.tool);
+        break;
+    }
+    case net::MsgType::Attack: {
+        net::Attack m;
+        if ((ok = net::Decode(in, m))) HandleAttack(client, m.creature, m.tool);
+        break;
+    }
+    case net::MsgType::MineStart: {
+        net::MineStart m;
+        if ((ok = net::Decode(in, m))) HandleMineStart(client, m.pos, m.tool);
         break;
     }
     case net::MsgType::EditPlace: {
@@ -318,6 +329,9 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
     }
     client.id = nextPlayerId++;
     client.mode = defaultMode;
+    client.viewDistance = hello.viewDistance > 0 ? std::clamp(static_cast<int>(hello.viewDistance), 2, ServerWorld::RENDER_DISTANCE)
+                                                 : ServerWorld::RENDER_DISTANCE;
+    client.verticalViewDistance = std::min(ServerWorld::VERTICAL_RENDER_DISTANCE, std::max(client.viewDistance, 4));
     client.name = hello.name.empty() ? "Player " + std::to_string(client.id) : hello.name;
     client.welcomed = true;
 
@@ -332,8 +346,8 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
     welcome.playerId = client.id;
     if (terrain.GetType() == TerrainGenerator::Type::Empty) welcome.flags |= net::kWelcomeEmptyWorld;
     welcome.spawn = client.feet;
-    welcome.renderDistance = ServerWorld::RENDER_DISTANCE;
-    welcome.verticalRenderDistance = ServerWorld::VERTICAL_RENDER_DISTANCE;
+    welcome.renderDistance = client.viewDistance;
+    welcome.verticalRenderDistance = client.verticalViewDistance;
 
     // Rejoining a saved world: back to where they left. (Two players with the same name
     // share the record and simply both start there.)
@@ -419,10 +433,74 @@ void Server::Echo(ClientState& client, const glm::ivec3& pos) {
     if (client.sent.count(chunk)) client.pendingCells[chunk].insert(LocalIndex(pos));
 }
 
-void Server::HandleBreak(ClientState& client, const glm::ivec3& pos) {
+void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
+    const double now = Now();
+    if (now < client.nextAttack) return;
+    client.nextAttack = now + Combat::kCooldown * 0.8; // (a little slack for timing)
+    bool killed = false;
+    const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
+    const CreatureSystem::Creature* target = creatures.Find(creature);
+    const CreatureType type = target ? target->type : CreatureType::Count;
+    if (creatures.Attack(creature, eye, tool, now, killed) && killed)
+        SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id);
+}
+
+void Server::UpdateCreatures() {
+    const double now = Now();
+    const float dt = lastCreatureTime > 0.0 ? static_cast<float>(std::clamp(now - lastCreatureTime, 0.0, 0.1)) : 1.0f / kTickRate;
+    lastCreatureTime = now;
+    std::vector<CreatureSystem::Player> players;
+    for (const auto& [peer, client] : clients) {
+        if (!client.welcomed || !client.hasState) continue;
+        const bool flying = client.noclip && (client.flags & net::kFlagFlying);
+        players.push_back({ client.id, client.feet, !Creative(client) && !flying });
+    }
+    // Daylight, as the client works it out: full once the sun is a little up.
+    const float sun = static_cast<float>(std::sin(timeOfDay * 6.283185307179586));
+    const float daylight = std::clamp((sun + 0.12f) / 0.37f, 0.0f, 1.0f);
+    creatures.Update(*world, players, now, dt, daylight, [&](uint16_t playerId, int damage, const char* deathMessage) {
+        for (auto& [peer, client] : clients)
+            if (client.id == playerId) Hurt(client, damage, deathMessage);
+    });
+}
+
+void Server::SendCreatures() {
+    const double now = Now();
+    constexpr float kSendRange = 72.0f;
+    for (auto& [peer, client] : clients) {
+        if (!client.welcomed) continue;
+        net::CreatureSnapshot m;
+        m.tick = tickCount;
+        for (const auto& c : creatures.All()) {
+            if (glm::distance(c.feet, client.feet) > kSendRange) continue;
+            m.creatures.push_back({ c.id, c.type, c.feet, c.yaw, static_cast<uint8_t>(now < c.hurtUntil ? net::kCreatureHurt : 0) });
+        }
+        net.Send(peer, net::kChannelUnreliable, net::Encode(m));
+    }
+}
+
+void Server::HandleMineStart(ClientState& client, const glm::ivec3& pos, Tool tool) {
+    client.mining = InReach(client, pos, kReach);
+    client.miningPos = pos;
+    client.miningTool = tool;
+    client.miningSince = Now();
+}
+
+void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) {
     Block block;
     if (!InReach(client, pos, kReach) || !world->GetBlock(pos.x, pos.y, pos.z, block) || block.IsAir() || block.IsLiquid()) {
         return Echo(client, pos);
+    }
+    // Survival: only once it's been mined for long enough, with that tool.
+    if (!Creative(client)) {
+        const double needed = Mining::Seconds(block, tool);
+        const bool started = client.mining && client.miningPos == pos && client.miningTool == tool;
+        const double mined = started ? Now() - client.miningSince : 0.0;
+        if (needed > 0.0 && mined < needed * (1.0 - Mining::kSlackShare) - Mining::kSlackSeconds) {
+            if (options.log && started) Log(client.name + " broke a block too soon");
+            return Echo(client, pos);
+        }
+        client.mining = false;
     }
     // Breaking a waterlogged block leaves its water behind.
     world->SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
@@ -631,6 +709,10 @@ void Server::UpdateBreath(ClientState& client, float dt) {
 
 void Server::UpdateTraps() {
     const double now = Now();
+    // Breath goes by real time, not ticks: on a slow, overloaded machine ticks run late,
+    // and air shouldn't last longer for it.
+    const float breathStep = lastTrapsTime > 0.0 ? static_cast<float>(std::clamp(now - lastTrapsTime, 0.0, 0.5)) : 1.0f / kTickRate;
+    lastTrapsTime = now;
     for (auto& [peer, client] : clients) {
         if (!client.welcomed || !client.hasState) continue;
         // Slow healing once nothing has hurt them for a while.
@@ -639,7 +721,7 @@ void Server::UpdateTraps() {
             client.nextRegen = now + kRegenInterval;
             SendHealth(client, false);
         }
-        UpdateBreath(client, 1.0f / kTickRate);
+        UpdateBreath(client, breathStep);
         if (client.noclip && (client.flags & net::kFlagFlying)) continue; // flying through it all
 
         // The cells the body's feet are in, and the cells just under them, at the
@@ -701,6 +783,7 @@ void Server::Tick() {
     RunConsoleCommands();
     UpdateSky();
     UpdateTraps();
+    UpdateCreatures();
     if (storage && options.autosaveSeconds > 0.0f && Now() - lastSaveTime >= options.autosaveSeconds) Save(false);
 
     std::vector<glm::ivec3> centers;
@@ -716,6 +799,7 @@ void Server::Tick() {
     for (auto& [peer, client] : clients)
         if (client.welcomed) StreamWorld(client);
     BroadcastPlayers();
+    SendCreatures();
     net.Flush();
 }
 
@@ -751,7 +835,7 @@ void Server::StreamWorld(ClientState& client) {
     if (net.GetStats(client.peer).queuedReliableBytes > kMaxQueuedBytes) return; // let the link catch up
 
     const glm::ivec3 center = Coords::ChunkOf(glm::ivec3(glm::floor(client.feet)));
-    const int r = ServerWorld::RENDER_DISTANCE, v = ServerWorld::VERTICAL_RENDER_DISTANCE;
+    const int r = client.viewDistance, v = client.verticalViewDistance;
     auto unload = [&](const glm::ivec3& coords) {
         net.Send(client.peer, net::kChannelReliable, net::Encode(net::ChunkUnload{ coords }));
         client.pendingCells.erase(coords);

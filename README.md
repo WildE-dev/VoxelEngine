@@ -2,7 +2,8 @@
 
 A small OpenGL voxel engine with sloped terrain, caves, trees, chunk streaming on a
 background thread, block lighting, ambient occlusion, finite flowing water and a
-skybox. Several players can share a world over the network. (A black hole lensing
+skybox. Deer roam it and ghouls come out in the dark. Several players can share a
+world over the network. (A black hole lensing
 effect at spawn is turned off; `kDrawBlackHole` in `src/render/Renderer.cpp` brings it
 back.)
 
@@ -17,7 +18,9 @@ cd build && ./VoxelEngine
 ```
 
 The executable loads `Resources/` relative to the working directory, and the
-build copies it next to the binary.
+build copies it next to the binary. Run with no options, it opens at the title
+screen (see [Menus and settings](#menus-and-settings)). With options, such as
+`--world`, `--connect` or `--server`, it goes straight into that game.
 
 The build also produces `VoxelServer` (a dedicated server that doesn't link GL or
 GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
@@ -26,14 +29,22 @@ GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
 (see [Chat and commands](#chat-and-commands)), `DungeonTest` (see
 [Dungeons](#dungeons)), `TrapTest` (see [Health and traps](#health-and-traps)),
 `ShapeTest` (see [Block shapes](#block-shapes)), `BiomeTest` (see [Biomes](#biomes))
-`ModeTest` (see [Game modes](#game-modes)) and `BreathTest` (see
-[Breathing](#breathing)).
+`ModeTest` (see [Game modes](#game-modes)), `MiningTest` (see [Mining](#mining)),
+`BreathTest` (see [Breathing](#breathing)) and `CreatureTest` (see
+[Creatures](#creatures)).
+
+`ctest` in the build directory runs them all, and `ctest -j15` runs them all at
+once. They're written to pass even then, on a loaded machine. They wait for things
+to happen rather than for fixed times. The network layer also rides out stalls of
+many seconds: ENet's timeout is raised from 5 s to at least 20 s, with larger socket
+buffers so bursts of chunks aren't dropped.
 
 ## Multiplayer
 
-Every game is a client of a server. Started without arguments, the game runs a
+Every game is a client of a server. For a singleplayer world, the game runs a
 server inside the same process on a free port of the loopback interface and
-connects to it, so singleplayer and multiplayer use the same code.
+connects to it, so singleplayer and multiplayer use the same code. Join a server
+from the title screen's Multiplayer page, or from the command line as below.
 
 Host a dedicated server (no window; Ctrl+C stops it):
 
@@ -94,8 +105,10 @@ server.
 
 ## Saving
 
-The server saves the world to a directory: `world/` for a dedicated server,
-`saves/singleplayer/` for singleplayer (both relative to the working directory).
+The server saves the world to a directory: `world/` for a dedicated server, and
+`saves/<name>/` for singleplayer worlds made from the title screen. `--world`
+from the command line defaults to `saves/singleplayer/`. Both are relative to the
+working directory.
 `--world DIR` picks another one, and `--no-save` neither loads nor saves anything.
 Works the same with `VoxelEngine` and `VoxelServer`:
 
@@ -150,11 +163,11 @@ that damaged files are refused, and that a rejoining player is put back in place
 | Shift | Sprint (fly: faster) |
 | Q / E | In no-clip (`/noclip`, operators): fly down / up |
 | Mouse | Look (a crosshair marks the middle of the screen) |
-| Left click | Break block |
+| Left click | Break block (survival: hold to mine it), or hit the creature in front of you |
 | Right click | Place the selected block |
 | V / Shift+V | Placement height for building blocks: full, 3/4, 1/2, 1/4 (and back) |
 | 1-9, 0 / mouse wheel | Select the hotbar slot to place from (with Tab you can also click a slot) |
-| I | Inventory: pick which block goes in each hotbar slot |
+| I | Inventory: pick which tool or block goes in each hotbar slot |
 | C / Shift+C | Chisel: lower / raise the quarter of the block you're looking at by a quarter |
 | L (hold) | Laser, operators only: carve a tunnel along the view ray |
 | R | Reload shaders and block textures, rebuild all chunk meshes |
@@ -166,7 +179,7 @@ that damaged files are refused, and that a rejoining player is put back in place
 | N | Skip to the next dusk (by day) or dawn (at night), for everyone on the server |
 | T / Enter | Open chat (Enter sends, Esc closes) |
 | / | Open chat with a command started |
-| Esc | Quit (or close the chat) |
+| Esc | Pause menu: resume, settings, back to the title screen, quit (or close the chat) |
 
 ## World generation
 
@@ -425,8 +438,9 @@ encoding, and that another player sees a sideways log.
 
 ## Inventory
 
-The hotbar holds ten blocks (keys 1-9 and 0). Press I to open the inventory: every
-block you can place (in survival, the ones you have), in a grid. Click one to put it in the selected hotbar slot; pick
+The hotbar holds ten tools or blocks (keys 1-9 and 0). Press I to open the
+inventory: the tools along the top (see [Mining](#mining)), then every block you can
+place (in survival, the ones you have), in a grid. Click one to put it in the selected hotbar slot; pick
 the slot with the number keys or by clicking it. I or Esc closes it. Your hotbar is
 kept in `hotbar.txt` in the working directory, so it's the same next time.
 
@@ -487,6 +501,77 @@ nothing can hurt you. All four blocks are in the inventory, for building traps o
 your own. `TrapTest` checks spikes, death and respawn, crumbling floors, pressure
 plates and sluice gates, and that no-clip and the laser are operators' only.
 
+## Mining
+
+In survival, breaking a block takes time: hold the left button on it, and cracks
+spread across it until it breaks. Looking away, or switching tools, starts over.
+
+| Block | By hand | With the right tool (4x faster) |
+| --- | --- | --- |
+| Plants | at once | |
+| Leaves | 0.3 s | |
+| Dirt, grass, sand, snow, cactus | 0.6 s | shovel (cactus: axe), 0.15 s |
+| Ice, lamps, crumbling bricks | 1 s | pickaxe, 0.25 s |
+| Logs | 2 s | axe, 0.5 s |
+| Spikes, pressure plates | 2 s, 1.5 s | pickaxe |
+| Pumps, pipes, sluice gates | 3 s | pickaxe, 0.75 s |
+| Stone | 4 s | pickaxe, 1 s |
+| Stone bricks | 5 s | pickaxe, 1.25 s |
+
+A carved block takes time in proportion to what's left of it, but never less than
+30%: a half slab takes half as long. The wrong tool is no better than a hand. The
+pickaxe, axe and shovel are in the inventory's top row (I). They're free for now,
+since there's no crafting yet. Put one in a hotbar slot to hold it. A tool places
+nothing on a right click. In creative everything breaks at once, as before.
+
+The server times every break, so a modified client can't mine faster. The client
+says when it starts on a block and with which tool. The server lets the break through
+only once that block has been mined for long enough with that same tool, give or take
+0.2 s for network jitter. The rules are in `src/world/Mining.h`. `MiningTest` checks:
+
+- the times and tools;
+- that breaks which weren't mined, or weren't mined for long enough, are refused;
+- that the tool and the block must match what was started;
+- that creative is instant.
+
+## Creatures
+
+Two kinds of creature live in the world. The server runs them and the players near
+them see them, smoothed like other players.
+
+- **Deer** wander grassland in herds of one to three. Hit one and it's knocked back
+  and bolts away from you for a few seconds.
+- **Ghouls** come out where it's dark: light 4 or less, with sky light counting for a
+  quarter at night. That means caves, dungeons and the surface after dusk. One goes
+  for the nearest survival player within 16 blocks and hits for one and a half
+  hearts a second while in reach. Creative players, and players in no-clip, are left
+  alone. Daylight under the open sky burns them up in about six seconds.
+
+Left click a creature in front of you (within 4.5 blocks) to hit it. A hand does
+1 heart, a shovel 1.5, a pickaxe 2 and an axe 2.5. Hits land at most about three
+times a second, and the server checks the reach. A deer has 4 hearts and a ghoul 6.
+Aiming at a creature doesn't mine the block behind it.
+
+In normal worlds they spawn by themselves around each player:
+
+- deer on open grass 20 to 48 blocks away, up to 6 nearby;
+- ghouls in the dark within 40 blocks, up to 5 nearby, never closer than 12.
+
+They go when no player is within 96 blocks. They aren't saved: a world fills with
+them again as you play. Empty worlds have none of their own; `/summon deer` or
+`/summon ghoul` brings one anywhere. Their models are boxes like the players': a deer
+with antlers, and a ghoul with outstretched arms and glowing eyes. Their legs swing as
+they move, and they flash red when hit. The rules are in `src/world/Creatures.h` and
+the server side in `src/server/Creatures.cpp`.
+
+`CreatureTest` checks:
+
+- summoning, and that both players see creatures fall onto the ground;
+- hits: out of reach, too fast, knockback and fleeing, kills;
+- a ghoul hunting a survival player and ignoring a creative one;
+- burning at noon, and `/creatures clear`;
+- in a normal world, deer turning up by day and ghouls at night.
+
 ## Breathing
 
 In survival you also need air. Ten bubbles appear above the right end of the hotbar
@@ -543,6 +628,8 @@ ones you're allowed to use:
 | `/gamemode` | everyone | show your game mode |
 | `/gamemode <creative\|survival> [player]` | operators | change a game mode (also `/gm`, `c`/`s`) |
 | `/give <block> [count] [player]` | operators | give survival blocks (`count` in blocks, default 64) |
+| `/summon <deer\|ghoul> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
+| `/creatures [clear]` | operators | count the creatures, or remove them all |
 | `/stop` | console | shut the server down |
 
 A dedicated server (`--server` or `VoxelServer`) also takes commands typed into its
@@ -623,6 +710,37 @@ without the extension; the face-to-texture mapping for each block type lives in
 square size (others are resampled to match the first). Missing textures show up
 as a magenta checkerboard.
 
+## Menus and settings
+
+Run with no options, the game opens at a title screen:
+
+- **Singleplayer**: the worlds in `saves/`, newest first, each with its terrain and
+  mode. You can play one, delete one (it asks first, and it can't be undone), or
+  make a new one with a name, terrain (normal or empty) and mode (survival or
+  creative).
+- **Multiplayer**: join a server by address (`host` or `host:port`). The last one is
+  remembered.
+- **Settings**: your name, render distance (2 to 12 chunks), field of view, mouse
+  sensitivity and vsync. They're kept in `settings.txt` in the working directory.
+
+In a game, Esc opens the pause menu: back to the game, settings, save and quit to the
+title screen (or disconnect), or quit. A singleplayer world keeps running while
+paused, as a server does. If the server drops you, the menu says why and takes you
+back to the title. Field of view, sensitivity and vsync change at once. A new render
+distance and name apply from the next game. The render distance is sent to the
+server when you join, and it streams only that far (never further than its own 12
+chunks), so a short one really does save work.
+
+For unattended screenshots there are a few environment variables:
+
+- `VOXEL_MENU_PAGE=worlds|new|multiplayer|settings` opens that page;
+- `VOXEL_PAUSE=1` opens the pause menu;
+- `VOXEL_RUN="/time noon;/summon deer"` sends those chat lines a second after landing;
+- `VOXEL_HOLD_MINE=1` mines whatever's in view.
+
+These go with the existing `VOXEL_AUTO_SCREENSHOT`, `VOXEL_NO_MOUSE` and
+`VOXEL_OPEN_INVENTORY`.
+
 ## Performance
 
 Most loaded chunks are solid ground or empty air and have no mesh. The client keeps a
@@ -640,18 +758,21 @@ many chunks were drawn.
 ```
 src/
   main.cpp  command line: singleplayer, --server, --connect, --world
-  app/      Application (window, input, main loop), Camera, Player (movement and physics)
+  app/      Application (window, input, main loop), Menu (title screen, pause menu),
+            Settings, Camera, Player (movement and physics)
   client/   Client (connection), ClientWorld (received chunks, mesh worker),
             ClientChunk (meshes and GL buffers), ChunkMesher
   server/   Server (clients, streaming, validation), ServerCommands (chat and
-            commands), ServerWorld (chunk loading,
+            commands), Creatures (spawning, AI, fights), ServerWorld (chunk loading,
             generation and light worker), Water, WorldStorage (saving),
             main.cpp (VoxelServer)
   net/      Protocol (messages, RLE chunk planes), Transport (ENet wrapper)
   render/   Renderer (frame passes, skybox, post effect), Rain, PlayerModels, Shader,
             Textures, DebugDraw
   world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
-            Features, Dungeons, Noise, Lighting, Collision, Raycast
+            Features, Dungeons, Noise, Lighting, Collision, Raycast, Mining,
+            Breathing, Creatures
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
-            ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest
+            ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
+            BreathTest, CreatureTest
 ```

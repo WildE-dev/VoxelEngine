@@ -30,8 +30,12 @@ struct FrameParams {
     bool underwater = false;    // camera is inside water: tint the screen
     float fogEnd = 0.0f;        // horizontal distance where the world fades fully into the sky (0: no fog)
     std::optional<glm::ivec3> highlightedBlock;
+    // Mining (survival): cracks over the box around the block being broken, 0..1 of the way.
+    float breakProgress = 0.0f;
+    glm::vec3 breakBoxMin{0.0f}, breakBoxSize{1.0f};
     std::vector<glm::vec3> highlightOutline; // the block's shape (Block::OutlineSegments)
     std::vector<PlayerModel> players; // other players
+    std::vector<CreatureModel> creatures;
 };
 
 // Owns all GPU resources outside the world: shaders, textures, the skybox,
@@ -72,6 +76,7 @@ private:
     void SetFogUniforms(Shader& shader, const FrameParams& params, int skyUnit);
     void DrawBlackHole(const FrameParams& params);
     void DrawWater(ClientWorld& world, const FrameParams& params);
+    void DrawCracks(const FrameParams& params);
 
     Shader worldShader;
     Shader debugShader;
@@ -81,6 +86,7 @@ private:
     Shader waterShader;
     Shader rainShader;
     Shader playerShader;
+    Shader crackShader;
 
     DebugDraw debugDraw;
     Rain rain;

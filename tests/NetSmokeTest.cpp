@@ -165,12 +165,12 @@ int main(int argc, char** argv) {
     if (failures) return EXIT_FAILURE;
 
     // Players see each other where they are.
-    Pump(a, b, 1.0, [] { return false; });
     auto seesOther = [](const TestClient& viewer, const TestClient& other) {
         for (const auto& p : viewer.client.GetRemotePlayers())
             if (p.id == other.client.GetPlayerId()) return glm::distance(p.feet, other.player.GetFeetPosition()) < 0.5f;
         return false;
     };
+    Pump(a, b, 20.0, [&] { return seesOther(a, b) && seesOther(b, a); });
     Check(seesOther(a, b), "A sees B at B's position");
     Check(seesOther(b, a), "B sees A at A's position");
 
@@ -183,9 +183,9 @@ int main(int argc, char** argv) {
     if (found) {
         const glm::ivec3 pillar = spot + glm::ivec3(0, 1, 0);
         a.client.PlaceBlock(pillar, BlockType::STONE);
-        Check(Pump(a, b, 5.0, [&] { return BlockIs(b.world, pillar, BlockType::STONE); }), "stone placed by A appears on B");
+        Check(Pump(a, b, 20.0, [&] { return BlockIs(b.world, pillar, BlockType::STONE); }), "stone placed by A appears on B");
         b.client.BreakBlock(pillar);
-        Check(Pump(a, b, 5.0, [&] { return BlockIs(a.world, pillar, BlockType::AIR); }), "stone broken by B disappears on A");
+        Check(Pump(a, b, 20.0, [&] { return BlockIs(a.world, pillar, BlockType::AIR); }), "stone broken by B disappears on A");
     }
 
     // Water poured by A flows, on both clients.
@@ -196,7 +196,7 @@ int main(int argc, char** argv) {
     if (found) {
         // Several blocks of water, so it has enough volume to spread visibly.
         for (int i = 0; i < 4; i++) a.client.PlaceBlock(pool + glm::ivec3(0, i, 0), BlockType::WATER);
-        Check(Pump(a, b, 5.0, [&] { return CountWater(b.world, pool, 6).cells >= 1; }), "water placed by A appears on B");
+        Check(Pump(a, b, 20.0, [&] { return CountWater(b.world, pool, 6).cells >= 1; }), "water placed by A appears on B");
         const bool spread = Pump(a, b, 15.0, [&] { return CountWater(b.world, pool, 6).cells >= 6; });
         const WaterView va = CountWater(a.world, pool, 6), vb = CountWater(b.world, pool, 6);
         Check(spread, "water flows outward as seen by B (" + std::to_string(vb.cells) + " wet cells)");

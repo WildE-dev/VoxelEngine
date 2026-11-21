@@ -18,6 +18,7 @@
 
 #include "net/Protocol.h"
 #include "net/Transport.h"
+#include "server/Creatures.h"
 #include "world/Breathing.h"
 #include "world/Coords.h"
 #include "world/TerrainGenerator.h"
@@ -57,6 +58,13 @@ class WorldStorage;
 // survival, every block costs resources (units of its type, see Block::ResourceUnits)
 // that players collect by breaking blocks, and traps hurt. The server keeps everyone's
 // mode and resources (saved with the player) and refuses what they can't afford.
+//
+// Creatures (server/Creatures.h): deer and ghouls, run here and sent to the players
+// near them every tick; players hit them with Attack.
+//
+// Mining (HandleMineStart, HandleBreak): in survival breaking a block takes time
+// (world/Mining.h). The client says when it starts on a block, and the break only
+// goes through once that long has passed.
 //
 // Health and traps (UpdateTraps): players have kMaxHealth half hearts. Standing in
 // spikes hurts; crumbling bricks give way soon after someone stands on them (and the
@@ -107,6 +115,9 @@ public:
         // The game mode new players start in, for a new world (a saved world keeps its
         // own; /gamemode changes a player's).
         net::GameMode defaultMode = net::GameMode::Survival;
+        // Creatures spawn by themselves around players (normal worlds only; /summon
+        // works anywhere).
+        bool creatures = true;
     };
 
     Server();
@@ -147,6 +158,7 @@ private:
 
         glm::ivec3 center{0};
         bool hasCenter = false;
+        int viewDistance = 0, verticalViewDistance = 0; // chunks: what they asked for, up to ours (set on Hello)
         bool allSent = false; // every chunk in range has been sent (until the centre moves)
 
         bool hasState = false; // has sent a valid PlayerState since joining
@@ -167,6 +179,12 @@ private:
         int sentAir = -1;
         Breathing::Cause sentAirCause = Breathing::Cause::None;
         double nextBreathHit = 0.0;
+        // Mining (survival): the block they're breaking, with what, since when.
+        bool mining = false;
+        glm::ivec3 miningPos{ 0 };
+        Tool miningTool = Tool::None;
+        double miningSince = 0.0;
+        double nextAttack = 0.0; // hitting creatures: at most this often
 
         // Chunks the client has, with the version of the light it has for each.
         std::unordered_map<glm::ivec3, uint32_t, Coords::IVec3Hash> sent;
@@ -181,7 +199,12 @@ private:
     void HandleMessage(ClientState& client, const std::vector<uint8_t>& data);
     void HandleHello(ClientState& client, const net::Hello& hello);
     void HandlePlayerState(ClientState& client, const net::PlayerState& state);
-    void HandleBreak(ClientState& client, const glm::ivec3& pos);
+    void HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool);
+    void HandleMineStart(ClientState& client, const glm::ivec3& pos, Tool tool);
+    void HandleAttack(ClientState& client, uint16_t creature, Tool tool);
+    // A tick of the creatures, and telling each player about the ones near them.
+    void UpdateCreatures();
+    void SendCreatures();
     void HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType type, int height, int faceAxis);
     void HandleChisel(ClientState& client, const net::EditChisel& chisel);
     void HandleCarve(ClientState& client, const net::EditCarve& carve);
@@ -247,9 +270,12 @@ private:
     Options options;
     net::NetServer net;
     TerrainGenerator terrain;
+    CreatureSystem creatures;
+    double lastCreatureTime = 0.0;
     std::unique_ptr<WorldStorage> storage; // declared before `world`, which uses it
     std::unique_ptr<ServerWorld> world;
     double lastSaveTime = 0.0;
+    double lastTrapsTime = 0.0; // last UpdateTraps (breath runs on real time)
 
     double timeOfDay = 0.05;     // 0..1, see net::PlayerSnapshot
     net::GameMode defaultMode = net::GameMode::Survival; // new players' (from the save, or the options)

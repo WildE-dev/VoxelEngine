@@ -39,6 +39,22 @@ size_t QueuedReliableBytes(const ENetPeer* peer) {
 }
 
 // Fills `event` from an ENet event. Returns false for events with nothing to report.
+// A busy machine (a big save, the whole test suite at once) can stall a process for
+// seconds. ENet's defaults would drop a connection after 5 s without an answer and
+// lose bursts of chunk data in small socket buffers; give both more room.
+constexpr enet_uint32 kTimeoutMinimumMs = 20000, kTimeoutMaximumMs = 60000;
+constexpr int kSocketBufferBytes = 4 * 1024 * 1024;
+
+void Tolerate(ENetPeer* peer) {
+    enet_peer_timeout(peer, 0, kTimeoutMinimumMs, kTimeoutMaximumMs);
+}
+
+void EnlargeBuffers(ENetHost* host) {
+    if (!host) return;
+    enet_socket_set_option(host->socket, ENET_SOCKOPT_RCVBUF, kSocketBufferBytes);
+    enet_socket_set_option(host->socket, ENET_SOCKOPT_SNDBUF, kSocketBufferBytes);
+}
+
 template <typename PeerIdOf>
 bool Translate(const ENetEvent& e, NetEvent& event, PeerIdOf peerIdOf) {
     switch (e.type) {
@@ -103,6 +119,7 @@ bool NetServer::Listen(const std::string& bindHost, uint16_t port, size_t maxCli
     address.port = port;
     if (!bindHost.empty() && bindHost != "0.0.0.0" && enet_address_set_host(&address, bindHost.c_str()) != 0) return false;
     impl->host = enet_host_create(&address, maxClients, kChannelCount, 0, 0);
+    EnlargeBuffers(impl->host);
     return impl->host != nullptr;
 }
 
@@ -115,6 +132,7 @@ bool NetServer::Poll(NetEvent& event, uint32_t timeoutMs) {
     ENetEvent e;
     while (enet_host_service(impl->host, &e, timeoutMs) > 0) {
         const bool disconnect = e.type == ENET_EVENT_TYPE_DISCONNECT;
+        if (e.type == ENET_EVENT_TYPE_CONNECT) Tolerate(e.peer);
         const bool translated = Translate(e, event, [&](ENetPeer* p) { return impl->IdOf(p); });
         if (disconnect) {
             impl->peers.erase(event.peer);
@@ -164,7 +182,10 @@ NetClient::~NetClient() {
 
 bool NetClient::Connect(const std::string& host, uint16_t port, uint32_t timeoutMs, std::string& error) {
     EnsureEnetInitialized();
-    if (!impl->host) impl->host = enet_host_create(nullptr, 1, kChannelCount, 0, 0);
+    if (!impl->host) {
+        impl->host = enet_host_create(nullptr, 1, kChannelCount, 0, 0);
+        EnlargeBuffers(impl->host);
+    }
     if (!impl->host) {
         error = "could not create a network socket";
         return false;
@@ -180,6 +201,7 @@ bool NetClient::Connect(const std::string& host, uint16_t port, uint32_t timeout
         error = "no free peer slot";
         return false;
     }
+    Tolerate(impl->peer);
 
     using Clock = std::chrono::steady_clock;
     const auto deadline = Clock::now() + std::chrono::milliseconds(timeoutMs);

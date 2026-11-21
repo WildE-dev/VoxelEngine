@@ -76,7 +76,8 @@ Renderer::Renderer()
       holeShader("Resources/Shaders/hole.vert", "Resources/Shaders/hole.frag"),
       waterShader("Resources/Shaders/water.vert", "Resources/Shaders/water.frag"),
       rainShader("Resources/Shaders/rain.vert", "Resources/Shaders/rain.frag"),
-      playerShader("Resources/Shaders/player.vert", "Resources/Shaders/player.frag") {
+      playerShader("Resources/Shaders/player.vert", "Resources/Shaders/player.frag"),
+      crackShader("Resources/Shaders/crack.vert", "Resources/Shaders/crack.frag") {
 }
 
 Renderer::~Renderer() {
@@ -205,6 +206,7 @@ void Renderer::ReloadShaders() {
     waterShader.Reload();
     rainShader.Reload();
     playerShader.Reload();
+    crackShader.Reload();
 }
 
 void Renderer::ReloadTextures() {
@@ -244,8 +246,11 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
     playerShader.SetUniform("cameraPos", params.cameraPosition);
     SetFogUniforms(playerShader, params, 1);
     playerModels.Draw(playerShader, params.view, params.projection, params.players);
+    playerModels.DrawCreatures(playerShader, params.view, params.projection, params.creatures, params.time);
 
     DrawSkybox(params);
+
+    if (params.breakProgress > 0.0f) DrawCracks(params);
 
     // The outline of the block in view, before the water: depth tested so blocks in
     // front hide it, and seen through water (which refracts what's behind it).
@@ -346,6 +351,30 @@ void Renderer::SetFogUniforms(Shader& shader, const FrameParams& params, int sky
     glActiveTexture(GL_TEXTURE0 + skyUnit);
     glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTexture);
     glActiveTexture(GL_TEXTURE0);
+}
+
+void Renderer::DrawCracks(const FrameParams& params) {
+    // Over the block, blended, behind anything in front of it; both sides, since the
+    // box's winding doesn't matter (the block hides its far faces).
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+    glDepthFunc(GL_LEQUAL);
+    glDisable(GL_CULL_FACE);
+    crackShader.Use();
+    crackShader.SetUniform("view", params.view);
+    crackShader.SetUniform("projection", params.projection);
+    crackShader.SetUniform("boxMin", params.breakBoxMin);
+    crackShader.SetUniform("boxSize", params.breakBoxSize);
+    crackShader.SetUniform("progress", params.breakProgress);
+    crackShader.SetUniform("brightness", 0.3f + 0.7f * params.sunBrightness);
+    glBindVertexArray(skyboxVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+    glEnable(GL_CULL_FACE);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
 }
 
 void Renderer::DrawSkybox(const FrameParams& params) {

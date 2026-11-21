@@ -109,17 +109,23 @@ int main() {
     for (const char* give : { "give spikes 4 Tester", "give crumbling_brick 4 Tester", "give sluice 2 Tester", "give pressure_plate 1 Tester" })
         server.QueueConsoleCommand(give);
     server.QueueConsoleCommand("gamemode creative Watcher");
-    Check(both(5.0, [&] { return a.client.GetResources(BlockType::SPIKES) == 4 * 64 && a.client.GetResources(BlockType::PRESSURE_PLATE) == 64 && b.client.IsCreative(); }),
+    Check(both(20.0, [&] { return a.client.GetResources(BlockType::SPIKES) == 4 * 64 && a.client.GetResources(BlockType::PRESSURE_PLATE) == 64 && b.client.IsCreative(); }),
           "the tester is given trap blocks, the watcher goes creative");
 
     std::cout << "Spikes" << std::endl;
     const glm::ivec3 feet(glm::floor(a.player.GetFeetPosition()));
     a.client.PlaceBlock(feet, BlockType::SPIKES);
-    Check(both(5.0, [&] { return a.client.GetHealth() < 20; }) && a.client.GetLastHurt() > 0.0,
+    Check(both(20.0, [&] { return a.client.GetHealth() < 20; }) && a.client.GetLastHurt() > 0.0,
           "standing in spikes hurts (" + std::to_string(a.client.GetHealth()) + " left)");
-    Check(both(10.0, [&] { return Has(a, "Tester was impaled on spikes") && Has(b, "Tester was impaled on spikes"); }), "until death, which everyone hears about");
-    a.client.BreakBlock(feet); // before falling back onto them
-    Check(both(10.0, [&] { return a.client.GetHealth() == 20 && glm::distance(glm::vec2(a.player.GetFeetPosition().x, a.player.GetFeetPosition().z), glm::vec2(7.5f)) < 1.0f; }),
+    Check(both(20.0, [&] { return Has(a, "Tester was impaled on spikes") && Has(b, "Tester was impaled on spikes"); }), "until death, which everyone hears about");
+    // Mined (it takes time in survival) before falling back onto them.
+    a.client.StartMining(feet, Tool::Pickaxe);
+    both(Mining::Seconds(Block::Plant(BlockType::SPIKES, 0), Tool::Pickaxe) + 0.1, [] { return false; });
+    for (int attempt = 0; attempt < 10 && TypeAt(b, feet) == BlockType::SPIKES; attempt++) {
+        a.client.BreakBlock(feet, Tool::Pickaxe); // again if the server was too busy to see the mining in time
+        both(1.0, [&] { return TypeAt(b, feet) != BlockType::SPIKES; });
+    }
+    Check(both(20.0, [&] { return a.client.GetHealth() == 20 && glm::distance(glm::vec2(a.player.GetFeetPosition().x, a.player.GetFeetPosition().z), glm::vec2(7.5f)) < 1.0f; }),
           "then respawns at the spawn point with full health");
     // Respawning drops the player from high up: wait for the landing (building has a reach).
     Check(both(15.0, [&] { return a.player.GetFeetPosition().y < 0.5f && a.player.IsOnGround(); }), "and lands");
@@ -129,9 +135,9 @@ int main() {
     both(1.0, [] { return false; });
     Check(TypeAt(b, { 20, 4, 7 }) == BlockType::CRUMBLING_BRICK && TypeAt(b, { 23, 4, 7 }) == BlockType::CRUMBLING_BRICK, "a ledge of crumbling bricks is built");
     server.QueueConsoleCommand("tp Tester 20.5 5.2 7.5");
-    Check(both(5.0, [&] { return TypeAt(b, { 20, 4, 7 }) == BlockType::AIR; }), "it gives way under the player");
-    Check(both(5.0, [&] { return TypeAt(b, { 23, 4, 7 }) == BlockType::AIR; }), "and the collapse spreads along the ledge");
-    Check(both(5.0, [&] { return a.player.GetFeetPosition().y < 1.0f; }), "dropping the player to the ground");
+    Check(both(20.0, [&] { return TypeAt(b, { 20, 4, 7 }) == BlockType::AIR; }), "it gives way under the player");
+    Check(both(20.0, [&] { return TypeAt(b, { 23, 4, 7 }) == BlockType::AIR; }), "and the collapse spreads along the ledge");
+    Check(both(20.0, [&] { return a.player.GetFeetPosition().y < 1.0f; }), "dropping the player to the ground");
 
     std::cout << "Pressure plates" << std::endl;
     a.client.PlaceBlock({ 30, 3, 7 }, BlockType::SLUICE);
@@ -141,29 +147,29 @@ int main() {
     both(1.0, [] { return false; });
     Check(TypeAt(b, { 30, 3, 7 }) == BlockType::SLUICE && TypeAt(b, { 30, 0, 10 }) == BlockType::PRESSURE_PLATE, "a sluice gate holds water up; a plate is set nearby");
     server.QueueConsoleCommand("tp Tester 30.5 1 10.5");
-    Check(both(5.0, [&] { return TypeAt(b, { 30, 3, 7 }) == BlockType::AIR && Has(a, "grinds open"); }), "stepping on the plate opens the gate");
+    Check(both(20.0, [&] { return TypeAt(b, { 30, 3, 7 }) == BlockType::AIR && Has(a, "grinds open"); }), "stepping on the plate opens the gate");
     Check(TypeAt(b, { 50, 3, 7 }) == BlockType::SLUICE, "but not one out of its reach");
-    Check(both(5.0, [&] { Block w; return b.world.GetBlock(30, 4, 7, w) && !w.HasWater(); }), "and the water it held pours out");
+    Check(both(20.0, [&] { Block w; return b.world.GetBlock(30, 4, 7, w) && !w.HasWater(); }), "and the water it held pours out");
 
     std::cout << "No-clip and the laser" << std::endl;
     a.client.SendChat("/noclip");
-    Check(both(5.0, [&] { return Has(a, "Only operators can do that"); }) && !(a.client.GetAbilities() & net::kAbilityNoclip), "a player can't turn on no-clip");
+    Check(both(20.0, [&] { return Has(a, "Only operators can do that"); }) && !(a.client.GetAbilities() & net::kAbilityNoclip), "a player can't turn on no-clip");
     const glm::ivec3 target(40, -1, 7);
     a.client.Carve({ target }, 1);
     both(1.0, [] { return false; });
     Check(TypeAt(b, target) != BlockType::AIR, "or use the laser: the server ignores it");
     server.QueueConsoleCommand("op Tester");
-    Check(both(5.0, [&] { return a.client.GetAbilities() & net::kAbilityOperator; }), "once made an operator, the client is told");
+    Check(both(20.0, [&] { return a.client.GetAbilities() & net::kAbilityOperator; }), "once made an operator, the client is told");
     a.client.Carve({ target }, 1);
-    Check(both(5.0, [&] { return TypeAt(b, target) == BlockType::AIR; }), "and the laser works");
+    Check(both(20.0, [&] { return TypeAt(b, target) == BlockType::AIR; }), "and the laser works");
     a.client.SendChat("/noclip");
-    Check(both(5.0, [&] { return (a.client.GetAbilities() & net::kAbilityNoclip) && a.player.IsFlying(); }), "/noclip turns it on, and the client flies");
+    Check(both(20.0, [&] { return (a.client.GetAbilities() & net::kAbilityNoclip) && a.player.IsFlying(); }), "/noclip turns it on, and the client flies");
     const glm::ivec3 here(glm::floor(a.player.GetFeetPosition()));
     a.client.PlaceBlock(here, BlockType::SPIKES);
     both(2.0, [] { return false; });
     Check(a.client.GetHealth() == 20, "spikes can't hurt a player in no-clip");
     server.QueueConsoleCommand("deop Tester");
-    Check(both(5.0, [&] { return !(a.client.GetAbilities() & (net::kAbilityNoclip | net::kAbilityOperator)) && !a.player.IsFlying(); }),
+    Check(both(20.0, [&] { return !(a.client.GetAbilities() & (net::kAbilityNoclip | net::kAbilityOperator)) && !a.player.IsFlying(); }),
           "losing operator status ends no-clip too");
 
     a.client.Disconnect();

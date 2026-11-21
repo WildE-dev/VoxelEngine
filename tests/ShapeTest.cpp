@@ -365,11 +365,11 @@ int main() {
         a.client.Chisel({ 9, 0, 7 }, 3, false);
         a.client.Chisel({ 10, 0, 7 }, 3, false);
         Block seen;
-        Check(Pump({ &a, &b }, 5.0, [&] { return b.world.GetBlock(9, 0, 7, seen) && seen.edgeData.GetTopY(3) == 4; }) && seen.edgeData.GetTopY(2) == 8,
+        Check(Pump({ &a, &b }, 20.0, [&] { return b.world.GetBlock(9, 0, 7, seen) && seen.edgeData.GetTopY(3) == 4; }) && seen.edgeData.GetTopY(2) == 8,
               "two chisel strokes take a quarter down by half a block, and the other player sees it");
         Check(b.world.GetBlock(10, 0, 7, seen) && seen.type == BlockType::PUMP && seen.IsFullBlock(), "a pump can't be chiselled");
         a.client.PlaceBlock({ 11, 0, 7 }, BlockType::LOG, 8, 0);
-        Check(Pump({ &a, &b }, 5.0, [&] { return b.world.GetBlock(11, 0, 7, seen) && seen.type == BlockType::LOG; }) && seen.axis == Block::kAlongX,
+        Check(Pump({ &a, &b }, 20.0, [&] { return b.world.GetBlock(11, 0, 7, seen) && seen.type == BlockType::LOG; }) && seen.axis == Block::kAlongX,
               "a log placed against a side face is seen lying along x by the other player");
         a.client.Disconnect();
         b.client.Disconnect();

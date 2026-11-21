@@ -21,6 +21,9 @@ public:
     float GetYaw() const { return yaw; }
     void SetYaw(float degrees);
     void SetLook(float yawDegrees, float pitchDegrees);
+    // Vertical field of view (degrees) and mouse sensitivity (degrees per pixel).
+    void SetFov(float degrees) { fov = degrees; }
+    void SetSensitivity(float degreesPerPixel) { sensitivity = degreesPerPixel; }
 
 private:
     void UpdateFront();
@@ -32,4 +35,5 @@ private:
     bool firstMouse = true;
     double lastX = 0.0, lastY = 0.0;
     float pitch = 0.0f, yaw = -90.0f;
+    float fov = 45.0f, sensitivity = 0.1f;
 };

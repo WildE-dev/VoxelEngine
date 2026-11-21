@@ -63,6 +63,7 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
     shader.SetUniform("projection", projection);
     glBindVertexArray(vao);
 
+    shader.SetUniform("glow", 0.0f);
     auto box = [&](const glm::mat4& model, const glm::vec3& color) {
         shader.SetUniform("model", model);
         shader.SetUniform("color", color);
@@ -80,5 +81,67 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
         box(glm::scale(head, glm::vec3(kHead)), p.color * 1.1f);
         // Visor on the front (+x in the head's frame).
         box(glm::scale(glm::translate(head, glm::vec3(kHead * 0.5f, 0.03f, 0)), glm::vec3(0.04f, kHead * 0.3f, kHead * 0.8f)), glm::vec3(0.1f));
+    }
+}
+
+void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<CreatureModel>& creatures,
+                                 float time) {
+    if (creatures.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    glBindVertexArray(vao);
+    const glm::vec3 kRed(0.9f, 0.15f, 0.1f);
+    shader.SetUniform("glow", 0.0f);
+    for (const auto& c : creatures) {
+        auto tint = [&](const glm::vec3& color) { return c.hurt ? glm::mix(color, kRed, 0.55f) : color; };
+        // A box of `size` centred at `centre` in the creature's frame (+x forward).
+        const glm::mat4 base = glm::rotate(glm::translate(glm::mat4(1.0f), c.feet), -glm::radians(c.yaw), glm::vec3(0, 1, 0));
+        auto box = [&](const glm::mat4& frame, const glm::vec3& centre, const glm::vec3& size, const glm::vec3& color) {
+            shader.SetUniform("model", glm::scale(glm::translate(frame, centre), size));
+            shader.SetUniform("color", tint(color));
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        };
+        // A limb hanging from `pivot`, swung `angle` radians forward and back.
+        auto limb = [&](const glm::vec3& pivot, float angle, const glm::vec3& size, const glm::vec3& color) {
+            const glm::mat4 frame = glm::rotate(glm::translate(base, pivot), angle, glm::vec3(0, 0, 1));
+            box(frame, glm::vec3(0.0f, -size.y * 0.5f, 0.0f), size, color);
+        };
+        const float stride = std::min(1.0f, c.speed / 2.0f);
+        const float swing = std::sin(time * (4.0f + c.speed * 2.0f)) * 0.6f * stride;
+
+        if (c.type == 0) { // Deer
+            const glm::vec3 coat(0.58f, 0.40f, 0.24f), dark(0.36f, 0.24f, 0.14f), pale(0.88f, 0.82f, 0.70f);
+            box(base, { 0.0f, 0.88f, 0.0f }, { 1.1f, 0.48f, 0.46f }, coat);           // body
+            for (int i = 0; i < 4; i++) {
+                const float x = i < 2 ? 0.4f : -0.4f, z = (i % 2) ? 0.15f : -0.15f;
+                limb({ x, 0.66f, z }, ((i == 0 || i == 3) ? swing : -swing), { 0.12f, 0.66f, 0.12f }, dark);
+            }
+            const glm::mat4 neck = glm::rotate(glm::translate(base, { 0.5f, 1.02f, 0.0f }), glm::radians(-30.0f), glm::vec3(0, 0, 1));
+            box(neck, { 0.0f, 0.2f, 0.0f }, { 0.2f, 0.45f, 0.2f }, coat);              // neck
+            box(base, { 0.78f, 1.38f, 0.0f }, { 0.38f, 0.24f, 0.24f }, coat);          // head
+            box(base, { 0.98f, 1.34f, 0.0f }, { 0.06f, 0.1f, 0.1f }, glm::vec3(0.1f)); // nose
+            for (float z : { -0.08f, 0.08f }) {
+                box(base, { 0.72f, 1.62f, z * 1.4f }, { 0.05f, 0.28f, 0.05f }, pale);  // antlers
+                box(base, { 0.78f, 1.68f, z * 2.6f }, { 0.05f, 0.05f, 0.18f }, pale);
+            }
+            box(base, { -0.58f, 0.98f, 0.0f }, { 0.08f, 0.14f, 0.12f }, pale);         // tail
+        }
+        else { // Ghoul
+            const glm::vec3 skin(0.46f, 0.56f, 0.42f), rags(0.28f, 0.26f, 0.30f), eyes(1.0f, 0.85f, 0.2f);
+            for (float z : { -0.12f, 0.12f })
+                limb({ 0.0f, 0.82f, z }, z < 0.0f ? swing : -swing, { 0.2f, 0.82f, 0.2f }, rags); // legs
+            box(base, { 0.0f, 1.12f, 0.0f }, { 0.3f, 0.62f, 0.5f }, rags);             // body
+            box(base, { 0.02f, 1.62f, 0.0f }, { 0.4f, 0.4f, 0.4f }, skin);             // head
+            shader.SetUniform("glow", 1.0f);
+            for (float z : { -0.09f, 0.09f })
+                box(base, { 0.23f, 1.66f, z }, { 0.02f, 0.06f, 0.08f }, eyes);         // eyes, glowing
+            shader.SetUniform("glow", 0.0f);
+            for (float z : { -0.33f, 0.33f }) {
+                // Arms reaching forward, swaying.
+                const glm::mat4 arm = glm::rotate(glm::translate(base, { 0.0f, 1.36f, z }), (z < 0.0f ? -swing : swing) * 0.3f, glm::vec3(0, 1, 0));
+                box(arm, { 0.3f, 0.0f, 0.0f }, { 0.62f, 0.16f, 0.16f }, skin);
+            }
+        }
     }
 }

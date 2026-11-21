@@ -1,0 +1,192 @@
+// Creatures over real connections. Checks that
+//  - /summon brings deer and ghouls, the players near them see them, and they fall
+//    onto the ground,
+//  - a ghoul comes for a survival player and hurts them, and leaves creative players
+//    alone,
+//  - hitting a deer knocks it back and sends it running, enough hits kill it, and
+//    hits out of reach or too fast don't count,
+//  - ghouls burn up in daylight under the open sky,
+//  - /creatures counts and clears them,
+//  - in a normal world, deer turn up by themselves on grass, and ghouls come out at
+//    night.
+#include <chrono>
+#include <cstdlib>
+#include <functional>
+#include <iostream>
+#include <string>
+#include <thread>
+
+#include "client/Client.h"
+#include "client/ClientWorld.h"
+#include "server/Server.h"
+
+namespace {
+
+int failures = 0;
+
+void Check(bool ok, const std::string& what) {
+    std::cout << (ok ? "  PASS  " : "  FAIL  ") << what << std::endl;
+    if (!ok) failures++;
+}
+
+// A client that stays wherever the server puts it.
+struct TestClient {
+    ClientWorld world;
+    Client client{ world };
+    glm::vec3 feet{ 0.0f };
+    bool joined = false;
+    void Update() {
+        client.Poll();
+        if (!joined && client.IsWelcomed()) joined = true, feet = client.GetSpawn();
+        if (auto c = client.TakeCorrection()) feet = *c;
+        if (!joined) return;
+        world.Update(feet + glm::vec3(0.0f, 1.62f, 0.0f));
+        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround);
+    }
+    const Client::Creature* Find(CreatureType type) const {
+        static thread_local std::vector<Client::Creature> seen;
+        seen = client.GetCreatures();
+        for (const auto& c : seen)
+            if (c.type == type) return &c;
+        return nullptr;
+    }
+};
+
+bool Pump(std::initializer_list<TestClient*> clients, double seconds, const std::function<bool()>& done) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
+    while (std::chrono::steady_clock::now() < deadline) {
+        for (auto* c : clients) c->Update();
+        if (done()) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    return done();
+}
+
+bool Has(const TestClient& c, const std::string& text) {
+    for (const auto& line : c.client.GetChat())
+        if (line.text.find(text) != std::string::npos) return true;
+    return false;
+}
+
+Server::Options BaseOptions(TerrainGenerator::Type type) {
+    Server::Options options;
+    options.bindHost = "127.0.0.1";
+    options.port = 0;
+    options.log = false;
+    options.worldType = type;
+    options.weather = Server::Options::Weather::Clear;
+    options.defaultMode = net::GameMode::Survival;
+    options.dayLengthSeconds = 100000.0f; // the clock stays where /time puts it
+    return options;
+}
+
+} // namespace
+
+int main() {
+    {
+        Server server;
+        if (!server.Start(BaseOptions(TerrainGenerator::Type::Empty))) return EXIT_FAILURE;
+        server.RunInBackground();
+        TestClient a, b;
+        std::string error;
+        a.client.Connect("127.0.0.1", server.GetPort(), "Hunter", error);
+        b.client.Connect("127.0.0.1", server.GetPort(), "Watcher", error);
+        auto both = [&](double s, const std::function<bool()>& done) { return Pump({ &a, &b }, s, done); };
+        auto wait = [&](double s) { both(s, [] { return false; }); };
+        Check(both(20.0, [&] { return a.joined && b.joined; }), "two players join an empty world");
+        server.QueueConsoleCommand("time midnight"); // no burning for now
+        server.QueueConsoleCommand("gamemode creative Watcher");
+        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+        server.QueueConsoleCommand("tp Watcher 30.5 0 8.5");
+        both(20.0, [&] { return b.client.IsCreative(); });
+        wait(0.5);
+        Check(a.client.GetCreatures().empty(), "an empty world has no creatures of its own");
+
+        std::cout << "Summoning" << std::endl;
+        server.QueueConsoleCommand("summon deer 12.5 3 8.5");
+        Check(both(20.0, [&] { return a.Find(CreatureType::Deer) && b.Find(CreatureType::Deer); }), "/summon brings a deer, and both players see it");
+        Check(both(20.0, [&] { const auto* d = a.Find(CreatureType::Deer); return d && std::abs(d->feet.y) < 0.05f; }), "it falls onto the ground");
+
+        std::cout << "Fighting" << std::endl;
+        const uint16_t deer = a.Find(CreatureType::Deer)->id;
+        server.QueueConsoleCommand("tp Hunter 30.5 0 30.5"); // far away
+        wait(1.0);
+        a.client.Attack(deer, Tool::Axe);
+        wait(1.0);
+        Check(a.client.GetChat().empty() || !Has(a, "defeated"), "a hit from 20 blocks away doesn't count");
+        const auto* d = a.Find(CreatureType::Deer);
+        server.QueueConsoleCommand("tp Hunter " + std::to_string(d->feet.x - 2.0f) + " 0 " + std::to_string(d->feet.z));
+        both(20.0, [&] { return glm::distance(a.feet, glm::vec3(d->feet.x - 2.0f, 0.0f, d->feet.z)) < 0.5f; });
+        wait(0.5);
+        const glm::vec3 hitAt = a.Find(CreatureType::Deer)->feet;
+        a.client.Attack(deer, Tool::Axe);
+        Check(both(20.0, [&] { const auto* c = a.Find(CreatureType::Deer); return c && c->hurt; }), "a hit in reach lands: the deer flashes red");
+        Check(both(20.0, [&] { const auto* c = a.Find(CreatureType::Deer); return c && c->feet.x > hitAt.x + 3.0f; }), "and it runs off, away from the hunter");
+        a.client.Attack(deer, Tool::Axe); // too soon after the first
+        wait(0.6);
+        Check(a.Find(CreatureType::Deer) != nullptr, "two hits at once count as one");
+        const auto* runner = a.Find(CreatureType::Deer);
+        server.QueueConsoleCommand("tp Hunter " + std::to_string(runner->feet.x - 1.5f) + " " + std::to_string(runner->feet.y) + " " +
+                                   std::to_string(runner->feet.z));
+        bool gone = false;
+        for (int i = 0; i < 10 && !gone; i++) {
+            wait(0.5);
+            const auto* c = a.Find(CreatureType::Deer);
+            if (!c) { gone = true; break; }
+            server.QueueConsoleCommand("tp Hunter " + std::to_string(c->feet.x - 1.5f) + " " + std::to_string(c->feet.y) + " " + std::to_string(c->feet.z));
+            wait(0.4);
+            a.client.Attack(deer, Tool::Axe);
+            gone = both(1.0, [&] { return a.Find(CreatureType::Deer) == nullptr; });
+        }
+        Check(gone && both(5.0, [&] { return Has(a, "You defeated a deer"); }), "a second axe hit (8 health, 5 a hit) finishes it");
+
+        std::cout << "Ghouls" << std::endl;
+        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+        server.QueueConsoleCommand("tp Watcher 8.5 0 40.5");
+        wait(1.0);
+        server.QueueConsoleCommand("summon ghoul 16.5 0 8.5");
+        Check(both(20.0, [&] { return a.Find(CreatureType::Ghoul) != nullptr; }), "a ghoul is summoned 8 blocks from the hunter");
+        Check(both(20.0, [&] { return a.client.GetHealth() < 20; }), "it comes for the hunter (in survival) and hurts them");
+        server.QueueConsoleCommand("gamemode creative Hunter");
+        both(20.0, [&] { return a.client.IsCreative(); });
+        const int health = a.client.GetHealth();
+        wait(3.0);
+        Check(a.client.GetHealth() >= health, "a creative player is left alone");
+        server.QueueConsoleCommand("time noon");
+        Check(both(20.0, [&] { return a.Find(CreatureType::Ghoul) == nullptr; }), "at noon under the open sky the ghoul burns up");
+
+        server.QueueConsoleCommand("time midnight");
+        server.QueueConsoleCommand("summon ghoul 20 0 20");
+        server.QueueConsoleCommand("summon deer 22 0 20");
+        server.QueueConsoleCommand("creatures");
+        wait(1.0);
+        server.QueueConsoleCommand("creatures clear");
+        Check(both(20.0, [&] { return a.client.GetCreatures().empty(); }), "/creatures clear removes them all");
+        a.client.Disconnect();
+        b.client.Disconnect();
+        Pump({ &a, &b }, 0.3, [] { return false; });
+        server.Stop();
+    }
+
+    std::cout << "Natural spawning" << std::endl;
+    {
+        Server server;
+        if (!server.Start(BaseOptions(TerrainGenerator::Type::Normal))) return EXIT_FAILURE;
+        server.RunInBackground();
+        TestClient a;
+        std::string error;
+        a.client.Connect("127.0.0.1", server.GetPort(), "Wanderer", error);
+        Check(Pump({ &a }, 30.0, [&] { return a.joined; }), "a player joins a normal world (forest at spawn)");
+        server.QueueConsoleCommand("gamemode creative Wanderer");
+        server.QueueConsoleCommand("time noon");
+        Check(Pump({ &a }, 60.0, [&] { return a.Find(CreatureType::Deer) != nullptr; }), "deer turn up by themselves around the player");
+        server.QueueConsoleCommand("time midnight");
+        Check(Pump({ &a }, 60.0, [&] { return a.Find(CreatureType::Ghoul) != nullptr; }), "ghouls come out at night");
+        a.client.Disconnect();
+        Pump({ &a }, 0.3, [] { return false; });
+        server.Stop();
+    }
+
+    std::cout << (failures ? "CREATURE TEST FAILED (" : "ALL CREATURE CHECKS PASSED (") << failures << " failures)" << std::endl;
+    return failures ? EXIT_FAILURE : EXIT_SUCCESS;
+}
