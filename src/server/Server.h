@@ -404,6 +404,7 @@ private:
     std::unordered_map<glm::ivec3, Drill, Coords::IVec3Hash> drills;
     std::unordered_map<glm::ivec3, Compressor, Coords::IVec3Hash> compressors;
     std::unordered_map<glm::ivec3, Power::DrillState, Coords::IVec3Hash> pumpStates;
+    std::unordered_map<glm::ivec3, Power::DrillState, Coords::IVec3Hash> pistonStates; // Idle (in), Working (out), NoPressure, Blocked
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> air; // air held in each part of a network
     std::vector<AirNetwork> networks;                             // as of the last update
     std::unordered_map<glm::ivec3, int, Coords::IVec3Hash> networkOf; // each part's network, as of the last update
@@ -416,6 +417,14 @@ private:
     // A drill's turn to dig (it has the air): digs the next block under it into a chest
     // beside it. Returns whether it dug.
     bool DrillDig(const glm::ivec3& pos, Drill& drill);
+    // A piston pushing out (the blocks in front of it, up to Power::kPushLimit, a block
+    // further, and its head into the space): whether it could. And pulling back (the
+    // block in front of its head with it).
+    bool PistonPush(const glm::ivec3& pos, const Block& piston);
+    void PistonPull(const glm::ivec3& pos, const Block& piston);
+    // Whether a piston can move this block (things with a state of their own kept by
+    // the server, machinery and liquids can't be).
+    bool Movable(const glm::ivec3& pos, const Block& b) const;
     void SendMachines();
 
     // Signals (world/Signals.h; the code is in Signals.cpp).
@@ -428,12 +437,17 @@ private:
     std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> plateSignal; // plates sending until then
     double nextSignalUpdate = 0.0;
     void UpdateSignals();
+    // Whether a sensor senses what it's for (world/Signals.h).
+    bool Senses(const glm::ivec3& pos, const Signals::Config& c) const;
     void HandleConfigureSignal(ClientState& client, const net::SignalInfo& m);
     net::SignalInfo SignalInfoAt(const glm::ivec3& pos) const;
     void BroadcastSignal(const glm::ivec3& pos);
     // Shuts an open sluice gate, moving the water in its cell out of the way (false:
     // nowhere for it to go yet).
     bool CloseSluice(const glm::ivec3& pos);
+    // Moves the water out of a cell into the cells above and beside it that have room
+    // (none of it is lost): whether it all went (if not, nothing moves).
+    bool PushWaterAside(const glm::ivec3& pos);
     void HandleInspect(ClientState& client, const glm::ivec3& pos);
 
     double lastCreatureTime = 0.0;

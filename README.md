@@ -903,6 +903,17 @@ The machines:
   so a pump can keep its own wheels turning and lift plenty more besides. Pumps take
   only the air above the running pressure that the drills on their network don't need
   for their next block.
+- The **piston** pushes the way you were looking when you placed it (level, up or
+  down). Give it a channel (see [Signals](#signals)) and join it to air pipes: while
+  the channel is on it pushes the row of blocks in front of it (up to 12) a block on,
+  for 4 units of air, and holds them out with its head, a plate on a rod. A row ending
+  in water pushes the water up or aside (it won't push if there's nowhere for the
+  water to go), and plants at the end are crushed. It won't move chests, beds, doors,
+  signs, crops, ladders, signal blocks or machinery. When the channel goes off it
+  pulls its head back, bringing the block in front of the head with it, so a piston
+  makes a door out of any block. Breaking the piston takes its head too; the head
+  itself gives nothing back. A **pressure sensor** (see [Signals](#signals)) joins
+  the pipes too, and sends while the pressure is high enough.
 
 Look at a wheel, compressor, pump or drill to see how it's doing under the
 crosshair, and right-click any part (wheel, shaft, compressor, pipe, pump or drill)
@@ -914,7 +925,8 @@ pressure, pipes and working machines.
 Recipes: a water wheel from 6 planks and a log; 3 shafts from a log; a compressor
 from an iron ingot and 2 stone; 4 air pipes from a stone and a quarter of an iron
 ingot; an air tank from 2 iron ingots and half a glass; a valve from half an iron
-ingot and a stone; a drill from 2 iron ingots and 2 stone.
+ingot and a stone; a drill from 2 iron ingots and 2 stone; a piston from a planks, a
+stone and half an iron ingot.
 
 The server runs it all four times a second (`Server::UpdatePower`,
 `src/server/Power.cpp`; the rules and numbers are in `src/world/Power.h`): the water
@@ -952,23 +964,30 @@ channel is heard by everything listening to it within **64 blocks**.
 | **Signal lamp** | lights while its channel is on |
 | **Valve** | opens while its channel is on (with no channel, right-click opens and shuts it); see [Air power](#air-power) |
 | **Sluice gate** | with a channel, opens out of the way while it's on, letting water through, and closes when it's off, pushing any water in its cell up or aside (it waits if there's nowhere for it to go); with none, it stays shut |
+| **Piston** | pushes out while its channel is on and pulls back when it's off; runs on air (see [Air power](#air-power)) |
+| **Water sensor** | sends while water touches it (an eighth of a block or more, on any side) |
+| **Pressure sensor** | joined to air pipes, sends while their pressure is at least its setting (a percentage; 0 for any air at all) |
+| **Daylight sensor** | sends by day, while the sky is open above it |
+| **Player sensor** | sends while a player is within its range (4 blocks unless set, up to 16) |
 
-Placing a lever, a logic gate or a signal lamp opens a small window to set its
-channels; right-click a gate or a lamp (with an empty hand or a tool), or crouch and
+Placing a lever, a logic gate, a signal lamp, a piston or a sensor opens a small
+window to set its channels (and a pressure or player sensor's setting); right-click a gate or a lamp (with an empty hand or a tool), or crouch and
 right-click any signal block
-(lever, plate, gate, lamp, valve or sluice gate), to change them. Looking at one shows
+(lever, plate, gate, lamp, valve, sluice gate, piston or sensor), to change them. Looking at one shows
 its channels (and a lever's, gate's or valve's state) under the crosshair. Gates work
 out their answer from what they heard and send it from the next update, a tenth of
 a second later, so a loop of gates steps along instead of locking up.
 
 Recipes: 2 levers from a quarter of a plank and a quarter of a stone; a logic gate
 from a stone, a quarter of an iron ingot and a quarter of a glass; a signal lamp from
-a glass and a quarter of a coal.
+a glass and a quarter of a coal. Sensors each take a stone (a planks for the daylight
+sensor) and a quarter of an iron ingot, with a quarter of sand (water), glass
+(pressure), coal (player) or half a glass (daylight).
 
 The server runs it ten times a second (`Server::UpdateSignals`,
 `src/server/Signals.cpp`; the rules are in `src/world/Signals.h`), keeps every
 block's channels and saves them with the world (world format 11), and tells everyone
-about each block's channels and state as they change (`SignalInfo`, protocol 36).
+about each block's channels and state as they change (`SignalInfo`, protocol 37).
 `SignalTest` checks:
 
 - a lamp lights and goes out with a lever on its channel, and one on another channel
@@ -982,6 +1001,10 @@ about each block's channels and state as they change (`SignalInfo`, protocol 36)
 - a sluice gate on a channel opens, and closes again pushing the water in its cell out
   beside it;
 - a pressure plate lights its lamp while it's stood on, and it goes out after;
+- a piston with air pushes two stones out and pulls the first back, one without air
+  stays put, a chest in the row stops it, and breaking a piston takes its head;
+- player, water, pressure and daylight sensors each come on and go off when they
+  should;
 - (and `DungeonTest`, that every flood chamber's plate sets a latch gate in its
   ceiling that its nine sluice gates listen to, and a lever resets it, each on a
   channel of its own: the server wires them up the first time the plate is stepped
@@ -1172,6 +1195,7 @@ ones you're allowed to use:
 | `/gamemode <creative\|survival> [player]` | operators | change a game mode (also `/gm`, `c`/`s`) |
 | `/give <block> [count] [player]`, `/give <tool> [player]` | operators | give survival blocks (`count` in blocks, default 64) or a tool |
 | `/fill <x1 y1 z1> <x2 y2 z2> <block>` | operators | fill a box with a block (`air` clears it; up to 32768 cells) |
+| `/pressurise <x y z>` | operators | fill the air network with a pipe or machine there with air |
 | `/summon <deer\|ghoul> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
 | `/creatures [clear]` | operators | count the creatures, or remove them all |
 | `/pvp`, `/food` | everyone | whether players can hurt each other; how fed you are |

@@ -28,6 +28,13 @@
 //       kDrillInterval seconds for kDrillAir, up to kDrillDepth deep, putting what it
 //       digs into a chest touching it. It stops at water, at a chest or a machine,
 //       and at anything it can't dig.
+//     . A piston (facing one of six ways; see Signals.h) pushes out while its
+//       channel is on, for kPistonAir: the blocks in a row in front of it (up to
+//       kPushLimit) each move a block on, and its head fills the space. A row ending
+//       in water pushes the water aside (up or sideways, never lost), and plants at
+//       the end are crushed. It won't move chests, beds, doors, signs, signal blocks,
+//       machinery or anything unloaded. When the channel goes off it pulls its head
+//       back, bringing the block in front of the head with it (free).
 //     . A pump (see Water.h) lifts water: kPumpAir for every unit of water raised a
 //       block (at least a block, even on the level). It's cheap: the air a wheel
 //       makes from water pouring past it lifts kPumpGain times that water as high as
@@ -61,12 +68,14 @@ constexpr int kDrillDepth = 32;               // blocks below the drill it reach
 constexpr float kPumpGain = 3.0f;
 constexpr float kPumpAir = kWheelMaxAir / (kWheelFullFlow * 3.0f * kPumpGain);
 constexpr int kMaxNetwork = 4096;             // pipes and machines in one network, at most
+constexpr float kPistonAir = 4.0f;            // air for each push (pulling back is free)
+constexpr int kPushLimit = 12;                // blocks a piston can push in a row, at most
 
 // Parts of an air network (wheels and shafts aren't: they turn compressors).
 // (A valve is part of the network only while it's open: shut, it divides it.)
 inline bool IsAirPart(BlockType t) {
     return t == BlockType::AIR_PIPE || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
-           t == BlockType::VALVE_OPEN;
+           t == BlockType::VALVE_OPEN || t == BlockType::PISTON || t == BlockType::PRESSURE_SENSOR;
 }
 // How much air a part holds when full.
 inline float CapacityOf(BlockType t) { return t == BlockType::AIR_TANK ? kAirPerTank : kAirPerCell; }
@@ -75,7 +84,8 @@ inline bool IsPart(BlockType t) { return IsAirPart(t) || t == BlockType::WATER_W
 // What the server keeps track of: wheels, compressors and machines (not pipes or
 // shafts, which it finds from them).
 inline bool IsMachine(BlockType t) {
-    return t == BlockType::WATER_WHEEL || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK;
+    return t == BlockType::WATER_WHEEL || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
+           t == BlockType::PISTON || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR;
 }
 
 // Whether a pipe (drawn as a thin tube) reaches across to this neighbour: water pipes

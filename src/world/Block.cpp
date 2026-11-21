@@ -297,6 +297,13 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* AIR_TANK    */ {{ "air_tank_top", "air_tank_top", "air_tank_side", "air_tank_side", "air_tank_side", "air_tank_side" }},
     /* VALVE       */ {{ "valve", "valve", "valve", "valve", "valve", "valve" }},
     /* VALVE_OPEN  */ {{ "valve_open", "valve_open", "valve_open", "valve_open", "valve_open", "valve_open" }},
+    // (Facing blocks: "top" is the face they point to, "bottom" the back, "front" the sides.)
+    /* PISTON      */ {{ "piston_face", "piston_back", "piston_side", "piston_side", "piston_side", "piston_side" }},
+    /* PISTON_HEAD */ {{ "piston_face", "piston_face", "piston_rod", "piston_rod", "piston_rod", "piston_rod" }},
+    /* WATER_SENSOR */ {{ "water_sensor", "sensor_bottom", "water_sensor", "water_sensor", "water_sensor", "water_sensor" }},
+    /* PRESSURE_SENSOR */ {{ "pressure_sensor", "sensor_bottom", "pressure_sensor", "pressure_sensor", "pressure_sensor", "pressure_sensor" }},
+    /* DAYLIGHT_SENSOR */ {{ "daylight_sensor", "sensor_bottom", "sensor_side", "sensor_side", "sensor_side", "sensor_side" }},
+    /* PLAYER_SENSOR */ {{ "player_sensor", "sensor_bottom", "player_sensor", "player_sensor", "player_sensor", "player_sensor" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -329,6 +336,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "stone_brick", "mossy_brick", "spikes", "crumbling_brick", "pressure_plate", "sluice", "snow", "dry_grass", "lush_grass", "snowy_grass",
     "pine_leaves", "cactus", "dead_bush", "ice", "pebbles", "planks", "glass", "raw_venison", "cooked_venison", "hide", "chest", "bed", "coal_ore", "iron_ore", "coal", "iron_ingot", "seeds", "crop", "ripe_wheat", "wheat", "bread", "ladder", "door", "door_open", "arrow", "raw_fish", "cooked_fish", "campfire", "sign", "tnt", "tnt_lit", "boat", "sapling", "pine_sapling",
     "water_wheel", "air_pipe", "drill", "shaft", "compressor", "lever", "lever_on", "logic_gate", "signal_lamp", "signal_lamp_on", "air_tank", "valve", "valve_open",
+    "piston", "piston_head", "water_sensor", "pressure_sensor", "daylight_sensor", "player_sensor",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");
@@ -480,8 +488,9 @@ void Block::AddBoxVertices(std::vector<uint32_t>& vertices, int x, int y, int z,
     for (int f = 0; f < kFaceCount; f++) {
         if (skip & (1u << f)) continue;
         const Face face = static_cast<Face>(f);
-        const int texture = face == Face::Top ? textures.top : face == Face::Bottom ? textures.bottom : face == Face::Right ? textures.right
-                          : face == Face::Left ? textures.left : face == Face::Back ? textures.back : textures.front;
+        int texture = face == Face::Top ? textures.top : face == Face::Bottom ? textures.bottom : face == Face::Right ? textures.right
+                    : face == Face::Left ? textures.left : face == Face::Back ? textures.back : textures.front;
+        if (IsFacingType(type)) texture = f == axis % 6 ? textures.top : f == ((axis % 6) ^ 1) ? textures.bottom : textures.front;
         const glm::vec3 normal(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]);
         // Corners as seen from outside: bottom left, bottom right, top left, top right.
         glm::vec3 c[4];
@@ -518,7 +527,14 @@ void Block::AddBoxVertices(std::vector<uint32_t>& vertices, int x, int y, int z,
 
 void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading) const {
     auto v = GetFaceVertices(face, edgeData, x, y, z, GetTextureData(type));
-    if (axis != kUpright) OrientGrain(v.data(), static_cast<int>(v.size()), face, GrainAxis(), GetTextureData(type));
+    if (IsFacingType(type)) {
+        // The face it points to, its back, or a side.
+        const TextureData t = GetTextureData(type);
+        const int f = static_cast<int>(face), towards = axis % 6;
+        const int texture = f == towards ? t.top : f == (towards ^ 1) ? t.bottom : t.front;
+        for (auto& vertex : v) vertex.textureIndex = texture;
+    }
+    else if (axis != kUpright) OrientGrain(v.data(), static_cast<int>(v.size()), face, GrainAxis(), GetTextureData(type));
 
     // Work out which face corner each vertex sits on. Horizontal coordinates are
     // always 0 or 1 within the block; vertical ones may be partial heights, so any
@@ -770,7 +786,7 @@ void Block::Shrink() {
 }
 
 int Block::ResourceUnits() const {
-    if (IsAir() || IsLiquid()) return 0;
+    if (IsAir() || IsLiquid() || type == BlockType::PISTON_HEAD) return 0;
     if (type == BlockType::PEBBLES) return kPebbleUnits;
     if (IsFullBlock() || !CanChisel()) return kUnitsPerBlock;
     if (IsStepped()) {
@@ -801,6 +817,12 @@ bool Block::CanChisel() const {
     case BlockType::AIR_TANK:
     case BlockType::VALVE:
     case BlockType::VALVE_OPEN:
+    case BlockType::PISTON:
+    case BlockType::PISTON_HEAD:
+    case BlockType::WATER_SENSOR:
+    case BlockType::PRESSURE_SENSOR:
+    case BlockType::DAYLIGHT_SENSOR:
+    case BlockType::PLAYER_SENSOR:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
     case BlockType::GLASS:

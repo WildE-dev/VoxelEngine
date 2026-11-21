@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 36;
+constexpr uint32_t kProtocolVersion = 37;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -238,7 +238,7 @@ struct EditPlace {
     glm::ivec3 pos{0};
     BlockType type = BlockType::AIR;
     uint8_t height = 8; // eighths: a slab lower than full (blocks that can be shaped)
-    uint8_t faceAxis = 1; // axis of the face it was placed against (0 x, 1 y, 2 z): logs lie along it
+    uint8_t faceAxis = 1; // axis of the face it was placed against (0 x, 1 y, 2 z): logs lie along it; a facing block's Face (0..5)
 };
 
 // Game modes. Creative: build with anything, nothing hurts you. Survival: blocks cost

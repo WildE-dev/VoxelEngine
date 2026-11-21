@@ -51,7 +51,9 @@ void Server::HandleConfigureSignal(ClientState& client, const net::SignalInfo& m
     s.config.kind = kind;
     s.config.mode = static_cast<Signals::Mode>(std::min<uint8_t>(m.mode, static_cast<uint8_t>(Signals::Mode::Count) - 1));
     s.config.a = Signals::Listens(kind) ? m.a : 0;
-    s.config.b = kind == Signals::Kind::Gate ? m.b : 0;
+    s.config.b = kind == Signals::Kind::Gate || Signals::HasSetting(kind) ? m.b : 0;
+    if (kind == Signals::Kind::PressureSensor) s.config.b = std::min<uint8_t>(s.config.b, 100);
+    if (kind == Signals::Kind::PlayerSensor) s.config.b = std::min<uint8_t>(s.config.b, Signals::kMaxPlayerRange);
     s.config.out = Signals::Sends(kind) ? m.out : 0;
     if (kind == Signals::Kind::Gate) s.on = false;
     BroadcastSignal(m.pos);
@@ -62,9 +64,17 @@ bool Server::CloseSluice(const glm::ivec3& pos) {
     if (!world->GetBlock(pos.x, pos.y, pos.z, cell)) return false;
     if (cell.type == BlockType::SLUICE) return true;
     if (!cell.IsAir() && !cell.IsLiquid()) return false; // (something's in the way)
-    int water = cell.WaterVolume();
     // The water goes up first, then to the sides, wherever there's room; only once it
     // has all gone does the gate shut (water is never lost).
+    if (!PushWaterAside(pos)) return false;
+    world->SetBlock(pos.x, pos.y, pos.z, Block(BlockType::SLUICE));
+    return true;
+}
+
+bool Server::PushWaterAside(const glm::ivec3& pos) {
+    Block cell;
+    if (!world->GetBlock(pos.x, pos.y, pos.z, cell)) return false;
+    int water = cell.WaterVolume();
     if (water > 0) {
         struct Room {
             glm::ivec3 pos;
@@ -90,9 +100,46 @@ bool Server::CloseSluice(const glm::ivec3& pos) {
             world->SetBlock(r.pos.x, r.pos.y, r.pos.z, filled);
             water -= put;
         }
+        world->SetBlock(pos.x, pos.y, pos.z, cell.WithWater(0));
     }
-    world->SetBlock(pos.x, pos.y, pos.z, Block(BlockType::SLUICE));
     return true;
+}
+
+bool Server::Senses(const glm::ivec3& pos, const Signals::Config& c) const {
+    switch (c.kind) {
+    case Signals::Kind::WaterSensor:
+        for (const glm::ivec3 d : { glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0), glm::ivec3(0, 1, 0), glm::ivec3(0, -1, 0), glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1) }) {
+            Block n;
+            if (world->GetBlock(pos.x + d.x, pos.y + d.y, pos.z + d.z, n) && n.WaterVolume() >= Block::kMaxWaterVolume / 8) return true;
+        }
+        return false;
+    case Signals::Kind::PressureSensor: {
+        auto n = networkOf.find(pos);
+        if (n == networkOf.end()) return false;
+        const AirNetwork& net = networks[n->second];
+        return c.b == 0 ? net.air > 0.5f : net.Pressure() * 100.0f >= static_cast<float>(c.b);
+    }
+    case Signals::Kind::DaylightSensor: {
+        // Day as players see it (the sun a little up), with nothing overhead that
+        // keeps the light out (anything unloaded above counts as open).
+        const float sun = static_cast<float>(std::sin(timeOfDay * 6.283185307179586));
+        if ((sun + 0.12f) / 0.37f < 0.5f) return false;
+        for (int y = pos.y + 1; y <= pos.y + 96; y++) {
+            Block above;
+            if (!world->GetBlock(pos.x, y, pos.z, above)) return true;
+            if (above.BlocksLight()) return false;
+        }
+        return true;
+    }
+    case Signals::Kind::PlayerSensor: {
+        const float range = static_cast<float>(Signals::PlayerRange(c.b));
+        const glm::vec3 centre = glm::vec3(pos) + 0.5f;
+        for (const auto& [peer, client] : clients)
+            if (client.welcomed && client.hasState && client.health > 0 && glm::distance(client.feet + glm::vec3(0, 0.9f, 0), centre) <= range) return true;
+        return false;
+    }
+    default: return false;
+    }
 }
 
 void Server::UpdateSignals() {
@@ -125,16 +172,29 @@ void Server::UpdateSignals() {
     };
     std::vector<Sender> senders;
     for (const auto& [pos, b] : loaded) {
-        const SignalBlock& s = signalBlocks[pos];
-        if (s.config.out == 0) continue;
+        SignalBlock& s = signalBlocks[pos];
         bool sending = false;
         switch (s.config.kind) {
         case Signals::Kind::Lever: sending = b.type == BlockType::LEVER_ON; break;
         case Signals::Kind::Plate: sending = plateSignal.count(pos) > 0; break;
         case Signals::Kind::Gate: sending = s.on; break;
+        case Signals::Kind::WaterSensor:
+        case Signals::Kind::PressureSensor:
+        case Signals::Kind::DaylightSensor:
+        case Signals::Kind::PlayerSensor: {
+            // (A sensor's `on` is what it senses, shown to players whether or not it
+            // has a channel to send it on.)
+            const bool senses = Senses(pos, s.config);
+            if (senses != s.on) {
+                s.on = senses;
+                BroadcastSignal(pos);
+            }
+            sending = senses;
+            break;
+        }
         default: break;
         }
-        if (sending) senders.push_back({ pos, s.config.out });
+        if (sending && s.config.out != 0) senders.push_back({ pos, s.config.out });
     }
     const float range2 = Signals::kRange * Signals::kRange;
     auto hears = [&](uint8_t channel, const glm::ivec3& at) {
@@ -174,6 +234,13 @@ void Server::UpdateSignals() {
         case Signals::Kind::Valve:
             if (c.a == 0) break;
             if (a != (b.type == BlockType::VALVE_OPEN)) world->SetBlock(pos.x, pos.y, pos.z, Block(a ? BlockType::VALVE_OPEN : BlockType::VALVE));
+            break;
+        case Signals::Kind::Piston:
+            // (UpdatePower moves it, when it has the air.)
+            if (a != s.on) {
+                s.on = a;
+                BroadcastSignal(pos);
+            }
             break;
         case Signals::Kind::Sluice:
             if (c.a == 0) break;

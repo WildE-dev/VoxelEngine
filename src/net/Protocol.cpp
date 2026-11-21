@@ -83,7 +83,7 @@ bool ReadBlock(ByteReader& in, Block& b) {
     for (int e = 0; e < 4; e++)
         if (!in.U8(b.edgeData.edges[e])) return false;
     if (!in.U8(b.water) || !in.U8(b.shown) || !in.U8(b.axis)) return false;
-    return b.water <= Block::kMaxWaterVolume && b.shown <= Block::kMaxWaterVolume && b.axis <= Block::kAlongZ;
+    return b.water <= Block::kMaxWaterVolume && b.shown <= Block::kMaxWaterVolume && b.axis <= Block::kMaxAxis;
 }
 
 void EncodeBlockPlanes(ByteWriter& out, const ChunkBlocks& blocks) {
@@ -126,7 +126,7 @@ bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis) {
         for (auto& b : blocks) b.axis = Block::kUpright;
     }
     else if (!DecodePlane(in, [&](int i, uint8_t v) {
-                 if (v > Block::kAlongZ) valid = false;
+                 if (v > Block::kMaxAxis) valid = false;
                  blocks[i].axis = v;
              }))
         return false;
@@ -296,7 +296,7 @@ std::vector<uint8_t> Encode(const SignalInfo& m, bool configure) {
 
 bool Decode(ByteReader& in, SignalInfo& m) {
     return in.IVec3(m.pos) && in.U8(m.kind) && in.U8(m.mode) && in.U8(m.a) && in.U8(m.b) && in.U8(m.out) && in.U8(m.on) && in.U8(m.erased) &&
-           m.kind <= 6 && m.mode < static_cast<uint8_t>(Signals::Mode::Count) && m.on <= 1 && m.erased <= 1 && in.AtEnd();
+           m.kind < static_cast<uint8_t>(Signals::Kind::Count) && m.mode < static_cast<uint8_t>(Signals::Mode::Count) && m.on <= 1 && m.erased <= 1 && in.AtEnd();
 }
 
 std::vector<uint8_t> Encode(const Machines& m) {
@@ -791,7 +791,7 @@ bool Decode(ByteReader& in, EditPlace& m) {
     uint8_t type;
     if (!in.IVec3(m.pos) || !in.U8(type) || type >= static_cast<uint8_t>(BlockType::COUNT)) return false;
     m.type = static_cast<BlockType>(type);
-    return in.U8(m.height) && m.height >= 1 && m.height <= 8 && in.U8(m.faceAxis) && m.faceAxis <= 2;
+    return in.U8(m.height) && m.height >= 1 && m.height <= 8 && in.U8(m.faceAxis) && m.faceAxis <= 5;
 }
 
 bool Decode(ByteReader& in, EditCarve& m) {

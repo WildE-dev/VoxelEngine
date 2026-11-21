@@ -76,6 +76,16 @@ void Server::UpdatePower() {
     prune(drills);
     prune(compressors);
     prune(pumpStates);
+    prune(pistonStates);
+
+    // A piston's head with no piston behind it (broken, or turned) goes too.
+    for (const auto& pos : machineList) {
+        const Block head = blockAt(pos);
+        if (head.type != BlockType::PISTON_HEAD) continue;
+        const Block body = blockAt(pos - head.Facing());
+        if (body.type == BlockType::COUNT) continue; // (not loaded: leave it)
+        if (body.type != BlockType::PISTON || body.axis != head.axis) world->SetBlock(pos.x, pos.y, pos.z, Block());
+    }
 
     // Wheels: the water through one side against the other. Each unit that moves is
     // counted leaving one cell and arriving in another, over a side's three cells:
@@ -133,7 +143,7 @@ void Server::UpdatePower() {
             }
 
         std::vector<std::pair<glm::ivec3, Drill*>> netDrills;
-        std::vector<glm::ivec3> netPumps;
+        std::vector<glm::ivec3> netPumps, netPistons;
         for (const auto& m : members) {
             auto a = air.find(m);
             if (a != air.end()) net.air += a->second;
@@ -152,6 +162,7 @@ void Server::UpdatePower() {
                 net.pumps++;
                 netPumps.push_back(m);
                 break;
+            case BlockType::PISTON: netPistons.push_back(m); break;
             default: break;
             }
         }
@@ -165,6 +176,30 @@ void Server::UpdatePower() {
             Power::DrillState& state = pumpStates[p];
             state = !use.wanted ? Power::DrillState::Idle : use.lifted > 0.0f ? Power::DrillState::Working : Power::DrillState::NoPressure;
             if (state == Power::DrillState::Working) net.pumping++;
+        }
+
+        // Pistons go out while their channel is on (if there's the air), and back in
+        // when it's off.
+        for (const auto& p : netPistons) {
+            const Block piston = blockAt(p);
+            auto sig = signalBlocks.find(p);
+            const bool want = sig != signalBlocks.end() && sig->second.on;
+            const Block front = blockAt(p + piston.Facing());
+            const bool out = front.type == BlockType::PISTON_HEAD && front.axis == piston.axis;
+            Power::DrillState& state = pistonStates[p];
+            if (want && !out) {
+                if (net.Pressure() < Power::kMinPressure || net.air < Power::kPistonAir) state = Power::DrillState::NoPressure;
+                else if (PistonPush(p, piston)) {
+                    net.air -= Power::kPistonAir;
+                    state = Power::DrillState::Working;
+                }
+                else state = Power::DrillState::Blocked;
+            }
+            else if (!want && out) {
+                PistonPull(p, piston);
+                state = Power::DrillState::Idle;
+            }
+            else state = out ? Power::DrillState::Working : Power::DrillState::Idle;
         }
 
         // Drills take their turn: whichever has waited longest goes first.
@@ -233,6 +268,61 @@ bool Server::DrillDig(const glm::ivec3& pos, Drill& drill) {
     }
     drill.state = Power::DrillState::Done;
     return false;
+}
+
+bool Server::Movable(const glm::ivec3& pos, const Block& b) const {
+    if (b.IsAir() || b.IsLiquid() || b.type == BlockType::COUNT) return false;
+    if (signalBlocks.count(pos) || Signals::KindOf(b.type) != Signals::Kind::None) return false;
+    switch (b.type) {
+    case BlockType::CHEST:
+    case BlockType::BED:
+    case BlockType::DOOR:
+    case BlockType::DOOR_OPEN:
+    case BlockType::SIGN:
+    case BlockType::TNT_LIT:
+    case BlockType::PUMP:
+    case BlockType::PIPE:
+    case BlockType::SLUICE:
+    case BlockType::LADDER:
+    case BlockType::CROP:
+    case BlockType::RIPE_WHEAT:
+    case BlockType::PISTON_HEAD: return false;
+    default: return !Power::IsPart(b.type) && !Power::IsMachine(b.type);
+    }
+}
+
+bool Server::PistonPush(const glm::ivec3& pos, const Block& piston) {
+    const glm::ivec3 dir = piston.Facing();
+    // The row in front, up to the first open cell (air, water, or a plant to crush).
+    std::vector<std::pair<glm::ivec3, Block>> row;
+    glm::ivec3 end = pos + dir;
+    Block endBlock;
+    for (;;) {
+        if (!world->GetBlock(end.x, end.y, end.z, endBlock)) return false; // (not loaded)
+        if (endBlock.IsAir() || endBlock.IsLiquid() || endBlock.IsReplaceableByWater()) break;
+        if (!Movable(end, endBlock) || static_cast<int>(row.size()) >= Power::kPushLimit) return false;
+        row.emplace_back(end, endBlock);
+        end += dir;
+    }
+    if (endBlock.IsLiquid() && !PushWaterAside(end)) return false; // (nowhere for the water to go)
+    for (int i = static_cast<int>(row.size()) - 1; i >= 0; i--) {
+        const glm::ivec3 to = row[i].first + dir;
+        world->SetBlock(to.x, to.y, to.z, row[i].second);
+    }
+    Block head(BlockType::PISTON_HEAD);
+    head.axis = piston.axis;
+    world->SetBlock(pos.x + dir.x, pos.y + dir.y, pos.z + dir.z, head);
+    return true;
+}
+
+void Server::PistonPull(const glm::ivec3& pos, const Block& piston) {
+    const glm::ivec3 dir = piston.Facing(), head = pos + dir, beyond = pos + dir * 2;
+    Block b;
+    if (world->GetBlock(beyond.x, beyond.y, beyond.z, b) && Movable(beyond, b) && !b.IsPlant()) {
+        world->SetBlock(head.x, head.y, head.z, b);
+        world->SetBlock(beyond.x, beyond.y, beyond.z, Block());
+    }
+    else world->SetBlock(head.x, head.y, head.z, Block());
 }
 
 void Server::SendMachines() {
@@ -314,6 +404,17 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
         }
         else if (b.type == BlockType::VALVE || b.type == BlockType::VALVE_OPEN) {
             text += b.type == BlockType::VALVE_OPEN ? "Valve: open. " : "Valve: shut (the pipes either side are kept apart). ";
+        }
+        else if (b.type == BlockType::PISTON) {
+            const Power::DrillState st = pistonStates.count(pos) ? pistonStates[pos] : Power::DrillState::Idle;
+            auto sig = signalBlocks.find(pos);
+            text += st == Power::DrillState::Working ? "Piston: pushed out. " : st == Power::DrillState::NoPressure ? "Piston: waiting for air pressure. "
+                  : st == Power::DrillState::Blocked ? "Piston: blocked (something it can't move, or too many blocks in a row). " : "Piston: in. ";
+            text += sig != signalBlocks.end() && sig->second.config.a ? "Listens to channel " + std::to_string(sig->second.config.a) + ". "
+                                                                      : "No channel (crouch and right-click to set one). ";
+        }
+        else if (b.type == BlockType::PRESSURE_SENSOR) {
+            text += "Pressure sensor. ";
         }
         else if (b.type == BlockType::PUMP) {
             const Power::DrillState st = pumpStates.count(pos) ? pumpStates[pos] : Power::DrillState::Idle;

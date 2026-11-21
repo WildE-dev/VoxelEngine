@@ -1030,6 +1030,178 @@ VALVE_COLOURS = {"c": (96, 60, 30), "C": (184, 120, 64), "r": (200, 40, 36)}
 VALVE_OPEN_COLOURS = {"c": (96, 60, 30), "C": (184, 120, 64), "r": (60, 180, 70)}
 
 
+PISTON_FACE = """
+iiiiiiiiiiiiiiii
+iwwwwwwwwwwwwwwi
+iwWWWWWWWWWWWWwi
+iwWwwwwwwwwwwWwi
+iwWWWWWWWWWWWWwi
+iwwwwwwwwwwwwwwi
+iwWWWWWWWWWWWWwi
+iwWwwwwwwwwwwWwi
+iwWWWWWWWWWWWWwi
+iwwwwwwwwwwwwwwi
+iwWWWWWWWWWWWWwi
+iwWwwwwwwwwwwWwi
+iwWWWWWWWWWWWWwi
+iwwwwwwwwwwwwwwi
+iwwwwwwwwwwwwwwi
+iiiiiiiiiiiiiiii
+"""
+PISTON_SIDE = """
+wwwwwwwwwwwwwwww
+WWWWWWWWWWWWWWWW
+wwwwwwwwwwwwwwww
+iiiiiiiiiiiiiiii
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSkkSSSSSSs
+sSSSSSSkkSSSSSSs
+sSSSSSSkkSSSSSSs
+sSSSSSSkkSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+ssssssssssssssss
+"""
+PISTON_BACK = """
+ssssssssssssssss
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSiiiiiiiiSSSs
+sSSiIIIIIIIIiSSs
+sSSiIIIIIIIIiSSs
+sSSiIIIkkIIIiSSs
+sSSiIIkkkkIIiSSs
+sSSiIIkkkkIIiSSs
+sSSiIIIkkIIIiSSs
+sSSiIIIIIIIIiSSs
+sSSiIIIIIIIIiSSs
+sSSSiiiiiiiiSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+ssssssssssssssss
+"""
+PISTON_ROD = """
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIrIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIrIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIrIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIrIi
+iIIIIIIIIIIIIIIi
+"""
+PISTON_COLOURS = {"i": (72, 74, 80), "I": (150, 152, 160), "r": (120, 100, 90), "w": (150, 112, 66), "W": (178, 136, 84),
+                  "s": (70, 70, 76), "S": (124, 124, 130), "k": (36, 36, 40)}
+
+SENSOR_FRAME = """
+ssssssssssssssss
+sSSSSSSSSSSSSSSs
+sSkkkkkkkkkkkkSs
+sSk..........kSs
+sSk..........kSs
+sSk..........kSs
+sSk..........kSs
+sSk..........kSs
+sSk..........kSs
+sSk..........kSs
+sSk..........kSs
+sSk..........kSs
+sSk..........kSs
+sSkkkkkkkkkkkkSs
+sSSSSSSSSSSSSSSs
+ssssssssssssssss
+"""
+def sensor(inner):
+    rows = SENSOR_FRAME.strip("\n").split("\n")
+    inner = inner.strip("\n").split("\n")
+    out = []
+    for y, r in enumerate(rows):
+        if 3 <= y <= 12:
+            r = r[:3] + inner[y - 3] + r[13:]
+        out.append(r)
+    return "\n" + "\n".join(out) + "\n"
+WATER_SENSOR = sensor("""
+bbbbbbbbbb
+bbbbbbbbbb
+bbbbBbbbbb
+bbbBBBbbbb
+bbBBBBBbbb
+bbBBwBBbbb
+bbBBBBBbbb
+bbbBBBbbbb
+bbbbbbbbbb
+bbbbbbbbbb
+""")
+PRESSURE_SENSOR = sensor("""
+gggggggggg
+ggGGGGGGgg
+gGGggggGGg
+gGgggggrGg
+gGggggrgGg
+gGgggkggGg
+gGggggggGg
+ggGGGGGGgg
+gggggggggg
+gggggggggg
+""")
+DAYLIGHT_SENSOR = sensor("""
+dddddddddd
+ddddyddddd
+dyddyddyd d
+ddyyyyyddd
+yyyYYYyyyd
+ddyyyyyddd
+dyddyddydd
+ddddyddddd
+dddddddddd
+dddddddddd
+""".replace(" ", ""))
+PLAYER_SENSOR = sensor("""
+pppppppppp
+ppppPPpppp
+pppPeePppp
+pppPPPPppp
+ppppPPpppp
+pppPPPPppp
+ppPPPPPPpp
+ppPPPPPPpp
+pppppppppp
+pppppppppp
+""")
+SENSOR_SIDE = """
+ssssssssssssssss
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSkkkkkkkkkkSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSkkkkkkkkkkSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+ssssssssssssssss
+"""
+SENSOR_COLOURS = {"s": (70, 70, 76), "S": (124, 124, 130), "k": (36, 36, 40), "b": (40, 70, 140), "B": (90, 150, 230), "w": (220, 240, 255),
+                  "g": (30, 34, 30), "G": (180, 180, 170), "r": (210, 60, 50), "d": (40, 60, 110), "y": (230, 190, 60), "Y": (255, 240, 160),
+                  "p": (50, 40, 50), "P": (200, 120, 200), "e": (255, 255, 255)}
+
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
     draw("cooked_venison", VENISON, COOKED, seed=12)
@@ -1088,6 +1260,16 @@ def main():
     draw("air_tank_top", TANK_TOP, TANK_COLOURS, jitter=4, seed=65)
     draw("valve", VALVE, VALVE_COLOURS, jitter=4, seed=66)
     draw("valve_open", VALVE, VALVE_OPEN_COLOURS, jitter=4, seed=67)
+    draw("piston_face", PISTON_FACE, PISTON_COLOURS, jitter=5, seed=68)
+    draw("piston_side", PISTON_SIDE, PISTON_COLOURS, jitter=4, seed=69)
+    draw("piston_back", PISTON_BACK, PISTON_COLOURS, jitter=4, seed=70)
+    draw("piston_rod", PISTON_ROD, PISTON_COLOURS, jitter=4, seed=71)
+    draw("water_sensor", WATER_SENSOR, SENSOR_COLOURS, jitter=4, seed=72)
+    draw("pressure_sensor", PRESSURE_SENSOR, SENSOR_COLOURS, jitter=4, seed=73)
+    draw("daylight_sensor", DAYLIGHT_SENSOR, SENSOR_COLOURS, jitter=4, seed=74)
+    draw("player_sensor", PLAYER_SENSOR, SENSOR_COLOURS, jitter=4, seed=75)
+    draw("sensor_side", SENSOR_SIDE, SENSOR_COLOURS, jitter=4, seed=76)
+    draw("sensor_bottom", SENSOR_SIDE, SENSOR_COLOURS, jitter=4, seed=77)
 
 
 if __name__ == "__main__":

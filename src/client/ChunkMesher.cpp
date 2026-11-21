@@ -408,6 +408,22 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 }
 
                 if (block.IsModel()) continue; // (drawn as a model: Renderer)
+                if (block.type == BlockType::PISTON_HEAD) {
+                    // A plate across the far end of the cell and a rod back through the
+                    // rest to the piston (lit by the light in its own cell).
+                    const uint8_t bl = static_cast<uint8_t>(blockLightAt(pos)), sl = static_cast<uint8_t>(skyLightAt(pos));
+                    const int face = block.axis % 6, axis = kFaceAxis[face];
+                    const bool positive = kFaceOffsets[face][axis] > 0;
+                    glm::ivec3 lo(0), hi(8);
+                    lo[axis] = positive ? 6 : 0;
+                    hi[axis] = positive ? 8 : 2;
+                    block.AddBoxVertices(vertices, x, y, z, lo, hi, 0, bl, sl);
+                    glm::ivec3 rlo(3), rhi(5);
+                    rlo[axis] = positive ? 0 : 2;
+                    rhi[axis] = positive ? 6 : 8;
+                    block.AddBoxVertices(vertices, x, y, z, rlo, rhi, (1u << face) | (1u << (face ^ 1)), bl, sl);
+                    continue;
+                }
                 if (block.IsPipe()) {
                     // A thin tube: a core in the middle of the cell, and an arm out to each
                     // neighbour it joins (another pipe, a pump, a compressor, a machine).

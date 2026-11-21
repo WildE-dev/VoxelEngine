@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <unordered_set>
 
 #include "server/ServerWorld.h"
 #include "server/WorldStorage.h"
@@ -94,6 +95,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Operator, "/weather <clear|rain|storm|auto> - set the weather" },
     { Level::Operator, "/tp <x> <y> <z> | /tp <player> | /tp <player> <x> <y> <z> - teleport (~ for relative)" },
     { Level::Operator, "/save - save the world now" },
+    { Level::Operator, "/pressurise <x y z> - fill the air network there with air" },
     { Level::Operator, "/kick <player> [reason] - remove a player" },
     { Level::Operator, "/op <player>, /deop <player> - make or unmake an operator" },
     { Level::Operator, "/noclip [player] - fly through blocks, on or off (operators may also use the laser, L)" },
@@ -116,7 +118,7 @@ constexpr HelpLine kHelp[] = {
 Level RequiredLevel(const std::string& command, size_t argumentCount) {
     if (command == "stop") return Level::Console;
     if (command == "tp" || command == "teleport" || command == "save" || command == "kick" || command == "op" || command == "deop" ||
-        command == "noclip" || command == "give" || command == "fill" || command == "summon" || command == "creatures")
+        command == "noclip" || command == "give" || command == "fill" || command == "pressurise" || command == "summon" || command == "creatures")
         return Level::Operator;
     if ((command == "time" || command == "weather" || command == "gamemode" || command == "pvp" || command == "food") && argumentCount > 0) return Level::Operator;
     return Level::Everyone;
@@ -361,6 +363,32 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
                     if (type == BlockType::CHEST) chests[{ x, y, z }] = ChestItems{};
                 }
         reply(Kind::Info, "Filled " + std::to_string(size.x * size.y * size.z) + " cells with " + BlockId(type));
+    }
+    else if (command == "pressurise") {
+        double v[3];
+        if (words.size() != 4) return usage("/pressurise <x y z>");
+        for (int i = 0; i < 3; i++)
+            if (!ParseNumber(words[1 + i], v[i]) || std::abs(v[i]) > 1e7) return usage("/pressurise <x y z>");
+        const glm::ivec3 start(glm::floor(glm::dvec3(v[0], v[1], v[2])));
+        std::lock_guard<std::recursive_mutex> edit(world->GetEditMutex());
+        // Every part joined to it, full (the next air update shares it out).
+        std::vector<glm::ivec3> parts;
+        std::unordered_set<glm::ivec3, Coords::IVec3Hash> seen;
+        auto partAt = [&](const glm::ivec3& p, Block& b) { return world->GetBlock(p.x, p.y, p.z, b) && Power::IsAirPart(b.type); };
+        if (Block b; partAt(start, b)) parts.push_back(start), seen.insert(start);
+        for (size_t i = 0; i < parts.size() && parts.size() < static_cast<size_t>(Power::kMaxNetwork); i++)
+            for (int f = 0; f < kFaceCount; f++) {
+                const glm::ivec3 n = parts[i] + glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]);
+                Block b;
+                if (!seen.count(n) && partAt(n, b)) parts.push_back(n), seen.insert(n);
+            }
+        if (parts.empty()) return reply(Kind::Error, "There's no air pipe or machine there");
+        for (const auto& p : parts) {
+            Block b;
+            world->GetBlock(p.x, p.y, p.z, b);
+            air[p] = Power::CapacityOf(b.type);
+        }
+        reply(Kind::Info, "Filled " + std::to_string(parts.size()) + " air parts");
     }
     else if (command == "summon") {
         const CreatureType type = words.size() > 1 ? CreatureFromId(Lower(words[1])) : CreatureType::Count;

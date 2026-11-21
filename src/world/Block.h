@@ -185,6 +185,18 @@ enum class BlockType : uint8_t {
     AIR_TANK,
     VALVE,
     VALVE_OPEN,
+    // A piston (an air machine listening to a channel): while its channel is on it
+    // pushes the blocks in front of it out a block and holds them there with its head
+    // (an arm, drawn thin); when it goes off it pulls the head back, and the block in
+    // front of it with it. It faces one of six ways (see Block::IsFacingType).
+    PISTON,
+    PISTON_HEAD,
+    // Sensors: send on their channel while there's water touching them, while the air
+    // network they're on is at a set pressure, by day, or while a player is near.
+    WATER_SENSOR,
+    PRESSURE_SENSOR,
+    DAYLIGHT_SENSOR,
+    PLAYER_SENSOR,
     COUNT
 };
 
@@ -192,6 +204,9 @@ enum class BlockType : uint8_t {
 // drawn as thin tubes: neither hides what's beside it or blocks light.
 inline bool IsModelType(BlockType type) { return type == BlockType::WATER_WHEEL || type == BlockType::SHAFT; }
 inline bool IsPipeType(BlockType type) { return type == BlockType::PIPE || type == BlockType::AIR_PIPE; }
+// Blocks that face one of six ways (their `axis` holds the Face they point to): a
+// piston and its head.
+inline bool IsFacingType(BlockType type) { return type == BlockType::PISTON || type == BlockType::PISTON_HEAD; }
 
 // Things held in the inventory that aren't blocks: they can't be placed.
 inline bool IsItemType(BlockType type) {
@@ -222,6 +237,7 @@ inline BlockType ResourceTypeOf(BlockType type) {
     case BlockType::LEVER_ON: return BlockType::LEVER;
     case BlockType::SIGNAL_LAMP_ON: return BlockType::SIGNAL_LAMP;
     case BlockType::VALVE_OPEN: return BlockType::VALVE;
+    case BlockType::PISTON_HEAD: return BlockType::AIR; // (part of the piston: gives nothing)
     default: return type;
     }
 }
@@ -334,16 +350,25 @@ struct Block {
     // holding at an eighth and then vanishing. Rendering only.
     uint8_t shown = 0;
     // Which way an orientable block (a log) runs: kUpright, kAlongX or kAlongZ. Its
-    // ends face that way and its grain runs along it. Always kUpright for others.
+    // ends face that way and its grain runs along it. A facing block (a piston) keeps
+    // the Face it points to here (0..5) instead. Always 0 for others.
     uint8_t axis = 0;
     static constexpr uint8_t kUpright = 0, kAlongX = 1, kAlongZ = 2;
+    static constexpr uint8_t kMaxAxis = 5; // (a facing block's Face)
+    // A facing block's direction (a unit step).
+    glm::ivec3 Facing() const { return glm::ivec3(kFaceOffsets[axis % 6][0], kFaceOffsets[axis % 6][1], kFaceOffsets[axis % 6][2]); }
     static bool IsOrientable(BlockType t) { return t == BlockType::LOG || t == BlockType::WATER_WHEEL || t == BlockType::SHAFT; }
     // The axis in kFaceAxis terms (0 x, 1 y, 2 z), and the orientation for one.
     int GrainAxis() const { return axis == kAlongX ? 0 : axis == kAlongZ ? 2 : 1; }
     static uint8_t AxisFor(int faceAxis) { return faceAxis == 0 ? kAlongX : faceAxis == 2 ? kAlongZ : kUpright; }
-    // The same block turned to run along `faceAxis` (if it can be).
+    // The same block turned to run along `faceAxis` (if it can be). A facing block
+    // takes a Face (0..5) instead.
     Block Turned(int faceAxis) const {
         Block b = *this;
+        if (IsFacingType(type)) {
+            b.axis = static_cast<uint8_t>(faceAxis >= 0 && faceAxis <= kMaxAxis ? faceAxis : 2);
+            return b;
+        }
         b.axis = IsOrientable(type) ? AxisFor(faceAxis) : kUpright;
         // Axles are level: along x unless placed along z.
         if ((type == BlockType::WATER_WHEEL || type == BlockType::SHAFT) && b.axis == kUpright) b.axis = kAlongX;
@@ -471,9 +496,9 @@ struct Block {
     bool IsFullBlock() const { return type != BlockType::AIR && !IsPlant() && !IsLiquid() && edgeData.IsFull(); }
     // Light passes through air, partial blocks, plants, leaves and water (water also
     // absorbs some; see LightPropagator).
-    bool BlocksLight() const { return IsFullBlock() && !IsLeavesType(type) && type != BlockType::ICE && type != BlockType::GLASS && type != BlockType::SIGNAL_LAMP && type != BlockType::SIGNAL_LAMP_ON && !IsModelType(type) && !IsPipeType(type); }
+    bool BlocksLight() const { return IsFullBlock() && !IsLeavesType(type) && type != BlockType::ICE && type != BlockType::GLASS && type != BlockType::SIGNAL_LAMP && type != BlockType::SIGNAL_LAMP_ON && !IsModelType(type) && !IsPipeType(type) && type != BlockType::PISTON_HEAD; }
     // A full block that hides the faces of the blocks it touches (not glass).
-    bool HidesNeighbours() const { return IsFullBlock() && type != BlockType::GLASS && !IsModelType(type) && !IsPipeType(type); }
+    bool HidesNeighbours() const { return IsFullBlock() && type != BlockType::GLASS && !IsModelType(type) && !IsPipeType(type) && type != BlockType::PISTON_HEAD; }
     // Air, a plant or water: nothing to stand on or bump into.
     bool IsPassable() const { return IsAir() || IsPlant() || IsLiquid(); }
     // Water may flow into this cell (washing away any plant).

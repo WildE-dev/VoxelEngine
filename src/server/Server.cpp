@@ -156,7 +156,7 @@ bool Server::Start(const Options& opts) {
         for (const auto& [pos, text] : storage->GetSigns()) signs[pos] = text;
         for (const auto& sig : storage->GetSignals()) {
             SignalBlock& b = signalBlocks[sig.pos];
-            b.config.kind = static_cast<Signals::Kind>(std::min<uint8_t>(sig.kind, 6));
+            b.config.kind = static_cast<Signals::Kind>(std::min<uint8_t>(sig.kind, static_cast<uint8_t>(Signals::Kind::Count) - 1));
             b.config.mode = static_cast<Signals::Mode>(std::min<uint8_t>(sig.mode, static_cast<uint8_t>(Signals::Mode::Count) - 1));
             b.config.a = sig.a;
             b.config.b = sig.b;

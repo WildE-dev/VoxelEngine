@@ -37,6 +37,12 @@ const char* Audio::Material(BlockType type) {
     case BlockType::VALVE:
     case BlockType::VALVE_OPEN:
     case BlockType::LOGIC_GATE:
+    case BlockType::PISTON:
+    case BlockType::PISTON_HEAD:
+    case BlockType::WATER_SENSOR:
+    case BlockType::PRESSURE_SENSOR:
+    case BlockType::DAYLIGHT_SENSOR:
+    case BlockType::PLAYER_SENSOR:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
     case BlockType::SPIKES:

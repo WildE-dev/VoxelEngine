@@ -8,6 +8,9 @@
 //  - a valve on a channel opens and shuts with it, and one without opens by hand,
 //  - a sluice gate on a channel opens and closes again, pushing water out of its cell,
 //  - a pressure plate sends while it's stood on,
+//  - a piston with air pushes a row of blocks out and pulls the first back, one
+//    without air doesn't move, a chest stops it, and its head goes with it;
+//  - player, water, pressure and daylight sensors send when they should,
 //  - channels set on blocks are still there after a restart, and go when a block is
 //    broken.
 #include <chrono>
@@ -269,6 +272,82 @@ int main() {
         std::cout << "Breaking" << std::endl;
         a.client.BreakBlock(otherLamp);
         Check(pump(5.0, [&] { return !a.client.GetSignals().count(otherLamp); }), "a broken block's channels go");
+
+        std::cout << "Pistons" << std::endl;
+        // A piston pushing +x (as /fill places it), on an air pipe, with two stones in
+        // front; another with no air.
+        const glm::ivec3 lever3{ 24, 0, 24 }, piston{ 26, 0, 26 }, dry{ 26, 0, 28 };
+        goTo(25.5f, 22.5f);
+        fill(lever3, "lever");
+        fill(piston, "piston");
+        fill(piston + glm::ivec3(0, 1, 0), "air_pipe");
+        fill(dry, "piston");
+        for (const glm::ivec3 p : { glm::ivec3(27, 0, 26), glm::ivec3(28, 0, 26), glm::ivec3(27, 0, 28) }) fill(p, "stone");
+        pump(10.0, [&] { return blockAt({ 27, 0, 28 }) == BlockType::STONE; });
+        Check(configure(lever3, Signals::Kind::Lever, 0, 0, 11) && configure(piston, Signals::Kind::Piston, 11, 0, 0) && configure(dry, Signals::Kind::Piston, 11, 0, 0),
+              "two pistons listen to 11");
+        server.QueueConsoleCommand("pressurise 26 0 26");
+        wait(0.6);
+        flip(lever3, true);
+        Check(pump(5.0, [&] { return blockAt({ 27, 0, 26 }) == BlockType::PISTON_HEAD && blockAt({ 28, 0, 26 }) == BlockType::STONE && blockAt({ 29, 0, 26 }) == BlockType::STONE; }),
+              "with air, it pushes both stones a block on, its head behind them");
+        wait(0.6);
+        Check(blockAt({ 27, 0, 28 }) == BlockType::STONE && blockAt({ 28, 0, 28 }) == BlockType::AIR, "without air, the other doesn't move");
+        flip(lever3, false);
+        Check(pump(5.0, [&] { return blockAt({ 27, 0, 26 }) == BlockType::STONE && blockAt({ 28, 0, 26 }) == BlockType::AIR && blockAt({ 29, 0, 26 }) == BlockType::STONE; }),
+              "off, it pulls back, bringing the first stone with it");
+        fill({ 28, 0, 26 }, "chest");
+        pump(5.0, [&] { return blockAt({ 28, 0, 26 }) == BlockType::CHEST; });
+        flip(lever3, true);
+        wait(1.0);
+        Check(blockAt({ 27, 0, 26 }) == BlockType::STONE && blockAt({ 28, 0, 26 }) == BlockType::CHEST, "a chest in the row stops it");
+        flip(lever3, false);
+        a.client.BreakBlock({ 28, 0, 26 });
+        fill({ 28, 0, 26 }, "air");
+        server.QueueConsoleCommand("pressurise 26 0 26");
+        wait(0.6);
+        flip(lever3, true);
+        Check(pump(5.0, [&] { return blockAt({ 27, 0, 26 }) == BlockType::PISTON_HEAD; }), "with the chest gone it pushes again");
+        a.client.BreakBlock(piston);
+        Check(pump(5.0, [&] { return blockAt(piston) == BlockType::AIR && blockAt({ 27, 0, 26 }) == BlockType::AIR; }), "and breaking the piston takes its head");
+        flip(lever3, false);
+
+        std::cout << "Sensors" << std::endl;
+        const glm::ivec3 playerSensor{ 24, 0, 32 }, waterSensor{ 26, 0, 32 }, pressureSensor{ 28, 0, 32 }, daySensor{ 30, 0, 32 };
+        fill(playerSensor, "player_sensor");
+        fill(waterSensor, "water_sensor");
+        fill(pressureSensor, "pressure_sensor");
+        fill(pressureSensor + glm::ivec3(0, 0, 1), "air_pipe");
+        fill(daySensor, "daylight_sensor");
+        for (int i = 0; i < 4; i++) fill(playerSensor + glm::ivec3(2 * i, 0, -1), "signal_lamp");
+        // A cell above the water sensor walled in, so water put there stays.
+        server.QueueConsoleCommand("fill 25 1 31 27 1 33 stone");
+        fill(waterSensor + glm::ivec3(0, 1, 0), "air");
+        pump(10.0, [&] { return blockAt({ 30, 0, 31 }) == BlockType::SIGNAL_LAMP && blockAt(waterSensor + glm::ivec3(0, 1, 0)) == BlockType::AIR; });
+        goTo(27.5f, 24.5f);
+        Check(configure(playerSensor, Signals::Kind::PlayerSensor, 0, 3, 12) && configure(waterSensor, Signals::Kind::WaterSensor, 0, 0, 13) &&
+                  configure(pressureSensor, Signals::Kind::PressureSensor, 0, 50, 14) && configure(daySensor, Signals::Kind::DaylightSensor, 0, 0, 15),
+              "a player sensor (3 blocks), a water sensor, a pressure sensor (50%) and a daylight sensor, sending on 12-15");
+        for (int i = 0; i < 4; i++) configure(playerSensor + glm::ivec3(2 * i, 0, -1), Signals::Kind::Lamp, static_cast<uint8_t>(12 + i), 0, 0);
+        const glm::ivec3 playerLamp = playerSensor + glm::ivec3(0, 0, -1), waterLamp = waterSensor + glm::ivec3(0, 0, -1),
+                         pressureLamp = pressureSensor + glm::ivec3(0, 0, -1), dayLamp = daySensor + glm::ivec3(0, 0, -1);
+        server.QueueConsoleCommand("time midnight");
+        wait(0.6);
+        Check(!lit(playerLamp) && !lit(waterLamp) && !lit(pressureLamp) && !lit(dayLamp), "at midnight, with no one near, no water and no air, all are off");
+        goTo(23.5f, 33.5f);
+        Check(pump(5.0, [&] { return lit(playerLamp); }), "the player sensor comes on with a player beside it");
+        goTo(27.5f, 24.5f);
+        Check(pump(5.0, [&] { return !lit(playerLamp); }), "and goes off when they've gone");
+        fill(waterSensor + glm::ivec3(0, 1, 0), "water");
+        Check(pump(5.0, [&] { return lit(waterLamp); }), "the water sensor comes on with water on it");
+        fill(waterSensor + glm::ivec3(0, 1, 0), "air");
+        Check(pump(5.0, [&] { return !lit(waterLamp); }), "and goes off when it's gone");
+        server.QueueConsoleCommand("pressurise 28 0 32");
+        Check(pump(5.0, [&] { return lit(pressureLamp); }), "the pressure sensor comes on once its pipe has air");
+        server.QueueConsoleCommand("time noon");
+        Check(pump(5.0, [&] { return lit(dayLamp); }), "the daylight sensor comes on at noon");
+        server.QueueConsoleCommand("fill 30 3 32 30 3 32 stone");
+        Check(pump(5.0, [&] { return !lit(dayLamp); }), "and goes off with a roof over it");
 
         server.QueueConsoleCommand("save");
         wait(1.0);

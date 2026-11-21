@@ -56,7 +56,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
-    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::DRILL, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
+    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::DRILL, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
     BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
@@ -134,6 +134,12 @@ const char* BlockName(BlockType type) {
     case BlockType::AIR_TANK: return "Air tank";
     case BlockType::VALVE: return "Valve (closed)";
     case BlockType::VALVE_OPEN: return "Valve (open)";
+    case BlockType::PISTON: return "Piston";
+    case BlockType::PISTON_HEAD: return "Piston head";
+    case BlockType::WATER_SENSOR: return "Water sensor";
+    case BlockType::PRESSURE_SENSOR: return "Pressure sensor";
+    case BlockType::DAYLIGHT_SENSOR: return "Daylight sensor";
+    case BlockType::PLAYER_SENSOR: return "Player sensor";
     case BlockType::STONE_BRICK: return "Stone bricks";
     case BlockType::MOSSY_BRICK: return "Mossy bricks";
     case BlockType::SPIKES: return "Spikes";
@@ -845,6 +851,20 @@ void Application::DrawCrosshair() {
             std::snprintf(text, sizeof text, "Valve: %s - %s", target.type == BlockType::VALVE_OPEN ? "open" : "shut",
                           info.a ? ("listens to " + ch(info.a)).c_str() : "by hand");
             break;
+        case Signals::Kind::Piston: std::snprintf(text, sizeof text, "Piston - %s", info.a ? ("listens to " + ch(info.a)).c_str() : "no channel"); break;
+        case Signals::Kind::WaterSensor:
+        case Signals::Kind::PressureSensor:
+        case Signals::Kind::DaylightSensor:
+        case Signals::Kind::PlayerSensor: {
+            const auto k = Signals::KindOf(target.type);
+            const char* what = k == Signals::Kind::WaterSensor ? "Water sensor" : k == Signals::Kind::PressureSensor ? "Pressure sensor"
+                             : k == Signals::Kind::DaylightSensor ? "Daylight sensor" : "Player sensor";
+            std::string setting;
+            if (k == Signals::Kind::PressureSensor) setting = info.b ? " at " + std::to_string(info.b) + "%" : " (any air)";
+            if (k == Signals::Kind::PlayerSensor) setting = " within " + std::to_string(Signals::PlayerRange(info.b)) + " blocks";
+            std::snprintf(text, sizeof text, "%s%s: %s - sends on %s", what, setting.c_str(), info.on ? "on" : "off", ch(info.out).c_str());
+            break;
+        }
         default: std::snprintf(text, sizeof text, "Sluice gate - %s", info.a ? ("listens to " + ch(info.a)).c_str() : "no channel (stays shut)"); break;
         }
         label(text);
@@ -898,6 +918,7 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
         }
     }
     if (drillDust.size() > 256) drillDust.clear();
+
 
     // Wheels and shafts in lines along their axles turn together, as fast as the
     // fastest wheel on the line (still if the server said nothing). Each line keeps its
@@ -2205,11 +2226,19 @@ void Application::OnMouseButton(int button, int action) {
             const glm::vec3 look = camera.GetDirection();
             faceAxis = std::abs(look.x) >= std::abs(look.z) ? 0 : 2;
         }
+        // A piston pushes the way you're looking (up, down or level): a Face.
+        if (IsFacingType(placeBlock)) {
+            const glm::vec3 look = camera.GetDirection(), a = glm::abs(look);
+            faceAxis = a.y >= a.x && a.y >= a.z ? (look.y > 0 ? 2 : 3) : a.x >= a.z ? (look.x > 0 ? 0 : 1) : (look.z > 0 ? 4 : 5);
+        }
         client->PlaceBlock(place, placeBlock, height, faceAxis);
         PlayAt("place", place, 0.8f);
         if (placeBlock == BlockType::SIGN) OpenSign(place); // and write on it
         // Signal blocks: set their channels straight away.
-        if (placeBlock == BlockType::LEVER || placeBlock == BlockType::LOGIC_GATE || placeBlock == BlockType::SIGNAL_LAMP) OpenSignalEditor(place, placeBlock);
+        const Signals::Kind placedKind = Signals::KindOf(placeBlock);
+        if (placeBlock == BlockType::LEVER || placeBlock == BlockType::LOGIC_GATE || placeBlock == BlockType::SIGNAL_LAMP || placedKind == Signals::Kind::Piston ||
+            Signals::IsSensor(placedKind))
+            OpenSignalEditor(place, placeBlock);
     }
 }
 
@@ -2243,9 +2272,11 @@ void Application::DrawSignalEditor() {
     ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.4f),
                             ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowBgAlpha(0.9f);
-    const char* titles[] = { "Signal", "Lever", "Pressure plate", "Logic gate", "Signal lamp", "Valve", "Sluice gate" };
+    const char* titles[] = { "Signal", "Lever", "Pressure plate", "Logic gate", "Signal lamp", "Valve", "Sluice gate", "Piston",
+                             "Water sensor", "Pressure sensor", "Daylight sensor", "Player sensor" };
+    static_assert(IM_ARRAYSIZE(titles) == static_cast<int>(Signals::Kind::Count), "a signal kind has no title");
     bool open = true;
-    if (ImGui::Begin(titles[std::clamp(signalKind, 0, 6)], &open,
+    if (ImGui::Begin(titles[std::clamp(signalKind, 0, static_cast<int>(Signals::Kind::Count) - 1)], &open,
                      ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse)) {
         auto channel = [](const char* label, int& value) {
             ImGui::SetNextItemWidth(160.0f);
@@ -2264,13 +2295,31 @@ void Application::DrawSignalEditor() {
         }
         else if (Signals::Sends(kind)) {
             channel("Sends on", signalOut);
-            ImGui::TextDisabled(kind == Signals::Kind::Lever ? "Right-click the lever to flip it." : "It sends while stood on, and for a second after.");
+            switch (kind) {
+            case Signals::Kind::Lever: ImGui::TextDisabled("Right-click the lever to flip it."); break;
+            case Signals::Kind::Plate: ImGui::TextDisabled("It sends while stood on, and for a second after."); break;
+            case Signals::Kind::WaterSensor: ImGui::TextDisabled("Sends while water touches it (an eighth of a block or more, on any side)."); break;
+            case Signals::Kind::DaylightSensor: ImGui::TextDisabled("Sends by day, while the sky is open above it."); break;
+            case Signals::Kind::PressureSensor:
+                ImGui::SetNextItemWidth(160.0f);
+                if (ImGui::InputInt("Pressure (%)", &signalB)) signalB = std::clamp(signalB, 0, 100);
+                ImGui::TextDisabled("Join it to air pipes. Sends while their pressure is at least this (0: any air at all).");
+                break;
+            case Signals::Kind::PlayerSensor:
+                ImGui::SetNextItemWidth(160.0f);
+                if (ImGui::InputInt("Range (blocks)", &signalB)) signalB = std::clamp(signalB, 0, Signals::kMaxPlayerRange);
+                ImGui::TextDisabled("Sends while a player is this near (0: %d blocks).", Signals::kPlayerRange);
+                break;
+            default: break;
+            }
         }
         else {
             channel("Listens to", signalA);
             if (kind == Signals::Kind::Lamp) ImGui::TextDisabled("Lights while the channel is on.");
             if (kind == Signals::Kind::Valve) ImGui::TextDisabled("Opens while the channel is on. With none, right-click (empty-handed) opens and shuts it.");
             if (kind == Signals::Kind::Sluice) ImGui::TextDisabled("Opens while the channel is on, and closes again when it's off.");
+            if (kind == Signals::Kind::Piston)
+                ImGui::TextDisabled("Pushes out while the channel is on and pulls back when it's off. It runs on air: join it to air pipes.");
         }
         if (ImGui::Button("Done") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
             net::SignalInfo info;
