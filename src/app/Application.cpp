@@ -486,8 +486,25 @@ void Application::Run() {
         };
         for (const auto& c : client->GetCreatures())
             params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet) });
+        const TextureAtlas& atlas = renderer->GetAtlas();
         for (const auto& other : client->GetRemotePlayers()) {
-            params.players.push_back({ other.feet, other.yaw, other.pitch, PlayerModels::ColorFor(other.id), (other.flags & net::kFlagHurt) != 0, lightAt(other.feet) });
+            PlayerModel model{ other.feet, other.yaw, other.pitch, PlayerModels::ColorFor(other.id), (other.flags & net::kFlagHurt) != 0, lightAt(other.feet) };
+            // What's in their hand: a tool's or an item's icon as a card, a block as a
+            // little cube.
+            int tile = -1;
+            if (other.heldTool != Tool::None) tile = ToolTile(atlas, other.heldTool), model.held = PlayerModel::Held::Icon;
+            else if (other.heldBlock != BlockType::AIR) {
+                tile = IconTile(other.heldBlock);
+                const bool flat = IsItemType(other.heldBlock) || IsPlantType(other.heldBlock) || Block(other.heldBlock).IsLiquid();
+                model.held = flat ? PlayerModel::Held::Icon : PlayerModel::Held::Block;
+            }
+            if (tile >= 0) {
+                glm::vec2 uv0, uv1;
+                atlas.GetTileUV(tile, uv0, uv1);
+                model.heldUV = glm::vec4(uv0, uv1);
+            }
+            model.armour = other.armour;
+            params.players.push_back(model);
         }
 
         lap(2);
@@ -509,6 +526,7 @@ void Application::Run() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        DrawNameTags(params.projection * params.view);
         DrawHotbar();
         DrawStatus();
         DrawChat();
@@ -646,6 +664,34 @@ void Application::DrawCrosshair() {
         draw->AddLine(ImVec2(c.x + kGap, c.y), ImVec2(c.x + kArm, c.y), color, width);
         draw->AddLine(ImVec2(c.x, c.y - kArm), ImVec2(c.x, c.y - kGap), color, width);
         draw->AddLine(ImVec2(c.x, c.y + kGap), ImVec2(c.x, c.y + kArm), color, width);
+    }
+}
+
+void Application::DrawNameTags(const glm::mat4& viewProjection) {
+    // Each other player's name over their head: within 40 blocks, in view, and not
+    // behind a wall (the line from the eye to the tag is clear), fading with distance.
+    ImDrawList* draw = ImGui::GetBackgroundDrawList();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const glm::vec3 eye = camera.GetPosition();
+    constexpr float kRange = 40.0f;
+    for (const auto& other : client->GetRemotePlayers()) {
+        if (other.name.empty()) continue;
+        const glm::vec3 tag = other.feet + glm::vec3(0.0f, 2.15f, 0.0f);
+        const glm::vec3 toTag = tag - eye;
+        const float distance = glm::length(toTag);
+        if (distance > kRange || distance < 0.5f) continue;
+        const glm::vec4 clip = viewProjection * glm::vec4(tag, 1.0f);
+        if (clip.w <= 0.1f) continue; // behind the camera
+        const glm::vec2 ndc = glm::vec2(clip) / clip.w;
+        if (std::abs(ndc.x) > 1.1f || std::abs(ndc.y) > 1.1f) continue;
+        if (auto hit = Raycast(*world, eye, toTag / distance, distance - 0.3f)) continue; // behind a wall
+        const ImVec2 at(viewport->WorkPos.x + (ndc.x * 0.5f + 0.5f) * viewport->WorkSize.x,
+                        viewport->WorkPos.y + (0.5f - ndc.y * 0.5f) * viewport->WorkSize.y);
+        const float fade = std::clamp((kRange - distance) / 10.0f, 0.0f, 1.0f);
+        const ImVec2 size = ImGui::CalcTextSize(other.name.c_str());
+        const ImVec2 lo(at.x - size.x * 0.5f - 5.0f, at.y - size.y - 4.0f), hi(at.x + size.x * 0.5f + 5.0f, at.y + 2.0f);
+        draw->AddRectFilled(lo, hi, IM_COL32(0, 0, 0, static_cast<int>(120 * fade)), 3.0f);
+        draw->AddText(ImVec2(lo.x + 5.0f, lo.y + 3.0f), IM_COL32(255, 255, 255, static_cast<int>(235 * fade)), other.name.c_str());
     }
 }
 
@@ -912,7 +958,12 @@ void Application::HandleContinuousInput(float deltaTime) {
         if (player.IsFlying()) flags |= net::kFlagFlying;
         if (player.IsOnGround()) flags |= net::kFlagOnGround;
         if (player.IsSwimming()) flags |= net::kFlagSwimming;
-        client->SendPlayerState(player.GetFeetPosition(), player.GetVelocity(), camera.GetYaw(), camera.GetDirectionAngles().x, flags);
+        // What's in hand, for others to see (a survival player's empty slot holds nothing).
+        const Tool heldTool = client->HasTool(SelectedTool()) ? SelectedTool() : Tool::None;
+        BlockType heldBlock = SelectedTool() == Tool::None ? SelectedBlock() : BlockType::AIR;
+        if (!client->IsCreative() && heldBlock != BlockType::AIR && client->GetResources(heldBlock) == 0) heldBlock = BlockType::AIR;
+        client->SendPlayerState(player.GetFeetPosition(), player.GetVelocity(), camera.GetYaw(), camera.GetDirectionAngles().x, flags, heldTool,
+                                heldBlock);
     }
 
     UpdateMining();

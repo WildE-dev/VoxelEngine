@@ -41,13 +41,14 @@ struct TestClient {
     Client client{ world };
     glm::vec3 feet{ 0.0f };
     bool joined = false;
+    Tool heldTool = Tool::None; // what others see in their hand
     void Update() {
         client.Poll();
         if (!joined && client.IsWelcomed()) joined = true, feet = client.GetSpawn();
         if (auto c = client.TakeCorrection()) feet = *c;
         if (!joined) return;
         world.Update(feet + glm::vec3(0.0f, 1.62f, 0.0f));
-        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround);
+        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround, heldTool);
     }
     const Client::Creature* Find(CreatureType type) const {
         static thread_local std::vector<Client::Creature> seen;
@@ -188,6 +189,18 @@ int main() {
         auto wait = [&](double s) { both(s, [] { return false; }); };
         Check(both(20.0, [&] { return a.joined && b.joined; }), "two survival players join");
         const uint16_t rival = b.client.GetPlayerId();
+        auto rivalAsSeen = [&]() -> Client::RemotePlayer {
+            for (const auto& p : a.client.GetRemotePlayers())
+                if (p.id == rival) return p;
+            return {};
+        };
+        auto duelistAsSeen = [&]() -> Client::RemotePlayer {
+            for (const auto& p : b.client.GetRemotePlayers())
+                if (p.id == a.client.GetPlayerId()) return p;
+            return {};
+        };
+        Check(both(20.0, [&] { return rivalAsSeen().name == "Rival" && duelistAsSeen().name == "Duelist"; }),
+              "each sees the other's name (for name tags), whoever joined first");
         auto rivalSeenHurt = [&] {
             for (const auto& p : a.client.GetRemotePlayers())
                 if (p.id == rival && (p.flags & net::kFlagHurt)) return true;
@@ -228,6 +241,9 @@ int main() {
         for (const char* piece : { "cap", "tunic", "boots" }) server.QueueConsoleCommand(std::string("give ") + piece + " Rival");
         server.QueueConsoleCommand("tp Rival " + std::to_string(a.feet.x + 2.0f) + " 0 8.5");
         both(20.0, [&] { return b.client.HasArmour(ArmourPiece::Boots) && a.client.HasTool(Tool::Sword); });
+        a.heldTool = Tool::Sword;
+        Check(both(20.0, [&] { return duelistAsSeen().heldTool == Tool::Sword && rivalAsSeen().armour == 7; }),
+              "others see the sword in the duelist's hand and the rival's armour");
         wait(3.5); // (past their respawn grace)
         a.client.AttackPlayer(rival, Tool::Sword);
         Check(both(20.0, [&] { return b.client.GetHealth() < 20; }) && b.client.GetHealth() == 16,

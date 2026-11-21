@@ -5,6 +5,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "render/Shader.h"
+#include "world/Armour.h"
 
 namespace {
 
@@ -66,6 +67,7 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
     glBindVertexArray(vao);
 
     shader.SetUniform("glow", 0.0f);
+    shader.SetUniform("textured", 0.0f);
     auto box = [&](const glm::mat4& model, const glm::vec3& color) {
         shader.SetUniform("model", model);
         shader.SetUniform("color", color);
@@ -73,10 +75,13 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
     };
 
     const glm::vec3 kRed(0.9f, 0.15f, 0.1f);
+    const glm::vec3 hide(0.55f, 0.37f, 0.2f), hideDark(0.42f, 0.27f, 0.14f);
     for (const auto& p : players) {
         shader.SetUniform("lightLevels", p.light);
-        const glm::vec3 color = p.hurt ? glm::mix(p.color, kRed, 0.55f) : p.color;
-        // Yaw follows the camera convention: 0 degrees looks along +x, 90 along +z.
+        auto tint = [&](const glm::vec3& c) { return p.hurt ? glm::mix(c, kRed, 0.55f) : c; };
+        const glm::vec3 color = tint(p.color);
+        // Yaw follows the camera convention: 0 degrees looks along +x, 90 along +z; +z
+        // in this frame is their right.
         const glm::mat4 base = glm::rotate(glm::translate(glm::mat4(1.0f), p.feet), -glm::radians(p.yaw), glm::vec3(0, 1, 0));
 
         const float bodyHeight = kEyeHeight - kHead * 0.5f;
@@ -86,6 +91,38 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
         box(glm::scale(head, glm::vec3(kHead)), color * 1.1f);
         // Visor on the front (+x in the head's frame).
         box(glm::scale(glm::translate(head, glm::vec3(kHead * 0.5f, 0.03f, 0)), glm::vec3(0.04f, kHead * 0.3f, kHead * 0.8f)), glm::vec3(0.1f));
+
+        // Armour, a little bigger than what it covers: a cap over the top of the head, a
+        // tunic over the upper body, boots at the feet.
+        if (p.armour & Armour::Bit(ArmourPiece::Cap)) {
+            box(glm::scale(glm::translate(head, glm::vec3(-0.01f, kHead * 0.32f, 0)), glm::vec3(kHead * 1.08f, kHead * 0.4f, kHead * 1.08f)), tint(hide));
+            box(glm::scale(glm::translate(head, glm::vec3(kHead * 0.5f, kHead * 0.14f, 0)), glm::vec3(0.12f, 0.04f, kHead * 1.08f)), tint(hideDark)); // brim
+        }
+        if (p.armour & Armour::Bit(ArmourPiece::Tunic))
+            box(glm::scale(glm::translate(base, glm::vec3(0, bodyHeight * 0.68f, 0)), glm::vec3(kWidth * 0.5f + 0.04f, bodyHeight * 0.55f, kWidth + 0.04f)),
+                tint(hide));
+        if (p.armour & Armour::Bit(ArmourPiece::Boots))
+            box(glm::scale(glm::translate(base, glm::vec3(0.02f, 0.11f, 0)), glm::vec3(kWidth * 0.5f + 0.06f, 0.22f, kWidth + 0.04f)), tint(hideDark));
+
+        // The right arm, held forward a little, and what's in its hand.
+        const glm::mat4 shoulder = glm::rotate(glm::translate(base, glm::vec3(0.0f, bodyHeight * 0.85f, kWidth * 0.5f + 0.08f)), glm::radians(35.0f),
+                                               glm::vec3(0, 0, 1));
+        box(glm::scale(glm::translate(shoulder, glm::vec3(0, -0.3f, 0)), glm::vec3(0.14f, 0.6f, 0.14f)), color * 0.85f);
+        if (p.held != PlayerModel::Held::Nothing) {
+            const glm::mat4 hand = glm::translate(shoulder, glm::vec3(0.05f, -0.62f, 0.0f));
+            shader.SetUniform("textured", 1.0f);
+            shader.SetUniform("tileRect", p.heldUV);
+            if (p.held == PlayerModel::Held::Block) {
+                box(glm::scale(glm::translate(hand, glm::vec3(0.1f, 0.0f, 0.0f)), glm::vec3(0.22f)), tint(glm::vec3(1.0f)));
+            }
+            else {
+                // A card facing sideways (its broad faces along the arm), pointing forward
+                // and up out of the fist, like a tool held ready.
+                const glm::mat4 card = glm::rotate(glm::translate(hand, glm::vec3(0.18f, 0.1f, 0.0f)), glm::radians(-35.0f), glm::vec3(0, 0, 1));
+                box(glm::scale(card, glm::vec3(0.5f, 0.5f, 0.03f)), tint(glm::vec3(1.0f)));
+            }
+            shader.SetUniform("textured", 0.0f);
+        }
     }
 }
 
@@ -98,6 +135,7 @@ void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const gl
     glBindVertexArray(vao);
     const glm::vec3 kRed(0.9f, 0.15f, 0.1f);
     shader.SetUniform("glow", 0.0f);
+    shader.SetUniform("textured", 0.0f);
     for (const auto& c : creatures) {
         shader.SetUniform("lightLevels", c.light);
         auto tint = [&](const glm::vec3& color) { return c.hurt ? glm::mix(color, kRed, 0.55f) : color; };

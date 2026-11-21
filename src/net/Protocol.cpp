@@ -181,7 +181,21 @@ std::vector<uint8_t> Encode(const PlayerState& m) {
     w.F32(m.yaw);
     w.F32(m.pitch);
     w.U8(m.flags);
+    w.U8(static_cast<uint8_t>(m.heldTool));
+    w.U8(static_cast<uint8_t>(m.heldBlock));
     return std::move(w.data);
+}
+
+std::vector<uint8_t> Encode(const PlayerName& m) {
+    ByteWriter w;
+    Begin(w, MsgType::PlayerName);
+    w.U16(m.id);
+    w.Str(m.name);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, PlayerName& m) {
+    return in.U16(m.id) && in.Str(m.name, 64) && in.AtEnd();
 }
 
 std::vector<uint8_t> Encode(const EditBreak& m) {
@@ -442,6 +456,9 @@ std::vector<uint8_t> Encode(const PlayerSnapshot& m) {
         w.F32(p.yaw);
         w.F32(p.pitch);
         w.U8(p.flags);
+        w.U8(static_cast<uint8_t>(p.heldTool));
+        w.U8(static_cast<uint8_t>(p.heldBlock));
+        w.U8(p.armour);
     }
     w.F32(m.timeOfDay);
     w.U8(m.rain);
@@ -487,10 +504,21 @@ bool Decode(ByteReader& in, Kick& m) {
     return in.Str(m.reason, kMaxReasonLength);
 }
 
+namespace {
+// What a player holds: a tool and a block type, both in range.
+bool ReadHeld(ByteReader& in, Tool& tool, BlockType& block) {
+    uint8_t t, b;
+    if (!in.U8(t) || !in.U8(b) || t >= static_cast<uint8_t>(Tool::Count) || b >= static_cast<uint8_t>(BlockType::COUNT)) return false;
+    tool = static_cast<Tool>(t);
+    block = static_cast<BlockType>(b);
+    return true;
+}
+} // namespace
+
 bool Decode(ByteReader& in, PlayerState& m) {
     return in.U32(m.sequence) && in.U16(m.correctionId) && in.Vec3(m.feet) && in.Vec3(m.velocity) && in.F32(m.yaw) &&
-           in.F32(m.pitch) && in.U8(m.flags) && Finite(m.feet) && Finite(m.velocity) && std::isfinite(m.yaw) &&
-           std::isfinite(m.pitch);
+           in.F32(m.pitch) && in.U8(m.flags) && ReadHeld(in, m.heldTool, m.heldBlock) && Finite(m.feet) && Finite(m.velocity) &&
+           std::isfinite(m.yaw) && std::isfinite(m.pitch);
 }
 
 namespace {
@@ -575,7 +603,9 @@ bool Decode(ByteReader& in, PlayerSnapshot& m) {
     if (!in.U32(m.tick) || !in.VarU32(n) || n > kMaxPlayers) return false;
     m.players.resize(n);
     for (auto& p : m.players)
-        if (!in.U16(p.id) || !in.Vec3(p.feet) || !in.F32(p.yaw) || !in.F32(p.pitch) || !in.U8(p.flags)) return false;
+        if (!in.U16(p.id) || !in.Vec3(p.feet) || !in.F32(p.yaw) || !in.F32(p.pitch) || !in.U8(p.flags) || !ReadHeld(in, p.heldTool, p.heldBlock) ||
+            !in.U8(p.armour))
+            return false;
     return in.F32(m.timeOfDay) && in.U8(m.rain) && std::isfinite(m.timeOfDay) && m.timeOfDay >= 0.0f && m.timeOfDay < 1.0f;
 }
 

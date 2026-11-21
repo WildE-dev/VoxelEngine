@@ -2,6 +2,13 @@
 
 in vec3 normal;
 in vec3 WorldPos;
+in vec2 faceUV;
+
+// A held block or item: the box shows an atlas tile (top-left, bottom-right in
+// tileRect) on each face, see-through where the tile is.
+uniform float textured;
+uniform vec4 tileRect;
+uniform sampler2D atlas;
 out vec4 FragColor;
 
 uniform vec3 cameraPos;
@@ -33,6 +40,12 @@ uniform vec3 sunDirection;
 uniform float sunBrightness;
 
 void main() {
+    vec3 albedo = color;
+    if (textured > 0.5) {
+        vec4 texel = texture(atlas, mix(tileRect.xy, tileRect.zw, clamp(faceUV, 0.02, 0.98)));
+        if (texel.a < 0.5) discard;
+        albedo *= texel.rgb;
+    }
     // Lit like the world around it (main.vert): sky light where the sky reaches, by
     // day, shaded toward the sun so the boxes read as solid; block light from lamps
     // and the like; and almost nothing in the dark (a cave at night is black).
@@ -42,5 +55,5 @@ void main() {
     float shade = 0.45 + 0.55 * sunSide;
     vec3 light = vec3(0.04) + vec3(sky * sunBrightness * shade) + block * blockLightColor * (0.7 + 0.3 * shade);
     light = mix(min(light, vec3(1.0)), vec3(1.0), glow);
-    FragColor = vec4(ApplyFog(color * light, WorldPos), 1.0);
+    FragColor = vec4(ApplyFog(albedo * light, WorldPos), 1.0);
 }

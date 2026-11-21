@@ -393,6 +393,12 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
     net.Send(client.peer, net::kChannelReliable, net::Encode(welcome));
     Log(client.name + " joined as player " + std::to_string(client.id));
     Broadcast(net::ChatMessage::Kind::Info, client.name + " joined the game");
+    // Names for name tags: theirs to everyone, everyone else's to them.
+    for (const auto& [peer, other] : clients) {
+        if (!other.welcomed) continue;
+        net.Send(other.peer, net::kChannelReliable, net::Encode(net::PlayerName{ client.id, client.name }));
+        if (other.id != client.id) net.Send(client.peer, net::kChannelReliable, net::Encode(net::PlayerName{ other.id, other.name }));
+    }
     SendChat(client, net::ChatMessage::Kind::Info, "Press T to chat, / for commands (/help lists them)");
     if (IsOperator(&client)) SendChat(client, net::ChatMessage::Kind::Info, "You are an operator");
     SendAbilities(client);
@@ -442,6 +448,8 @@ void Server::HandlePlayerState(ClientState& client, const net::PlayerState& stat
     client.yaw = state.yaw;
     client.pitch = state.pitch;
     client.flags = state.flags;
+    client.heldTool = state.heldTool;
+    client.heldBlock = state.heldBlock;
     client.lastStateTime = now;
     if (!blocked) client.lastValid = state.feet;
 }
@@ -1095,7 +1103,9 @@ void Server::BroadcastPlayers() {
         if (!client.welcomed || !client.hasState) continue;
         // Flashes red for others while just hurt.
         const uint8_t flags = static_cast<uint8_t>((client.flags & ~net::kFlagHurt) | (Now() - client.lastHurt < 0.3 ? net::kFlagHurt : 0));
-        snapshot.players.push_back({ client.id, client.feet, client.yaw, client.pitch, flags });
+        // (Armour shows only in survival, where it's worn.)
+        snapshot.players.push_back({ client.id, client.feet, client.yaw, client.pitch, flags, client.heldTool, client.heldBlock,
+                                     static_cast<uint8_t>(Creative(client) ? 0 : client.armour) });
     }
     const auto packet = net::Encode(snapshot);
     for (const auto& [peer, client] : clients)

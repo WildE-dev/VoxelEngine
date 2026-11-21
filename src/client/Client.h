@@ -33,6 +33,10 @@ public:
         glm::vec3 feet{0.0f};
         float yaw = 0.0f, pitch = 0.0f;
         uint8_t flags = 0;
+        Tool heldTool = Tool::None;          // what's in their hand
+        BlockType heldBlock = BlockType::AIR;
+        uint8_t armour = 0;                  // armour worn (Armour::Bit each)
+        std::string name;                    // (empty until the server says)
     };
 
     explicit Client(ClientWorld& world);
@@ -66,7 +70,9 @@ public:
     glm::vec3 TakeKnockback() { const glm::vec3 k = pendingKnockback; pendingKnockback = glm::vec3(0.0f); return k; }
 
     // Sent at most kStateRate times a second; extra calls are ignored.
-    void SendPlayerState(const glm::vec3& feet, const glm::vec3& velocity, float yaw, float pitch, uint8_t flags);
+    // `heldTool` / `heldBlock`: what's in hand, for others to see.
+    void SendPlayerState(const glm::vec3& feet, const glm::vec3& velocity, float yaw, float pitch, uint8_t flags, Tool heldTool = Tool::None,
+                         BlockType heldBlock = BlockType::AIR);
 
     // Edits (predicted locally).
     // In survival, breaking takes time (world/Mining.h): StartMining when starting on a
@@ -194,6 +200,7 @@ private:
         RemotePlayer state;
     };
     std::unordered_map<uint16_t, std::deque<Sample>> remote;
+    std::unordered_map<uint16_t, std::string> playerNames; // by id (PlayerName)
     struct CreatureSample {
         double time;
         Creature state;

@@ -180,6 +180,8 @@ private:
         std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{}; // units held (survival)
         uint8_t tools = 0; // tools made (Crafting::ToolBit each; creative has them all)
         uint8_t armour = 0; // armour worn (Armour::Bit each)
+        Tool heldTool = Tool::None;          // in their hand, for others to see
+        BlockType heldBlock = BlockType::AIR;
 
         int health = kMaxHealth;
         int sentHealth = -1;          // last health the client was told

@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 22;
+constexpr uint32_t kProtocolVersion = 23;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -65,6 +65,7 @@ enum class MsgType : uint8_t {
     GameModeIs,    // you're in creative or survival
     Resources,     // what you hold (survival): units of each block type
     CreatureSnapshot, // the creatures near you
+    PlayerName,    // a player's name, by id (for their name tag)
     Knockback,     // you were hit: a push to add to your velocity
 };
 
@@ -196,6 +197,10 @@ struct PlayerState {
     glm::vec3 velocity{0.0f};
     float yaw = 0.0f, pitch = 0.0f; // degrees
     uint8_t flags = 0;
+    // What's in their hand, for others to see: a tool, or else a block or item
+    // (BlockType::AIR: nothing).
+    Tool heldTool = Tool::None;
+    BlockType heldBlock = BlockType::AIR;
 };
 
 struct EditBreak {
@@ -268,6 +273,16 @@ struct PlayerInfo {
     glm::vec3 feet{0.0f};
     float yaw = 0.0f, pitch = 0.0f;
     uint8_t flags = 0;
+    Tool heldTool = Tool::None;          // see PlayerState
+    BlockType heldBlock = BlockType::AIR;
+    uint8_t armour = 0;                  // armour worn (Armour::Bit each)
+};
+
+// A player's name, sent to everyone when they join (and to a joining player for each
+// player already there), for name tags.
+struct PlayerName {
+    uint16_t id = 0;
+    std::string name;
 };
 
 struct PlayerSnapshot {
@@ -385,6 +400,7 @@ std::vector<uint8_t> EncodeLightData(const glm::ivec3& coords, const ChunkLight&
 std::vector<uint8_t> Encode(const BlockDeltas& m);
 std::vector<uint8_t> Encode(const PlayerSnapshot& m);
 std::vector<uint8_t> Encode(const Correction& m);
+std::vector<uint8_t> Encode(const PlayerName& m);
 std::vector<uint8_t> Encode(const Knockback& m);
 
 bool Decode(ByteReader& in, Hello& m);
@@ -406,6 +422,7 @@ bool DecodeLightData(ByteReader& in, glm::ivec3& coords, ChunkLight& light);
 bool Decode(ByteReader& in, BlockDeltas& m);
 bool Decode(ByteReader& in, PlayerSnapshot& m);
 bool Decode(ByteReader& in, Correction& m);
+bool Decode(ByteReader& in, PlayerName& m);
 bool Decode(ByteReader& in, Knockback& m);
 
 } // namespace net

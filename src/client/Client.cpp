@@ -180,10 +180,15 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
             if (p.id == playerId) continue;
             auto& samples = next[p.id];
             if (auto it = remote.find(p.id); it != remote.end()) samples = std::move(it->second);
-            samples.push_back({ now, { p.id, p.feet, p.yaw, p.pitch, p.flags } });
+            samples.push_back({ now, { p.id, p.feet, p.yaw, p.pitch, p.flags, p.heldTool, p.heldBlock, p.armour, {} } });
             while (samples.size() > 2 && samples[1].time < now - 1.0) samples.pop_front();
         }
         remote = std::move(next); // players missing from the snapshot have left
+        break;
+    }
+    case net::MsgType::PlayerName: {
+        net::PlayerName m;
+        if ((ok = net::Decode(in, m))) playerNames[m.id] = m.name;
         break;
     }
     case net::MsgType::CreatureSnapshot: {
@@ -227,7 +232,8 @@ std::optional<glm::vec3> Client::TakeCorrection() {
     return c;
 }
 
-void Client::SendPlayerState(const glm::vec3& feet, const glm::vec3& velocity, float yaw, float pitch, uint8_t flags) {
+void Client::SendPlayerState(const glm::vec3& feet, const glm::vec3& velocity, float yaw, float pitch, uint8_t flags, Tool heldTool,
+                             BlockType heldBlock) {
     const double now = Now();
     if (!welcomed || now - lastStateSent < 1.0 / kStateRate) return;
     lastStateSent = now;
@@ -239,6 +245,8 @@ void Client::SendPlayerState(const glm::vec3& feet, const glm::vec3& velocity, f
     m.yaw = yaw;
     m.pitch = pitch;
     m.flags = flags;
+    m.heldTool = heldTool;
+    m.heldBlock = heldBlock;
     net.Send(net::kChannelUnreliable, net::Encode(m));
 }
 
@@ -341,8 +349,10 @@ std::vector<Client::RemotePlayer> Client::GetRemotePlayers() const {
         // The two samples around t; before the first or after the last, hold it.
         size_t i = 0;
         while (i + 1 < samples.size() && samples[i + 1].time <= t) i++;
+        const auto name = playerNames.find(id);
         if (i + 1 >= samples.size() || t <= samples[i].time) {
             result.push_back(samples[i].state);
+            if (name != playerNames.end()) result.back().name = name->second;
             continue;
         }
         const Sample& a = samples[i];
@@ -352,6 +362,7 @@ std::vector<Client::RemotePlayer> Client::GetRemotePlayers() const {
         p.feet = glm::mix(a.state.feet, b.state.feet, f);
         p.yaw = LerpAngle(a.state.yaw, b.state.yaw, f);
         p.pitch = a.state.pitch + (b.state.pitch - a.state.pitch) * f;
+        if (name != playerNames.end()) p.name = name->second;
         result.push_back(p);
     }
     return result;

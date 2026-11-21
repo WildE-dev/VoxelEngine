@@ -15,6 +15,11 @@ struct PlayerModel {
     glm::vec3 color{1.0f};
     bool hurt = false;
     glm::vec2 light{ 15.0f, 0.0f }; // sky and block light where they stand (0..15)
+    // What's in their right hand: nothing, a block (a little textured cube) or a tool
+    // or item (its icon, as a flat card). `heldUV`: the atlas tile (top-left, bottom-right).
+    enum class Held : uint8_t { Nothing, Block, Icon } held = Held::Nothing;
+    glm::vec4 heldUV{ 0.0f };
+    uint8_t armour = 0; // armour worn (Armour::Bit each): drawn over them
 };
 
 // A creature as drawn (world/Creatures.h): what it is, where, which way it faces,

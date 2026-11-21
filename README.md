@@ -75,7 +75,12 @@ cd build && ./VoxelEngine --connect 192.168.1.20 --name Alice
 `--connect host:port` sets the port. To play on the same machine as the server,
 connect to `127.0.0.1`. Over the internet, forward UDP port 27450 to the server.
 Other players appear as box figures in their own colour, with a dark visor on the
-side they're facing. The server saves the world (see [Saving](#saving)).
+side they're facing. Each has a right arm holding whatever is in their hand: a block
+as a little textured cube, a tool or item as its icon. Survival players' armour shows
+over them (see [Swords and armour](#swords-and-armour)). Their name floats over their
+head, within 40 blocks and only when nothing's in the way. The server sends names once
+(when someone joins), and what's in hand and the armour with every position update.
+The server saves the world (see [Saving](#saving)).
 
 `NetSmokeTest` starts a server and two clients in one process (real sockets on
 localhost, no windows) and checks that chunks stream, edits and flowing water
@@ -608,7 +613,8 @@ game applies it, so the usual movement checks still hold. Killing someone tells
 everyone (`X was slain by Y`), and they respawn. Creative players and players flying in
 no-clip can't be hurt. PvP is on by default; operators switch it with `/pvp on|off`,
 and `/pvp` shows which. With it off, a hit just tells you so. `CreatureTest` checks
-reach, damage, the red flash, knockback, `/pvp off`, and being slain.
+names, held items and armour reaching other players, reach, damage, the red flash,
+knockback, `/pvp off`, and being slain.
 
 ## Swords and armour
 

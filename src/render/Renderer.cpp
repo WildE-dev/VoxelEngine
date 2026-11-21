@@ -244,6 +244,8 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
     playerShader.SetUniform("sunDirection", params.sunDirection);
     playerShader.SetUniform("sunBrightness", params.sunBrightness);
     playerShader.SetUniform("blockLightColor", kBlockLightColor);
+    playerShader.SetUniform("atlas", 0); // held blocks and items
+    atlas.Bind(GL_TEXTURE0);
     playerShader.SetUniform("cameraPos", params.cameraPosition);
     SetFogUniforms(playerShader, params, 1);
     playerModels.Draw(playerShader, params.view, params.projection, params.players);

@@ -108,6 +108,8 @@ private:
     void DrawChat();
     // Hearts above the hotbar, and a red flash when hurt.
     void DrawHealth();
+    // Other players' names over their heads (`viewProjection`: this frame's camera).
+    void DrawNameTags(const glm::mat4& viewProjection);
     // A small cross in the middle of the screen while aiming.
     void DrawCrosshair();
     void OpenChat(char openedWith);
