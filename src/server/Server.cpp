@@ -1783,17 +1783,32 @@ void Server::SetHorde(bool on) {
 
 void Server::Tick() {
     tickCount++;
+    // VOXEL_BENCH: where tick time goes, printed once a second (see Bench below).
+    static const bool bench = std::getenv("VOXEL_BENCH") != nullptr;
+    double mark = bench ? Now() : 0.0;
+    const double tickStart = mark;
+    auto section = [&](int i) {
+        if (!bench) return;
+        const double t = Now();
+        benchSections[i] += t - mark;
+        mark = t;
+    };
     RunConsoleCommands();
     UpdateSky();
     UpdateHorde();
     UpdateTraps();
+    section(0);
     UpdateCreatures();
+    section(1);
     UpdateCrops();
     UpdateArrows();
     UpdateFishing();
     UpdateTnt();
+    section(2);
     UpdatePower();
+    section(3);
     UpdateSignals();
+    section(4);
     if (storage && options.autosaveSeconds > 0.0f && Now() - lastSaveTime >= options.autosaveSeconds) Save(false);
 
     std::vector<glm::ivec3> centers;
@@ -1812,6 +1827,28 @@ void Server::Tick() {
     SendCreatures();
     SendArrows();
     net.Flush();
+    section(5);
+    if (bench) {
+        const double took = Now() - tickStart;
+        benchTicks++;
+        benchWorst = std::max(benchWorst, took);
+        if (tickStart - benchLast >= 1.0) {
+            const double n = static_cast<double>(benchTicks);
+            const auto water = world->GetWater().TakeBench();
+            std::printf("[server] %d ticks: %.2f ms avg, %.2f worst | traps %.2f creatures %.2f misc %.2f power %.2f signals %.2f world+send %.2f ms | "
+                        "%zu machines, %zu air networks, %zu signal blocks | water: %d ticks, %.2f ms avg, %.2f worst, %zu active, %zu pumps+springs\n",
+                        benchTicks,
+                        (benchSections[0] + benchSections[1] + benchSections[2] + benchSections[3] + benchSections[4] + benchSections[5]) / n * 1e3, benchWorst * 1e3, benchSections[0] / n * 1e3, benchSections[1] / n * 1e3, benchSections[2] / n * 1e3,
+                        benchSections[3] / n * 1e3, benchSections[4] / n * 1e3, benchSections[5] / n * 1e3, machineList.size(), networks.size(), signalBlocks.size(),
+                        water.ticks, water.ticks ? water.seconds / water.ticks * 1e3 : 0.0, water.worst * 1e3, world->GetWater().GetActiveCount(),
+                        world->GetWater().GetPumpCount());
+            std::fflush(stdout);
+            benchLast = tickStart;
+            benchTicks = 0;
+            benchWorst = 0.0;
+            for (double& s : benchSections) s = 0.0;
+        }
+    }
 }
 
 void Server::DistributeChanges() {

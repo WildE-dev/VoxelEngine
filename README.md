@@ -1508,7 +1508,21 @@ skipped when no water is in view.
 
 `VOXEL_BENCH=1 ./VoxelEngine` turns vsync off and prints, once a second, the frame
 rate, where the frame time goes (network, update, draw submission, GPU, UI) and how
-many chunks were drawn.
+many chunks were drawn. The server prints a line of its own: ticks, their average and
+worst time, where it goes (traps, creatures, other updates, air power, signals, world
+and sending), how many machines, air networks and signal blocks there are, and the
+water simulation's ticks (it runs on its own thread), their time and its active cells.
+
+Measured on this Mac (Release, normal world, by the river near spawn): about 108 fps,
+the server's tick 0.08 ms (of the 50 it has), and the water simulation 4 ticks a second
+of about 9 ms each with some 4,600 cells moving (the rivers never stop). With a large
+factory beside it (1,024 air pipes, 1,024 item pipes and 32 each of compressors,
+smelters, chests, air tanks, extractors, crafters, pistons and gauges, all on one
+network) the tick averages 0.2 ms, the worst 2.5 ms (the air update, four times a
+second), and frames lose about 0.3 ms to drawing. Pressure gauges are the only
+machines with a real drawing cost (a dial is a dozen small boxes), so they're drawn in
+less detail further off: the marks only within 12 blocks, only the housing from behind,
+and none beyond 48.
 
 ## Layout
 

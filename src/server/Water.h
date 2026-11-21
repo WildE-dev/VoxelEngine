@@ -132,6 +132,17 @@ public:
 
     size_t GetActiveCount() const { return activeCount.load(std::memory_order_relaxed); }
     // Rain on or off (the server's weather). Any thread.
+    // Time spent ticking since the last call (for VOXEL_BENCH): ticks, seconds, worst.
+    struct Bench {
+        int ticks = 0;
+        double seconds = 0.0, worst = 0.0;
+    };
+    Bench TakeBench() {
+        std::lock_guard<std::mutex> lock(benchMutex);
+        const Bench b = bench;
+        bench = {};
+        return b;
+    }
     void SetRaining(bool on) { raining.store(on, std::memory_order_relaxed); }
     bool IsRaining() const { return raining.load(std::memory_order_relaxed); }
     // Units rain has added so far (for tests and stats).
@@ -201,6 +212,8 @@ private:
 
     std::mt19937 random{0x5EED}; // ticking thread only (fixed seed: tests repeat)
     std::vector<glm::ivec3> randomChunks, puddles, wet, aboveSea; // tick scratch
+    std::mutex benchMutex;
+    Bench bench;
     std::atomic<bool> raining{false};
     std::atomic<size_t> rainedUnits{0};
     std::atomic<size_t> evaporatedCount{0};

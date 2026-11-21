@@ -220,7 +220,15 @@ void PlayerModels::DrawGauges(Shader& shader, const glm::mat4& view, const glm::
     shader.SetUniform("textured", 0.0f);
     glBindVertexArray(vao);
     const glm::vec3 kRim(0.25f, 0.25f, 0.28f), kFace(0.93f, 0.9f, 0.8f), kRed(0.8f, 0.12f, 0.1f), kGreen(0.25f, 0.65f, 0.3f), kPin(0.1f, 0.1f, 0.1f);
+    // Less detail further off: the marks only up close, nothing but the housing from
+    // behind, and nothing at all far away (a dial's details are a lot of tiny boxes).
+    const glm::vec3 eye = glm::vec3(glm::inverse(view)[3]);
+    constexpr float kMarksRange = 12.0f, kDrawRange = 48.0f;
     for (const auto& g : gauges) {
+        const glm::vec3 toEye = eye - g.centre;
+        const float distance = glm::length(toEye);
+        if (distance > kDrawRange) continue;
+        const bool front = glm::dot(toEye, glm::vec3(g.facing)) > 0.0f;
         shader.SetUniform("lightLevels", g.light);
         // Local frame: +z the way it faces (level ones turned about y, upright ones
         // about x), the pipe behind it at -z.
@@ -235,11 +243,12 @@ void PlayerModels::DrawGauges(Shader& shader, const glm::mat4& view, const glm::
         };
         part(base, { 0.0f, 0.0f, -0.38f }, { 0.14f, 0.14f, 0.24f }, kRim);   // the stem, back to the pipe
         part(base, { 0.0f, 0.0f, -0.2f }, { 0.52f, 0.52f, 0.14f }, kRim);    // the housing
+        if (!front) continue;
         const glm::mat4 frame = glm::translate(base, glm::vec3(0.0f, 0.0f, -0.14f));
         part(frame, { 0.0f, 0.0f, 0.01f }, { 0.44f, 0.44f, 0.02f }, kRim);
         part(frame, { 0.0f, 0.0f, 0.02f }, { 0.36f, 0.36f, 0.02f }, kFace);
         // Marks: the running pressure (a quarter) in green, the rest round the dial.
-        for (int i = 0; i <= 8; i++) {
+        for (int i = 0; i <= 8 && distance < kMarksRange; i++) {
             const float a = glm::radians(135.0f - 270.0f * i / 8.0f);
             const glm::mat4 r = glm::rotate(frame, a, glm::vec3(0, 0, 1));
             part(r, { 0.0f, 0.14f, 0.032f }, { 0.02f, 0.05f, 0.01f }, i == 2 ? kGreen : kPin);

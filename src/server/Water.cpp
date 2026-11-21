@@ -452,6 +452,18 @@ void WaterSimulation::ThreadLoop(ServerWorld& world) {
 }
 
 void WaterSimulation::Tick(ServerWorld& world) {
+    // (Timed for VOXEL_BENCH.)
+    struct Timer {
+        WaterSimulation& w;
+        std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+        ~Timer() {
+            const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+            std::lock_guard<std::mutex> lock(w.benchMutex);
+            w.bench.ticks++;
+            w.bench.seconds += s;
+            w.bench.worst = std::max(w.bench.worst, s);
+        }
+    } timer{ *this };
     std::recursive_mutex& edit = world.GetEditMutex();
     struct Ticking {
         std::atomic<bool>& flag;

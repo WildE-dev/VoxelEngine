@@ -464,6 +464,10 @@ private:
     std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> plateSignal; // plates sending until then
     double nextSignalUpdate = 0.0;
     void UpdateSignals();
+    // VOXEL_BENCH timings (Tick): seconds in each part this second, ticks, the worst.
+    double benchSections[6] = {};
+    int benchTicks = 0;
+    double benchWorst = 0.0, benchLast = 0.0;
     // A pressure plate pressed (by a player or a creature): it sends for a while. A
     // dungeon flood chamber's gets its wiring the first time.
     void PressPlate(const glm::ivec3& pos, double now);
