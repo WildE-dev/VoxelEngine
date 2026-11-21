@@ -202,6 +202,7 @@ void Server::StorePlayer(const ClientState& client) {
     record.tools = client.tools;
     record.health = client.health;
     record.food = client.food;
+    record.armour = client.armour;
     storage->StorePlayer(client.name, record);
 }
 
@@ -380,6 +381,7 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
             client.flags = saved->flags;
             client.health = std::clamp(saved->health, 1, kMaxHealth);
             client.food = std::clamp(saved->food, 0, Hunger::kMaxFood);
+            client.armour = saved->armour;
             welcome.spawn = saved->feet;
             welcome.yaw = saved->yaw;
             welcome.pitch = saved->pitch;
@@ -462,13 +464,15 @@ void Server::HandleCraft(ClientState& client, int recipeIndex, int count) {
     const auto& recipes = Crafting::Recipes();
     if (Creative(client) || recipeIndex < 0 || recipeIndex >= static_cast<int>(recipes.size())) return;
     const Recipe& recipe = recipes[recipeIndex];
-    if (recipe.tool != Tool::None) {
-        if (client.tools & Crafting::ToolBit(recipe.tool)) return SendResources(client); // made already
+    if (recipe.MadeOnce()) {
+        const bool made = recipe.tool != Tool::None ? (client.tools & Crafting::ToolBit(recipe.tool)) != 0 : (client.armour & Armour::Bit(recipe.armour)) != 0;
+        if (made) return SendResources(client); // made already
         count = 1;
     }
     if (Crafting::TimesAffordable(recipe, client.resources) < static_cast<uint32_t>(count)) return SendResources(client); // can't afford
     for (const auto& in : recipe.inputs) client.resources[static_cast<size_t>(in.type)] -= in.units * count;
     if (recipe.tool != Tool::None) client.tools |= Crafting::ToolBit(recipe.tool);
+    else if (recipe.armour != ArmourPiece::Count) client.armour |= Armour::Bit(recipe.armour);
     else client.resources[static_cast<size_t>(recipe.output)] += recipe.outputUnits * count;
     SendResources(client);
 }
@@ -488,8 +492,9 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
         if (type == CreatureType::Deer) {
             const uint32_t venison = 1 + static_cast<uint32_t>(tickCount % 2);
             client.resources[static_cast<size_t>(BlockType::RAW_VENISON)] += venison * Block::kUnitsPerBlock;
+            client.resources[static_cast<size_t>(BlockType::HIDE)] += Block::kUnitsPerBlock; // and its hide
             SendResources(client);
-            spoils = " (+" + std::to_string(venison) + " raw venison)";
+            spoils = " (+" + std::to_string(venison) + " raw venison, +1 hide)";
         }
         SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id + spoils);
     }
@@ -705,6 +710,7 @@ void Server::SendResources(ClientState& client) {
     for (size_t t = 0; t < client.resources.size(); t++)
         if (client.resources[t] > 0) m.held.emplace_back(static_cast<BlockType>(t), client.resources[t]);
     m.tools = client.tools;
+    m.armour = client.armour;
     net.Send(client.peer, net::kChannelReliable, net::Encode(m));
 }
 
@@ -729,9 +735,10 @@ void Server::SendHealth(ClientState& client, bool hurt) {
     net.Send(client.peer, net::kChannelReliable, net::Encode(m));
 }
 
-void Server::Hurt(ClientState& client, int amount, const std::string& deathMessage) {
+void Server::Hurt(ClientState& client, int amount, const std::string& deathMessage, bool armourHelps) {
     const double now = Now();
     if (now < client.invulnerableUntil || Creative(client)) return; // nothing hurts in creative
+    if (armourHelps) amount = Armour::Reduce(amount, client.armour);
     client.health = std::max(0, client.health - amount);
     client.lastHurt = now;
     client.nextRegen = now + kRegenDelay;
@@ -791,7 +798,8 @@ void Server::UpdateBreath(ClientState& client, float dt) {
             Hurt(client, drowning ? kDrownDamage : kSuffocateDamage,
                  drowning                       ? "drowned"
                  : air.cause == Cause::ThinAir ? "ran out of breath in the thin air up high"
-                                                : "suffocated in the stale air deep underground");
+                                                : "suffocated in the stale air deep underground",
+                 false);
         }
     }
     if (static_cast<int>(std::ceil(client.air)) != client.sentAir || client.airCause != client.sentAirCause) SendHealth(client, false);
@@ -817,7 +825,7 @@ void Server::UpdateHunger(ClientState& client, float dt) {
     const double now = Now();
     if (client.food == 0 && now >= client.nextStarve) {
         client.nextStarve = now + Hunger::kStarveInterval / std::max(1.0f, options.hungerRate);
-        if (client.health > Hunger::kStarveFloor) Hurt(client, 1, "starved");
+        if (client.health > Hunger::kStarveFloor) Hurt(client, 1, "starved", false);
     }
     if (client.food != client.sentFood) SendHealth(client, false);
 }

@@ -50,6 +50,7 @@ public:
         // more can be added without breaking older saves).
         int health = 20; // half hearts
         int food = 20;   // world/Hunger.h
+        uint8_t armour = 0; // armour worn (Armour::Bit each)
     };
 
     // One bit per block column of a chunk (index x * CHUNK_SIZE + z).

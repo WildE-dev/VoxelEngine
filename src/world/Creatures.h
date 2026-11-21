@@ -47,6 +47,7 @@ constexpr float kReach = 4.5f;
 constexpr double kCooldown = 0.35;
 inline int Damage(Tool tool) {
     switch (tool) {
+    case Tool::Sword: return 7;
     case Tool::Axe: return 5;
     case Tool::Pickaxe: return 4;
     case Tool::Shovel: return 3;

@@ -224,6 +224,14 @@ int main() {
         }
         Check(both(5.0, [&] { return Has(b, "Rival was slain by Duelist"); }), "enough axe hits slay them (and everyone's told)");
         Check(both(5.0, [&] { return b.client.GetHealth() == 20; }), "and they're back at full health");
+        server.QueueConsoleCommand("give sword Duelist");
+        for (const char* piece : { "cap", "tunic", "boots" }) server.QueueConsoleCommand(std::string("give ") + piece + " Rival");
+        server.QueueConsoleCommand("tp Rival " + std::to_string(a.feet.x + 2.0f) + " 0 8.5");
+        both(20.0, [&] { return b.client.HasArmour(ArmourPiece::Boots) && a.client.HasTool(Tool::Sword); });
+        wait(3.5); // (past their respawn grace)
+        a.client.AttackPlayer(rival, Tool::Sword);
+        Check(both(20.0, [&] { return b.client.GetHealth() < 20; }) && b.client.GetHealth() == 16,
+              "armour takes a sword's 3.5 hearts down to 2 (health " + std::to_string(b.client.GetHealth()) + ")");
         a.client.Disconnect();
         b.client.Disconnect();
         Pump({ &a, &b }, 0.3, [] { return false; });

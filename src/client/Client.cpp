@@ -109,6 +109,7 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         for (const auto& [type, units] : m.held)
             if (static_cast<size_t>(type) < resources.size()) resources[static_cast<size_t>(type)] = units;
         tools = m.tools;
+        armour = m.armour;
         break;
     }
     case net::MsgType::Abilities: {
@@ -262,6 +263,7 @@ bool Client::CanCraft(int index, int count) const {
     if (IsCreative() || index < 0 || index >= static_cast<int>(recipes.size())) return false;
     const Recipe& recipe = recipes[index];
     if (recipe.tool != Tool::None && HasTool(recipe.tool)) return false;
+    if (recipe.armour != ArmourPiece::Count && HasArmour(recipe.armour)) return false;
     return Crafting::TimesAffordable(recipe, resources) >= static_cast<uint32_t>(count);
 }
 
@@ -271,6 +273,7 @@ void Client::Craft(int index, int count) {
     const Recipe& recipe = Crafting::Recipes()[index];
     for (const auto& in : recipe.inputs) resources[static_cast<size_t>(in.type)] -= in.units * count;
     if (recipe.tool != Tool::None) tools |= Crafting::ToolBit(recipe.tool);
+    else if (recipe.armour != ArmourPiece::Count) armour |= Armour::Bit(recipe.armour);
     else resources[static_cast<size_t>(recipe.output)] += recipe.outputUnits * count;
     net.Send(net::kChannelReliable, net::Encode(net::Craft{ static_cast<uint8_t>(index), static_cast<uint8_t>(count) }));
 }

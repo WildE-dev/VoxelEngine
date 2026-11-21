@@ -99,7 +99,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Operator, "/noclip [player] - fly through blocks, on or off (operators may also use the laser, L)" },
     { Level::Everyone, "/gamemode - show your game mode" },
     { Level::Operator, "/gamemode <creative|survival> [player] - creative: anything, unhurt; survival: collect what you build with" },
-    { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64), or /give <tool> [player]" },
+    { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64), or /give <tool|cap|tunic|boots> [player]" },
     { Level::Operator, "/summon <deer|ghoul> [x y z] - bring a creature (default: a few blocks ahead of you)" },
     { Level::Operator, "/creatures [clear] - count the creatures, or remove them all" },
     { Level::Everyone, "/food - how hungry you are" },
@@ -311,6 +311,15 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
             SendResources(*target);
             if (target != sender) SendChat(*target, Kind::Info, who + " gave you a " + Mining::ToolId(tool));
             return reply(Kind::Info, std::string("Gave a ") + Mining::ToolId(tool) + (target != sender ? " to " + target->name : ""));
+        }
+        // A piece of armour: worn from now on.
+        if (const ArmourPiece piece = Armour::FromId(Lower(words[1])); piece != ArmourPiece::Count) {
+            ClientState* target = words.size() > 2 ? FindPlayer(words.back()) : sender;
+            if (!target) return usage("give <cap|tunic|boots> <player>");
+            target->armour |= Armour::Bit(piece);
+            SendResources(*target);
+            if (target != sender) SendChat(*target, Kind::Info, who + " gave you a " + Armour::Name(piece));
+            return reply(Kind::Info, std::string("Gave a ") + Armour::Name(piece) + (target != sender ? " to " + target->name : ""));
         }
         const BlockType type = BlockFromId(Lower(words[1]));
         if (type == BlockType::COUNT || Block(type).IsLiquid())

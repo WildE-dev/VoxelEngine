@@ -52,7 +52,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::RAW_VENISON, BlockType::COOKED_VENISON,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -79,7 +79,7 @@ const char* HeightName(int eighths) {
 }
 
 // The tools the inventory offers, and the icon (atlas tile) for one.
-constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel };
+constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel, Tool::Sword };
 int ToolTile(const TextureAtlas& atlas, Tool tool) {
     const char* name = Mining::ToolTexture(tool);
     return name ? atlas.GetIndex(name) : 0;
@@ -89,6 +89,7 @@ const char* ToolHint(Tool tool) {
     case Tool::Pickaxe: return "fast on stone, bricks, ice and machines";
     case Tool::Axe: return "fast on wood";
     case Tool::Shovel: return "fast on dirt, grass, sand and snow";
+    case Tool::Sword: return "for fighting: 3.5 hearts a hit (and quick on leaves)";
     default: return "";
     }
 }
@@ -132,6 +133,7 @@ const char* BlockName(BlockType type) {
     case BlockType::GLASS: return "Glass";
     case BlockType::RAW_VENISON: return "Raw venison";
     case BlockType::COOKED_VENISON: return "Cooked venison";
+    case BlockType::HIDE: return "Hide";
     default:               return "Air";
     }
 }
@@ -1233,6 +1235,26 @@ void Application::DrawInventory() {
             }
             ImGui::PopID();
         }
+        // Armour worn (survival): its pieces, shaded over until made, and what they
+        // take off.
+        if (survival) {
+            ImGui::SameLine(0.0f, 24.0f);
+            for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++) {
+                const ArmourPiece piece = static_cast<ArmourPiece>(p);
+                if (p > 0) ImGui::SameLine();
+                glm::vec2 uv0, uv1;
+                atlas.GetTileUV(atlas.GetIndex(Armour::Texture(piece)), uv0, uv1);
+                ImGui::Image(texture, ImVec2(kIcon, kIcon), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
+                const bool worn = client->HasArmour(piece);
+                if (!worn) ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), IM_COL32(0, 0, 0, 150), 3.0f);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("%s: %d%% less damage from hits and traps%s", Armour::Name(piece),
+                                      static_cast<int>(std::lround(Armour::Protection(piece) * 100.0f)), worn ? " (worn)" : " (not made yet: craft it from hide below)");
+            }
+            ImGui::SameLine();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled("Armour: %d%%", static_cast<int>(std::lround(Armour::Protection(client->GetArmour()) * 100.0f)));
+        }
         ImGui::Separator();
         int column = 0;
         for (BlockType type : kInventoryBlocks) {
@@ -1282,7 +1304,10 @@ void Application::DrawInventory() {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     glm::vec2 uv0, uv1;
-                    atlas.GetTileUV(recipe.tool != Tool::None ? ToolTile(atlas, recipe.tool) : IconTile(recipe.output), uv0, uv1);
+                    const int icon = recipe.tool != Tool::None              ? ToolTile(atlas, recipe.tool)
+                                     : recipe.armour != ArmourPiece::Count ? atlas.GetIndex(Armour::Texture(recipe.armour))
+                                                                           : IconTile(recipe.output);
+                    atlas.GetTileUV(icon, uv0, uv1);
                     ImGui::Image(texture, ImVec2(24.0f, 24.0f), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
                     ImGui::SameLine();
                     ImGui::AlignTextToFramePadding();
@@ -1291,8 +1316,9 @@ void Application::DrawInventory() {
                     std::string needs;
                     for (const auto& in : recipe.inputs)
                         needs += (needs.empty() ? "" : " + ") + FormatBlocks(in.units) + " " + BlockName(in.type);
-                    const bool owned = recipe.tool != Tool::None && client->HasTool(recipe.tool);
-                    if (owned) ImGui::TextDisabled("made");
+                    const bool owned = (recipe.tool != Tool::None && client->HasTool(recipe.tool)) ||
+                                       (recipe.armour != ArmourPiece::Count && client->HasArmour(recipe.armour));
+                    if (owned) ImGui::TextDisabled(recipe.armour != ArmourPiece::Count ? "worn" : "made");
                     else if (client->CanCraft(r)) ImGui::TextUnformatted(needs.c_str());
                     else ImGui::TextDisabled("%s", needs.c_str());
                     ImGui::TableNextColumn();
@@ -1302,7 +1328,7 @@ void Application::DrawInventory() {
                         audio->PlayHere("craft", 0.6f);
                     }
                     ImGui::EndDisabled();
-                    if (recipe.tool == Tool::None) {
+                    if (!recipe.MadeOnce()) {
                         ImGui::SameLine();
                         ImGui::BeginDisabled(!client->CanCraft(r, 4));
                         if (ImGui::SmallButton("x4")) {

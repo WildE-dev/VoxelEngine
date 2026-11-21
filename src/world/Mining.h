@@ -12,7 +12,8 @@
 
 #include "world/Block.h"
 
-enum class Tool : uint8_t { None, Pickaxe, Axe, Shovel, Count };
+// The sword is for fighting (see Combat in world/Creatures.h); it's quick on leaves too.
+enum class Tool : uint8_t { None, Pickaxe, Axe, Shovel, Sword, Count };
 
 namespace Mining {
 
@@ -28,6 +29,7 @@ inline const char* ToolName(Tool t) {
     case Tool::Pickaxe: return "Pickaxe";
     case Tool::Axe: return "Axe";
     case Tool::Shovel: return "Shovel";
+    case Tool::Sword: return "Sword";
     default: return "Hand";
     }
 }
@@ -36,6 +38,7 @@ inline const char* ToolId(Tool t) {
     case Tool::Pickaxe: return "pickaxe";
     case Tool::Axe: return "axe";
     case Tool::Shovel: return "shovel";
+    case Tool::Sword: return "sword";
     default: return "hand";
     }
 }
@@ -45,6 +48,7 @@ inline const char* ToolTexture(Tool t) {
     case Tool::Pickaxe: return "tool_pickaxe";
     case Tool::Axe: return "tool_axe";
     case Tool::Shovel: return "tool_shovel";
+    case Tool::Sword: return "tool_sword";
     default: return nullptr;
     }
 }
@@ -111,6 +115,8 @@ inline Tool BestTool(BlockType type) {
     case BlockType::SNOWY_GRASS:
     case BlockType::SAND:
     case BlockType::SNOW: return Tool::Shovel;
+    case BlockType::LEAVES:
+    case BlockType::PINE_LEAVES: return Tool::Sword;
     default: return Tool::None;
     }
 }

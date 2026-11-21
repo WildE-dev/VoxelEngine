@@ -179,6 +179,7 @@ private:
         net::GameMode mode = net::GameMode::Survival;
         std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{}; // units held (survival)
         uint8_t tools = 0; // tools made (Crafting::ToolBit each; creative has them all)
+        uint8_t armour = 0; // armour worn (Armour::Bit each)
 
         int health = kMaxHealth;
         int sentHealth = -1;          // last health the client was told
@@ -272,7 +273,9 @@ private:
     void UpdateBreath(ClientState& client, float dt);
     void UpdateHunger(ClientState& client, float dt);
     void HandleEat(ClientState& client, BlockType food);
-    void Hurt(ClientState& client, int amount, const std::string& deathMessage);
+    // Damage in half hearts. `armourHelps`: a hit or a trap (armour takes some off),
+    // not drowning, bad air or starving.
+    void Hurt(ClientState& client, int amount, const std::string& deathMessage, bool armourHelps = true);
     void SendHealth(ClientState& client, bool hurt);
     // A pressure plate at `plate` was stepped on: opens the sluice gates near it.
     void TriggerPlate(ClientState& client, const glm::ivec3& plate);

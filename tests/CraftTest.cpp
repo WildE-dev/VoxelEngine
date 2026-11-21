@@ -79,7 +79,7 @@ int main() {
     std::cout << "Recipes" << std::endl;
     bool sensible = true;
     for (const auto& r : Crafting::Recipes()) {
-        sensible &= !r.inputs.empty() && (r.tool != Tool::None ? r.output == BlockType::AIR : r.outputUnits > 0 && r.output != BlockType::AIR);
+        sensible &= !r.inputs.empty() && (r.MadeOnce() ? r.output == BlockType::AIR : r.outputUnits > 0 && r.output != BlockType::AIR);
         for (const auto& in : r.inputs) sensible &= in.units > 0 && in.type != BlockType::AIR;
     }
     Check(sensible && Crafting::Recipes().size() >= 10, "every recipe takes something and makes something");
@@ -155,6 +155,25 @@ int main() {
         sync();
         Check(units(BlockType::LAMP) == 0 && units(BlockType::PLANKS) == 7 * kBlock, "a lamp needs glass, which is used up: nothing happens");
 
+        std::cout << "Swords and armour" << std::endl;
+        server.QueueConsoleCommand("give stone 2 Crafter");
+        server.QueueConsoleCommand("give hide 8 Crafter");
+        sync();
+        a.client.Craft(Crafting::Find("sword"), 1);
+        sync();
+        Check(pump(20.0, [&] { return a.client.HasTool(Tool::Sword); }) && units(BlockType::PLANKS) == 7 * kBlock - kBlock / 2,
+              "half a plank and 2 stone make a sword");
+        for (const char* piece : { "cap", "tunic", "boots" }) a.client.Craft(Crafting::Find(piece), 1);
+        sync();
+        Check(pump(20.0, [&] { return a.client.HasArmour(ArmourPiece::Cap) && a.client.HasArmour(ArmourPiece::Tunic) && a.client.HasArmour(ArmourPiece::Boots); }) &&
+                  units(BlockType::HIDE) == 0,
+              "8 hide make a cap, a tunic and boots, worn at once");
+        Check(!a.client.CanCraft(Crafting::Find("cap")) && std::abs(Armour::Protection(a.client.GetArmour()) - 0.48f) < 1e-4f,
+              "each is made once; together they take off 48%");
+        Check(Armour::Reduce(7, a.client.GetArmour()) == 4 && Armour::Reduce(1, a.client.GetArmour()) == 1 && Armour::Reduce(4, 0) == 4,
+              "a sword's 7 comes down to 4; a hit always does at least one");
+        // (Planks were used for the sword: 6.5 left.)
+
         server.QueueConsoleCommand("gamemode creative Crafter");
         pump(20.0, [&] { return a.client.IsCreative(); });
         Check(a.client.HasTool(Tool::Axe) && !a.client.CanCraft(Crafting::Find("stone_brick")), "creative players have every tool and craft nothing");
@@ -174,10 +193,11 @@ int main() {
         std::string error;
         a.client.Connect("127.0.0.1", server.GetPort(), "Crafter", error, kTestViewDistance);
         const bool back = Pump(a, 20.0, [&] { return a.joined && a.client.GetResources(BlockType::PLANKS) > 0; });
-        Check(back && a.client.HasTool(Tool::Pickaxe) && !a.client.HasTool(Tool::Shovel) && a.client.GetResources(BlockType::PLANKS) == 7 * kBlock,
+        Check(back && a.client.HasTool(Tool::Pickaxe) && !a.client.HasTool(Tool::Shovel) && a.client.GetResources(BlockType::PLANKS) == 7 * kBlock - kBlock / 2,
               "after a restart: the pickaxe and the planks are still theirs (joined " + std::to_string(a.joined) + ", mode " +
                   std::to_string(static_cast<int>(a.client.GetMode())) + ", planks " + std::to_string(a.client.GetResources(BlockType::PLANKS)) +
                   ", pickaxe " + std::to_string(a.client.HasTool(Tool::Pickaxe)) + ")");
+        Check(a.client.HasTool(Tool::Sword) && a.client.HasArmour(ArmourPiece::Tunic), "and so are the sword and the armour");
         a.client.Disconnect();
         Pump(a, 0.3, [] { return false; });
         server.Stop();

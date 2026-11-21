@@ -118,11 +118,13 @@ enum class BlockType : uint8_t {
     // world/Hunger.h): venison from deer, raw or cooked.
     RAW_VENISON,
     COOKED_VENISON,
+    // Deer hide, for armour (see world/Armour.h).
+    HIDE,
     COUNT
 };
 
 // Things held in the inventory that aren't blocks: they can't be placed.
-inline bool IsItemType(BlockType type) { return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON; }
+inline bool IsItemType(BlockType type) { return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE; }
 
 inline bool IsPlantType(BlockType type) {
     return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW || type == BlockType::SPIKES ||

@@ -18,7 +18,7 @@ constexpr char kRegionMagic[4] = { 'V', 'X', 'R', 'G' };
 constexpr char kWorldMagic[4] = { 'V', 'X', 'W', 'D' };
 constexpr size_t kMaxNameLength = 256;
 // Tagged player fields (format 7 on).
-constexpr uint8_t kFieldHealth = 1, kFieldFood = 2;
+constexpr uint8_t kFieldHealth = 1, kFieldFood = 2, kFieldArmour = 3;
 
 int FloorDiv(int a, int b) {
     return a >= 0 ? a / b : -((-a + b - 1) / b);
@@ -151,6 +151,7 @@ bool WorldStorage::ReadWorldFile() {
                 uint8_t v;
                 if (tag == kFieldHealth && length == 1) ok = r.U8(v), p.health = v;
                 else if (tag == kFieldFood && length == 1) ok = r.U8(v), p.food = v;
+                else if (tag == kFieldArmour && length == 1) ok = r.U8(v), p.armour = v;
                 else ok = r.Skip(length);
             }
             if (!ok) {
@@ -347,9 +348,10 @@ bool WorldStorage::Flush() {
                         w.VarU32(p.resources[t]);
                     }
                 w.U8(p.tools);
-                w.VarU32(2);
+                w.VarU32(3);
                 w.U8(kFieldHealth), w.VarU32(1), w.U8(static_cast<uint8_t>(std::clamp(p.health, 0, 255)));
                 w.U8(kFieldFood), w.VarU32(1), w.U8(static_cast<uint8_t>(std::clamp(p.food, 0, 255)));
+                w.U8(kFieldArmour), w.VarU32(1), w.U8(p.armour);
             }
             files.emplace_back(directory / "world.dat", std::move(w.data));
             writePlayers = true;

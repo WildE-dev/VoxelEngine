@@ -12,6 +12,7 @@
 #include <glm/glm.hpp>
 
 #include "net/Protocol.h"
+#include "world/Armour.h"
 #include "world/Breathing.h"
 #include "net/Transport.h"
 
@@ -115,6 +116,9 @@ public:
     // (By what the type counts as: pebbles show the stone held.)
     uint32_t GetResources(BlockType type) const { return resources[static_cast<size_t>(ResourceTypeOf(type))]; }
     // Tools: whether we have one (creative: all of them; survival: those we've made).
+    // Armour worn (survival; world/Armour.h).
+    bool HasArmour(ArmourPiece piece) const { return (armour & Armour::Bit(piece)) != 0; }
+    uint8_t GetArmour() const { return armour; }
     bool HasTool(Tool tool) const { return tool == Tool::None || IsCreative() || (tools & (1u << static_cast<unsigned>(tool))); }
     // The tool we really work with: that one if we have it, a hand if not.
     Tool Usable(Tool tool) const { return HasTool(tool) ? tool : Tool::None; }
@@ -207,6 +211,7 @@ private:
     net::GameMode mode = net::GameMode::Creative;
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{};
     uint8_t tools = 0;
+    uint8_t armour = 0;
     double lastHurt = -1000.0;
     std::deque<ChatLine> chat; // the last kMaxChatLines
     static constexpr size_t kMaxChatLines = 100;

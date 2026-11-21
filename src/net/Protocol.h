@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 21;
+constexpr uint32_t kProtocolVersion = 22;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -227,6 +227,7 @@ struct GameModeIs {
 struct Resources {
     std::vector<std::pair<BlockType, uint32_t>> held;
     uint8_t tools = 0; // tools made (Crafting::ToolBit each)
+    uint8_t armour = 0; // armour worn (Armour::Bit each)
 };
 
 // Survival: make `count` of a recipe (an index into Crafting::Recipes()).

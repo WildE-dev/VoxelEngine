@@ -574,7 +574,7 @@ them see them, smoothed like other players.
   alone. Daylight under the open sky burns them up in about six seconds.
 
 Left click a creature in front of you (within 4.5 blocks) to hit it. A hand does
-1 heart, a shovel 1.5, a pickaxe 2 and an axe 2.5. Hits land at most about three
+1 heart, a shovel 1.5, a pickaxe 2, an axe 2.5 and a sword 3.5. Hits land at most about three
 times a second, and the server checks the reach. A deer has 4 hearts and a ghoul 6.
 Aiming at a creature doesn't mine the block behind it.
 
@@ -610,6 +610,31 @@ no-clip can't be hurt. PvP is on by default; operators switch it with `/pvp on|o
 and `/pvp` shows which. With it off, a hit just tells you so. `CreatureTest` checks
 reach, damage, the red flash, knockback, `/pvp off`, and being slain.
 
+## Swords and armour
+
+The **sword** is a tool made for fighting: 3.5 hearts a hit, against creatures or
+players (an axe does 2.5). It's also quick on leaves. Make it from 0.5 planks and 2
+stone.
+
+**Armour** is made from deer **hide** (each deer you kill gives one, along with its
+venison). There are three pieces, each made once and then always worn, like tools are
+kept:
+
+| Piece | From | Takes off |
+| --- | --- | --- |
+| Hide cap | 2 hide | 12% |
+| Hide tunic | 4 hide | 24% |
+| Hide boots | 2 hide | 12% |
+
+All three take 48% off the damage from hits (creatures and other players) and traps,
+rounded, but a hit always does at least half a heart. Armour doesn't help against
+drowning, thin or stale air, or starving. The inventory shows your pieces beside the
+tools (shaded until made) and the total. Armour is saved with you; operators can hand
+it out with `/give cap|tunic|boots [player]`. The rules are in `src/world/Armour.h`.
+`CraftTest` checks making the sword and the armour, that each piece is made once, the
+damage sums, and that they're kept after a restart; `CreatureTest` checks that armour
+takes a sword hit from 3.5 hearts down to 2.
+
 ## Food and hunger
 
 In survival you also get hungry. Ten drumsticks sit above the right end of the hotbar,
@@ -623,7 +648,7 @@ To eat, put food in the hotbar and right-click with it, looking anywhere:
 
 | Food | Gives | From |
 | --- | --- | --- |
-| Raw venison | 3 | killing a deer (one or two each) |
+| Raw venison | 3 | killing a deer (one or two each, and a hide) |
 | Cooked venison | 8 | crafting: 1 raw venison + 0.25 log |
 
 Food is an item: it lives in the inventory and the hotbar like blocks do, but can't be
@@ -662,6 +687,8 @@ makes four.
 | Axe | 1 planks + 1 stone |
 | Shovel | 1 planks + 0.5 stone |
 | Cooked venison | 1 raw venison + 0.25 log |
+| Sword | 0.5 planks + 2 stone |
+| Hide cap / tunic / boots | 2 / 4 / 2 hide |
 
 Amounts are in blocks, using the same resource units as building (a block is 64).
 Tools are made once and kept, and saved with the player. In survival you can only
@@ -925,7 +952,7 @@ src/
             Textures, DebugDraw
   world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
             Features, Dungeons, Noise, Lighting, Collision, Raycast, Mining,
-            Breathing, Creatures, Crafting, Hunger
+            Breathing, Creatures, Crafting, Hunger, Armour
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
             BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest

@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "world/Armour.h"
 #include "world/Block.h"
 #include "world/Mining.h"
 
@@ -25,6 +26,9 @@ struct Recipe {
     BlockType output = BlockType::AIR; // AIR when it makes a tool
     uint32_t outputUnits = 0;
     Tool tool = Tool::None;
+    ArmourPiece armour = ArmourPiece::Count; // a piece of armour (made once, then worn)
+    // Made once and kept: a tool or a piece of armour.
+    bool MadeOnce() const { return tool != Tool::None || armour != ArmourPiece::Count; }
 };
 
 namespace Crafting {
@@ -48,6 +52,11 @@ inline const std::vector<Recipe>& Recipes() {
         { "pickaxe", "Pickaxe", { { BlockType::PLANKS, kBlock }, { BlockType::STONE, kBlock * 3 / 2 } }, BlockType::AIR, 0, Tool::Pickaxe },
         { "axe", "Axe", { { BlockType::PLANKS, kBlock }, { BlockType::STONE, kBlock } }, BlockType::AIR, 0, Tool::Axe },
         { "shovel", "Shovel", { { BlockType::PLANKS, kBlock }, { BlockType::STONE, kBlock / 2 } }, BlockType::AIR, 0, Tool::Shovel },
+        { "sword", "Sword", { { BlockType::PLANKS, kBlock / 2 }, { BlockType::STONE, 2 * kBlock } }, BlockType::AIR, 0, Tool::Sword },
+        // Armour, from deer hide.
+        { "cap", "Hide cap", { { BlockType::HIDE, 2 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Cap },
+        { "tunic", "Hide tunic", { { BlockType::HIDE, 4 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Tunic },
+        { "boots", "Hide boots", { { BlockType::HIDE, 2 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Boots },
     };
     return recipes;
 }
