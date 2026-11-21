@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <optional>
@@ -78,6 +79,11 @@ private:
     void PlayWorld(const std::string& directory, bool empty, int mode);
     void LoadBlockTextures();
     void LoadData(); // Resources/Data: blocks' details, creatures' models (again with R)
+    // Loads the data files again when one changes on disk (the model editor saving, say):
+    // checked once a second.
+    void WatchData(double now);
+    double dataCheckedAt = 0.0;
+    std::map<std::string, std::filesystem::file_time_type> dataTimes;
     void DrawHotbar();
     BlockType SelectedBlock() const;
     Tool SelectedTool() const { return hotbarTools[selectedSlot]; }

@@ -1558,8 +1558,9 @@ once), and figures and creatures near a carried light are lit by it.
 
 Blocks' details and creatures' models are data, in `Resources/Data`, so you can change
 them without touching the code. Edit the files there (the build copies them beside the
-game), or the copies beside the game for a quick try, and press **R** in the game to
-load them again (with the textures and shaders). A file that can't be read is
+game), or the copies beside the game for a quick try. The game notices when one of
+them changes (it looks once a second) and loads it again, saying so in chat; **R** also
+loads them again, with the textures and shaders. A file that can't be read is
 reported, with the line, and the game carries on with its own built-in details (blocks)
 or plain boxes (creatures).
 
@@ -1625,7 +1626,7 @@ cd build && ./ModelEditor            # or: ./ModelEditor structures blast_furnac
   ignores it).
 
 Ctrl (Cmd) S saves to both `Resources/Data` in the source tree and the copy beside the
-game, keeping the comments at the top; press R in a running game to see it there.
+game, keeping the comments at the top; a running game picks the change up within a second.
 Ctrl Z and Ctrl Shift Z undo and redo, and Revert reads the file again.
 
 `DataTest` checks the JSON reader (comments, trailing commas, an error's line), that a

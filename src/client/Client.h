@@ -97,6 +97,11 @@ public:
     };
     void SendChat(const std::string& text);
     const std::deque<ChatLine>& GetChat() const { return chat; }
+    // A line in this player's chat only (not sent anywhere).
+    void Note(const std::string& text, net::ChatMessage::Kind kind = net::ChatMessage::Kind::Info) {
+        chat.push_back({ kind, text, Now() });
+        while (chat.size() > kMaxChatLines) chat.pop_front();
+    }
     static double Now();
 
     // The sky, from the latest snapshot: time of day (0..1, 0 sunrise, 0.25 noon,

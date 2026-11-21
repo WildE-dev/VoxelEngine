@@ -170,7 +170,7 @@ public:
         committed = root;
         savedText = Json::Write(root);
         unsaved = false;
-        status = "Saved " + wrote.front() + (wrote.size() > 1 ? " and " + wrote.back() : "") + ". Press R in the game to see it there.";
+        status = "Saved " + wrote.front() + (wrote.size() > 1 ? " and " + wrote.back() : "") + " (a running game loads it again by itself).";
     }
 
     void Frame(int fbWidth, int fbHeight, int winWidth, int winHeight, float time);

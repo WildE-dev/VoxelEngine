@@ -530,6 +530,42 @@ void Application::LoadData() {
     if (!renderer->LoadStructureModels(error)) std::cerr << "[data] " << error << " (structures not drawn)" << std::endl;
 }
 
+void Application::WatchData(double now) {
+    if (now - dataCheckedAt < 1.0) return;
+    dataCheckedAt = now;
+    std::vector<std::string> changed;
+    for (const char* path : { BlockData::kPath, PlayerModels::kCreatureModelsPath, PlayerModels::kStructureModelsPath }) {
+        std::error_code ec;
+        const auto time = std::filesystem::last_write_time(path, ec);
+        if (ec) continue;
+        auto it = dataTimes.find(path);
+        if (it == dataTimes.end()) dataTimes[path] = time; // (the first look: as loaded)
+        else if (it->second != time) {
+            it->second = time;
+            changed.push_back(path);
+        }
+    }
+    if (changed.empty()) return;
+    std::string error;
+    for (const auto& path : changed) {
+        const std::string name = std::filesystem::path(path).filename().string();
+        bool ok = true;
+        if (path == BlockData::kPath) {
+            ok = BlockData::Load(BlockData::kPath, error);
+            LoadBlockTextures();
+            world->RebuildAllChunks();
+        } else if (path == PlayerModels::kCreatureModelsPath)
+            ok = renderer->LoadCreatureModels(error);
+        else
+            ok = renderer->LoadStructureModels(error);
+        if (client) {
+            if (ok) client->Note("Loaded " + name + " again");
+            else client->Note(error, net::ChatMessage::Kind::Error);
+        }
+        if (!ok) std::cerr << "[data] " << error << std::endl;
+    }
+}
+
 void Application::LoadBlockTextures() {
     const TextureAtlas& atlas = renderer->GetAtlas();
     ResolveBlockTextures([&](const std::string& name) {
@@ -591,6 +627,7 @@ void Application::Run() {
             mark = t;
         };
         UpdateNetwork();
+        WatchData(now);
         lap(0);
         if (rightClickAt > 0.0 && glfwGetTime() >= rightClickAt) {
             rightClickAt = 0.0;
