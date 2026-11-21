@@ -289,6 +289,14 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* DRILL       */ {{ "drill_top", "drill_bottom", "drill_side", "drill_side", "drill_side", "drill_side" }},
     /* SHAFT       */ {{ "shaft", "shaft", "shaft", "shaft", "shaft", "shaft" }}, // icon (drawn as a model)
     /* COMPRESSOR  */ {{ "compressor_top", "compressor_top", "compressor_side", "compressor_side", "compressor_side", "compressor_side" }},
+    /* LEVER       */ {{ "lever", nullptr, nullptr, nullptr, nullptr, nullptr }},
+    /* LEVER_ON    */ {{ "lever_on", nullptr, nullptr, nullptr, nullptr, nullptr }},
+    /* LOGIC_GATE  */ {{ "logic_gate_top", "logic_gate_side", "logic_gate_side", "logic_gate_side", "logic_gate_side", "logic_gate_side" }},
+    /* SIGNAL_LAMP */ {{ "signal_lamp", "signal_lamp", "signal_lamp", "signal_lamp", "signal_lamp", "signal_lamp" }},
+    /* SIGNAL_LAMP_ON */ {{ "signal_lamp_on", "signal_lamp_on", "signal_lamp_on", "signal_lamp_on", "signal_lamp_on", "signal_lamp_on" }},
+    /* AIR_TANK    */ {{ "air_tank_top", "air_tank_top", "air_tank_side", "air_tank_side", "air_tank_side", "air_tank_side" }},
+    /* VALVE       */ {{ "valve", "valve", "valve", "valve", "valve", "valve" }},
+    /* VALVE_OPEN  */ {{ "valve_open", "valve_open", "valve_open", "valve_open", "valve_open", "valve_open" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -320,7 +328,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "air", "grass", "dirt", "stone", "lamp", "log", "leaves", "tall_grass", "flower_red", "flower_yellow", "sand", "water", "pump", "pipe",
     "stone_brick", "mossy_brick", "spikes", "crumbling_brick", "pressure_plate", "sluice", "snow", "dry_grass", "lush_grass", "snowy_grass",
     "pine_leaves", "cactus", "dead_bush", "ice", "pebbles", "planks", "glass", "raw_venison", "cooked_venison", "hide", "chest", "bed", "coal_ore", "iron_ore", "coal", "iron_ingot", "seeds", "crop", "ripe_wheat", "wheat", "bread", "ladder", "door", "door_open", "arrow", "raw_fish", "cooked_fish", "campfire", "sign", "tnt", "tnt_lit", "boat", "sapling", "pine_sapling",
-    "water_wheel", "air_pipe", "drill", "shaft", "compressor",
+    "water_wheel", "air_pipe", "drill", "shaft", "compressor", "lever", "lever_on", "logic_gate", "signal_lamp", "signal_lamp_on", "air_tank", "valve", "valve_open",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");
@@ -787,6 +795,12 @@ bool Block::CanChisel() const {
     case BlockType::DRILL:
     case BlockType::SHAFT:
     case BlockType::COMPRESSOR:
+    case BlockType::LOGIC_GATE:
+    case BlockType::SIGNAL_LAMP:
+    case BlockType::SIGNAL_LAMP_ON:
+    case BlockType::AIR_TANK:
+    case BlockType::VALVE:
+    case BlockType::VALVE_OPEN:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
     case BlockType::GLASS:

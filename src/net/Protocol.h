@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 34;
+constexpr uint32_t kProtocolVersion = 35;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -57,6 +57,7 @@ enum class MsgType : uint8_t {
     WriteSign,     // set the text on a sign
     Interact,      // right-clicked a creature (feeding a wolf tames it)
     Inspect,       // right-clicked part of an air network: tell me how it's doing
+    ConfigureSignal, // set a signal block's channels (and a gate's mode)
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -82,6 +83,7 @@ enum class MsgType : uint8_t {
     Explosion,     // something blew up here (for the sound and the debris)
     Knockback,     // you were hit: a push to add to your velocity
     Machines,      // the water wheels and machines near you and how they're doing
+    SignalInfo,    // a signal block's channels and whether it's sending (or that it's gone)
 };
 
 // ---------------------------------------------------------------------------------
@@ -390,6 +392,14 @@ struct MachineInfo {
 struct Machines {
     std::vector<MachineInfo> machines;
 };
+// A signal block's settings (world/Signals.h): set by a player (ConfigureSignal), or
+// sent to everyone (SignalInfo) with whether it's sending and, for a block that's
+// gone, `erased`. Kinds and modes are Signals::Kind and Signals::Mode.
+struct SignalInfo {
+    glm::ivec3 pos{0};
+    uint8_t kind = 0, mode = 0, a = 0, b = 0, out = 0;
+    uint8_t on = 0, erased = 0;
+};
 constexpr size_t kMaxMachinesSent = 512;
 struct CreatureInfo {
     uint16_t id = 0;
@@ -485,6 +495,8 @@ std::vector<uint8_t> Encode(const MineStart& m);
 std::vector<uint8_t> Encode(const Attack& m);
 std::vector<uint8_t> Encode(const Interact& m);
 std::vector<uint8_t> Encode(const Inspect& m);
+// `configure`: as a ConfigureSignal (client to server), else a SignalInfo.
+std::vector<uint8_t> Encode(const SignalInfo& m, bool configure);
 std::vector<uint8_t> Encode(const Machines& m);
 std::vector<uint8_t> Encode(const AttackPlayer& m);
 std::vector<uint8_t> Encode(const Eat& m);
@@ -536,6 +548,7 @@ bool Decode(ByteReader& in, MineStart& m);
 bool Decode(ByteReader& in, Attack& m);
 bool Decode(ByteReader& in, Interact& m);
 bool Decode(ByteReader& in, Inspect& m);
+bool Decode(ByteReader& in, SignalInfo& m);
 bool Decode(ByteReader& in, Machines& m);
 bool Decode(ByteReader& in, AttackPlayer& m);
 bool Decode(ByteReader& in, Eat& m);

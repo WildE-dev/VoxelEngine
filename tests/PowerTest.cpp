@@ -129,6 +129,8 @@ int main() {
     a.client.PlaceBlock({ 20, 3, 11 }, BlockType::SHAFT, 8, 2);
     a.client.PlaceBlock({ 20, 3, 12 }, BlockType::SHAFT, 8, 2);
     fill(compressor, compressor, "compressor");
+    fill({ 19, 3, 13 }, { 19, 3, 13 }, "valve");   // shut, with an air tank behind it
+    fill({ 18, 3, 13 }, { 18, 3, 13 }, "air_tank");
     fill(cut, { 20, 3, 15 }, "air_pipe");
     fill(drill, drill, "drill");
     fill(chest, chest, "chest");
@@ -191,6 +193,34 @@ int main() {
     a.client.OpenChest(chest);
     Check(pump(20.0, [&] { return a.client.GetChestUnits(BlockType::STONE) >= 2 * Block::kUnitsPerBlock; }), "and what it digs is in the chest");
     a.client.CloseChest();
+
+    std::cout << "Tanks and valves" << std::endl;
+    const glm::ivec3 valve{ 19, 3, 13 }, tank{ 18, 3, 13 };
+    a.client.Inspect(tank);
+    Check(pump(10.0, [&] { return Has(a.client, "Air tank: holding 0 of 256"); }), "an air tank behind a shut valve gets no air");
+    server.QueueConsoleCommand("tp Miller 15.5 0 11.5");
+    pump(10.0, [&] { return a.feet.x < 16.0f; });
+    a.client.UseBed(valve);
+    Check(pump(10.0, [&] {
+              Block b;
+              return a.world.GetBlock(valve.x, valve.y, valve.z, b) && b.type == BlockType::VALVE_OPEN;
+          }),
+          "opening the valve");
+    wait(2.0);
+    a.client.Inspect(tank);
+    Check(pump(10.0, [&] {
+              for (const auto& line : a.client.GetChat())
+                  if (line.text.find("Air tank: holding") != std::string::npos && line.text.find("holding 0 of") == std::string::npos &&
+                      line.text.find("1 tanks") != std::string::npos)
+                      return true;
+              return false;
+          }),
+          "lets the network's air into the tank (which joins the network)");
+    a.client.UseBed(valve);
+    pump(10.0, [&] {
+        Block b;
+        return a.world.GetBlock(valve.x, valve.y, valve.z, b) && b.type == BlockType::VALVE;
+    });
 
     std::cout << "Cutting the air" << std::endl;
     a.client.BreakBlock(cut);

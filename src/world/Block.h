@@ -172,6 +172,19 @@ enum class BlockType : uint8_t {
     DRILL, // a machine: digs straight down, into a chest beside it
     SHAFT,      // carries a wheel's turning along its axle (drawn as a turning rod)
     COMPRESSOR, // turned by a shaft, pumps air into the air pipes joined to it
+    // Signals (see world/Signals.h): wireless, on numbered channels. A lever (a sprite,
+    // passable) sends while it's on; a logic gate works out a channel from others; a
+    // signal lamp lights while its channel is on.
+    LEVER,
+    LEVER_ON,
+    LOGIC_GATE,
+    SIGNAL_LAMP,
+    SIGNAL_LAMP_ON,
+    // Air power: a tank holds a lot of air (a store of pressure); a valve joins the air
+    // pipes either side of it only while it's open (by hand, or by a signal).
+    AIR_TANK,
+    VALVE,
+    VALVE_OPEN,
     COUNT
 };
 
@@ -191,7 +204,8 @@ inline bool IsPlantType(BlockType type) {
     return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW || type == BlockType::SPIKES ||
            type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES || type == BlockType::CROP || type == BlockType::RIPE_WHEAT ||
            type == BlockType::LADDER || type == BlockType::DOOR_OPEN || type == BlockType::CAMPFIRE ||
-           type == BlockType::SIGN || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING;
+           type == BlockType::SIGN || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING || type == BlockType::LEVER ||
+           type == BlockType::LEVER_ON;
 }
 
 // The resource a block counts as in survival (see Block::ResourceUnits): its own type,
@@ -205,6 +219,9 @@ inline BlockType ResourceTypeOf(BlockType type) {
     case BlockType::RIPE_WHEAT: return BlockType::WHEAT; // (and the server adds seeds)
     case BlockType::DOOR_OPEN: return BlockType::DOOR;
     case BlockType::TNT_LIT: return BlockType::TNT;
+    case BlockType::LEVER_ON: return BlockType::LEVER;
+    case BlockType::SIGNAL_LAMP_ON: return BlockType::SIGNAL_LAMP;
+    case BlockType::VALVE_OPEN: return BlockType::VALVE;
     default: return type;
     }
 }
@@ -242,7 +259,7 @@ inline ShapeStyle StyleOf(BlockType type) {
 
 // Block light emitted by a block type, 0..kMaxLight.
 inline uint8_t GetLightEmission(BlockType type) {
-    return type == BlockType::LAMP ? kMaxLight : type == BlockType::CAMPFIRE ? kMaxLight - 1 : 0;
+    return type == BlockType::LAMP || type == BlockType::SIGNAL_LAMP_ON ? kMaxLight : type == BlockType::CAMPFIRE ? kMaxLight - 1 : 0;
 }
 
 // Indices into the texture atlas for each face of a block.
@@ -454,13 +471,15 @@ struct Block {
     bool IsFullBlock() const { return type != BlockType::AIR && !IsPlant() && !IsLiquid() && edgeData.IsFull(); }
     // Light passes through air, partial blocks, plants, leaves and water (water also
     // absorbs some; see LightPropagator).
-    bool BlocksLight() const { return IsFullBlock() && !IsLeavesType(type) && type != BlockType::ICE && type != BlockType::GLASS && !IsModelType(type) && !IsPipeType(type); }
+    bool BlocksLight() const { return IsFullBlock() && !IsLeavesType(type) && type != BlockType::ICE && type != BlockType::GLASS && type != BlockType::SIGNAL_LAMP && type != BlockType::SIGNAL_LAMP_ON && !IsModelType(type) && !IsPipeType(type); }
     // A full block that hides the faces of the blocks it touches (not glass).
     bool HidesNeighbours() const { return IsFullBlock() && type != BlockType::GLASS && !IsModelType(type) && !IsPipeType(type); }
     // Air, a plant or water: nothing to stand on or bump into.
     bool IsPassable() const { return IsAir() || IsPlant() || IsLiquid(); }
     // Water may flow into this cell (washing away any plant).
-    bool IsReplaceableByWater() const { return IsAir() || (IsPlant() && type != BlockType::LADDER && type != BlockType::DOOR_OPEN); }
+    bool IsReplaceableByWater() const {
+        return IsAir() || (IsPlant() && type != BlockType::LADDER && type != BlockType::DOOR_OPEN && type != BlockType::LEVER && type != BlockType::LEVER_ON);
+    }
     // Drawn as a see-through cube shell (a ladder's rungs, an open door's frame).
     // Solid, but drawn by a model of its own (a turning wheel), not by the chunk mesh.
     bool IsModel() const { return IsModelType(type); }

@@ -37,7 +37,7 @@ public:
     static constexpr int kRegionSize = 8;      // chunks per region along each axis
     // 2: world type; 3: time of day; 4: game modes and resources; 5: block axes (logs);
     // 6: tools players have made
-    static constexpr uint32_t kFormatVersion = 10;
+    static constexpr uint32_t kFormatVersion = 11;
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
@@ -67,6 +67,14 @@ public:
     using Signs = std::vector<std::pair<glm::ivec3, std::string>>;
     Signs GetSigns() const;
     void SetSigns(Signs signs);
+    // Signal blocks' channels (world/Signals.h), by position (format 11 on): kind, gate
+    // mode, inputs, output, and whether it's on (a gate's output, a sluice gate open).
+    struct SavedSignal {
+        glm::ivec3 pos{0};
+        uint8_t kind = 0, mode = 0, a = 0, b = 0, out = 0, on = 0;
+    };
+    std::vector<SavedSignal> GetSignals() const;
+    void SetSignals(std::vector<SavedSignal> s);
 
     // One bit per block column of a chunk (index x * CHUNK_SIZE + z).
     using ColumnMask = std::array<uint64_t, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE / 64>;
@@ -151,4 +159,5 @@ private:
     Chests chests;
     std::vector<glm::ivec3> crops;
     Signs signs;
+    std::vector<SavedSignal> signalBlocks;
 };

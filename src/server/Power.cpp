@@ -139,6 +139,7 @@ void Server::UpdatePower() {
             if (a != air.end()) net.air += a->second;
             switch (blockAt(m).type) {
             case BlockType::AIR_PIPE: net.pipes++; break;
+            case BlockType::AIR_TANK: net.tanks++; break;
             case BlockType::COMPRESSOR:
                 net.compressors++;
                 net.supply += compressors[m].power * Power::kWheelMaxAir;
@@ -154,7 +155,7 @@ void Server::UpdatePower() {
             default: break;
             }
         }
-        net.capacity = static_cast<float>(members.size()) * Power::kAirPerCell;
+        for (const auto& m : members) net.capacity += Power::CapacityOf(blockAt(m).type);
         net.air = std::min(net.capacity, net.air + net.supply * static_cast<float>(Power::kInterval));
 
         // Pumps: the air for what they lifted since the last update.
@@ -189,8 +190,9 @@ void Server::UpdatePower() {
         for (const auto& p : netPumps)
             water.SetPumpBudget(p, net.Pressure() >= Power::kMinPressure ? spare / static_cast<float>(netPumps.size()) / Power::kPumpAir : 0.0f);
 
-        const float share = net.air / static_cast<float>(members.size());
-        for (const auto& m : members) newAir[m] = share;
+        // Everything at the same pressure: each part holds its share by size.
+        const float fill = net.capacity > 0.0f ? net.air / net.capacity : 0.0f;
+        for (const auto& m : members) newAir[m] = fill * Power::CapacityOf(blockAt(m).type);
     }
     air.swap(newAir); // (parts in no network lose their air)
     SendMachines();
@@ -262,6 +264,9 @@ void Server::SendMachines() {
                 info.depth = static_cast<uint8_t>(std::clamp(c->second.wheels, 0, 255));
                 info.state = static_cast<uint8_t>(c->second.turning ? Power::DrillState::Working : Power::DrillState::Idle);
             }
+            else if (Block t; world->GetBlock(pos.x, pos.y, pos.z, t) && t.type == BlockType::AIR_TANK) {
+                info.type = static_cast<uint8_t>(BlockType::AIR_TANK);
+            }
             else if (auto p = pumpStates.find(pos); p != pumpStates.end()) {
                 info.type = static_cast<uint8_t>(BlockType::PUMP);
                 info.state = static_cast<uint8_t>(p->second);
@@ -302,6 +307,14 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
             std::snprintf(line, sizeof line, "Compressor: wheels turning %d of %d on its shafts, +%.1f air/s. ", c.turning, c.wheels, c.power * Power::kWheelMaxAir);
             text += line;
         }
+        else if (b.type == BlockType::AIR_TANK) {
+            const float held = air.count(pos) ? air[pos] : 0.0f;
+            std::snprintf(line, sizeof line, "Air tank: holding %.0f of %.0f. ", held, Power::kAirPerTank);
+            text += line;
+        }
+        else if (b.type == BlockType::VALVE || b.type == BlockType::VALVE_OPEN) {
+            text += b.type == BlockType::VALVE_OPEN ? "Valve: open. " : "Valve: shut (the pipes either side are kept apart). ";
+        }
         else if (b.type == BlockType::PUMP) {
             const Power::DrillState st = pumpStates.count(pos) ? pumpStates[pos] : Power::DrillState::Idle;
             text += st == Power::DrillState::Working ? "Pump: pumping. " : st == Power::DrillState::NoPressure ? "Pump: waiting for air pressure. " : "Pump: nothing to pump. ";
@@ -310,8 +323,8 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
         if (n == networkOf.end()) text += "Not joined to a compressor or machine.";
         else {
             const AirNetwork& net = networks[n->second];
-            std::snprintf(line, sizeof line, "Air pressure %d%% (%d pipes; compressors: %d, +%.1f air/s; drills working: %d of %d; pumps working: %d of %d)",
-                          int(std::lround(net.Pressure() * 100)), net.pipes, net.compressors, net.supply, net.working, net.drills, net.pumping, net.pumps);
+            std::snprintf(line, sizeof line, "Air pressure %d%% (%.0f of %.0f air; %d pipes, %d tanks; compressors: %d, +%.1f air/s; drills working: %d of %d; pumps working: %d of %d)",
+                          int(std::lround(net.Pressure() * 100)), net.air, net.capacity, net.pipes, net.tanks, net.compressors, net.supply, net.working, net.drills, net.pumping, net.pumps);
             text += line;
         }
     }

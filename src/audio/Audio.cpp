@@ -33,6 +33,10 @@ const char* Audio::Material(BlockType type) {
     case BlockType::AIR_PIPE:
     case BlockType::DRILL:
     case BlockType::COMPRESSOR:
+    case BlockType::AIR_TANK:
+    case BlockType::VALVE:
+    case BlockType::VALVE_OPEN:
+    case BlockType::LOGIC_GATE:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
     case BlockType::SPIKES:

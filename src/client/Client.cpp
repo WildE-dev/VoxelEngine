@@ -222,6 +222,13 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         arrowsAt = Now();
         break;
     }
+    case net::MsgType::SignalInfo: {
+        net::SignalInfo m;
+        if (!(ok = net::Decode(in, m))) break;
+        if (m.erased) signalInfos.erase(m.pos);
+        else signalInfos[m.pos] = m;
+        break;
+    }
     case net::MsgType::Machines: {
         net::Machines m;
         if ((ok = net::Decode(in, m))) machines = std::move(m.machines);
@@ -496,6 +503,10 @@ void Client::MoveChestItems(BlockType type, uint32_t units, bool intoChest) {
 void Client::Eat(BlockType item) {
     if (!welcomed) return;
     net.Send(net::kChannelReliable, net::Encode(net::Eat{ item }));
+}
+
+void Client::ConfigureSignal(const net::SignalInfo& info) {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(info, true));
 }
 
 void Client::Inspect(const glm::ivec3& pos) {

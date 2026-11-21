@@ -178,6 +178,10 @@ public:
     void Interact(uint16_t creature);
     // Right-clicked part of an air network: the server answers in chat.
     void Inspect(const glm::ivec3& pos);
+    // Signal blocks' channels and states, as the server last said (world/Signals.h),
+    // and setting a block's.
+    const std::unordered_map<glm::ivec3, net::SignalInfo, Coords::IVec3Hash>& GetSignals() const { return signalInfos; }
+    void ConfigureSignal(const net::SignalInfo& info);
     // The water wheels and machines near us, as of the server's last word.
     const std::vector<net::MachineInfo>& GetMachines() const { return machines; }
     // Eat one of a food item held (survival; the server checks it).
@@ -238,6 +242,7 @@ private:
     std::vector<net::Explosion> explosions;
     std::vector<net::ArrowInfo> arrows;
     std::vector<net::MachineInfo> machines;
+    std::unordered_map<glm::ivec3, net::SignalInfo, Coords::IVec3Hash> signalInfos;
     std::optional<glm::ivec3> bobber;
     bool bite = false;
     std::unordered_map<glm::ivec3, std::string, Coords::IVec3Hash> signs;

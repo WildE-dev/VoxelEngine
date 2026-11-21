@@ -35,6 +35,7 @@
 #include "world/Breathing.h"
 #include "world/Hunger.h"
 #include "world/Power.h"
+#include "world/Signals.h"
 #include "world/Chunk.h"
 #include "world/Crafting.h"
 #include "world/Raycast.h"
@@ -55,7 +56,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
-    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::DRILL, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
+    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::DRILL, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
     BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
@@ -125,6 +126,14 @@ const char* BlockName(BlockType type) {
     case BlockType::DRILL: return "Drill";
     case BlockType::SHAFT: return "Shaft";
     case BlockType::COMPRESSOR: return "Compressor";
+    case BlockType::LEVER: return "Lever";
+    case BlockType::LEVER_ON: return "Lever (on)";
+    case BlockType::LOGIC_GATE: return "Logic gate";
+    case BlockType::SIGNAL_LAMP: return "Signal lamp";
+    case BlockType::SIGNAL_LAMP_ON: return "Signal lamp (lit)";
+    case BlockType::AIR_TANK: return "Air tank";
+    case BlockType::VALVE: return "Valve (closed)";
+    case BlockType::VALVE_OPEN: return "Valve (open)";
     case BlockType::STONE_BRICK: return "Stone bricks";
     case BlockType::MOSSY_BRICK: return "Mossy bricks";
     case BlockType::SPIKES: return "Spikes";
@@ -799,8 +808,41 @@ void Application::DrawCrosshair() {
         draw->AddLine(ImVec2(c.x, c.y - kArm), ImVec2(c.x, c.y - kGap), color, width);
         draw->AddLine(ImVec2(c.x, c.y + kGap), ImVec2(c.x, c.y + kArm), color, width);
     }
-    // Looking at a water wheel or a machine: how it's doing, under the crosshair.
+    // Looking at a signal block: its channels and whether it's on.
     Block target;
+    auto label = [&](const char* text) {
+        const ImVec2 size = ImGui::CalcTextSize(text);
+        const ImVec2 p(c.x - size.x * 0.5f, c.y + 22.0f);
+        draw->AddRectFilled(ImVec2(p.x - 6, p.y - 3), ImVec2(p.x + size.x + 6, p.y + size.y + 3), IM_COL32(0, 0, 0, 140), 4.0f);
+        draw->AddText(p, IM_COL32(255, 255, 255, 235), text);
+    };
+    if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
+        at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Signals::KindOf(target.type) != Signals::Kind::None) {
+        const auto& infos = client->GetSignals();
+        auto it = infos.find(at->block);
+        char text[160];
+        const net::SignalInfo info = it != infos.end() ? it->second : net::SignalInfo{};
+        auto ch = [](int c) { return c ? std::to_string(c) : std::string("none"); };
+        switch (Signals::KindOf(target.type)) {
+        case Signals::Kind::Lever: std::snprintf(text, sizeof text, "Lever: %s - sends on %s", target.type == BlockType::LEVER_ON ? "on" : "off", ch(info.out).c_str()); break;
+        case Signals::Kind::Plate: std::snprintf(text, sizeof text, "Pressure plate - sends on %s", ch(info.out).c_str()); break;
+        case Signals::Kind::Gate: {
+            const auto mode = static_cast<Signals::Mode>(info.mode);
+            const std::string inputs = Signals::Inputs(mode) == 2 ? ch(info.a) + ", " + ch(info.b) : ch(info.a);
+            std::snprintf(text, sizeof text, "%s gate (%s) -> %s: %s", Signals::ModeName(mode), inputs.c_str(), ch(info.out).c_str(), info.on ? "on" : "off");
+            break;
+        }
+        case Signals::Kind::Lamp: std::snprintf(text, sizeof text, "Signal lamp - listens to %s", ch(info.a).c_str()); break;
+        case Signals::Kind::Valve:
+            std::snprintf(text, sizeof text, "Valve: %s - %s", target.type == BlockType::VALVE_OPEN ? "open" : "shut",
+                          info.a ? ("listens to " + ch(info.a)).c_str() : "by hand");
+            break;
+        default: std::snprintf(text, sizeof text, "Sluice gate - %s", info.a ? ("listens to " + ch(info.a)).c_str() : "opened by a pressure plate nearby"); break;
+        }
+        label(text);
+        return;
+    }
+    // Looking at a water wheel or a machine: how it's doing, under the crosshair.
     if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
         at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Power::IsMachine(target.type)) {
         for (const auto& m : client->GetMachines()) {
@@ -813,6 +855,7 @@ void Application::DrawCrosshair() {
                               int(std::lround(m.speed / 2.55f)));
             else if (target.type == BlockType::COMPRESSOR)
                 std::snprintf(text, sizeof text, "Compressor: +%.1f air/s from %d wheel%s - air %d%%", m.speed / 4.0f, m.depth, m.depth == 1 ? "" : "s", pressure);
+            else if (target.type == BlockType::AIR_TANK) std::snprintf(text, sizeof text, "Air tank - air %d%%", pressure);
             else if (target.type == BlockType::PUMP)
                 std::snprintf(text, sizeof text, "Pump: %s - air %d%%", state == Power::DrillState::Working ? "pumping" : state == Power::DrillState::NoPressure ? "needs air pressure" : "nothing to pump", pressure);
             else std::snprintf(text, sizeof text, "Drill: %s - air %d%%", Power::Describe(state), pressure);
@@ -1593,7 +1636,7 @@ void Application::OnKey(int key, int action) {
     }
     // The inventory takes I and Esc (to close) and the number keys (to pick a slot).
     if (inventoryOpen) {
-        if ((key == GLFW_KEY_I && !signMode) || key == GLFW_KEY_ESCAPE) SetInventoryOpen(false); // (writing a sign, I is a letter)
+        if ((key == GLFW_KEY_I && !signMode && !signalMode) || key == GLFW_KEY_ESCAPE) SetInventoryOpen(false); // (writing a sign, I is a letter)
         else if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9) SelectSlot(key - GLFW_KEY_1);
         else if (key == GLFW_KEY_0) SelectSlot(9);
         return;
@@ -1701,7 +1744,7 @@ void Application::SetInventoryOpen(bool open) {
         client->CloseChest();
         chestMode = chestSeenOpen = false;
     }
-    if (!open) signMode = false;
+    if (!open) signMode = false, signalMode = false;
     // The cursor is needed to click blocks; give it back to the game on closing.
     if (open) cursorBeforeInventory = captureCursor;
     captureCursor = open ? false : cursorBeforeInventory;
@@ -1713,6 +1756,7 @@ void Application::DrawInventory() {
     if (!inventoryOpen) return;
     if (chestMode) return DrawChest();
     if (signMode) return DrawSignEditor();
+    if (signalMode) return DrawSignalEditor();
     constexpr int kColumns = 7;
     constexpr float kIcon = 44.0f;
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -2007,6 +2051,14 @@ void Application::OnMouseButton(int button, int action) {
             chestAskedAt = Client::Now();
             return;
         }
+        // A signal block: crouching, set its channels; a gate or a lamp (nothing else to
+        // do with them), likewise.
+        if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
+            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Signals::KindOf(target.type) != Signals::Kind::None &&
+            (player.IsCrouching() || target.type == BlockType::LOGIC_GATE || target.type == BlockType::SIGNAL_LAMP || target.type == BlockType::SIGNAL_LAMP_ON)) {
+            OpenSignalEditor(at->block, target.type);
+            return;
+        }
         // A sign: write on it.
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
             at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && target.type == BlockType::SIGN) {
@@ -2017,7 +2069,8 @@ void Application::OnMouseButton(int button, int action) {
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
             at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) &&
             (target.type == BlockType::BED || target.type == BlockType::DOOR || target.type == BlockType::DOOR_OPEN || target.type == BlockType::CAMPFIRE ||
-             target.type == BlockType::TNT)) {
+             target.type == BlockType::TNT || target.type == BlockType::LEVER || target.type == BlockType::LEVER_ON || target.type == BlockType::VALVE ||
+             target.type == BlockType::VALVE_OPEN)) {
             client->UseBed(at->block);
             return;
         }
@@ -2143,6 +2196,8 @@ void Application::OnMouseButton(int button, int action) {
         client->PlaceBlock(place, placeBlock, height, faceAxis);
         PlayAt("place", place, 0.8f);
         if (placeBlock == BlockType::SIGN) OpenSign(place); // and write on it
+        // Signal blocks: set their channels straight away.
+        if (placeBlock == BlockType::LEVER || placeBlock == BlockType::LOGIC_GATE || placeBlock == BlockType::SIGNAL_LAMP) OpenSignalEditor(place, placeBlock);
     }
 }
 
@@ -2153,6 +2208,73 @@ void Application::OpenSign(const glm::ivec3& pos) {
     std::snprintf(signText, sizeof signText, "%s", it != signs.end() ? it->second.c_str() : "");
     SetInventoryOpen(true);
     signMode = true;
+}
+
+void Application::OpenSignalEditor(const glm::ivec3& pos, BlockType type) {
+    signalAt = pos;
+    signalKind = static_cast<int>(Signals::KindOf(type));
+    signalModeIndex = signalA = signalB = signalOut = 0;
+    const auto& infos = client->GetSignals();
+    if (auto it = infos.find(pos); it != infos.end() && it->second.kind == signalKind) {
+        signalModeIndex = it->second.mode;
+        signalA = it->second.a;
+        signalB = it->second.b;
+        signalOut = it->second.out;
+    }
+    SetInventoryOpen(true);
+    signalMode = true;
+}
+
+void Application::DrawSignalEditor() {
+    const auto kind = static_cast<Signals::Kind>(signalKind);
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.4f),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowBgAlpha(0.9f);
+    const char* titles[] = { "Signal", "Lever", "Pressure plate", "Logic gate", "Signal lamp", "Valve", "Sluice gate" };
+    bool open = true;
+    if (ImGui::Begin(titles[std::clamp(signalKind, 0, 6)], &open,
+                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse)) {
+        auto channel = [](const char* label, int& value) {
+            ImGui::SetNextItemWidth(160.0f);
+            if (ImGui::InputInt(label, &value)) value = std::clamp(value, 0, 255);
+        };
+        ImGui::TextDisabled("Channels 1-255 (0: none). Signals reach %.0f blocks.", Signals::kRange);
+        if (kind == Signals::Kind::Gate) {
+            const char* modes[] = { "AND (on while A and B are)", "OR (on while A or B is)", "XOR (on while just one of A, B is)", "NOT (on while A isn't)",
+                                    "RELAY (sends A on again, further)", "CLOCK (on and off each second while A is on, or always)" };
+            ImGui::SetNextItemWidth(360.0f);
+            ImGui::Combo("Does", &signalModeIndex, modes, IM_ARRAYSIZE(modes));
+            channel("Input A", signalA);
+            if (Signals::Inputs(static_cast<Signals::Mode>(signalModeIndex)) == 2) channel("Input B", signalB);
+            channel("Sends on", signalOut);
+        }
+        else if (Signals::Sends(kind)) {
+            channel("Sends on", signalOut);
+            ImGui::TextDisabled(kind == Signals::Kind::Lever ? "Right-click the lever to flip it." : "It sends for a second when stepped on.");
+        }
+        else {
+            channel("Listens to", signalA);
+            if (kind == Signals::Kind::Lamp) ImGui::TextDisabled("Lights while the channel is on.");
+            if (kind == Signals::Kind::Valve) ImGui::TextDisabled("Opens while the channel is on. With none, right-click opens and shuts it.");
+            if (kind == Signals::Kind::Sluice) ImGui::TextDisabled("Opens while the channel is on, and closes again when it's off.");
+        }
+        if (ImGui::Button("Done") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            net::SignalInfo info;
+            info.pos = signalAt;
+            info.kind = static_cast<uint8_t>(signalKind);
+            info.mode = static_cast<uint8_t>(signalModeIndex);
+            info.a = static_cast<uint8_t>(signalA);
+            info.b = static_cast<uint8_t>(signalB);
+            info.out = static_cast<uint8_t>(signalOut);
+            client->ConfigureSignal(info);
+            open = false;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("Crouch and right-click to change it later.");
+    }
+    ImGui::End();
+    if (!open) SetInventoryOpen(false);
 }
 
 void Application::DrawSignEditor() {

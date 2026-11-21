@@ -77,6 +77,12 @@ inline const std::vector<Recipe>& Recipes() {
         { "water_wheel", "Water wheel", { { BlockType::PLANKS, 6 * kBlock }, { BlockType::LOG, kBlock } }, BlockType::WATER_WHEEL, kBlock },
         { "shaft", "3 shafts", { { BlockType::LOG, kBlock } }, BlockType::SHAFT, 3 * kBlock },
         { "compressor", "Compressor", { { BlockType::IRON_INGOT, kBlock }, { BlockType::STONE, 2 * kBlock }, }, BlockType::COMPRESSOR, kBlock },
+        { "air_tank", "Air tank", { { BlockType::IRON_INGOT, 2 * kBlock }, { BlockType::GLASS, kBlock / 2 } }, BlockType::AIR_TANK, kBlock },
+        { "valve", "Valve", { { BlockType::IRON_INGOT, kBlock / 2 }, { BlockType::STONE, kBlock } }, BlockType::VALVE, kBlock },
+        // Signals (world/Signals.h).
+        { "lever", "2 levers", { { BlockType::PLANKS, kBlock / 4 }, { BlockType::STONE, kBlock / 4 } }, BlockType::LEVER, 2 * kBlock },
+        { "logic_gate", "Logic gate", { { BlockType::STONE, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 }, { BlockType::GLASS, kBlock / 4 } }, BlockType::LOGIC_GATE, kBlock },
+        { "signal_lamp", "Signal lamp", { { BlockType::GLASS, kBlock }, { BlockType::COAL, kBlock / 4 } }, BlockType::SIGNAL_LAMP, kBlock },
         { "air_pipe", "4 air pipes", { { BlockType::STONE, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::AIR_PIPE, 4 * kBlock },
         { "drill", "Drill", { { BlockType::IRON_INGOT, 2 * kBlock }, { BlockType::STONE, 2 * kBlock } }, BlockType::DRILL, kBlock },
         { "coal_lamp", "Lamp (with coal)", { { BlockType::GLASS, kBlock / 2 }, { BlockType::COAL, kBlock / 4 } }, BlockType::LAMP, kBlock },

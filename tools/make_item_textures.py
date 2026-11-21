@@ -872,6 +872,163 @@ iiiiiiiiiiiiiiii
 COMPRESSOR_COLOURS = {"i": (70, 52, 36), "I": (176, 116, 62), "r": (220, 170, 110), "w": (60, 60, 64), "W": (230, 228, 214),
                       "k": (200, 40, 36), "g": (50, 36, 26)}
 
+LEVER = """
+................
+................
+................
+.........hh.....
+........hhh.....
+........hh......
+.......ww.......
+.......ww.......
+......ww........
+......ww........
+.....ww.........
+....sssssss.....
+...sSSSSSSSs....
+...sSSSSSSSs....
+...sssssssss....
+................
+"""
+LEVER_ON = """
+................
+................
+................
+....hh..........
+....hhh.........
+.....hh.........
+.......ww.......
+.......ww.......
+........ww......
+........ww......
+.........ww.....
+....sssssss.....
+...sSSSSSSSs....
+...sSSSSSSSs....
+...sssssssss....
+................
+"""
+LEVER_COLOURS = {"w": (120, 84, 46), "h": (90, 90, 96), "s": (100, 100, 104), "S": (140, 140, 146)}
+LEVER_ON_COLOURS = {"w": (120, 84, 46), "h": (220, 60, 50), "s": (100, 100, 104), "S": (140, 140, 146)}
+
+GATE_TOP = """
+ssssssssssssssss
+sSSSSSSSSSSSSSSs
+sSccccSSSSccccSs
+sScoocSSSScoocSs
+sSccccSSSSccccSs
+sSSSSyyyyyySSSSs
+sSSSSySSSSySSSSs
+sSSSSySggSySSSSs
+sSSSSySggSySSSSs
+sSSSSySSSSySSSSs
+sSSSSyyyyyySSSSs
+sSSSSSSyySSSSSSs
+sSSSSSccccSSSSSs
+sSSSSScoocSSSSSs
+sSSSSSccccSSSSSs
+ssssssssssssssss
+"""
+GATE_SIDE = """
+ssssssssssssssss
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSkkkkkkkkkkkkSs
+sSkyykggkyykkkSs
+sSkkkkkkkkkkkkSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+sSSSSSSSSSSSSSSs
+ssssssssssssssss
+"""
+GATE_COLOURS = {"s": (70, 70, 76), "S": (124, 124, 130), "c": (184, 120, 64), "o": (40, 30, 24), "y": (210, 170, 60), "g": (80, 200, 90), "k": (36, 36, 40)}
+
+SIGNAL_LAMP = """
+iiiiiiiiiiiiiiii
+igggggggggggggGi
+igGGGGGGGGGGGGgi
+igGggggggggggGgi
+igGgGGGGGGGGgGgi
+igGgGggggggGgGgi
+igGgGgGGGGgGgGgi
+igGgGgGrrGgGgGgi
+igGgGgGrrGgGgGgi
+igGgGgGGGGgGgGgi
+igGgGggggggGgGgi
+igGgGGGGGGGGgGgi
+igGggggggggggGgi
+igGGGGGGGGGGGGgi
+iggggggggggggggi
+iiiiiiiiiiiiiiii
+"""
+SIGNAL_LAMP_COLOURS = {"i": (60, 60, 66), "g": (110, 40, 36), "G": (140, 56, 50), "r": (170, 70, 60)}
+SIGNAL_LAMP_ON_COLOURS = {"i": (60, 60, 66), "g": (240, 90, 70), "G": (255, 150, 110), "r": (255, 240, 200)}
+
+TANK_SIDE = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+irIIIIIIIIIIIIri
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIIIIwwwwwwIIIIi
+iIIIwWWWWWWwIIIi
+iIIIwWWWkWWwIIIi
+iIIIwWWkWWWwIIIi
+iIIIIwwwwwwIIIIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+irIIIIIIIIIIIIri
+iiiiiiiiiiiiiiii
+"""
+TANK_TOP = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIiiiiiiiIIIIi
+iIIiIIIIIIIiIIIi
+iIiIIIIIIIIIiIIi
+iIiIIIIccIIIiIIi
+iIiIIIIccIIIiIIi
+iIiIIIIIIIIIiIIi
+iIIiIIIIIIIiIIIi
+iIIIiiiiiiiIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+TANK_COLOURS = {"i": (60, 64, 70), "I": (150, 156, 164), "r": (200, 204, 210), "w": (60, 60, 64), "W": (230, 228, 214), "k": (200, 40, 36), "c": (184, 120, 64)}
+
+VALVE = """
+cccccccccccccccc
+cCCCCCCCCCCCCCCc
+cCCCCCrrrrCCCCCc
+cCCCCrCCCCrCCCCc
+cCCCrCCCCCCrCCCc
+cCCrCCCrrCCCrCCc
+cCCrCCrrrrCCrCCc
+cCCrCCrrrrCCrCCc
+cCCrCCCrrCCCrCCc
+cCCCrCCCCCCrCCCc
+cCCCCrCCCCrCCCCc
+cCCCCCrrrrCCCCCc
+cCCCCCCCCCCCCCCc
+cCCCCCCCCCCCCCCc
+cCCCCCCCCCCCCCCc
+cccccccccccccccc
+"""
+VALVE_COLOURS = {"c": (96, 60, 30), "C": (184, 120, 64), "r": (200, 40, 36)}
+VALVE_OPEN_COLOURS = {"c": (96, 60, 30), "C": (184, 120, 64), "r": (60, 180, 70)}
+
 
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
@@ -921,6 +1078,16 @@ def main():
     draw("shaft", SHAFT_ICON, SHAFT_COLOURS, jitter=5, seed=55)
     draw("compressor_side", COMPRESSOR_SIDE, COMPRESSOR_COLOURS, jitter=5, seed=56)
     draw("compressor_top", COMPRESSOR_TOP, COMPRESSOR_COLOURS, jitter=5, seed=57)
+    draw("lever", LEVER, LEVER_COLOURS, jitter=4, seed=58)
+    draw("lever_on", LEVER_ON, LEVER_ON_COLOURS, jitter=4, seed=59)
+    draw("logic_gate_top", GATE_TOP, GATE_COLOURS, jitter=4, seed=60)
+    draw("logic_gate_side", GATE_SIDE, GATE_COLOURS, jitter=4, seed=61)
+    draw("signal_lamp", SIGNAL_LAMP, SIGNAL_LAMP_COLOURS, jitter=4, seed=62)
+    draw("signal_lamp_on", SIGNAL_LAMP, SIGNAL_LAMP_ON_COLOURS, jitter=4, seed=63)
+    draw("air_tank_side", TANK_SIDE, TANK_COLOURS, jitter=4, seed=64)
+    draw("air_tank_top", TANK_TOP, TANK_COLOURS, jitter=4, seed=65)
+    draw("valve", VALVE, VALVE_COLOURS, jitter=4, seed=66)
+    draw("valve_open", VALVE, VALVE_OPEN_COLOURS, jitter=4, seed=67)
 
 
 if __name__ == "__main__":

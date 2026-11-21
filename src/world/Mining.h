@@ -106,7 +106,15 @@ inline float Hardness(BlockType type) {
     case BlockType::AIR_PIPE:
     case BlockType::DRILL:
     case BlockType::COMPRESSOR:
+    case BlockType::AIR_TANK:
+    case BlockType::VALVE:
+    case BlockType::VALVE_OPEN:
+    case BlockType::LOGIC_GATE:
     case BlockType::SLUICE: return 3.0f;
+    case BlockType::SIGNAL_LAMP:
+    case BlockType::SIGNAL_LAMP_ON: return 0.5f;
+    case BlockType::LEVER:
+    case BlockType::LEVER_ON: return 0.4f;
     case BlockType::SHAFT:
     case BlockType::WATER_WHEEL: return 2.0f;
     case BlockType::STONE: return 4.0f;
@@ -135,6 +143,10 @@ inline Tool BestTool(BlockType type) {
     case BlockType::AIR_PIPE:
     case BlockType::DRILL:
     case BlockType::COMPRESSOR:
+    case BlockType::AIR_TANK:
+    case BlockType::VALVE:
+    case BlockType::VALVE_OPEN:
+    case BlockType::LOGIC_GATE:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE: return Tool::Pickaxe;
     case BlockType::WATER_WHEEL:

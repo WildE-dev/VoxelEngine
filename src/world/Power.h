@@ -14,9 +14,12 @@
 //  - The wheel turns the shaft on its axle: shafts lie end to end along the same axis,
 //    through any number of wheels' hubs, and a compressor at an end of the line takes
 //    the power of every wheel on it (kWheelMaxAir a second each at full speed).
-//  - Air pipes join face to face, and to compressors and machines. Everything joined
-//    is one network sharing one store of air: each pipe, compressor and machine holds
-//    up to kAirPerCell, and the network's pressure is how full it is (0..1).
+//  - Air pipes join face to face, and to compressors, machines, air tanks and valves.
+//    Everything joined is one network sharing one store of air: each pipe, compressor
+//    and machine holds up to kAirPerCell and each air tank kAirPerTank, and the
+//    network's pressure is how full it is (0..1). A valve joins what's either side of
+//    it only while it's open; shut, the two sides are separate networks, each keeping
+//    its own air.
 //    Compressors stop adding air once it's full; longer networks store more but take
 //    longer to fill. Breaking a pipe lets out the air it held; a network split in two
 //    keeps its pressure on both sides.
@@ -40,6 +43,7 @@ namespace Power {
 
 constexpr double kInterval = 0.25;            // seconds between updates
 constexpr float kAirPerCell = 16.0f;          // air each pipe, compressor or machine holds
+constexpr float kAirPerTank = 256.0f;         // air an air tank holds
 constexpr float kWheelMaxAir = 8.0f;          // air a second from a wheel at full speed
 constexpr float kWheelFullFlow = 256.0f;      // water units a second down one side for full speed
 constexpr float kWheelMinFlow = 8.0f;         // less than this and it stands still
@@ -56,22 +60,26 @@ constexpr float kPumpAir = 1.5f * kWheelMaxAir / (kWheelFullFlow * 3.0f);
 constexpr int kMaxNetwork = 4096;             // pipes and machines in one network, at most
 
 // Parts of an air network (wheels and shafts aren't: they turn compressors).
+// (A valve is part of the network only while it's open: shut, it divides it.)
 inline bool IsAirPart(BlockType t) {
-    return t == BlockType::AIR_PIPE || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP;
+    return t == BlockType::AIR_PIPE || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
+           t == BlockType::VALVE_OPEN;
 }
+// How much air a part holds when full.
+inline float CapacityOf(BlockType t) { return t == BlockType::AIR_TANK ? kAirPerTank : kAirPerCell; }
 // Everything to do with air power (what right-clicking describes).
-inline bool IsPart(BlockType t) { return IsAirPart(t) || t == BlockType::WATER_WHEEL || t == BlockType::SHAFT; }
+inline bool IsPart(BlockType t) { return IsAirPart(t) || t == BlockType::WATER_WHEEL || t == BlockType::SHAFT || t == BlockType::VALVE; }
 // What the server keeps track of: wheels, compressors and machines (not pipes or
 // shafts, which it finds from them).
 inline bool IsMachine(BlockType t) {
-    return t == BlockType::WATER_WHEEL || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP;
+    return t == BlockType::WATER_WHEEL || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK;
 }
 
 // Whether a pipe (drawn as a thin tube) reaches across to this neighbour: water pipes
 // join each other and pumps; air pipes join each other, compressors and machines.
 inline bool PipeJoins(BlockType pipe, BlockType other) {
     if (pipe == BlockType::PIPE) return other == BlockType::PIPE || other == BlockType::PUMP;
-    if (pipe == BlockType::AIR_PIPE) return IsAirPart(other);
+    if (pipe == BlockType::AIR_PIPE) return IsAirPart(other) || other == BlockType::VALVE;
     return false;
 }
 

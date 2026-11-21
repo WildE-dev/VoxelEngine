@@ -248,6 +248,12 @@ private:
     char signText[72] = {};
     void OpenSign(const glm::ivec3& pos);
     void DrawSignEditor();
+    // Setting a signal block's channels (world/Signals.h).
+    bool signalMode = false;
+    glm::ivec3 signalAt{ 0 };
+    int signalKind = 0, signalModeIndex = 0, signalA = 0, signalB = 0, signalOut = 0;
+    void OpenSignalEditor(const glm::ivec3& pos, BlockType type);
+    void DrawSignalEditor();
     void DrawSigns(const glm::mat4& viewProjection); // the texts, floating over their signs
     double chestAskedAt = 0.0;
     void DrawChest();

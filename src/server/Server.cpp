@@ -154,6 +154,15 @@ bool Server::Start(const Options& opts) {
         for (const auto& [pos, held] : storage->GetChests()) chests[pos] = held;
         for (const auto& pos : storage->GetCrops()) crops.insert(pos);
         for (const auto& [pos, text] : storage->GetSigns()) signs[pos] = text;
+        for (const auto& sig : storage->GetSignals()) {
+            SignalBlock& b = signalBlocks[sig.pos];
+            b.config.kind = static_cast<Signals::Kind>(std::min<uint8_t>(sig.kind, 6));
+            b.config.mode = static_cast<Signals::Mode>(std::min<uint8_t>(sig.mode, static_cast<uint8_t>(Signals::Mode::Count) - 1));
+            b.config.a = sig.a;
+            b.config.b = sig.b;
+            b.config.out = sig.out;
+            b.on = sig.on != 0;
+        }
     }
     weatherSeed ^= static_cast<uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
     weatherMode = options.weather;
@@ -250,6 +259,11 @@ void Server::Save(bool shuttingDown) {
     storage->SetChests({ chests.begin(), chests.end() });
     storage->SetCrops({ crops.begin(), crops.end() });
     storage->SetSigns({ signs.begin(), signs.end() });
+    std::vector<WorldStorage::SavedSignal> savedSignals;
+    for (const auto& [pos, b] : signalBlocks)
+        savedSignals.push_back({ pos, static_cast<uint8_t>(b.config.kind), static_cast<uint8_t>(b.config.mode), b.config.a, b.config.b, b.config.out,
+                                 static_cast<uint8_t>(b.on ? 1 : 0) });
+    storage->SetSignals(std::move(savedSignals));
     const size_t saved = world->SaveAll();
     const bool ok = storage->Flush();
     lastSaveTime = Now();
@@ -315,6 +329,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     case net::MsgType::Attack: {
         net::Attack m;
         if ((ok = net::Decode(in, m))) HandleAttack(client, m.creature, m.tool);
+        break;
+    }
+    case net::MsgType::ConfigureSignal: {
+        net::SignalInfo m;
+        if ((ok = net::Decode(in, m))) HandleConfigureSignal(client, m);
         break;
     }
     case net::MsgType::Inspect: {
@@ -474,6 +493,8 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
     Broadcast(net::ChatMessage::Kind::Info, client.name + " joined the game");
     // Every sign's text (there aren't many).
     for (const auto& [pos, text] : signs) net.Send(client.peer, net::kChannelReliable, net::Encode(net::SignText{ pos, text }, false));
+    // And every signal block's channels.
+    for (const auto& [pos, b] : signalBlocks) net.Send(client.peer, net::kChannelReliable, net::Encode(SignalInfoAt(pos), false));
     // Names for name tags: theirs to everyone, everyone else's to them.
     for (const auto& [peer, other] : clients) {
         if (!other.welcomed) continue;
@@ -1048,6 +1069,21 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     if (!InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block)) return;
     if (block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN) return ToggleDoor(pos, block.type == BlockType::DOOR);
     if (block.type == BlockType::TNT) return LightTnt(pos, kTntFuse);
+    // A lever flips; a valve with no channel opens or shuts by hand.
+    if (block.type == BlockType::LEVER || block.type == BlockType::LEVER_ON) {
+        Block flipped = block;
+        flipped.type = block.type == BlockType::LEVER ? BlockType::LEVER_ON : BlockType::LEVER;
+        world->SetBlock(pos.x, pos.y, pos.z, flipped);
+        return;
+    }
+    if (block.type == BlockType::VALVE || block.type == BlockType::VALVE_OPEN) {
+        auto sig = signalBlocks.find(pos);
+        if (sig != signalBlocks.end() && sig->second.config.a != 0) {
+            return SendChat(client, net::ChatMessage::Kind::Info, "This valve answers to channel " + std::to_string(sig->second.config.a));
+        }
+        world->SetBlock(pos.x, pos.y, pos.z, Block(block.type == BlockType::VALVE ? BlockType::VALVE_OPEN : BlockType::VALVE));
+        return;
+    }
     if (block.type == BlockType::CAMPFIRE) {
         // Cooks one of the raw food in their hand.
         const BlockType cooked = client.heldBlock == BlockType::RAW_VENISON ? BlockType::COOKED_VENISON
@@ -1141,6 +1177,9 @@ void Server::TriggerPlate(ClientState& client, const glm::ivec3& plate) {
             for (int z = -r; z <= r; z++) {
                 Block b;
                 const glm::ivec3 p = plate + glm::ivec3(x, y, z);
+                // (Sluice gates with a channel answer to it instead.)
+                auto sig = signalBlocks.find(p);
+                if (sig != signalBlocks.end() && sig->second.config.a != 0) continue;
                 if (world->GetBlock(p.x, p.y, p.z, b) && b.type == BlockType::SLUICE) {
                     world->SetBlock(p.x, p.y, p.z, Block());
                     opened++;
@@ -1637,6 +1676,7 @@ void Server::UpdateTraps() {
                 if (b.type == BlockType::SPIKES) spiked = true;
                 if (b.type == BlockType::CAMPFIRE) burning = true;
                 if (b.type == BlockType::PRESSURE_PLATE) {
+                    plateSignal[f] = now + Signals::kPlateSeconds; // (sending on its channel, if it has one)
                     auto it = plateReady.find(f);
                     if (it == plateReady.end() || now >= it->second) {
                         plateReady[f] = now + 2.0;
@@ -1688,6 +1728,7 @@ void Server::Tick() {
     UpdateFishing();
     UpdateTnt();
     UpdatePower();
+    UpdateSignals();
     if (storage && options.autosaveSeconds > 0.0f && Now() - lastSaveTime >= options.autosaveSeconds) Save(false);
 
     std::vector<glm::ivec3> centers;

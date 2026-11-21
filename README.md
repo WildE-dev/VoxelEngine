@@ -34,7 +34,8 @@ GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
 [Creatures](#creatures) and [PvP](#pvp)), `CraftTest` (see [Crafting](#crafting)),
 `FoodTest` (see [Food and hunger](#food-and-hunger)), `ChestTest` (see
 [Chests](#chests)), `BedTest` (see [Beds](#beds)), `PowerTest` (see
-[Air power](#air-power)) and `SoundTest` (see [Sound](#sound)).
+[Air power](#air-power)), `SignalTest` (see [Signals](#signals)) and `SoundTest` (see
+[Sound](#sound)).
 
 `ctest` in the build directory runs them all, and `ctest -j15` runs them all at
 once. They're written to pass even then, on a loaded machine:
@@ -868,10 +869,16 @@ wheels** through **shafts**:
   number of wheels' hubs; shafts and wheels on a line turn together, drawn as a
   turning wooden rod. A **compressor** at either end of the line takes the power of
   every wheel on it: 8 units of air a second from each wheel at full speed.
-- **Air pipes** join face to face to each other, to compressors, and to machines;
-  everything joined is one network sharing one store of air. Every pipe, compressor
-  and machine holds a little (16 units), and the network's **pressure** is how full
-  it is, so long pipe runs store more but take longer to fill. Breaking a pipe lets
+- **Air pipes** join face to face to each other, to compressors, machines, air tanks
+  and valves; everything joined is one network sharing one store of air. Every pipe,
+  compressor and machine holds a little (16 units), and the network's **pressure** is
+  how full it is, so long pipe runs store more but take longer to fill.
+- An **air tank** holds 256 units: a store of pressure, filling while the wheels make
+  more air than the machines use and keeping them going when the water stops. (It's
+  more to fill, too: a network with a tank takes longer to reach running pressure.)
+- A **valve** joins the pipes either side of it only while it's open; shut, the two
+  sides are separate networks, each keeping its own air. Right-click opens and shuts
+  it, or give it a channel (see [Signals](#signals)) and it opens while that's on. Breaking a pipe lets
   out what it held, and the two halves of a network keep their pressure. Pipes are
   drawn as thin tubes, joined to what they connect to (they still stop you like a
   whole block). Machines run above 25% pressure.
@@ -899,7 +906,8 @@ pressure, pipes and working machines.
 
 Recipes: a water wheel from 6 planks and a log; 3 shafts from a log; a compressor
 from an iron ingot and 2 stone; 4 air pipes from a stone and a quarter of an iron
-ingot; a drill from 2 iron ingots and 2 stone.
+ingot; an air tank from 2 iron ingots and half a glass; a valve from half an iron
+ingot and a stone; a drill from 2 iron ingots and 2 stone.
 
 The server runs it all four times a second (`Server::UpdatePower`,
 `src/server/Power.cpp`; the rules and numbers are in `src/world/Power.h`): the water
@@ -919,8 +927,52 @@ to a drill and a pump) and checks:
 - the pump runs on the air, and the drill digs into the ground with what it digs in
   the chest;
 - right-clicking the compressor and a wheel describes them;
+- an air tank behind a shut valve gets no air, and opening the valve lets the
+  network's air into it;
 - cutting the air pipe starves the drill;
 - stopping the water brings the wheels to a stop.
+
+## Signals
+
+Signals are wireless, on numbered **channels** (1 to 255). Anything sending on a
+channel is heard by everything listening to it within **64 blocks**.
+
+| Block | What it does |
+|---|---|
+| **Lever** | sends on its channel while it's on; right-click flips it |
+| **Pressure plate** | sends for a second after someone steps on it (and still opens the old-style sluice gates around it) |
+| **Logic gate** | listens to one or two channels (A, B) and sends its answer on another: AND, OR, XOR, NOT (of A), RELAY (A again: to carry a signal further than 64 blocks) or CLOCK (on and off each second while A is on, or always with no A) |
+| **Signal lamp** | lights while its channel is on |
+| **Valve** | opens while its channel is on (with no channel, right-click opens and shuts it); see [Air power](#air-power) |
+| **Sluice gate** | with a channel, opens out of the way while it's on, letting water through, and closes when it's off, pushing any water in its cell up or aside (it waits if there's nowhere for it to go); with none, it's the old kind, opened for good by a pressure plate near it |
+
+Placing a lever, a logic gate or a signal lamp opens a small window to set its
+channels; right-click a gate or a lamp, or crouch and right-click any signal block
+(lever, plate, gate, lamp, valve or sluice gate), to change them. Looking at one shows
+its channels (and a lever's, gate's or valve's state) under the crosshair. Gates work
+out their answer from what they heard and send it from the next update, a tenth of
+a second later, so a loop of gates steps along instead of locking up.
+
+Recipes: 2 levers from a quarter of a plank and a quarter of a stone; a logic gate
+from a stone, a quarter of an iron ingot and a quarter of a glass; a signal lamp from
+a glass and a quarter of a coal.
+
+The server runs it ten times a second (`Server::UpdateSignals`,
+`src/server/Signals.cpp`; the rules are in `src/world/Signals.h`), keeps every
+block's channels and saves them with the world (world format 11), and tells everyone
+about each block's channels and state as they change (`SignalInfo`, protocol 35).
+`SignalTest` checks:
+
+- a lamp lights and goes out with a lever on its channel, and one on another channel
+  doesn't;
+- signals don't reach 80 blocks, and a relay gate carries them 82;
+- AND and NOT gates follow two levers, and a clock gate blinks its lamp;
+- a valve without a channel opens by hand; one on a channel opens and shuts with it
+  and won't move by hand;
+- a sluice gate on a channel opens, and closes again pushing the water in its cell out
+  beside it;
+- a pressure plate lights its lamp while it's stood on, and it goes out after;
+- a broken block's channels go, and channels are still there after a restart.
 
 ## Beds
 
@@ -1321,6 +1373,6 @@ src/
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
             BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest, ChestTest, BedTest,
-            PowerTest
+            PowerTest, SignalTest
 tools/      make_sounds.py (sound effects), make_item_textures.py (item icons)
 ```

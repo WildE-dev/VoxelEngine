@@ -24,6 +24,7 @@
 #include "world/Achievements.h"
 #include "world/Hunger.h"
 #include "world/Power.h"
+#include "world/Signals.h"
 #include "world/Crafting.h"
 #include "world/Coords.h"
 #include "world/TerrainGenerator.h"
@@ -398,7 +399,7 @@ private:
         int wheels = 0, turning = 0;
     };
     struct AirNetwork {
-        int pipes = 0, compressors = 0, drills = 0, working = 0, pumps = 0, pumping = 0;
+        int pipes = 0, tanks = 0, compressors = 0, drills = 0, working = 0, pumps = 0, pumping = 0;
         float air = 0.0f, capacity = 0.0f, supply = 0.0f; // supply: air a second from its compressors
         float Pressure() const { return capacity > 0.0f ? air / capacity : 0.0f; }
     };
@@ -419,6 +420,23 @@ private:
     // beside it. Returns whether it dug.
     bool DrillDig(const glm::ivec3& pos, Drill& drill);
     void SendMachines();
+
+    // Signals (world/Signals.h; the code is in Signals.cpp).
+    struct SignalBlock {
+        Signals::Config config;
+        bool on = false;       // a gate's output; a sluice gate's open
+        double clockAt = 0.0;  // a clock's next flip
+    };
+    std::unordered_map<glm::ivec3, SignalBlock, Coords::IVec3Hash> signalBlocks;
+    std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> plateSignal; // plates sending until then
+    double nextSignalUpdate = 0.0;
+    void UpdateSignals();
+    void HandleConfigureSignal(ClientState& client, const net::SignalInfo& m);
+    net::SignalInfo SignalInfoAt(const glm::ivec3& pos) const;
+    void BroadcastSignal(const glm::ivec3& pos);
+    // Shuts an open sluice gate, moving the water in its cell out of the way (false:
+    // nowhere for it to go yet).
+    bool CloseSluice(const glm::ivec3& pos);
     void HandleInspect(ClientState& client, const glm::ivec3& pos);
 
     double lastCreatureTime = 0.0;
