@@ -198,6 +198,13 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         else openChest.reset();
         break;
     }
+    case net::MsgType::SignText: {
+        net::SignText m;
+        if (!(ok = net::Decode(in, m))) break;
+        if (m.text.empty()) signs.erase(m.pos);
+        else signs[m.pos] = m.text;
+        break;
+    }
     case net::MsgType::Bobber: {
         net::Bobber m;
         if (!(ok = net::Decode(in, m))) break;
@@ -430,6 +437,10 @@ std::vector<Client::BlockEvent> Client::TakeBlockEvents() {
     std::vector<BlockEvent> events;
     events.swap(blockEvents);
     return events;
+}
+
+void Client::WriteSign(const glm::ivec3& pos, const std::string& text) {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::SignText{ pos, text.substr(0, net::kMaxSignLength) }, true));
 }
 
 void Client::Cast(const glm::ivec3& pos, bool cast) {

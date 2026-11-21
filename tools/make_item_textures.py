@@ -597,6 +597,26 @@ SMOKE = """
 """
 SMOKE_COLOURS = {"s": (120, 120, 124), "S": (160, 160, 164)}
 
+SIGN = """
+................
+................
+.bbbbbbbbbbbbbb.
+.bwwwwwwwwwwwwb.
+.bwkkkwkkkwkkwb.
+.bwwwwwwwwwwwwb.
+.bwkkwkkkkwkkwb.
+.bwwwwwwwwwwwwb.
+.bbbbbbbbbbbbbb.
+.......pp.......
+.......pp.......
+.......pp.......
+.......pp.......
+.......pp.......
+.......pp.......
+.......pp.......
+"""
+SIGN_COLOURS = {"b": (110, 76, 38), "w": (196, 160, 104), "k": (90, 64, 34), "p": (120, 84, 44)}
+
 
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
@@ -630,6 +650,7 @@ def main():
     draw("bobber", BOBBER, BOBBER_COLOURS, jitter=4, seed=39)
     draw("campfire", CAMPFIRE, CAMPFIRE_COLOURS, jitter=8, seed=40)
     draw("smoke", SMOKE, SMOKE_COLOURS, jitter=6, seed=41)
+    draw("sign", SIGN, SIGN_COLOURS, jitter=5, seed=42)
 
 
 if __name__ == "__main__":

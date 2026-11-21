@@ -54,7 +54,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -154,6 +154,7 @@ const char* BlockName(BlockType type) {
     case BlockType::DOOR_OPEN: return "Open door";
     case BlockType::ARROW: return "Arrow";
     case BlockType::CAMPFIRE: return "Campfire";
+    case BlockType::SIGN: return "Sign";
     case BlockType::RAW_FISH: return "Raw fish";
     case BlockType::COOKED_FISH: return "Cooked fish";
     default:               return "Air";
@@ -607,6 +608,7 @@ void Application::Run() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         DrawNameTags(params.projection * params.view);
+        DrawSigns(params.projection * params.view);
         if (showCompass) DrawCompass();
         if (showMap) DrawMinimap();
         DrawToast();
@@ -1417,7 +1419,7 @@ void Application::OnKey(int key, int action) {
     }
     // The inventory takes I and Esc (to close) and the number keys (to pick a slot).
     if (inventoryOpen) {
-        if (key == GLFW_KEY_I || key == GLFW_KEY_ESCAPE) SetInventoryOpen(false);
+        if ((key == GLFW_KEY_I && !signMode) || key == GLFW_KEY_ESCAPE) SetInventoryOpen(false); // (writing a sign, I is a letter)
         else if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9) SelectSlot(key - GLFW_KEY_1);
         else if (key == GLFW_KEY_0) SelectSlot(9);
         return;
@@ -1522,6 +1524,7 @@ void Application::SetInventoryOpen(bool open) {
         client->CloseChest();
         chestMode = chestSeenOpen = false;
     }
+    if (!open) signMode = false;
     // The cursor is needed to click blocks; give it back to the game on closing.
     if (open) cursorBeforeInventory = captureCursor;
     captureCursor = open ? false : cursorBeforeInventory;
@@ -1532,6 +1535,7 @@ void Application::SetInventoryOpen(bool open) {
 void Application::DrawInventory() {
     if (!inventoryOpen) return;
     if (chestMode) return DrawChest();
+    if (signMode) return DrawSignEditor();
     constexpr int kColumns = 7;
     constexpr float kIcon = 44.0f;
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -1799,6 +1803,12 @@ void Application::OnMouseButton(int button, int action) {
             chestAskedAt = Client::Now();
             return;
         }
+        // A sign: write on it.
+        if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
+            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && target.type == BlockType::SIGN) {
+            OpenSign(at->block);
+            return;
+        }
         // A bed: respawn here (and sleep, at night).
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
             at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) &&
@@ -1897,6 +1907,60 @@ void Application::OnMouseButton(int button, int action) {
         const int faceAxis = hit->normal.x != 0 ? 0 : hit->normal.z != 0 ? 2 : 1;
         client->PlaceBlock(place, placeBlock, height, faceAxis);
         PlayAt("place", place, 0.8f);
+        if (placeBlock == BlockType::SIGN) OpenSign(place); // and write on it
+    }
+}
+
+void Application::OpenSign(const glm::ivec3& pos) {
+    signAt = pos;
+    const auto& signs = client->GetSigns();
+    auto it = signs.find(pos);
+    std::snprintf(signText, sizeof signText, "%s", it != signs.end() ? it->second.c_str() : "");
+    SetInventoryOpen(true);
+    signMode = true;
+}
+
+void Application::DrawSignEditor() {
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.4f),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowBgAlpha(0.9f);
+    bool open = true;
+    if (ImGui::Begin("Sign", &open, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse)) {
+        ImGui::TextUnformatted("What's written on it (Enter to finish, Esc to leave it):");
+        ImGui::SetNextItemWidth(420.0f);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        if (ImGui::InputText("##sign", signText, net::kMaxSignLength + 1, ImGuiInputTextFlags_EnterReturnsTrue)) {
+            client->WriteSign(signAt, signText);
+            open = false;
+        }
+    }
+    ImGui::End();
+    if (!open) SetInventoryOpen(false);
+}
+
+void Application::DrawSigns(const glm::mat4& viewProjection) {
+    // Each sign's words over it, within 12 blocks and in sight, like a little plaque.
+    ImDrawList* draw = ImGui::GetBackgroundDrawList();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const glm::vec3 eye = camera.GetPosition();
+    for (const auto& [pos, text] : client->GetSigns()) {
+        const glm::vec3 at = glm::vec3(pos) + glm::vec3(0.5f, 0.95f, 0.5f);
+        const glm::vec3 to = at - eye;
+        const float distance = glm::length(to);
+        if (distance > 12.0f || distance < 0.3f) continue;
+        const glm::vec4 clip = viewProjection * glm::vec4(at, 1.0f);
+        if (clip.w <= 0.1f) continue;
+        const glm::vec2 ndc = glm::vec2(clip) / clip.w;
+        if (std::abs(ndc.x) > 1.1f || std::abs(ndc.y) > 1.1f) continue;
+        if (auto hit = Raycast(*world, eye, to / distance, distance - 0.6f); hit && hit->block != pos) continue;
+        const ImVec2 c(viewport->WorkPos.x + (ndc.x * 0.5f + 0.5f) * viewport->WorkSize.x, viewport->WorkPos.y + (0.5f - ndc.y * 0.5f) * viewport->WorkSize.y);
+        const float fade = std::clamp((12.0f - distance) / 3.0f, 0.0f, 1.0f);
+        const ImVec2 size = ImGui::CalcTextSize(text.c_str());
+        const ImVec2 lo(c.x - size.x * 0.5f - 7.0f, c.y - size.y - 6.0f), hi(c.x + size.x * 0.5f + 7.0f, c.y + 2.0f);
+        draw->AddRectFilled(lo, hi, IM_COL32(196, 160, 104, static_cast<int>(225 * fade)), 2.0f);
+        draw->AddRect(lo, hi, IM_COL32(110, 76, 38, static_cast<int>(255 * fade)), 2.0f, 0, 2.0f);
+        draw->AddText(ImVec2(lo.x + 7.0f, lo.y + 4.0f), IM_COL32(40, 26, 12, static_cast<int>(255 * fade)), text.c_str());
     }
 }
 

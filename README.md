@@ -733,6 +733,17 @@ it out with `/give cap|tunic|boots [player]`. The rules are in `src/world/Armour
 damage sums, and that they're kept after a restart; `CreatureTest` checks that armour
 takes a sword hit from 3.5 hearts down to 2.
 
+## Signs
+
+A **sign** (two from a plank) is a post with a board. Place one and a box opens to
+write a line on it (up to 64 characters; Enter finishes, Esc leaves it as it is);
+right-click a sign later to rewrite it. Its words float over it like a little plaque
+for anyone within 12 blocks who can see it. The server keeps every sign's text, sends
+them all to each player who joins, tells everyone when one changes, and saves them
+with the world (format 10). `ChestTest` checks that writing reaches the other player
+(unprintable characters dropped), that there's no writing without a sign, and that it
+survives a restart.
+
 ## Ladders
 
 A **ladder** (three from a plank) is a see-through frame of rungs filling its cell.
@@ -860,6 +871,7 @@ makes four.
 | 3 ladders | 1 planks |
 | Door | 2 planks |
 | Campfire | 1 log + 0.25 stone |
+| 2 signs | 1 planks |
 | Bed | 3 planks + 1 hide |
 | Iron ingot | 1 iron ore + 0.25 coal |
 | Lamp (with coal) | 0.5 glass + 0.25 coal |

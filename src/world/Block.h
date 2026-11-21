@@ -153,6 +153,9 @@ enum class BlockType : uint8_t {
     // A campfire: a bright light (drawn as a sprite of logs and flames, passable),
     // smoking; right-click it with raw food in hand to cook it; standing in it burns.
     CAMPFIRE,
+    // A sign on a post (a sprite, passable) with a line of text on it, written after
+    // placing it (or rewritten with a right-click); the server keeps the texts.
+    SIGN,
     COUNT
 };
 
@@ -166,7 +169,8 @@ inline bool IsItemType(BlockType type) {
 inline bool IsPlantType(BlockType type) {
     return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW || type == BlockType::SPIKES ||
            type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES || type == BlockType::CROP || type == BlockType::RIPE_WHEAT ||
-           type == BlockType::LADDER || type == BlockType::DOOR_OPEN || type == BlockType::CAMPFIRE;
+           type == BlockType::LADDER || type == BlockType::DOOR_OPEN || type == BlockType::CAMPFIRE ||
+           type == BlockType::SIGN;
 }
 
 // The resource a block counts as in survival (see Block::ResourceUnits): its own type,

@@ -365,6 +365,10 @@ private:
     void UpdateArrows();
     void SendArrows();
     void HandleCast(ClientState& client, const glm::ivec3& pos, bool cast);
+    // Signs' texts, by position (saved with the world).
+    std::unordered_map<glm::ivec3, std::string, Coords::IVec3Hash> signs;
+    void HandleWriteSign(ClientState& client, const glm::ivec3& pos, const std::string& text);
+    void BroadcastSign(const glm::ivec3& pos);
     void UpdateFishing(); // bites, and lines snapped by walking off
     double lastCreatureTime = 0.0;
     std::unique_ptr<WorldStorage> storage; // declared before `world`, which uses it

@@ -150,6 +150,7 @@ bool Server::Start(const Options& opts) {
     if (storage) {
         for (const auto& [pos, held] : storage->GetChests()) chests[pos] = held;
         for (const auto& pos : storage->GetCrops()) crops.insert(pos);
+        for (const auto& [pos, text] : storage->GetSigns()) signs[pos] = text;
     }
     weatherSeed ^= static_cast<uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
     weatherMode = options.weather;
@@ -245,6 +246,7 @@ void Server::Save(bool shuttingDown) {
     storage->SetTimeOfDay(static_cast<float>(timeOfDay));
     storage->SetChests({ chests.begin(), chests.end() });
     storage->SetCrops({ crops.begin(), crops.end() });
+    storage->SetSigns({ signs.begin(), signs.end() });
     const size_t saved = world->SaveAll();
     const bool ok = storage->Flush();
     lastSaveTime = Now();
@@ -315,6 +317,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     case net::MsgType::AttackPlayer: {
         net::AttackPlayer m;
         if ((ok = net::Decode(in, m))) HandleAttackPlayer(client, m.player, m.tool);
+        break;
+    }
+    case net::MsgType::WriteSign: {
+        net::SignText m;
+        if ((ok = net::Decode(in, m))) HandleWriteSign(client, m.pos, m.text);
         break;
     }
     case net::MsgType::Cast: {
@@ -452,6 +459,8 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
     net.Send(client.peer, net::kChannelReliable, net::Encode(welcome));
     Log(client.name + " joined as player " + std::to_string(client.id));
     Broadcast(net::ChatMessage::Kind::Info, client.name + " joined the game");
+    // Every sign's text (there aren't many).
+    for (const auto& [pos, text] : signs) net.Send(client.peer, net::kChannelReliable, net::Encode(net::SignText{ pos, text }, false));
     // Names for name tags: theirs to everyone, everyone else's to them.
     for (const auto& [peer, other] : clients) {
         if (!other.welcomed) continue;
@@ -707,6 +716,7 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
     world->SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
     if (block.type == BlockType::CHEST) RemoveChest(pos, &client);
     if (block.type == BlockType::CROP) crops.erase(pos);
+    if (block.type == BlockType::SIGN && signs.erase(pos)) BroadcastSign(pos);
     // A door goes as a whole: the other half too (its worth is counted once, below).
     if (block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN)
         for (const int dy : { 1, -1 }) {
@@ -1260,6 +1270,24 @@ void Server::HandleShoot(ClientState& client, const glm::vec3& direction) {
     const glm::vec3 eye = client.feet + glm::vec3(0.0f, (client.flags & net::kFlagCrouching) ? 1.27f : kEyeHeight, 0.0f);
     arrows.push_back({ eye + dir * 0.4f, dir * kArrowSpeed, client.id, now });
     if (arrows.size() > 256) arrows.erase(arrows.begin()); // (the oldest go first)
+}
+
+void Server::HandleWriteSign(ClientState& client, const glm::ivec3& pos, const std::string& raw) {
+    Block block;
+    if (!InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block) || block.type != BlockType::SIGN) return;
+    // Printable characters only.
+    std::string text;
+    for (char c : raw)
+        if (c >= 32 && c < 127) text += c;
+    signs[pos] = text.substr(0, net::kMaxSignLength);
+    BroadcastSign(pos);
+}
+
+void Server::BroadcastSign(const glm::ivec3& pos) {
+    auto it = signs.find(pos);
+    const auto packet = net::Encode(net::SignText{ pos, it != signs.end() ? it->second : std::string() }, false);
+    for (auto& [peer, client] : clients)
+        if (client.welcomed) net.Send(peer, net::kChannelReliable, packet);
 }
 
 void Server::HandleCast(ClientState& client, const glm::ivec3& pos, bool cast) {

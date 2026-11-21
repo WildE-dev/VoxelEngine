@@ -199,6 +199,18 @@ bool WorldStorage::ReadWorldFile() {
         }
         crops.push_back(pos);
     }
+    // Signs (format 10 on): position and text.
+    uint32_t signCount = 0;
+    if (version >= 10 && !r.VarU32(signCount)) signCount = 0;
+    for (uint32_t i = 0; i < signCount; i++) {
+        glm::ivec3 pos;
+        std::string text;
+        if (!r.IVec3(pos) || !r.Str(text, 256)) {
+            std::cerr << "[storage] " << path.string() << " is truncated (signs)" << std::endl;
+            return false;
+        }
+        signs.emplace_back(pos, text);
+    }
     return true;
 }
 
@@ -341,6 +353,17 @@ void WorldStorage::SetChests(Chests c) {
     playersDirty = true; // world.dat needs writing
 }
 
+WorldStorage::Signs WorldStorage::GetSigns() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return signs;
+}
+
+void WorldStorage::SetSigns(Signs s) {
+    std::lock_guard<std::mutex> lock(mutex);
+    signs = std::move(s);
+    playersDirty = true;
+}
+
 std::vector<glm::ivec3> WorldStorage::GetCrops() const {
     std::lock_guard<std::mutex> lock(mutex);
     return crops;
@@ -428,6 +451,11 @@ bool WorldStorage::Flush() {
             }
             w.VarU32(static_cast<uint32_t>(crops.size()));
             for (const auto& pos : crops) w.IVec3(pos);
+            w.VarU32(static_cast<uint32_t>(signs.size()));
+            for (const auto& [pos, text] : signs) {
+                w.IVec3(pos);
+                w.Str(text);
+            }
             files.emplace_back(directory / "world.dat", std::move(w.data));
             writePlayers = true;
             playersDirty = false;

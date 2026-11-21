@@ -13,6 +13,7 @@
 
 #include "net/Protocol.h"
 #include "world/Armour.h"
+#include "world/Coords.h"
 #include "world/Breathing.h"
 #include "net/Transport.h"
 
@@ -178,6 +179,9 @@ public:
     void Shoot(const glm::vec3& direction);
     // Fishing: cast into the water at `pos`, or reel in.
     void Cast(const glm::ivec3& pos, bool cast);
+    // Signs: write on one, and what's written on every sign we know of.
+    void WriteSign(const glm::ivec3& pos, const std::string& text);
+    const std::unordered_map<glm::ivec3, std::string, Coords::IVec3Hash>& GetSigns() const { return signs; }
     // Where our bobber floats (none if it's in), and whether a fish bit since the last call.
     std::optional<glm::ivec3> GetBobber() const { return bobber; }
     bool TakeBite() { const bool b = bite; bite = false; return b; }
@@ -222,6 +226,7 @@ private:
     std::vector<net::ArrowInfo> arrows;
     std::optional<glm::ivec3> bobber;
     bool bite = false;
+    std::unordered_map<glm::ivec3, std::string, Coords::IVec3Hash> signs;
     double arrowsAt = 0.0;
     std::optional<glm::ivec3> openChest;
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> chestHeld{};

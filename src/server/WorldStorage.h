@@ -37,7 +37,7 @@ public:
     static constexpr int kRegionSize = 8;      // chunks per region along each axis
     // 2: world type; 3: time of day; 4: game modes and resources; 5: block axes (logs);
     // 6: tools players have made
-    static constexpr uint32_t kFormatVersion = 9;
+    static constexpr uint32_t kFormatVersion = 10;
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
@@ -63,6 +63,10 @@ public:
     // Crops still growing, by position (format 9 on).
     std::vector<glm::ivec3> GetCrops() const;
     void SetCrops(std::vector<glm::ivec3> crops);
+    // Signs' texts, by position (format 10 on).
+    using Signs = std::vector<std::pair<glm::ivec3, std::string>>;
+    Signs GetSigns() const;
+    void SetSigns(Signs signs);
 
     // One bit per block column of a chunk (index x * CHUNK_SIZE + z).
     using ColumnMask = std::array<uint64_t, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE / 64>;
@@ -146,4 +150,5 @@ private:
     uint8_t defaultMode = 1; // creative, for worlds saved before modes
     Chests chests;
     std::vector<glm::ivec3> crops;
+    Signs signs;
 };

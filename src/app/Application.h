@@ -234,6 +234,13 @@ private:
     // A chest is open (in place of the inventory): asked for at chestAskedAt, and seen
     // open by the server since.
     bool chestMode = false, chestSeenOpen = false;
+    // Writing on a sign (in place of the inventory): which one, and the text so far.
+    bool signMode = false;
+    glm::ivec3 signAt{ 0 };
+    char signText[72] = {};
+    void OpenSign(const glm::ivec3& pos);
+    void DrawSignEditor();
+    void DrawSigns(const glm::mat4& viewProjection); // the texts, floating over their signs
     double chestAskedAt = 0.0;
     void DrawChest();
     double scrollAccumulator = 0.0;

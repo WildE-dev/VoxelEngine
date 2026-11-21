@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 29;
+constexpr uint32_t kProtocolVersion = 30;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -54,6 +54,7 @@ enum class MsgType : uint8_t {
     UseBed,        // right-clicked a bed: respawn there (and sleep, at night)
     Shoot,         // shoot an arrow from your bow, this way
     Cast,          // cast the fishing rod into the water here (or reel in)
+    WriteSign,     // set the text on a sign
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -75,6 +76,7 @@ enum class MsgType : uint8_t {
     Lightning,     // lightning struck here (in a storm)
     Arrows,        // the arrows in flight (or stuck) near you, every tick
     Bobber,        // where your bobber floats (or that it's reeled in), and bites
+    SignText,      // a sign's text (empty: gone)
     Knockback,     // you were hit: a push to add to your velocity
 };
 
@@ -303,6 +305,14 @@ struct PlayerSnapshot {
     uint8_t storm = 0;      // 1: the rain is a thunderstorm (darker, with lightning)
 };
 
+// Signs: what's written on one (the same message both ways: a player writes it, the
+// server tells everyone; empty text is a sign gone).
+constexpr size_t kMaxSignLength = 64;
+struct SignText {
+    glm::ivec3 pos{0};
+    std::string text;
+};
+
 // Fishing: cast into the water at `pos` (`cast` 0 reels in). The server answers with
 // Bobber: where it floats, and `bite` 1 when a fish takes it (and is caught).
 struct Cast {
@@ -473,6 +483,7 @@ std::vector<uint8_t> Encode(const PlayerName& m);
 std::vector<uint8_t> Encode(const Lightning& m);
 std::vector<uint8_t> Encode(const Shoot& m);
 std::vector<uint8_t> Encode(const Cast& m);
+std::vector<uint8_t> Encode(const SignText& m, bool fromPlayer);
 std::vector<uint8_t> Encode(const Bobber& m);
 std::vector<uint8_t> Encode(const Arrows& m);
 std::vector<uint8_t> Encode(const Knockback& m);
@@ -504,6 +515,7 @@ bool Decode(ByteReader& in, PlayerName& m);
 bool Decode(ByteReader& in, Lightning& m);
 bool Decode(ByteReader& in, Shoot& m);
 bool Decode(ByteReader& in, Cast& m);
+bool Decode(ByteReader& in, SignText& m);
 bool Decode(ByteReader& in, Bobber& m);
 bool Decode(ByteReader& in, Arrows& m);
 bool Decode(ByteReader& in, Knockback& m);

@@ -151,6 +151,19 @@ int main() {
         wait(1.0);
         Check(!b.client.GetOpenChest(), "from 30 blocks away it won't open");
 
+        std::cout << "Signs" << std::endl;
+        const glm::ivec3 signAt{ 8, 0, 9 };
+        server.QueueConsoleCommand("give sign 1 Keeper");
+        sync();
+        a.client.PlaceBlock(signAt, BlockType::SIGN);
+        both(20.0, [&] { Block s; return a.world.GetBlock(signAt.x, signAt.y, signAt.z, s) && s.type == BlockType::SIGN; });
+        a.client.WriteSign(signAt, "Keep out!\x01 (mine)");
+        Check(both(20.0, [&] { auto it = b.client.GetSigns().find(signAt); return it != b.client.GetSigns().end() && it->second == "Keep out! (mine)"; }),
+              "words written on a sign reach the other player (unprintable ones dropped)");
+        a.client.WriteSign({ 30, 0, 30 }, "nothing here");
+        both(1.0, [] { return false; });
+        Check(a.client.GetSigns().size() == 1, "and there's no writing where there's no sign");
+
         std::cout << "Saving" << std::endl;
         a.client.CloseChest();
         server.QueueConsoleCommand("save");
@@ -176,6 +189,9 @@ int main() {
         a.client.OpenChest(chestAt);
         Check(pump(20.0, [&] { return a.client.GetChestUnits(BlockType::STONE) == 5 * kBlock && a.client.GetChestUnits(BlockType::COOKED_VENISON) == kBlock; }),
               "with the same things in it");
+
+        Check(pump(20.0, [&] { auto it = a.client.GetSigns().find({ 8, 0, 9 }); return it != a.client.GetSigns().end() && it->second == "Keep out! (mine)"; }),
+              "the sign's words are still there after a restart");
 
         std::cout << "Breaking" << std::endl;
         server.QueueConsoleCommand("gamemode creative Keeper"); // (breaks at once)

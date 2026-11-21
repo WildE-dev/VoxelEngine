@@ -205,6 +205,18 @@ namespace {
 bool FiniteVec(const glm::vec3& v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
 } // namespace
 
+std::vector<uint8_t> Encode(const SignText& m, bool fromPlayer) {
+    ByteWriter w;
+    Begin(w, fromPlayer ? MsgType::WriteSign : MsgType::SignText);
+    w.IVec3(m.pos);
+    w.Str(m.text.substr(0, kMaxSignLength));
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, SignText& m) {
+    return in.IVec3(m.pos) && in.Str(m.text, kMaxSignLength) && in.AtEnd();
+}
+
 std::vector<uint8_t> Encode(const Cast& m) {
     ByteWriter w;
     Begin(w, MsgType::Cast);
