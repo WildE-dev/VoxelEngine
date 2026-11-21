@@ -13,6 +13,7 @@
 
 #include "net/Protocol.h"
 #include "world/Armour.h"
+#include "world/Coords.h"
 #include "world/Breathing.h"
 #include "net/Transport.h"
 
@@ -107,6 +108,9 @@ public:
     int GetHealth() const { return health; }
     int GetMaxHealth() const { return maxHealth; }
     double GetLastHurt() const { return lastHurt; }
+    // When we last died (and respawned), and the name we joined with.
+    double GetLastDeath() const { return lastDeath; }
+    const std::string& GetMyName() const { return myName; }
     // Breath (survival): air left (0..GetMaxAir()) and what's taking it.
     int GetAir() const { return air; }
     // Hunger (survival): food points (0..GetMaxFood(), world/Hunger.h).
@@ -115,6 +119,11 @@ public:
     int GetMaxAir() const { return maxAir; }
     Breathing::Cause GetAirCause() const { return airCause; }
     float GetRain() const { return rain; }
+    bool IsStorm() const { return storm; }
+    // Lightning strikes since the last call.
+    std::vector<glm::ivec3> TakeLightning() { std::vector<glm::ivec3> out; out.swap(lightning); return out; }
+    // Explosions since the last call (where, and how big).
+    std::vector<net::Explosion> TakeExplosions() { std::vector<net::Explosion> out; out.swap(explosions); return out; }
     // Game mode, and in survival the resource units held of each block type (predicted
     // on edits, put right by the server).
     net::GameMode GetMode() const { return mode; }
@@ -124,6 +133,8 @@ public:
     // Tools: whether we have one (creative: all of them; survival: those we've made).
     // Armour worn (survival; world/Armour.h).
     bool HasArmour(ArmourPiece piece) const { return (armour & Armour::Bit(piece)) != 0; }
+    // The iron upgrade (Crafting::kIronBit): faster tools, harder hits.
+    bool HasIron() const { return (tools & (1u << 7)) != 0; }
     uint8_t GetArmour() const { return armour; }
     bool HasTool(Tool tool) const { return tool == Tool::None || IsCreative() || (tools & (1u << static_cast<unsigned>(tool))); }
     // The tool we really work with: that one if we have it, a hand if not.
@@ -148,6 +159,7 @@ public:
         float yaw = 0.0f;
         bool hurt = false;
         float speed = 0.0f;
+        bool tame = false; // a wolf with an owner
     };
     std::vector<Creature> GetCreatures() const;
 
@@ -162,6 +174,8 @@ public:
     // Hit a creature (the server checks the reach).
     void Attack(uint16_t creature, Tool tool);
     void AttackPlayer(uint16_t player, Tool tool);
+    // Right-clicked a creature (with raw venison in hand, a wild wolf is tamed).
+    void Interact(uint16_t creature);
     // Eat one of a food item held (survival; the server checks it).
     void Eat(BlockType item);
     // Chests: ask to open the one at `pos` (the server answers with its contents), close
@@ -169,6 +183,18 @@ public:
     void OpenChest(const glm::ivec3& pos);
     // Right-clicked a bed: respawn there (and sleep, at night). The server says so in chat.
     void UseBed(const glm::ivec3& pos);
+    // Shoot an arrow from the bow, this way (the server checks the bow and the arrow).
+    void Shoot(const glm::vec3& direction);
+    // Fishing: cast into the water at `pos`, or reel in.
+    void Cast(const glm::ivec3& pos, bool cast);
+    // Signs: write on one, and what's written on every sign we know of.
+    void WriteSign(const glm::ivec3& pos, const std::string& text);
+    const std::unordered_map<glm::ivec3, std::string, Coords::IVec3Hash>& GetSigns() const { return signs; }
+    // Where our bobber floats (none if it's in), and whether a fish bit since the last call.
+    std::optional<glm::ivec3> GetBobber() const { return bobber; }
+    bool TakeBite() { const bool b = bite; bite = false; return b; }
+    // Arrows near us, as of the last update, moved on by their speed since.
+    std::vector<net::ArrowInfo> GetArrows() const;
     void CloseChest();
     void MoveChestItems(BlockType type, uint32_t units, bool intoChest);
     // The chest open now (none until the server says it's open, or once it's closed),
@@ -203,6 +229,14 @@ private:
     uint32_t stateSequence = 0;
     uint16_t correctionId = 0;
     glm::vec3 pendingKnockback{ 0.0f };
+    bool storm = false;
+    std::vector<glm::ivec3> lightning;
+    std::vector<net::Explosion> explosions;
+    std::vector<net::ArrowInfo> arrows;
+    std::optional<glm::ivec3> bobber;
+    bool bite = false;
+    std::unordered_map<glm::ivec3, std::string, Coords::IVec3Hash> signs;
+    double arrowsAt = 0.0;
     std::optional<glm::ivec3> openChest;
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> chestHeld{};
     std::optional<glm::vec3> pendingCorrection;
@@ -214,6 +248,8 @@ private:
     };
     std::unordered_map<uint16_t, std::deque<Sample>> remote;
     std::unordered_map<uint16_t, std::string> playerNames; // by id (PlayerName)
+    double lastDeath = -1000.0;
+    std::string myName;
     struct CreatureSample {
         double time;
         Creature state;

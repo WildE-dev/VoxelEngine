@@ -21,6 +21,7 @@ struct PlayerModel {
     glm::vec4 heldUV{ 0.0f };
     uint8_t armour = 0; // armour worn (Armour::Bit each): drawn over them
     bool crouching = false; // ducked: lower, leaning forward
+    bool boat = false;      // sitting in a boat
 };
 
 // A creature as drawn (world/Creatures.h): what it is, where, which way it faces,
@@ -32,6 +33,35 @@ struct CreatureModel {
     bool hurt = false;
     float speed = 0.0f;
     glm::vec2 light{ 15.0f, 0.0f }; // sky and block light where it stands (0..15)
+    bool tame = false;               // a wolf with an owner: a red collar
+};
+
+// A flying bit of a broken block: a tiny cube showing a piece of the block's texture.
+struct ParticleModel {
+    glm::vec3 position{0.0f};
+    float size = 0.1f;
+    glm::vec4 uv{ 0.0f }; // the atlas tile region it shows (top-left, bottom-right)
+    glm::vec2 light{ 15.0f, 0.0f };
+};
+
+// An arrow: where it is and which way it points.
+struct ArrowModel {
+    glm::vec3 position{0.0f}, direction{ 1.0f, 0.0f, 0.0f };
+    glm::vec2 light{ 15.0f, 0.0f };
+};
+
+// A firefly: a tiny speck that lights itself (0..1 how brightly, as it blinks).
+struct GlowModel {
+    glm::vec3 position{0.0f};
+    float size = 0.05f;
+    float brightness = 1.0f;
+};
+
+// A lightning bolt: a jagged line of points from the sky down to where it struck,
+// drawn glowing, fading with `brightness` (0..1).
+struct BoltModel {
+    std::vector<glm::vec3> points;
+    float brightness = 1.0f;
 };
 
 // Draws other players as simple box figures: a body, and a head that turns and tilts
@@ -47,6 +77,11 @@ public:
 
     void Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<PlayerModel>& players);
     // Creatures, from boxes too: a deer, a ghoul. `time` swings their legs.
+    void DrawArrows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ArrowModel>& arrows);
+    void DrawGlows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GlowModel>& glows);
+    void DrawBolts(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<BoltModel>& bolts);
+    // Bits of broken blocks (tiny textured cubes).
+    void DrawParticles(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ParticleModel>& particles);
     void DrawCreatures(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<CreatureModel>& creatures, float time);
 
     // A stable colour per player id.

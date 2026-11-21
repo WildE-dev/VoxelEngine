@@ -15,6 +15,7 @@ struct Settings {
     float sensitivity = 0.1f; // mouse: degrees per pixel
     bool vsync = true;
     float volume = 0.8f;      // sound, 0..1
+    bool viewBobbing = true;  // the view bobs a little while walking
     std::string lastServer = "localhost";
 
     static constexpr int kMinRenderDistance = 2, kMaxRenderDistance = 12;
@@ -45,6 +46,7 @@ struct Settings {
             else if (key == "vsync") vsync = rest != "0";
             else if (key == "volume") volume = static_cast<float>(std::atof(rest.c_str()));
             else if (key == "last_server") lastServer = rest;
+            else if (key == "view_bobbing") viewBobbing = rest != "0";
         }
         Clamp();
         return true;
@@ -58,6 +60,7 @@ struct Settings {
              << "sensitivity " << sensitivity << "\n"
              << "vsync " << (vsync ? 1 : 0) << "\n"
              << "volume " << volume << "\n"
-             << "last_server " << lastServer << "\n";
+             << "last_server " << lastServer << "\n"
+             << "view_bobbing " << (viewBobbing ? 1 : 0) << "\n";
     }
 };

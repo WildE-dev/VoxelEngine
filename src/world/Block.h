@@ -126,20 +126,74 @@ enum class BlockType : uint8_t {
     // A bed (a half-height block): right-click to make it where you respawn, and at
     // night to sleep (see Server::HandleUseBed).
     BED,
+    // Ores, in veins in the stone underground (iron deeper): coal ore breaks into
+    // coal; iron ore is smelted into iron ingots (see world/Crafting.h).
+    COAL_ORE,
+    IRON_ORE,
+    COAL,       // items
+    IRON_INGOT,
+    // Farming: seeds (from tall grass) planted on dirt or grass grow into a crop that
+    // ripens into wheat (the server grows them: Server::UpdateCrops); wheat bakes into
+    // bread.
+    SEEDS,      // item
+    CROP,       // plant: young
+    RIPE_WHEAT, // plant: ready to harvest
+    WHEAT,      // items
+    BREAD,
+    // A ladder: a see-through frame of rungs you walk into and climb (passable like a
+    // plant; drawn as a cube).
+    LADDER,
+    // A door, two cells tall: closed it's solid; right-click opens it (both halves) into
+    // an open frame you walk through (passable, drawn like a ladder's shell).
+    DOOR,
+    DOOR_OPEN,
+    ARROW, // item: what a bow shoots
+    RAW_FISH,    // items: caught with a fishing rod
+    COOKED_FISH,
+    // A campfire: a bright light (drawn as a sprite of logs and flames, passable),
+    // smoking; right-click it with raw food in hand to cook it; standing in it burns.
+    CAMPFIRE,
+    // A sign on a post (a sprite, passable) with a line of text on it, written after
+    // placing it (or rewritten with a right-click); the server keeps the texts.
+    SIGN,
+    // TNT: right-click to light it; three seconds later it explodes (the server runs it).
+    TNT,
+    TNT_LIT, // (flashing, about to go)
+    BOAT,    // item: right-click water to get in
+    // Saplings (plants, from leaves): planted on soil, they grow into a tree.
+    SAPLING,
+    PINE_SAPLING,
     COUNT
 };
 
 // Things held in the inventory that aren't blocks: they can't be placed.
-inline bool IsItemType(BlockType type) { return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE; }
+inline bool IsItemType(BlockType type) {
+    return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE || type == BlockType::COAL ||
+           type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD ||
+           type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH || type == BlockType::BOAT;
+}
 
 inline bool IsPlantType(BlockType type) {
     return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW || type == BlockType::SPIKES ||
-           type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES;
+           type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES || type == BlockType::CROP || type == BlockType::RIPE_WHEAT ||
+           type == BlockType::LADDER || type == BlockType::DOOR_OPEN || type == BlockType::CAMPFIRE ||
+           type == BlockType::SIGN || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING;
 }
 
 // The resource a block counts as in survival (see Block::ResourceUnits): its own type,
 // except pebbles, which are stone.
-inline BlockType ResourceTypeOf(BlockType type) { return type == BlockType::PEBBLES ? BlockType::STONE : type; }
+// What breaking a block gives: pebbles are stone, coal ore is coal.
+inline BlockType ResourceTypeOf(BlockType type) {
+    switch (type) {
+    case BlockType::PEBBLES: return BlockType::STONE;
+    case BlockType::COAL_ORE: return BlockType::COAL;
+    case BlockType::CROP: return BlockType::SEEDS;       // (an unripe crop gives its seed back; planting costs one)
+    case BlockType::RIPE_WHEAT: return BlockType::WHEAT; // (and the server adds seeds)
+    case BlockType::DOOR_OPEN: return BlockType::DOOR;
+    case BlockType::TNT_LIT: return BlockType::TNT;
+    default: return type;
+    }
+}
 
 // Grass of any biome (plants grow on it).
 inline bool IsGrassType(BlockType type) {
@@ -174,7 +228,7 @@ inline ShapeStyle StyleOf(BlockType type) {
 
 // Block light emitted by a block type, 0..kMaxLight.
 inline uint8_t GetLightEmission(BlockType type) {
-    return type == BlockType::LAMP ? kMaxLight : 0;
+    return type == BlockType::LAMP ? kMaxLight : type == BlockType::CAMPFIRE ? kMaxLight - 1 : 0;
 }
 
 // Indices into the texture atlas for each face of a block.
@@ -390,7 +444,9 @@ struct Block {
     // Air, a plant or water: nothing to stand on or bump into.
     bool IsPassable() const { return IsAir() || IsPlant() || IsLiquid(); }
     // Water may flow into this cell (washing away any plant).
-    bool IsReplaceableByWater() const { return IsAir() || IsPlant(); }
+    bool IsReplaceableByWater() const { return IsAir() || (IsPlant() && type != BlockType::LADDER && type != BlockType::DOOR_OPEN); }
+    // Drawn as a see-through cube shell (a ladder's rungs, an open door's frame).
+    bool IsShell() const { return type == BlockType::LADDER || type == BlockType::DOOR_OPEN; }
     uint8_t GetLightEmission() const { return ::GetLightEmission(type); }
 
     // Height of the block's top surface (0..1) at a point inside its footprint,
@@ -425,6 +481,7 @@ inline Block Block::Placed(BlockType t, int heightEighths, int faceAxis) {
     if (t == BlockType::WATER) return Water(kMaxWaterVolume);
     if (t == BlockType::PRESSURE_PLATE) return PressurePlate();
     if (t == BlockType::BED) return Bed();
+    if (t == BlockType::LADDER || t == BlockType::DOOR_OPEN) return Block(t); // (a whole cell, not a sprite's drop)
     if (IsPlantType(t)) return Plant(t, 0);
     if (heightEighths >= 8 || heightEighths <= 0 || !CanShape(t)) return Block(t).Turned(faceAxis);
     EdgeData slab;

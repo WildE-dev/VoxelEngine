@@ -94,6 +94,15 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
         // Visor on the front (+x in the head's frame).
         box(glm::scale(glm::translate(head, glm::vec3(kHead * 0.5f, 0.03f, 0)), glm::vec3(0.04f, kHead * 0.3f, kHead * 0.8f)), glm::vec3(0.1f));
 
+        // In a boat: a wooden hull round their legs.
+        if (p.boat) {
+            const glm::vec3 wood(0.55f, 0.38f, 0.2f), dark(0.4f, 0.27f, 0.14f);
+            box(glm::scale(glm::translate(base, glm::vec3(0.0f, 0.12f, 0.0f)), glm::vec3(1.6f, 0.12f, 0.9f)), wood); // bottom
+            for (float z : { -0.42f, 0.42f })
+                box(glm::scale(glm::translate(base, glm::vec3(0.0f, 0.32f, z)), glm::vec3(1.6f, 0.3f, 0.08f)), dark); // sides
+            for (float x : { -0.78f, 0.78f })
+                box(glm::scale(glm::translate(base, glm::vec3(x, 0.32f, 0.0f)), glm::vec3(0.08f, 0.3f, 0.9f)), dark); // ends
+        }
         // Armour, a little bigger than what it covers: a cap over the top of the head, a
         // tunic over the upper body, boots at the feet.
         if (p.armour & Armour::Bit(ArmourPiece::Cap)) {
@@ -126,6 +135,101 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
             shader.SetUniform("textured", 0.0f);
         }
     }
+}
+
+void PlayerModels::DrawArrows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ArrowModel>& arrows) {
+    if (arrows.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 0.0f);
+    shader.SetUniform("textured", 0.0f);
+    glBindVertexArray(vao);
+    for (const auto& a : arrows) {
+        shader.SetUniform("lightLevels", a.light);
+        // A frame along the arrow: x forward.
+        const glm::vec3 x = glm::length(a.direction) > 1e-4f ? glm::normalize(a.direction) : glm::vec3(1, 0, 0);
+        const glm::vec3 y = glm::normalize(std::abs(x.y) < 0.95f ? glm::cross(glm::cross(x, glm::vec3(0, 1, 0)), x) : glm::vec3(1, 0, 0));
+        const glm::vec3 z = glm::cross(x, y);
+        glm::mat4 frame(1.0f);
+        frame[0] = glm::vec4(x, 0.0f);
+        frame[1] = glm::vec4(y, 0.0f);
+        frame[2] = glm::vec4(z, 0.0f);
+        frame[3] = glm::vec4(a.position, 1.0f);
+        auto part = [&](const glm::vec3& centre, const glm::vec3& size, const glm::vec3& color) {
+            shader.SetUniform("model", glm::scale(glm::translate(frame, centre), size));
+            shader.SetUniform("color", color);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        };
+        part({ -0.3f, 0.0f, 0.0f }, { 0.7f, 0.05f, 0.05f }, glm::vec3(0.55f, 0.38f, 0.2f));  // shaft
+        part({ 0.07f, 0.0f, 0.0f }, { 0.1f, 0.09f, 0.09f }, glm::vec3(0.6f, 0.6f, 0.62f));   // head
+        part({ -0.6f, 0.0f, 0.0f }, { 0.14f, 0.14f, 0.02f }, glm::vec3(0.9f, 0.9f, 0.88f)); // fletching
+        part({ -0.6f, 0.0f, 0.0f }, { 0.14f, 0.02f, 0.14f }, glm::vec3(0.9f, 0.9f, 0.88f));
+    }
+}
+
+void PlayerModels::DrawGlows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GlowModel>& glows) {
+    if (glows.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 1.0f);
+    shader.SetUniform("textured", 0.0f);
+    glBindVertexArray(vao);
+    for (const auto& g : glows) {
+        shader.SetUniform("color", glm::vec3(0.75f, 1.0f, 0.35f) * (0.25f + 0.75f * g.brightness));
+        shader.SetUniform("model", glm::scale(glm::translate(glm::mat4(1.0f), g.position), glm::vec3(g.size)));
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+    shader.SetUniform("glow", 0.0f);
+}
+
+void PlayerModels::DrawBolts(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<BoltModel>& bolts) {
+    if (bolts.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 1.0f);
+    shader.SetUniform("textured", 0.0f);
+    glBindVertexArray(vao);
+    for (const auto& bolt : bolts) {
+        shader.SetUniform("color", glm::mix(glm::vec3(0.3f, 0.35f, 0.5f), glm::vec3(0.92f, 0.95f, 1.0f), bolt.brightness));
+        for (size_t i = 0; i + 1 < bolt.points.size(); i++) {
+            // A thin box along the segment: its y axis turned onto the segment.
+            const glm::vec3 a = bolt.points[i], b = bolt.points[i + 1], d = b - a;
+            const float length = glm::length(d);
+            if (length < 1e-3f) continue;
+            const glm::vec3 y = d / length;
+            const glm::vec3 x = glm::normalize(std::abs(y.x) < 0.9f ? glm::cross(y, glm::vec3(1, 0, 0)) : glm::cross(y, glm::vec3(0, 0, 1)));
+            const glm::vec3 z = glm::cross(x, y);
+            glm::mat4 model(1.0f);
+            model[0] = glm::vec4(x * 0.18f, 0.0f);
+            model[1] = glm::vec4(d, 0.0f);
+            model[2] = glm::vec4(z * 0.18f, 0.0f);
+            model[3] = glm::vec4((a + b) * 0.5f, 1.0f);
+            shader.SetUniform("model", model);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
+    }
+    shader.SetUniform("glow", 0.0f);
+}
+
+void PlayerModels::DrawParticles(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ParticleModel>& particles) {
+    if (particles.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 0.0f);
+    shader.SetUniform("textured", 1.0f);
+    shader.SetUniform("color", glm::vec3(1.0f));
+    glBindVertexArray(vao);
+    for (const auto& p : particles) {
+        shader.SetUniform("lightLevels", p.light);
+        shader.SetUniform("tileRect", p.uv);
+        shader.SetUniform("model", glm::scale(glm::translate(glm::mat4(1.0f), p.position), glm::vec3(p.size)));
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+    shader.SetUniform("textured", 0.0f);
 }
 
 void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<CreatureModel>& creatures,
@@ -172,6 +276,47 @@ void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const gl
                 box(base, { 0.78f, 1.68f, z * 2.6f }, { 0.05f, 0.05f, 0.18f }, pale);
             }
             box(base, { -0.58f, 0.98f, 0.0f }, { 0.08f, 0.14f, 0.12f }, pale);         // tail
+        }
+        else if (c.type == 4) { // Bat: a little dark body, ears, and wings flapping fast
+            const glm::vec3 fur(0.18f, 0.15f, 0.14f), wing(0.12f, 0.1f, 0.1f);
+            box(base, { 0.0f, 0.2f, 0.0f }, { 0.18f, 0.16f, 0.14f }, fur);
+            for (float z : { -0.04f, 0.04f }) box(base, { 0.06f, 0.31f, z }, { 0.03f, 0.06f, 0.03f }, fur);
+            const float flap = std::sin(time * 28.0f + c.feet.x) * 0.7f;
+            for (float side : { -1.0f, 1.0f }) {
+                const glm::mat4 w = glm::rotate(glm::translate(base, { 0.0f, 0.22f, side * 0.07f }), side * flap, glm::vec3(1, 0, 0));
+                box(w, { 0.0f, 0.0f, side * 0.16f }, { 0.16f, 0.02f, 0.32f }, wing);
+            }
+        }
+        else if (c.type == 3) { // Wolf: grey, low and long, with a snout, ears and a bushy tail
+            const glm::vec3 fur(0.55f, 0.55f, 0.56f), darkFur(0.4f, 0.4f, 0.42f), pale(0.8f, 0.8f, 0.78f);
+            box(base, { 0.0f, 0.55f, 0.0f }, { 0.8f, 0.34f, 0.36f }, fur);           // body
+            box(base, { 0.22f, 0.6f, 0.0f }, { 0.36f, 0.4f, 0.42f }, darkFur);       // shoulders
+            for (int i = 0; i < 4; i++) {
+                const float x = i < 2 ? 0.28f : -0.28f, z = (i % 2) ? 0.12f : -0.12f;
+                limb({ x, 0.42f, z }, ((i == 0 || i == 3) ? swing : -swing), { 0.11f, 0.42f, 0.11f }, darkFur);
+            }
+            box(base, { 0.55f, 0.78f, 0.0f }, { 0.3f, 0.28f, 0.3f }, fur);          // head
+            box(base, { 0.75f, 0.72f, 0.0f }, { 0.16f, 0.12f, 0.16f }, pale);       // snout
+            box(base, { 0.79f, 0.76f, 0.0f }, { 0.05f, 0.04f, 0.06f }, glm::vec3(0.08f)); // nose
+            for (float z : { -0.09f, 0.09f }) box(base, { 0.5f, 0.97f, z }, { 0.07f, 0.12f, 0.07f }, darkFur); // ears
+            const glm::mat4 tail = glm::rotate(glm::translate(base, { -0.42f, 0.66f, 0.0f }), glm::radians(-35.0f + swing * 20.0f), glm::vec3(0, 0, 1));
+            box(tail, { -0.18f, 0.0f, 0.0f }, { 0.38f, 0.12f, 0.12f }, fur);
+            if (c.tame) box(base, { 0.4f, 0.74f, 0.0f }, { 0.06f, 0.3f, 0.34f }, glm::vec3(0.8f, 0.12f, 0.1f)); // collar
+        }
+        else if (c.type == 2) { // Skeleton: thin bone-white limbs, a skull with dark sockets, a bow
+            const glm::vec3 bone(0.86f, 0.84f, 0.76f), dark(0.12f, 0.1f, 0.1f);
+            for (float z : { -0.1f, 0.1f })
+                limb({ 0.0f, 0.82f, z }, z < 0.0f ? swing : -swing, { 0.1f, 0.82f, 0.1f }, bone); // legs
+            box(base, { 0.0f, 1.12f, 0.0f }, { 0.18f, 0.6f, 0.42f }, bone);           // ribs
+            for (float y : { 0.95f, 1.1f, 1.25f }) box(base, { 0.0f, y, 0.0f }, { 0.2f, 0.03f, 0.46f }, glm::vec3(0.7f, 0.68f, 0.6f));
+            box(base, { 0.02f, 1.62f, 0.0f }, { 0.38f, 0.38f, 0.38f }, bone);         // skull
+            for (float z : { -0.08f, 0.08f }) box(base, { 0.2f, 1.66f, z }, { 0.02f, 0.08f, 0.08f }, dark); // sockets
+            for (float z : { -0.3f, 0.3f }) {
+                // Arms held out, the left with a bow.
+                const glm::mat4 arm = glm::translate(base, { 0.0f, 1.36f, z });
+                box(arm, { 0.28f, 0.0f, 0.0f }, { 0.56f, 0.08f, 0.08f }, bone);
+            }
+            box(base, { 0.58f, 1.36f, -0.3f }, { 0.05f, 0.7f, 0.05f }, glm::vec3(0.5f, 0.34f, 0.18f)); // the bow
         }
         else { // Ghoul
             const glm::vec3 skin(0.46f, 0.56f, 0.42f), rags(0.28f, 0.26f, 0.30f), eyes(1.0f, 0.85f, 0.2f);

@@ -7,7 +7,9 @@
 //  - killing a deer gives raw venison, which cooks (with a little wood) into cooked
 //    venison,
 //  - items can't be placed as blocks,
-//  - creative players don't get hungry.
+//  - creative players don't get hungry,
+//  - farming: seeds grow only on soil, ripen into wheat, harvest into wheat and seeds,
+//    and 3 wheat bake into bread.
 #include <chrono>
 #include <cstdlib>
 #include <functional>
@@ -40,13 +42,14 @@ struct TestClient {
     Client client{ world };
     glm::vec3 feet{ 0.0f };
     bool joined = false;
+    BlockType held = BlockType::AIR; // what others (and the server) see in hand
     void Update() {
         client.Poll();
         if (!joined && client.IsWelcomed()) joined = true, feet = client.GetSpawn();
         if (auto c = client.TakeCorrection()) feet = *c;
         if (!joined) return;
         world.Update(feet + glm::vec3(0.0f, 1.62f, 0.0f));
-        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround);
+        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround, Tool::None, held);
     }
 };
 
@@ -88,6 +91,8 @@ int main() {
     options.defaultMode = net::GameMode::Survival;
     options.dayLengthSeconds = 100000.0f;
     options.hungerRate = 10.0f; // a point every 5 s; starving hurts every 0.4 s
+    options.cropGrowthRate = 200.0f; // crops ripen within a second or two
+    options.fishingRate = 20.0f;     // fish bite within a second
     if (!server.Start(options)) return EXIT_FAILURE;
     server.RunInBackground();
 
@@ -166,6 +171,97 @@ int main() {
               a.client.GetResources(BlockType::RAW_VENISON) == raw - Block::kUnitsPerBlock &&
               a.client.GetResources(BlockType::LOG) == Block::kUnitsPerBlock * 3 / 4,
           "raw venison and a quarter log cook into cooked venison");
+
+    std::cout << "Farming" << std::endl;
+    server.QueueConsoleCommand("tp Eater 7.5 0 7.5");
+    server.QueueConsoleCommand("give seeds 2 Eater");
+    server.QueueConsoleCommand("food 10 Eater");
+    sync();
+    Pump(a, 20.0, [&] { return a.feet.y < 0.5f; });
+    a.client.PlaceBlock({ 9, 3, 7 }, BlockType::CROP);
+    wait(1.0);
+    Block planted;
+    Check(a.world.GetBlock(9, 3, 7, planted) && planted.IsAir() && a.client.GetResources(BlockType::SEEDS) == 2 * Block::kUnitsPerBlock,
+          "seeds won't grow in mid air");
+    a.client.PlaceBlock({ 9, 0, 7 }, BlockType::CROP);
+    Check(Pump(a, 20.0, [&] { return a.world.GetBlock(9, 0, 7, planted) && planted.type == BlockType::CROP; }) &&
+              a.client.GetResources(BlockType::SEEDS) == Block::kUnitsPerBlock,
+          "a seed planted on grass comes up as a crop");
+    Check(Pump(a, 20.0, [&] { return a.world.GetBlock(9, 0, 7, planted) && planted.type == BlockType::RIPE_WHEAT; }), "which ripens into wheat");
+    a.client.BreakBlock({ 9, 0, 7 });
+    // (The client counts the wheat at once; the seeds come with the server's answer.)
+    Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::WHEAT) == Block::kUnitsPerBlock && a.client.GetResources(BlockType::SEEDS) >= 2 * Block::kUnitsPerBlock; }),
+          "harvested, it gives wheat and seeds to plant again (wheat " + std::to_string(a.client.GetResources(BlockType::WHEAT)) + ", seeds " +
+              std::to_string(a.client.GetResources(BlockType::SEEDS)) + ")");
+    server.QueueConsoleCommand("give sapling 1 Eater");
+    sync();
+    a.client.PlaceBlock({ 5, 0, 7 }, BlockType::SAPLING);
+    Check(Pump(a, 20.0, [&] { Block t; return a.world.GetBlock(5, 0, 7, t) && t.type == BlockType::SAPLING; }), "a sapling planted on grass");
+    Check(Pump(a, 30.0, [&] {
+              Block trunk, top;
+              return a.world.GetBlock(5, 0, 7, trunk) && trunk.type == BlockType::LOG && a.world.GetBlock(5, 5, 7, top) && (top.type == BlockType::LEAVES || top.type == BlockType::LOG);
+          }),
+          "grows into a tree");
+
+    server.QueueConsoleCommand("give wheat 2 Eater");
+    sync();
+    a.client.Craft(Crafting::Find("bread"), 1);
+    Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::BREAD) == Block::kUnitsPerBlock && a.client.GetResources(BlockType::WHEAT) == 0; }),
+          "3 wheat bake into bread");
+    const int beforeBread = a.client.GetFood();
+    a.client.Eat(BlockType::BREAD);
+    Check(Pump(a, 20.0, [&] { return a.client.GetFood() >= beforeBread + 5; }), "which is good for 6 food");
+
+    std::cout << "Fishing" << std::endl;
+    // A one-block pond (dug and filled in creative), then back to survival with a rod.
+    server.QueueConsoleCommand("gamemode creative Eater");
+    sync();
+    a.client.BreakBlock({ 9, -1, 9 });
+    Pump(a, 20.0, [&] { Block g; return a.world.GetBlock(9, -1, 9, g) && g.IsAir(); });
+    a.client.PlaceBlock({ 9, -1, 9 }, BlockType::WATER);
+    Pump(a, 20.0, [&] { Block g; return a.world.GetBlock(9, -1, 9, g) && g.HasWater(); });
+    server.QueueConsoleCommand("gamemode survival Eater");
+    server.QueueConsoleCommand("give rod Eater");
+    sync();
+    Pump(a, 20.0, [&] { return a.client.HasTool(Tool::Rod) && !a.client.IsCreative(); });
+    a.client.Cast({ 9, 0, 9 }, true); // (dry ground: no)
+    wait(0.5);
+    Check(!a.client.GetBobber(), "a line cast onto dry ground doesn't stay out");
+    a.client.Cast({ 9, -1, 9 }, true);
+    Check(Pump(a, 20.0, [&] { return a.client.GetBobber().has_value(); }), "cast into the pond, the bobber floats");
+    Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::RAW_FISH) == Block::kUnitsPerBlock; }) && a.client.TakeBite() && Has(a, "You caught a fish!"),
+          "a fish bites, and it's caught");
+    Check(!a.client.GetBobber() && Has(a, "Angler: catch a fish"), "the line comes in (and that's an achievement)");
+    server.QueueConsoleCommand("give log 1 Eater");
+    sync();
+    a.client.Craft(Crafting::Find("cooked_fish"), 1);
+    Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::COOKED_FISH) == Block::kUnitsPerBlock; }), "and cooks with a little wood");
+
+    std::cout << "Campfire" << std::endl;
+    server.QueueConsoleCommand("give campfire 1 Eater");
+    server.QueueConsoleCommand("give raw_venison 2 Eater");
+    sync();
+    a.client.PlaceBlock({ 6, 0, 7 }, BlockType::CAMPFIRE);
+    int blockLight = 0, skyLight = 0;
+    Check(Pump(a, 20.0, [&] { return a.world.GetLight(6, 0, 7, blockLight, skyLight) && blockLight >= 13; }), "a campfire burns bright (light " + std::to_string(blockLight) + ")");
+    a.held = BlockType::RAW_VENISON;
+    wait(0.3);
+    const uint32_t cookedBefore = a.client.GetResources(BlockType::COOKED_VENISON), rawBefore = a.client.GetResources(BlockType::RAW_VENISON);
+    a.client.UseBed({ 6, 0, 7 });
+    Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::COOKED_VENISON) == cookedBefore + Block::kUnitsPerBlock; }) &&
+              a.client.GetResources(BlockType::RAW_VENISON) == rawBefore - Block::kUnitsPerBlock,
+          "right-clicking it with raw venison in hand cooks one");
+    a.held = BlockType::AIR;
+
+    std::cout << "Achievements" << std::endl;
+    Check(Has(a, "First Meal: eat something") && Has(a, "Hunter: bring down a deer") && Has(a, "Cook: cook some venison") && Has(a, "Farmer: harvest ripe wheat") &&
+              Has(a, "Baker: bake bread"),
+          "eating, hunting, cooking, farming and baking each earn an achievement");
+    a.client.SendChat("/achievements");
+    Check(Pump(a, 20.0, [&] { return Has(a, " of 16 achievements") && Has(a, "Still to do:"); }), "/achievements lists the earned ones and what's still to do");
+    size_t meals = 0;
+    for (const auto& line : a.client.GetChat()) meals += line.text.find("First Meal: eat") != std::string::npos;
+    Check(meals == 1, "each is earned only once (" + std::to_string(meals) + " first meals, after three)");
 
     std::cout << "Creative" << std::endl;
     server.QueueConsoleCommand("gamemode creative Eater");

@@ -91,7 +91,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Everyone, "/time, /weather - show the time and weather" },
     { Level::Everyone, "/ops - list the operators" },
     { Level::Operator, "/time <day|noon|dusk|night|midnight|dawn|HH:MM> - set the time of day" },
-    { Level::Operator, "/weather <clear|rain|auto> - set the weather" },
+    { Level::Operator, "/weather <clear|rain|storm|auto> - set the weather" },
     { Level::Operator, "/tp <x> <y> <z> | /tp <player> | /tp <player> <x> <y> <z> - teleport (~ for relative)" },
     { Level::Operator, "/save - save the world now" },
     { Level::Operator, "/kick <player> [reason] - remove a player" },
@@ -100,9 +100,10 @@ constexpr HelpLine kHelp[] = {
     { Level::Everyone, "/gamemode - show your game mode" },
     { Level::Operator, "/gamemode <creative|survival> [player] - creative: anything, unhurt; survival: collect what you build with" },
     { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64), or /give <tool|cap|tunic|boots> [player]" },
-    { Level::Operator, "/summon <deer|ghoul> [x y z] - bring a creature (default: a few blocks ahead of you)" },
+    { Level::Operator, "/summon <deer|ghoul|skeleton> [x y z] - bring a creature (default: a few blocks ahead of you)" },
     { Level::Operator, "/creatures [clear] - count the creatures, or remove them all" },
     { Level::Everyone, "/food - how hungry you are" },
+    { Level::Everyone, "/achievements - the milestones you've reached, and those still to come" },
     { Level::Operator, "/food <0-20> [player] - set how fed someone is (20: full)" },
     { Level::Everyone, "/pvp - whether players can hurt each other" },
     { Level::Operator, "/pvp <on|off> - let players hurt each other, or not" },
@@ -222,6 +223,8 @@ void Server::Teleport(ClientState& client, const glm::vec3& feet) {
     client.correctionId++;
     client.feet = client.lastValid = feet;
     client.blockedStates = 0;
+    client.falling = false; // (a fall from here on counts from here)
+    client.fallPeak = feet.y;
     net.Send(client.peer, net::kChannelReliable, net::Encode(net::Correction{ client.correctionId, feet }));
 }
 
@@ -338,7 +341,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
     }
     else if (command == "summon") {
         const CreatureType type = words.size() > 1 ? CreatureFromId(Lower(words[1])) : CreatureType::Count;
-        if (type == CreatureType::Count) return usage("/summon <deer|ghoul> [x y z]");
+        if (type == CreatureType::Count) return usage("/summon <deer|ghoul|skeleton> [x y z]");
         glm::vec3 at;
         if (words.size() >= 5) {
             const glm::vec3 base = sender ? sender->feet : glm::vec3(0.0f);
@@ -347,7 +350,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
                 const std::string& w = words[2 + a];
                 const bool relative = !w.empty() && w[0] == '~';
                 if ((relative && w.size() > 1 && !ParseNumber(w.substr(1), v)) || (!relative && !ParseNumber(w, v)))
-                    return usage("/summon <deer|ghoul> [x y z]");
+                    return usage("/summon <deer|ghoul|skeleton> [x y z]");
                 at[a] = static_cast<float>(relative ? base[a] + v : v);
             }
         }
@@ -355,7 +358,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
             const float yaw = glm::radians(sender->yaw);
             at = sender->feet + glm::vec3(std::cos(yaw), 0.0f, std::sin(yaw)) * 4.0f + glm::vec3(0.0f, 0.5f, 0.0f);
         }
-        else return usage("summon <deer|ghoul> <x> <y> <z>");
+        else return usage("summon <deer|ghoul|skeleton> <x> <y> <z>");
         if (!creatures.Spawn(type, at)) return reply(Kind::Error, "Too many creatures already");
         char where[64];
         std::snprintf(where, sizeof where, "%.1f, %.1f, %.1f", at.x, at.y, at.z);
@@ -373,6 +376,21 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         for (int t = 0; t < static_cast<int>(CreatureType::Count); t++)
             text += std::string(t ? ", " : ": ") + std::to_string(counts[t]) + " " + SpecOf(static_cast<CreatureType>(t)).id;
         reply(Kind::Info, text);
+    }
+    else if (command == "achievements" || command == "ach") {
+        if (!sender) return reply(Kind::Error, "Only players have achievements");
+        int earned = 0;
+        std::string have, todo;
+        for (int i = 0; i < static_cast<int>(Achievement::Count); i++) {
+            const Achievement a = static_cast<Achievement>(i);
+            if (sender->achievements & Achievements::Bit(a)) {
+                earned++;
+                have += (have.empty() ? "" : ", ") + std::string(Achievements::Name(a));
+            }
+            else todo += (todo.empty() ? "" : "; ") + std::string(Achievements::Description(a));
+        }
+        reply(Kind::Info, std::to_string(earned) + " of " + std::to_string(static_cast<int>(Achievement::Count)) + " achievements" + (have.empty() ? "" : ": " + have));
+        if (!todo.empty()) reply(Kind::Info, "Still to do: " + todo);
     }
     else if (command == "food") {
         if (words.size() == 1) {
@@ -445,17 +463,20 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         Broadcast(Kind::Info, who + " set the time to " + FormatTime(timeOfDay));
     }
     else if (command == "weather") {
-        auto name = [](Options::Weather w) { return w == Options::Weather::Clear ? "clear" : w == Options::Weather::Rain ? "rain" : "auto"; };
+        auto name = [](Options::Weather w) {
+            return w == Options::Weather::Clear ? "clear" : w == Options::Weather::Rain ? "rain" : w == Options::Weather::Storm ? "storm" : "auto";
+        };
         if (words.size() < 2)
-            return reply(Kind::Info, std::string(raining ? "It's raining" : "It's clear") + " (weather: " + name(weatherMode) + ")");
+            return reply(Kind::Info, std::string(storm && raining ? "There's a thunderstorm" : raining ? "It's raining" : "It's clear") + " (weather: " + name(weatherMode) + ")");
         const std::string arg = Lower(words[1]);
         if (arg == "clear" || arg == "sun") weatherMode = Options::Weather::Clear;
         else if (arg == "rain") weatherMode = Options::Weather::Rain;
+        else if (arg == "storm" || arg == "thunder") weatherMode = Options::Weather::Storm;
         else if (arg == "auto") {
             weatherMode = Options::Weather::Auto;
             weatherTimer = raining ? 3.0 * 60.0 : 15.0 * 60.0; // carry on with the current weather for a while
         }
-        else return usage("/weather [clear|rain|auto]");
+        else return usage("/weather [clear|rain|storm|auto]");
         Broadcast(Kind::Info, who + " set the weather to " + name(weatherMode));
     }
     else if (command == "tp" || command == "teleport") {

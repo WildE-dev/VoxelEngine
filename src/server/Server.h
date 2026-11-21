@@ -21,6 +21,7 @@
 #include "net/Transport.h"
 #include "server/Creatures.h"
 #include "world/Breathing.h"
+#include "world/Achievements.h"
 #include "world/Hunger.h"
 #include "world/Crafting.h"
 #include "world/Coords.h"
@@ -113,7 +114,7 @@ public:
         // Generator for a new world (a saved world keeps the one it was created with).
         TerrainGenerator::Type worldType = TerrainGenerator::Type::Normal;
         float dayLengthSeconds = 20.0f * 60.0f;
-        enum class Weather { Auto, Clear, Rain } weather = Weather::Auto;
+        enum class Weather { Auto, Clear, Rain, Storm } weather = Weather::Auto;
         // Always an operator (singleplayer: the local player). Empty: nobody.
         std::string ownerName;
         // Made operators at startup, besides those in ops.txt (--op NAME).
@@ -126,6 +127,10 @@ public:
         bool creatures = true;
         // Survival players who die leave half of what they carry in a chest there.
         bool dropOnDeath = true;
+        // How fast fish bite (1: normal, 4 to 14 seconds; tests speed it up).
+        float fishingRate = 1.0f;
+        // How fast crops ripen (1: normal, a minute and a half on average; tests speed it up).
+        float cropGrowthRate = 1.0f;
         // How fast players get hungry (1: normal; tests speed it up).
         float hungerRate = 1.0f;
         // Players can hurt each other (operators switch it with /pvp).
@@ -186,6 +191,8 @@ private:
         std::optional<glm::ivec3> openChest; // the chest they have open
         std::optional<glm::ivec3> bed;       // where they respawn (if it's still a bed)
         double sleptAt = -1000.0;            // when they last got into bed at night
+        float fallPeak = 0.0f;               // highest point since last on the ground (UpdateFall)
+        bool falling = false;
         Tool heldTool = Tool::None;          // in their hand, for others to see
         BlockType heldBlock = BlockType::AIR;
 
@@ -215,6 +222,14 @@ private:
         Tool miningTool = Tool::None;
         double miningSince = 0.0;
         double nextAttack = 0.0; // hitting creatures: at most this often
+        double nextShot = 0.0;   // the bow: at most this often
+        uint32_t achievements = 0; // earned (Achievements::Bit each)
+        bool sentArrows = false; // the last Arrows they were sent had some in it
+        // Fishing: where their bobber floats (if it's out), where they cast from, and
+        // when a fish will bite.
+        std::optional<glm::ivec3> bobber;
+        glm::vec3 castFrom{ 0.0f };
+        double biteAt = 0.0;
 
         // Chunks the client has, with the version of the light it has for each.
         std::unordered_map<glm::ivec3, uint32_t, Coords::IVec3Hash> sent;
@@ -233,6 +248,7 @@ private:
     void HandleMineStart(ClientState& client, const glm::ivec3& pos, Tool tool);
     void HandleAttack(ClientState& client, uint16_t creature, Tool tool);
     void HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool);
+    void HandleInteract(ClientState& client, uint16_t creature);
     void HandleCraft(ClientState& client, int recipe, int count);
     // The tool a player really works with: theirs if they have it, a bare hand if not.
     static Tool Usable(const ClientState& client, Tool tool);
@@ -290,7 +306,13 @@ private:
     void SendChestToViewers(const glm::ivec3& pos);
     void RemoveChest(const glm::ivec3& pos, ClientState* breaker); // gone: contents to whoever broke it
     void DropOnDeath(ClientState& client); // half of what they carry, into a chest where they died
+    // Right-clicked a block that does something: a bed (respawn, sleep) or a door.
     void HandleUseBed(ClientState& client, const glm::ivec3& pos);
+    void ToggleDoor(const glm::ivec3& pos, bool open); // both halves (not shut on anyone)
+    // Fall damage, from each accepted position: landing far below the highest point
+    // since last on the ground hurts. `reset`: start counting from here (teleports,
+    // the first position, flying).
+    void UpdateFall(ClientState& client, const net::PlayerState& state, bool reset);
     // Where they come back after dying: on (or beside) their bed if it's still there and
     // there's room, otherwise the world's spawn point (`why` says what was wrong).
     glm::vec3 RespawnPoint(const ClientState& client, std::string& why) const;
@@ -325,6 +347,36 @@ private:
     TerrainGenerator terrain;
     CreatureSystem creatures;
     std::unordered_map<glm::ivec3, ChestItems, Coords::IVec3Hash> chests;
+    // Planted crops still growing (saved with the world), and when they're next looked at.
+    std::unordered_set<glm::ivec3, Coords::IVec3Hash> crops;
+    double nextCropUpdate = 0.0;
+    void UpdateCrops();
+    bool GrowTree(const glm::ivec3& at, bool pine); // a sapling grows (false: no room yet)
+    // Gives them an achievement if they haven't got it (survival only): a toast for them,
+    // a line for everyone else.
+    void Award(ClientState& client, Achievement a);
+    // Arrows: flying (with gravity) until they hit a block (then stuck there a while), a
+    // creature or a player.
+    struct Arrow {
+        glm::vec3 position, velocity;
+        uint16_t shooter;
+        double born, stuckAt = -1.0; // stuckAt >= 0: stuck in a block since then
+    };
+    std::vector<Arrow> arrows;
+    void HandleShoot(ClientState& client, const glm::vec3& direction);
+    void UpdateArrows();
+    void SendArrows();
+    void HandleCast(ClientState& client, const glm::ivec3& pos, bool cast);
+    // Signs' texts, by position (saved with the world).
+    std::unordered_map<glm::ivec3, std::string, Coords::IVec3Hash> signs;
+    void HandleWriteSign(ClientState& client, const glm::ivec3& pos, const std::string& text);
+    // TNT burning down: where, and when it goes.
+    std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> fuses;
+    void LightTnt(const glm::ivec3& pos, double fuse);
+    void UpdateTnt();
+    void Explode(const glm::ivec3& pos, int radius);
+    void BroadcastSign(const glm::ivec3& pos);
+    void UpdateFishing(); // bites, and lines snapped by walking off
     double lastCreatureTime = 0.0;
     std::unique_ptr<WorldStorage> storage; // declared before `world`, which uses it
     std::unique_ptr<ServerWorld> world;
@@ -335,6 +387,9 @@ private:
     net::GameMode defaultMode = net::GameMode::Survival; // new players' (from the save, or the options)
     Options::Weather weatherMode = Options::Weather::Auto; // starts as options.weather; /weather changes it
     bool raining = false;
+    bool storm = false;          // the rain is a thunderstorm
+    double nextLightning = 0.0;
+    void UpdateStorm();          // lightning strikes near players while a storm rages
     float rainLevel = 0.0f;      // 0..1, fades toward `raining`
     double weatherTimer = 0.0;   // seconds until the weather changes (Auto)
     uint32_t weatherSeed = 0x9E3779B9u;

@@ -406,6 +406,16 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     continue;
                 }
 
+                if (block.IsShell()) {
+                    // A see-through cube of rungs: its faces, both ways round (seen from
+                    // inside while climbing too), except where a solid block hides them.
+                    for (int face = 0; face < kFaceCount; ++face) {
+                        const glm::ivec3 front = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
+                        if (isOpaque(front) || cellAt(front).type == block.type) continue;
+                        block.AddFaceVertices(vertices, static_cast<Face>(face), x, y, z, shadeFace(pos, face, true, true));
+                    }
+                    continue;
+                }
                 if (block.IsPlant()) {
                     block.AddPlantVertices(vertices, x, y, z, static_cast<uint8_t>(blockLightAt(pos)), static_cast<uint8_t>(skyLightAt(pos)));
                     continue;

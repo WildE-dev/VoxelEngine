@@ -142,6 +142,36 @@ def main():
         bite = envelope(mix(lowpass(noise(secs(0.07), bite_rng), 1800), [0.4 * s for s in highpass(noise(secs(0.07), bite_rng), 3000)]), 0.002, 0.065, 2.5)
         bites += bite + [0.0] * secs(0.05)
     save("eat", bites)
+
+    # Thunder: a sharp crack, then a long low rumble rolling away (its own random stream).
+    thunder_rng = random.Random(61)
+    crack = envelope(highpass(noise(secs(0.25), thunder_rng), 1200), 0.002, 0.24, 3.0)
+    rumble = envelope(lowpass(lowpass(noise(secs(3.5), thunder_rng), 140), 220), 0.08, 3.4, 1.4)
+    # The bow: a short twang, and the arrow's whoosh.
+    bow_rng = random.Random(71)
+    twang = envelope(tone(330, 250, 0.18, "saw"), 0.002, 0.17, 2.5)
+    whoosh = envelope(highpass(noise(secs(0.18), bow_rng), 2000), 0.03, 0.15, 1.5)
+    save("bow", mix([0.6 * s for s in lowpass(twang, 1800)], [0.4 * s for s in whoosh]))
+    # Birdsong: a few quick chirps, rising then falling (variants), and crickets: a
+    # high chirring in short bursts.
+    for v in range(1, 4):
+        song = []
+        for k in range(3 + v):
+            f0 = 2200 + 400 * ((k * 7 + v) % 3)
+            chirp = envelope(tone(f0, f0 * (1.35 if k % 2 == 0 else 0.8), 0.07 + 0.01 * v), 0.005, 0.06, 2.0)
+            song += chirp + [0.0] * secs(0.05 + 0.02 * ((k + v) % 2))
+        save(f"birds_{v}", [0.5 * s for s in song])
+    cricket = []
+    for k in range(4):
+        pulse = [0.4 * math.sin(2 * math.pi * 4200 * i / RATE) * (1 if (i // secs(0.012)) % 2 == 0 else 0) for i in range(secs(0.15))]
+        cricket += envelope(pulse, 0.01, 0.14, 1.0) + [0.0] * secs(0.18)
+    save("crickets", cricket)
+    # An explosion: a hard thump, a roar, and debris pattering down.
+    boom_rng = random.Random(91)
+    thump = envelope(mix(tone(90, 30, 0.5), lowpass(noise(secs(0.5), boom_rng), 300)), 0.002, 0.48, 2.0)
+    roar = envelope(lowpass(noise(secs(1.6), boom_rng), 900), 0.01, 1.55, 1.6)
+    save("explosion", mix([1.4 * s for s in thump] + [0.0] * (len(roar) - len(thump)), roar))
+    save("thunder", mix(crack + [0.0] * (len(rumble) - len(crack)), [1.6 * s for s in rumble]))
     print("sounds written to", os.path.normpath(OUT))
 
 

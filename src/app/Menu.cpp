@@ -254,6 +254,7 @@ void Application::DrawSettingsPage(bool inGame) {
         if (ImGui::SliderFloat("Mouse sensitivity", &settings.sensitivity, Settings::kMinSensitivity, Settings::kMaxSensitivity, "%.2f"))
             ApplySettings();
         if (ImGui::Checkbox("Vsync", &settings.vsync)) ApplySettings();
+        ImGui::Checkbox("View bobbing", &settings.viewBobbing);
         int volume = static_cast<int>(settings.volume * 100.0f + 0.5f);
         if (ImGui::SliderInt("Volume", &volume, 0, 100, "%d%%")) settings.volume = volume / 100.0f;
         ImGui::Spacing();

@@ -18,7 +18,7 @@ constexpr char kRegionMagic[4] = { 'V', 'X', 'R', 'G' };
 constexpr char kWorldMagic[4] = { 'V', 'X', 'W', 'D' };
 constexpr size_t kMaxNameLength = 256;
 // Tagged player fields (format 7 on).
-constexpr uint8_t kFieldHealth = 1, kFieldFood = 2, kFieldArmour = 3, kFieldBed = 4;
+constexpr uint8_t kFieldHealth = 1, kFieldFood = 2, kFieldArmour = 3, kFieldBed = 4, kFieldAchievements = 5;
 
 int FloorDiv(int a, int b) {
     return a >= 0 ? a / b : -((-a + b - 1) / b);
@@ -152,6 +152,7 @@ bool WorldStorage::ReadWorldFile() {
                 if (tag == kFieldHealth && length == 1) ok = r.U8(v), p.health = v;
                 else if (tag == kFieldFood && length == 1) ok = r.U8(v), p.food = v;
                 else if (tag == kFieldArmour && length == 1) ok = r.U8(v), p.armour = v;
+                else if (tag == kFieldAchievements && length == 4) ok = r.U32(p.achievements);
                 else if (tag == kFieldBed && length == 12) {
                     glm::ivec3 bed;
                     ok = r.IVec3(bed);
@@ -186,6 +187,29 @@ bool WorldStorage::ReadWorldFile() {
             return false;
         }
         chests.emplace_back(pos, held);
+    }
+    // Crops (format 9 on): positions.
+    uint32_t cropCount = 0;
+    if (version >= 9 && !r.VarU32(cropCount)) cropCount = 0;
+    for (uint32_t c = 0; c < cropCount; c++) {
+        glm::ivec3 pos;
+        if (!r.IVec3(pos)) {
+            std::cerr << "[storage] " << path.string() << " is truncated (crops)" << std::endl;
+            return false;
+        }
+        crops.push_back(pos);
+    }
+    // Signs (format 10 on): position and text.
+    uint32_t signCount = 0;
+    if (version >= 10 && !r.VarU32(signCount)) signCount = 0;
+    for (uint32_t i = 0; i < signCount; i++) {
+        glm::ivec3 pos;
+        std::string text;
+        if (!r.IVec3(pos) || !r.Str(text, 256)) {
+            std::cerr << "[storage] " << path.string() << " is truncated (signs)" << std::endl;
+            return false;
+        }
+        signs.emplace_back(pos, text);
     }
     return true;
 }
@@ -329,6 +353,28 @@ void WorldStorage::SetChests(Chests c) {
     playersDirty = true; // world.dat needs writing
 }
 
+WorldStorage::Signs WorldStorage::GetSigns() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return signs;
+}
+
+void WorldStorage::SetSigns(Signs s) {
+    std::lock_guard<std::mutex> lock(mutex);
+    signs = std::move(s);
+    playersDirty = true;
+}
+
+std::vector<glm::ivec3> WorldStorage::GetCrops() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return crops;
+}
+
+void WorldStorage::SetCrops(std::vector<glm::ivec3> c) {
+    std::lock_guard<std::mutex> lock(mutex);
+    crops = std::move(c);
+    playersDirty = true;
+}
+
 size_t WorldStorage::GetStoredChunkCount() const {
     std::lock_guard<std::mutex> lock(mutex);
     return chunks.size();
@@ -384,11 +430,12 @@ bool WorldStorage::Flush() {
                         w.VarU32(p.resources[t]);
                     }
                 w.U8(p.tools);
-                w.VarU32(p.bed ? 4 : 3);
+                w.VarU32(p.bed ? 5 : 4);
                 w.U8(kFieldHealth), w.VarU32(1), w.U8(static_cast<uint8_t>(std::clamp(p.health, 0, 255)));
                 w.U8(kFieldFood), w.VarU32(1), w.U8(static_cast<uint8_t>(std::clamp(p.food, 0, 255)));
                 w.U8(kFieldArmour), w.VarU32(1), w.U8(p.armour);
                 if (p.bed) w.U8(kFieldBed), w.VarU32(12), w.IVec3(*p.bed);
+                w.U8(kFieldAchievements), w.VarU32(4), w.U32(p.achievements);
             }
             w.VarU32(static_cast<uint32_t>(chests.size()));
             for (const auto& [pos, held] : chests) {
@@ -401,6 +448,13 @@ bool WorldStorage::Flush() {
                         w.U8(static_cast<uint8_t>(t));
                         w.VarU32(held[t]);
                     }
+            }
+            w.VarU32(static_cast<uint32_t>(crops.size()));
+            for (const auto& pos : crops) w.IVec3(pos);
+            w.VarU32(static_cast<uint32_t>(signs.size()));
+            for (const auto& [pos, text] : signs) {
+                w.IVec3(pos);
+                w.Str(text);
             }
             files.emplace_back(directory / "world.dat", std::move(w.data));
             writePlayers = true;

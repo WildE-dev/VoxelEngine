@@ -18,7 +18,10 @@
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "server/Server.h"
+#include "world/Crafting.h"
+#include "world/Creatures.h"
 #include "world/Mining.h"
+#include "world/TerrainGenerator.h"
 
 // Test clients ask for a short view (chunks): plenty for the checks, and light enough
 // to run every suite at once.
@@ -69,6 +72,44 @@ bool Near(double a, double b) { return std::abs(a - b) < 1e-4; }
 
 int main() {
     using namespace Mining;
+    std::cout << "Ores and iron" << std::endl;
+    {
+        // Ores in the stone under a normal world: coal from 8 blocks down, iron (rarer)
+        // from 24 down.
+        TerrainGenerator terrain;
+        int coal = 0, iron = 0, shallowOre = 0, stone = 0;
+        for (int cx = 0; cx < 3; cx++)
+            for (int cz = 0; cz < 3; cz++) {
+                TerrainGenerator::ColumnHeights heights;
+                terrain.ComputeColumnHeights(cx, cz, heights);
+                for (int cy = -5; cy <= 4; cy++) {
+                    TerrainGenerator::Blocks blocks;
+                    terrain.GenerateChunk({ cx, cy, cz }, heights, blocks);
+                    for (int x = 0; x < Chunk::CHUNK_SIZE; x++)
+                        for (int z = 0; z < Chunk::CHUNK_SIZE; z++) {
+                            const int surface = terrain.ColumnAt(cx * Chunk::CHUNK_SIZE + x, cz * Chunk::CHUNK_SIZE + z).surfaceRow;
+                            for (int y = 0; y < Chunk::CHUNK_SIZE; y++) {
+                                const BlockType t = blocks[Chunk::Index(x, y, z)].type;
+                                const int depth = surface - (cy * Chunk::CHUNK_SIZE + y);
+                                coal += t == BlockType::COAL_ORE;
+                                iron += t == BlockType::IRON_ORE;
+                                stone += t == BlockType::STONE;
+                                shallowOre += (t == BlockType::COAL_ORE && depth < 8) || (t == BlockType::IRON_ORE && depth < 24);
+                            }
+                        }
+                }
+            }
+        Check(coal > 0 && iron > 0 && iron < coal && coal * 10 < stone, "coal and (rarer) iron ore lie in the stone (" + std::to_string(coal) + " coal, " +
+                                                                              std::to_string(iron) + " iron, " + std::to_string(stone) + " stone)");
+        Check(shallowOre == 0, "coal no shallower than 8 blocks, iron no shallower than 24");
+        Check(ResourceTypeOf(BlockType::COAL_ORE) == BlockType::COAL && IsItemType(BlockType::COAL) && IsItemType(BlockType::IRON_INGOT),
+              "coal ore breaks into coal; coal and ingots are items");
+        Check(Seconds(Block(BlockType::IRON_ORE), Tool::Pickaxe, true) < Seconds(Block(BlockType::IRON_ORE), Tool::Pickaxe) &&
+                  Combat::Damage(Tool::Sword, true) == Combat::Damage(Tool::Sword) + 2 && Combat::Damage(Tool::None, true) == Combat::Damage(Tool::None),
+              "the iron upgrade mines faster and hits a heart harder (not bare-handed)");
+        Check(Crafting::Find("iron_ingot") >= 0 && Crafting::Recipes()[Crafting::Find("iron_tools")].ironUpgrade, "iron ore smelts into ingots, which make the upgrade");
+    }
+
     std::cout << "Rules" << std::endl;
     Check(Near(Seconds(Block(BlockType::DIRT), Tool::None), 0.6) && Near(Seconds(Block(BlockType::LOG), Tool::None), 2.0) &&
               Near(Seconds(Block(BlockType::STONE), Tool::None), 4.0) && Near(Seconds(Block(BlockType::STONE_BRICK), Tool::None), 5.0),

@@ -27,8 +27,9 @@ struct Recipe {
     uint32_t outputUnits = 0;
     Tool tool = Tool::None;
     ArmourPiece armour = ArmourPiece::Count; // a piece of armour (made once, then worn)
-    // Made once and kept: a tool or a piece of armour.
-    bool MadeOnce() const { return tool != Tool::None || armour != ArmourPiece::Count; }
+    bool ironUpgrade = false;                // the iron upgrade (made once: Crafting::kIronBit)
+    // Made once and kept: a tool, a piece of armour, or the upgrade.
+    bool MadeOnce() const { return tool != Tool::None || armour != ArmourPiece::Count || ironUpgrade; }
 };
 
 namespace Crafting {
@@ -46,19 +47,35 @@ inline const std::vector<Recipe>& Recipes() {
         { "pump", "Pump", { { BlockType::STONE, 2 * kBlock }, { BlockType::GLASS, kBlock } }, BlockType::PUMP, kBlock },
         { "sluice", "Sluice gate", { { BlockType::STONE_BRICK, kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::SLUICE, kBlock },
         { "pressure_plate", "Pressure plate", { { BlockType::STONE, kBlock / 4 } }, BlockType::PRESSURE_PLATE, kBlock },
+        { "boat", "Boat", { { BlockType::PLANKS, 3 * kBlock } }, BlockType::BOAT, kBlock },
+        { "tnt", "TNT", { { BlockType::SAND, kBlock }, { BlockType::COAL, kBlock / 2 } }, BlockType::TNT, kBlock },
+        { "sign", "2 signs", { { BlockType::PLANKS, kBlock } }, BlockType::SIGN, 2 * kBlock },
+        { "campfire", "Campfire", { { BlockType::LOG, kBlock }, { BlockType::STONE, kBlock / 4 } }, BlockType::CAMPFIRE, kBlock },
+        { "door", "Door", { { BlockType::PLANKS, 2 * kBlock } }, BlockType::DOOR, kBlock },
+        { "ladder", "3 ladders", { { BlockType::PLANKS, kBlock } }, BlockType::LADDER, 3 * kBlock },
         { "chest", "Chest", { { BlockType::PLANKS, 2 * kBlock } }, BlockType::CHEST, kBlock },
         { "bed", "Bed", { { BlockType::PLANKS, 3 * kBlock }, { BlockType::HIDE, kBlock } }, BlockType::BED, kBlock },
         { "spikes", "Spikes", { { BlockType::STONE, kBlock } }, BlockType::SPIKES, kBlock },
+        { "bread", "Bread", { { BlockType::WHEAT, 3 * kBlock } }, BlockType::BREAD, kBlock },
+        { "cooked_fish", "Cooked fish", { { BlockType::RAW_FISH, kBlock }, { BlockType::LOG, kBlock / 4 } }, BlockType::COOKED_FISH, kBlock },
         // Cooked over a little wood.
         { "cooked_venison", "Cooked venison", { { BlockType::RAW_VENISON, kBlock }, { BlockType::LOG, kBlock / 4 } }, BlockType::COOKED_VENISON, kBlock },
         { "pickaxe", "Pickaxe", { { BlockType::PLANKS, kBlock }, { BlockType::STONE, kBlock * 3 / 2 } }, BlockType::AIR, 0, Tool::Pickaxe },
         { "axe", "Axe", { { BlockType::PLANKS, kBlock }, { BlockType::STONE, kBlock } }, BlockType::AIR, 0, Tool::Axe },
         { "shovel", "Shovel", { { BlockType::PLANKS, kBlock }, { BlockType::STONE, kBlock / 2 } }, BlockType::AIR, 0, Tool::Shovel },
         { "sword", "Sword", { { BlockType::PLANKS, kBlock / 2 }, { BlockType::STONE, 2 * kBlock } }, BlockType::AIR, 0, Tool::Sword },
+        { "bow", "Bow", { { BlockType::PLANKS, kBlock }, { BlockType::HIDE, kBlock } }, BlockType::AIR, 0, Tool::Bow },
+        { "rod", "Fishing rod", { { BlockType::PLANKS, kBlock }, { BlockType::HIDE, kBlock / 4 } }, BlockType::AIR, 0, Tool::Rod },
+        { "arrows", "4 arrows", { { BlockType::PLANKS, kBlock / 2 }, { BlockType::STONE, kBlock / 4 } }, BlockType::ARROW, 4 * kBlock },
         // Armour, from deer hide.
         { "cap", "Hide cap", { { BlockType::HIDE, 2 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Cap },
         { "tunic", "Hide tunic", { { BlockType::HIDE, 4 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Tunic },
         { "boots", "Hide boots", { { BlockType::HIDE, 2 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Boots },
+        // Smelting, and what iron is for.
+        { "iron_ingot", "Iron ingot", { { BlockType::IRON_ORE, kBlock }, { BlockType::COAL, kBlock / 4 } }, BlockType::IRON_INGOT, kBlock },
+        { "coal_lamp", "Lamp (with coal)", { { BlockType::GLASS, kBlock / 2 }, { BlockType::COAL, kBlock / 4 } }, BlockType::LAMP, kBlock },
+        { "iron_tools", "Iron upgrade (all tools)", { { BlockType::IRON_INGOT, 3 * kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::AIR, 0, Tool::None,
+          ArmourPiece::Count, true },
     };
     return recipes;
 }
@@ -69,6 +86,10 @@ inline int Find(const char* id) {
         if (std::string(id) == recipes[i].id) return static_cast<int>(i);
     return -1;
 }
+
+// The iron upgrade's bit in the tools mask (tools use bits 1..4): every tool you make
+// mines at Mining::kIronToolSpeed and hits a heart harder.
+constexpr uint8_t kIronBit = 1u << 7;
 
 // Tools held, one bit each (1 << Tool).
 inline uint8_t ToolBit(Tool tool) { return static_cast<uint8_t>(1u << static_cast<unsigned>(tool)); }

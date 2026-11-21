@@ -12,6 +12,7 @@ uniform float radius;
 uniform float height;
 uniform float speed;
 uniform float streak;
+uniform float snow; // 1: flakes, drifting from side to side as they fall
 
 out float Alpha;
 
@@ -29,9 +30,12 @@ void main()
     float bottom = cameraPos.y - height * 0.5;
     float y = bottom + mod(aDrop.y * height - time * speed - bottom, height) + aDrop.w * streak;
 
+    // Snowflakes sway, each on its own phase, and are short slanted dashes.
+    xz += snow * vec2(sin(time * 0.9 + aDrop.x * 40.0), cos(time * 0.7 + aDrop.z * 40.0)) * 0.6;
+    xz.x += snow * aDrop.w * 0.05;
     vec3 world = vec3(xz.x, y, xz.y);
     gl_Position = projection * view * vec4(world, 1.0);
     // Fade toward the edge of the box so it has no visible border.
     float d = length(xz - cameraPos.xz) / radius;
-    Alpha = 0.75 * clamp(1.0 - d, 0.0, 1.0) * (0.5 + 0.5 * aDrop.w);
+    Alpha = mix(0.75 * (0.5 + 0.5 * aDrop.w), 0.95, snow) * clamp(1.0 - d, 0.0, 1.0);
 }

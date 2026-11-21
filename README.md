@@ -178,12 +178,13 @@ that damaged files are refused, and that a rejoining player is put back in place
 | --- | --- |
 | WASD | Walk (or fly) |
 | Space | Jump (swim: up; fly: up) |
-| Shift | Sprint (fly: faster) |
+| Shift | Sprint (fly: faster); the view widens a little while you sprint |
 | Left Ctrl (hold) | Crouch: lower (fits under 1.5-high gaps) and slow, and you won't walk off edges; your name tag hides. You stand again once there's room. (Flying: down) |
 | Q / E | In no-clip (`/noclip`, operators): fly down / up |
 | Mouse | Look (a crosshair marks the middle of the screen) |
 | Left click | Break block (survival: hold to mine it), or hit the creature in front of you |
 | Right click | Place the selected block; eat food in hand; open a chest; use a bed (Shift: place against a chest or bed instead) |
+| Middle click | Pick the block you're looking at into the selected hotbar slot (survival: if you have some) |
 | V / Shift+V | Placement height for building blocks: full, 3/4, 1/2, 1/4 (and back) |
 | 1-9, 0 / mouse wheel | Select the hotbar slot to place from (with Tab you can also click a slot) |
 | I | Inventory: pick which tool or block goes in each hotbar slot |
@@ -194,6 +195,9 @@ that damaged files are refused, and that a rejoining player is put back in place
 | F1 | Toggle wireframe |
 | F2 | Toggle debug window |
 | F3 | Toggle ambient occlusion |
+| F4 | Toggle the compass, coordinates and clock at the top of the screen |
+| P | Toggle the list of players online, with how far off each is and which way |
+| M | Toggle the minimap (top right): the ground around you from above, north up, with you as an arrow and other players as dots |
 | F12 | Save a screenshot (`screenshot-<date>-<time>.png` in the working directory) |
 | N | Skip to the next dusk (by day) or dawn (at night), for everyone on the server |
 | T / Enter | Open chat (Enter sends, Esc closes). While it's open the view stays still and the cursor is free |
@@ -540,8 +544,14 @@ work the same for everyone:
 - **Crumbling bricks** give way 0.4 seconds after you stand on them, and the collapse
   spreads to the crumbling bricks touching them, so a whole pit cover falls in.
 - **Pressure plates** open every sluice gate within 8 blocks.
+- **Falls** of more than 3 blocks cost half a heart for each block beyond that (an
+  11-block drop is four hearts). Landing in water is safe. The server measures the
+  fall from the highest point since you were last on the ground, deciding "on the
+  ground" from the world rather than from what your client says. Teleports, respawns,
+  flying and creative start the count afresh. Armour doesn't help.
 
-The screen flashes red when you're hurt. Hearts come back one every 4 seconds once
+The screen flashes red when you're hurt, and when you die it goes dark red for a few
+seconds with "You died!" and how it happened. Hearts come back one every 4 seconds once
 nothing has hurt you for 5, as long as you're well fed (see
 [Food and hunger](#food-and-hunger)). With none left, everyone hears how you died and you
 respawn at the spawn point (or your bed: see [Beds](#beds)) with full health (and three seconds' grace). In survival,
@@ -551,7 +561,19 @@ the chat tells you where; anyone can open it, so a killer can take it. Your tool
 armour aren't dropped. In no-clip
 nothing can hurt you. All four blocks are in the inventory, for building traps of
 your own. `TrapTest` checks spikes, death and respawn, crumbling floors, pressure
-plates and sluice gates, and that no-clip and the laser are operators' only.
+plates and sluice gates, falls (safe from 3 blocks, four hearts from 11), and that
+no-clip and the laser are operators' only.
+
+## TNT
+
+**TNT** (a sand and half a coal) explodes. Right-click it to light it: it turns white
+and three seconds later blows a round crater three blocks out in every direction.
+Everything in the blast goes (dungeon bricks and water too, and a chest's contents
+are lost), and other TNT caught in it goes off a moment later, so a row of it sets
+off a chain. Players within six blocks take up to five hearts, the closer the worse
+(armour helps), and are thrown back; creatures are hurt too. Everyone hears the boom,
+sees smoke and debris fly, and the view shakes if it was close. `TrapTest` checks
+lighting it, the crater and its size, and the damage.
 
 ## Mining
 
@@ -586,6 +608,11 @@ only once that block has been mined for long enough with that same tool, give or
 - that the tool and the block must match what was started;
 - that creative is instant.
 
+**Particles.** Breaking a block throws out a burst of little cubes cut from its
+texture, which tumble, bounce on the ground and shrink away; mining one chips a few
+off as you go. Blocks other players break burst too. They're only for show, on the
+client.
+
 ## Creatures
 
 Two kinds of creature live in the world. The server runs them and the players near
@@ -603,6 +630,27 @@ Left click a creature in front of you (within 4.5 blocks) to hit it. A hand does
 1 heart, a shovel 1.5, a pickaxe 2, an axe 2.5 and a sword 3.5. Hits land at most about three
 times a second, and the server checks the reach. A deer has 4 hearts and a ghoul 6.
 Aiming at a creature doesn't mine the block behind it.
+
+**Skeletons** come out in the dark like ghouls (three in ten of the night's hostile
+creatures) and burn in daylight too, but they keep their distance: 7 to 14 blocks off,
+backing away if you close in, edging sideways, and shooting an arrow every couple of
+seconds, aimed high enough to allow for its drop. Their arrows hurt whatever they hit
+(PvP or not). A skeleton has 5 hearts, and killing one leaves you two arrows.
+`/summon skeleton` brings one.
+
+**Bats** flutter about in the dark of caves (three in ten creatures spawned where no
+sky reaches), flitting in a new direction every second or so and darting away when
+hit. They're harmless. `/summon bat` brings one.
+
+**Wolves** roam grassland in pairs (now and then in place of a herd of deer) and leave
+you alone, unless you hit one: then it goes for you for twenty seconds (1.5 hearts a
+bite). Right-click a wild wolf with raw venison in your hand to tame it (it eats one).
+A tame wolf wears a red collar and follows you, keeping close, catching up if it falls
+far behind, and staying as long as you're here. It goes for the ghoul or skeleton
+nearest you (within 10 blocks) and bites it until it's gone. Taming one is the Best
+Friend achievement. Tame wolves aren't saved: like all creatures, they're gone after
+a restart. `/summon wolf` brings one. `CreatureTest` checks that an empty hand doesn't
+tame a wolf, venison does, a tame wolf follows, and it sees off a ghoul.
 
 In normal worlds they spawn by themselves around each player:
 
@@ -640,6 +688,67 @@ names, held items and armour reaching other players, reach, damage, the red flas
 knockback, `/pvp off`, being slain, and the killer finding half the victim's things in
 a chest where they died.
 
+## Bows and arrows
+
+A **bow** (1 plank + 1 hide) is a tool; **arrows** come four at a time from half a
+plank and a quarter of stone. With the bow in your hand, right-click to shoot an arrow
+where you're looking (one arrow each, at most about every 0.6 s; creative players
+need none). The server flies it: fast, with gravity pulling it down, until it hits a
+block (where it sticks for six seconds), a creature or a player. A hit does 2.5 hearts
+and knocks the target back; players only when PvP is on (see [PvP](#pvp)), and armour
+helps. Everyone near sees arrows in flight and stuck in the ground. With the iron
+upgrade the bow doesn't hit harder (the arrow does the work). `CreatureTest` checks a
+hit from ten blocks off, that a bow's shots are spaced out, and arrows sticking in
+the ground.
+
+## Ores and iron
+
+The stone underground holds veins of ore: **coal ore** from 8 blocks below the surface
+(about 3% of the stone) and **iron ore** from 24 down (about 1%, in smaller veins).
+Both want a pickaxe (iron ore is harder). Coal ore breaks into **coal**; iron ore is
+smelted into **iron ingots** (1 iron ore + 0.25 coal). Coal also makes a lamp more
+cheaply (0.5 glass + 0.25 coal).
+
+Three ingots and a plank make the **iron upgrade**, once: from then on every tool you
+make mines faster (6 times a hand's speed on what it's for, instead of 4) and hits a
+heart harder (a sword does 4.5 hearts). It's kept like tools are. `MiningTest` checks
+where ore lies, what it breaks into, and what the upgrade does.
+
+## Farming
+
+Breaking tall grass now and then gives **seeds** (three times in ten). With seeds in
+hand, right-click the top of a dirt or grass block to plant one: a young **crop**
+comes up, and ripens into **wheat** on its own, after about a minute and a half on
+average (while its chunk is loaded, which it is near a player). Break ripe wheat to
+harvest it: you get the wheat and one or two seeds to plant again. Breaking a young
+crop just gives its seed back, and water washes crops away. Three wheat bake into
+**bread** (6 food). Breaking leaves now and then gives a **sapling** (a pine sapling from pine
+needles); planted on dirt or grass it grows into a tree after about two minutes: a
+trunk four to six logs tall with a round crown of leaves, or a cone of needles for a
+pine, if there's room above it. So wood grows back. The server keeps a list of growing crops, saved with the world
+(format 9). `FoodTest` checks planting (not in mid air), ripening, harvesting, bread
+and eating it.
+
+## Boats
+
+A **boat** (3 planks) takes you across water fast. With it in hand, right-click
+water within 4 blocks to sit in it on the surface: steer as you'd walk (6.5 blocks a
+second, 9 sprinting), gliding rather than stopping dead; the bow stops at the shore,
+since a boat stays on water. Ctrl gets you out (into the water). The boat isn't used
+up: you carry it. Others see you sitting in a little wooden boat, and nothing you do
+in one counts as a fall. `ShapeTest` checks gliding over water and stopping at the
+shore.
+
+## Fishing
+
+A **fishing rod** (a plank and a quarter of a hide) is a tool. With it in hand,
+right-click water within 12 blocks to cast: a red and white bobber floats on the
+surface. Somewhere between 4 and 14 seconds later a fish bites, with a splash, and
+lands in your inventory as **raw fish** (2 food); a little wood cooks it into
+**cooked fish** (6 food). Walk more than 3 blocks from where you cast and the line
+comes in empty; right-click again to reel in. The server runs it all. `FoodTest`
+checks casting (not onto dry ground), the bite, the catch and cooking it.
+
 ## Swords and armour
 
 The **sword** is a tool made for fighting: 3.5 hearts a hit, against creatures or
@@ -664,6 +773,42 @@ it out with `/give cap|tunic|boots [player]`. The rules are in `src/world/Armour
 `CraftTest` checks making the sword and the armour, that each piece is made once, the
 damage sums, and that they're kept after a restart; `CreatureTest` checks that armour
 takes a sword hit from 3.5 hearts down to 2.
+
+## Signs
+
+A **sign** (two from a plank) is a post with a board. Place one and a box opens to
+write a line on it (up to 64 characters; Enter finishes, Esc leaves it as it is);
+right-click a sign later to rewrite it. Its words float over it like a little plaque
+for anyone within 12 blocks who can see it. The server keeps every sign's text, sends
+them all to each player who joins, tells everyone when one changes, and saves them
+with the world (format 10). `ChestTest` checks that writing reaches the other player
+(unprintable characters dropped), that there's no writing without a sign, and that it
+survives a restart.
+
+## Ladders
+
+A **ladder** (three from a plank) is a see-through frame of rungs filling its cell.
+Walk into one to climb: moving or holding jump takes you up, crouching holds you
+where you are, and letting go slides you down slowly. A ladder ends a fall (no fall
+damage on one), water doesn't wash it away, and it's fastest to break with an axe.
+Stack them up a shaft or against a wall. `ShapeTest` checks climbing, holding on and
+sliding.
+
+## Campfires
+
+A **campfire** (a log and a quarter of stone) burns almost as bright as a lamp, with
+smoke curling up from it. Right-click it with raw venison or raw fish in your hand to
+cook one on the spot, no crafting needed. Standing in it burns (half a heart every
+0.75 s), and water puts it out. `FoodTest` checks its light and the cooking.
+
+## Doors
+
+A **door** (2 planks) stands two blocks tall: placing one needs room above for its
+upper half, and costs one door. Right-click either half (within 6 blocks) to open
+it, which turns both halves into an open frame you can walk through, and again to
+shut it. It won't shut on someone standing in the doorway. Breaking either half takes
+the whole door, and gives it back. `BedTest` checks placing, opening, not shutting on
+someone, closing from the other half, and breaking.
 
 ## Chests
 
@@ -718,6 +863,9 @@ To eat, put food in the hotbar and right-click with it, looking anywhere:
 | --- | --- | --- |
 | Raw venison | 3 | killing a deer (one or two each, and a hide) |
 | Cooked venison | 8 | crafting: 1 raw venison + 0.25 log |
+| Bread | 6 | crafting: 3 wheat (see [Farming](#farming)) |
+| Raw fish | 2 | fishing (see [Fishing](#fishing)) |
+| Cooked fish | 6 | crafting: 1 raw fish + 0.25 log |
 
 Food is an item: it lives in the inventory and the hotbar like blocks do, but can't be
 placed. You can't eat when you're full. Creative players don't get hungry. Your food
@@ -756,8 +904,22 @@ makes four.
 | Shovel | 1 planks + 0.5 stone |
 | Cooked venison | 1 raw venison + 0.25 log |
 | Sword | 0.5 planks + 2 stone |
+| Bow | 1 planks + 1 hide |
+| Fishing rod | 1 planks + 0.25 hide |
+| Cooked fish | 1 raw fish + 0.25 log |
+| 4 arrows | 0.5 planks + 0.25 stone |
 | Chest | 2 planks |
+| 3 ladders | 1 planks |
+| Door | 2 planks |
+| Campfire | 1 log + 0.25 stone |
+| 2 signs | 1 planks |
+| TNT | 1 sand + 0.5 coal |
+| Boat | 3 planks |
 | Bed | 3 planks + 1 hide |
+| Iron ingot | 1 iron ore + 0.25 coal |
+| Lamp (with coal) | 0.5 glass + 0.25 coal |
+| Iron upgrade | 3 iron ingots + 1 planks |
+| Bread | 3 wheat |
 | Hide cap / tunic / boots | 2 / 4 / 2 hide |
 
 Amounts are in blocks, using the same resource units as building (a block is 64).
@@ -812,6 +974,18 @@ to check:
 - recovery on the ground;
 - creative.
 
+## Achievements
+
+Survival players earn achievements for milestones, once each: breaking a first block,
+making a tool, bringing down a deer, defeating a ghoul, cooking venison, eating,
+harvesting wheat, baking bread, digging out iron ore, the iron upgrade, a full set of
+armour, opening a dungeon chest, sleeping through a night, and taking something down
+with an arrow, catching a fish, and taming a wolf (sixteen in all). Earning one shows a banner under the compass for a
+few seconds (with a chime) and tells everyone else. They're saved with you.
+`/achievements` lists what you've earned and what's still to do. `FoodTest` checks
+the ones it passes on the way, that `/achievements` answers, and that each is earned
+only once.
+
 ## Chat and commands
 
 Press T (or Enter) to chat: Enter sends the line to everyone, Esc closes the box. New
@@ -830,7 +1004,7 @@ ones you're allowed to use:
 | `/spawn` | everyone | back to the spawn point |
 | `/time`, `/weather`, `/ops` | everyone | show the time, the weather, the operators |
 | `/time <day\|noon\|dusk\|night\|midnight\|dawn\|HH:MM>` | operators | set the time (sunrise is 06:00) |
-| `/weather <clear\|rain\|auto>` | operators | set the weather |
+| `/weather <clear\|rain\|storm\|auto>` | operators | set the weather |
 | `/tp <x> <y> <z>`, `/tp <player>`, `/tp <player> <x> <y> <z>` | operators | teleport; `~` means relative (`/tp ~ ~10 ~`) |
 | `/save` | operators | save the world now |
 | `/kick <player> [reason]` | operators | remove a player |
@@ -842,6 +1016,7 @@ ones you're allowed to use:
 | `/summon <deer\|ghoul> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
 | `/creatures [clear]` | operators | count the creatures, or remove them all |
 | `/pvp`, `/food` | everyone | whether players can hurt each other; how fed you are |
+| `/achievements` | everyone | the milestones you've reached, and those still to come |
 | `/pvp <on\|off>` | operators | let players hurt each other, or not |
 | `/food <0-20> [player]` | operators | set how fed someone is |
 | `/stop` | console | shut the server down |
@@ -876,15 +1051,34 @@ east, crosses the sky (lighting the terrain, the water's glint and players from 
 current direction), and the sky turns warm around sunrise and sunset and dark at
 night. The time of day is saved with the world.
 
+The sun is a bright disc with a glow in its direction, and the moon a pale disc
+opposite it. As night falls the stars come out and twinkle. Clouds (rain) hide all
+three. On clear nights fireflies drift and blink over grassy ground near
+you (up to 40 at a time), and go at dawn.
+
 Now and then it rains: clear spells last 10 to 25 minutes and showers 2 to 5, fading
 in and out over ten seconds. Rain greys and dims the sky, falls as streaks around
 the player (not under a roof or underwater), and tops up lakes and pools (see
 [Water](#water)).
 
-`--day-length SECONDS` and `--weather clear|rain|auto` change these, on `VoxelEngine`
+While a daytime shower is light (starting or clearing), a **rainbow** stands in the
+sky opposite the sun, highest when the sun is low.
+
+Where it's cold (snow, snowy grass, ice or pines underfoot), it falls as **snow**:
+white flakes drifting slowly down and swaying, instead of rain.
+
+Three showers in ten are **thunderstorms**: the sky goes darker still, and every 3
+to 12 seconds lightning strikes the ground somewhere within 40 blocks of a player. A
+strike is a jagged glowing bolt from high in the sky, with a flash that lights up the
+whole world for a moment, then thunder that rolls in later the further off it was.
+Anyone within 3 blocks of a strike takes three hearts (armour helps). Operators can
+call one with `/weather storm`.
+
+`--day-length SECONDS` and `--weather clear|rain|storm|auto` change these, on `VoxelEngine`
 (singleplayer or `--server`) and `VoxelServer`. `WeatherTest` checks thin water, that
 rain fills a drained pool to the brim and no further while leaving full, covered and
-dry-ground water alone, and that the clock runs, saves, resumes and can be skipped.
+dry-ground water alone, that the clock runs, saves, resumes and can be skipped, and
+that a storm reaches the client and strikes near the player.
 
 ## Fog
 
@@ -915,6 +1109,11 @@ Sky light depends on which way a face points: full on faces turned up, half on w
 and 40% on faces turned down, so the underside of an overhang or a tree canopy is
 lit by the sky around it instead of going black.
 
+
+Carrying light: with a lamp or a campfire selected in the hotbar (and some to hold),
+the world around you lights up as you walk, falling off a level a block like placed
+light. Other players carrying one light their surroundings too (up to eight lights at
+once), and figures and creatures near a carried light are lit by it.
 ## Block textures
 
 Every PNG in `Resources/Textures/Blocks/` is packed into a texture atlas at
@@ -956,6 +1155,9 @@ handy for unattended screenshots. The code is in `src/audio/Audio.cpp`.
 - that blocks sound like their material;
 - that a player gets events for another player's edits, and not their own.
 
+
+Outdoors, under the open sky and not in heavy rain, you hear birdsong now and then by
+day and crickets at night, from somewhere around you.
 ## Menus and settings
 
 Run with no options, the game opens at a title screen:

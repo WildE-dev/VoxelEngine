@@ -10,7 +10,9 @@
 //  - in a normal world, deer turn up by themselves on grass, and ghouls come out at
 //    night,
 //  - PvP: players hit each other in reach (flashing red for others, knocked back), can be slain,
-//    and /pvp off stops it.
+//    and /pvp off stops it,
+//  - archery: an arrow hits a player ten blocks off, a bow's shots are spaced out,
+//    and arrows stick in the ground.
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -43,13 +45,14 @@ struct TestClient {
     glm::vec3 feet{ 0.0f };
     bool joined = false;
     Tool heldTool = Tool::None; // what others see in their hand
+    BlockType heldBlock = BlockType::AIR;
     void Update() {
         client.Poll();
         if (!joined && client.IsWelcomed()) joined = true, feet = client.GetSpawn();
         if (auto c = client.TakeCorrection()) feet = *c;
         if (!joined) return;
         world.Update(feet + glm::vec3(0.0f, 1.62f, 0.0f));
-        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround, heldTool);
+        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround, heldTool, heldBlock);
     }
     const Client::Creature* Find(CreatureType type) const {
         static thread_local std::vector<Client::Creature> seen;
@@ -164,6 +167,56 @@ int main() {
         server.QueueConsoleCommand("time noon");
         Check(both(20.0, [&] { return a.Find(CreatureType::Ghoul) == nullptr; }), "at noon under the open sky the ghoul burns up");
 
+        std::cout << "Skeletons" << std::endl;
+        server.QueueConsoleCommand("time midnight");
+        server.QueueConsoleCommand("gamemode survival Hunter");
+        server.QueueConsoleCommand("food 20 Hunter");
+        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+        server.QueueConsoleCommand("summon skeleton 20.5 0 8.5");
+        Check(both(20.0, [&] { return a.Find(CreatureType::Skeleton) != nullptr && !a.client.IsCreative(); }), "a skeleton is summoned 12 blocks from the hunter");
+        both(4.0, [&] { return a.client.GetHealth() == 20; });
+        const int beforeVolley = a.client.GetHealth();
+        Check(both(20.0, [&] { return a.client.GetHealth() < beforeVolley; }), "it shoots the hunter from a distance");
+        const auto* skeleton = a.Find(CreatureType::Skeleton);
+        Check(skeleton && glm::distance(glm::vec2(skeleton->feet.x, skeleton->feet.z), glm::vec2(8.5f)) > 5.0f, "and keeps its distance");
+        server.QueueConsoleCommand("creatures clear");
+        server.QueueConsoleCommand("gamemode creative Hunter");
+        both(20.0, [&] { return a.client.GetCreatures().empty() && a.client.IsCreative(); });
+
+        std::cout << "Bats" << std::endl;
+        server.QueueConsoleCommand("summon bat 12.5 6 12.5");
+        Check(both(20.0, [&] { return a.Find(CreatureType::Bat) != nullptr; }), "a bat is summoned in mid air");
+        both(3.0, [] { return false; });
+        Check(a.Find(CreatureType::Bat) && a.Find(CreatureType::Bat)->feet.y > 1.0f, "and flies about rather than falling (at " +
+                                                                                      std::to_string(a.Find(CreatureType::Bat) ? a.Find(CreatureType::Bat)->feet.y : -1.0f) + ")");
+        server.QueueConsoleCommand("creatures clear");
+        both(20.0, [&] { return a.client.GetCreatures().empty(); });
+
+        std::cout << "Wolves" << std::endl;
+        server.QueueConsoleCommand("time noon");
+        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+        server.QueueConsoleCommand("summon wolf 11.5 0 8.5");
+        server.QueueConsoleCommand("give raw_venison 2 Hunter");
+        Check(both(20.0, [&] { return a.Find(CreatureType::Wolf) != nullptr; }), "a wolf is summoned beside the hunter");
+        const uint16_t wolf = a.Find(CreatureType::Wolf)->id;
+        a.client.Interact(wolf); // (empty-handed: nothing)
+        both(1.0, [] { return false; });
+        Check(!a.Find(CreatureType::Wolf)->tame, "a wolf isn't tamed by an empty hand");
+        a.heldBlock = BlockType::RAW_VENISON;
+        both(0.3, [] { return false; });
+        a.client.Interact(wolf);
+        Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && w->tame; }) && Has(a, "The wolf is yours"), "fed raw venison, it's tamed (and wears a collar)");
+        a.heldBlock = BlockType::AIR;
+        server.QueueConsoleCommand("tp Hunter 22.5 0 8.5");
+        Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && glm::distance(glm::vec2(w->feet.x, w->feet.z), glm::vec2(22.5f, 8.5f)) < 5.0f; }),
+              "it follows its owner");
+        server.QueueConsoleCommand("time midnight");
+        server.QueueConsoleCommand("summon ghoul 26.5 0 8.5");
+        Check(both(20.0, [&] { return a.Find(CreatureType::Ghoul) != nullptr; }), "a ghoul turns up near them");
+        Check(both(30.0, [&] { return a.Find(CreatureType::Ghoul) == nullptr; }), "and the wolf sees it off");
+        server.QueueConsoleCommand("creatures clear");
+        both(20.0, [&] { return a.client.GetCreatures().empty(); });
+
         server.QueueConsoleCommand("time midnight");
         server.QueueConsoleCommand("summon ghoul 20 0 20");
         server.QueueConsoleCommand("summon deer 22 0 20");
@@ -264,6 +317,32 @@ int main() {
         a.client.AttackPlayer(rival, Tool::Sword);
         Check(both(20.0, [&] { return b.client.GetHealth() < 20; }) && b.client.GetHealth() == 16,
               "armour takes a sword's 3.5 hearts down to 2 (health " + std::to_string(b.client.GetHealth()) + ")");
+
+        std::cout << "Archery" << std::endl;
+        server.QueueConsoleCommand("give bow Duelist");
+        server.QueueConsoleCommand("give arrow 3 Duelist");
+        server.QueueConsoleCommand("tp Duelist 20.5 0 8.5");
+        server.QueueConsoleCommand("tp Rival 30.5 0 8.5"); // ten blocks off
+        Check(both(20.0, [&] { return a.client.HasTool(Tool::Bow) && a.client.GetResources(BlockType::ARROW) == 3 * 64 && std::abs(b.feet.x - 30.5f) < 0.1f; }),
+              "the duelist has a bow and three arrows; the rival stands ten blocks off");
+        both(3.5, [] { return false; }); // (no grace left; healed or not)
+        const int beforeArrow = b.client.GetHealth();
+        // Aim at their middle, a little high (arrows drop).
+        const glm::vec3 eye = a.feet + glm::vec3(0.0f, 1.62f, 0.0f), target = b.feet + glm::vec3(0.0f, 1.0f + 0.5f, 0.0f);
+        a.client.Shoot(target - eye);
+        Check(both(5.0, [&] { return b.client.GetHealth() < beforeArrow; }) && b.client.GetHealth() == beforeArrow - 3,
+              "an arrow across ten blocks hits (2.5 hearts, armour takes it to 1.5)");
+        Check(a.client.GetResources(BlockType::ARROW) == 2 * 64, "and uses an arrow");
+        a.client.Shoot(glm::vec3(1.0f, -1.0f, 0.0f)); // (too soon: the bow isn't ready)
+        both(1.0, [] { return false; });
+        Check(a.client.GetResources(BlockType::ARROW) == 2 * 64, "a second shot straight after doesn't go");
+        a.client.Shoot(glm::vec3(1.0f, -1.0f, 0.0f)); // at the ground ahead
+        bool stuck = false;
+        both(5.0, [&] {
+            for (const auto& arrow : a.client.GetArrows()) stuck |= glm::length(arrow.velocity) < 1e-3f;
+            return stuck;
+        });
+        Check(stuck && a.client.GetResources(BlockType::ARROW) == 64, "one shot at the ground sticks there");
         a.client.Disconnect();
         b.client.Disconnect();
         Pump({ &a, &b }, 0.3, [] { return false; });

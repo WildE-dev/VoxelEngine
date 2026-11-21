@@ -194,6 +194,102 @@ std::vector<uint8_t> Encode(const PlayerName& m) {
     return std::move(w.data);
 }
 
+std::vector<uint8_t> Encode(const Lightning& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Lightning);
+    w.IVec3(m.pos);
+    return std::move(w.data);
+}
+
+namespace {
+bool FiniteVec(const glm::vec3& v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
+} // namespace
+
+std::vector<uint8_t> Encode(const SignText& m, bool fromPlayer) {
+    ByteWriter w;
+    Begin(w, fromPlayer ? MsgType::WriteSign : MsgType::SignText);
+    w.IVec3(m.pos);
+    w.Str(m.text.substr(0, kMaxSignLength));
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, SignText& m) {
+    return in.IVec3(m.pos) && in.Str(m.text, kMaxSignLength) && in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const Cast& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Cast);
+    w.IVec3(m.pos);
+    w.U8(m.cast);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Cast& m) {
+    return in.IVec3(m.pos) && in.U8(m.cast) && m.cast <= 1 && in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const Bobber& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Bobber);
+    w.IVec3(m.pos);
+    w.U8(m.out);
+    w.U8(m.bite);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Bobber& m) {
+    return in.IVec3(m.pos) && in.U8(m.out) && in.U8(m.bite) && m.out <= 1 && m.bite <= 1 && in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const Shoot& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Shoot);
+    w.Vec3(m.direction);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Shoot& m) {
+    return in.Vec3(m.direction) && FiniteVec(m.direction) && glm::length(m.direction) > 0.1f && in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const Arrows& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Arrows);
+    const size_t n = std::min(m.arrows.size(), kMaxArrowsSent);
+    w.VarU32(static_cast<uint32_t>(n));
+    for (size_t i = 0; i < n; i++) {
+        w.Vec3(m.arrows[i].position);
+        w.Vec3(m.arrows[i].velocity);
+    }
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Arrows& m) {
+    uint32_t n;
+    if (!in.VarU32(n) || n > kMaxArrowsSent) return false;
+    m.arrows.resize(n);
+    for (auto& a : m.arrows)
+        if (!in.Vec3(a.position) || !in.Vec3(a.velocity) || !FiniteVec(a.position) || !FiniteVec(a.velocity)) return false;
+    return in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const Explosion& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Explosion);
+    w.IVec3(m.pos);
+    w.U8(m.radius);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Explosion& m) {
+    return in.IVec3(m.pos) && in.U8(m.radius) && m.radius <= 8 && in.AtEnd();
+}
+
+bool Decode(ByteReader& in, Lightning& m) {
+    return in.IVec3(m.pos) && in.AtEnd();
+}
+
 bool Decode(ByteReader& in, PlayerName& m) {
     return in.U16(m.id) && in.Str(m.name, 64) && in.AtEnd();
 }
@@ -220,6 +316,17 @@ std::vector<uint8_t> Encode(const AttackPlayer& m) {
     w.U16(m.player);
     w.U8(static_cast<uint8_t>(m.tool));
     return std::move(w.data);
+}
+
+std::vector<uint8_t> Encode(const Interact& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Interact);
+    w.U16(m.creature);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Interact& m) {
+    return in.U16(m.creature) && in.AtEnd();
 }
 
 std::vector<uint8_t> Encode(const CreatureSnapshot& m) {
@@ -527,6 +634,7 @@ std::vector<uint8_t> Encode(const PlayerSnapshot& m) {
     }
     w.F32(m.timeOfDay);
     w.U8(m.rain);
+    w.U8(m.storm);
     return std::move(w.data);
 }
 
@@ -671,7 +779,7 @@ bool Decode(ByteReader& in, PlayerSnapshot& m) {
         if (!in.U16(p.id) || !in.Vec3(p.feet) || !in.F32(p.yaw) || !in.F32(p.pitch) || !in.U8(p.flags) || !ReadHeld(in, p.heldTool, p.heldBlock) ||
             !in.U8(p.armour))
             return false;
-    return in.F32(m.timeOfDay) && in.U8(m.rain) && std::isfinite(m.timeOfDay) && m.timeOfDay >= 0.0f && m.timeOfDay < 1.0f;
+    return in.F32(m.timeOfDay) && in.U8(m.rain) && in.U8(m.storm) && m.storm <= 1 && std::isfinite(m.timeOfDay) && m.timeOfDay >= 0.0f && m.timeOfDay < 1.0f;
 }
 
 bool Decode(ByteReader& in, Knockback& m) {

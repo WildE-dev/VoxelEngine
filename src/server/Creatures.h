@@ -16,6 +16,7 @@
 
 #include <glm/glm.hpp>
 
+#include "world/Collision.h"
 #include "world/Creatures.h"
 
 class ServerWorld;
@@ -37,6 +38,10 @@ public:
         double nextDecision = 0.0;
         double nextAttack = 0.0;
         double nextBurn = 0.0;
+        // Wolves: their owner (0: wild), and the player they're angry with until when.
+        uint16_t owner = 0;
+        uint16_t angryAt = 0;
+        double angryUntil = 0.0;
     };
 
     // A player as the creatures see them.
@@ -47,6 +52,9 @@ public:
     };
     // A ghoul hit a player for `damage` half hearts.
     using HurtPlayer = std::function<void(uint16_t playerId, int damage, const char* deathMessage)>;
+    // Skeletons shoot: an arrow from here, this way (the server flies it).
+    using ShootArrow = std::function<void(const glm::vec3& from, const glm::vec3& direction)>;
+    void SetShooter(ShootArrow shoot) { shooter = std::move(shoot); }
 
     static constexpr size_t kMaxCreatures = 80;
     static constexpr float kDespawnDistance = 96.0f;
@@ -63,7 +71,15 @@ public:
 
     // A player at `eye` hits creature `id` with `tool`. Returns whether it landed
     // (exists, in reach); `killed` says if it died.
-    bool Attack(uint16_t id, const glm::vec3& eye, Tool tool, double now, bool& killed);
+    bool Attack(uint16_t id, const glm::vec3& eye, Tool tool, bool iron, double now, bool& killed);
+    // Hurts it (from anywhere: an arrow), knocking it back away from `from`.
+    bool Damage(uint16_t id, int damage, const glm::vec3& from, double now, bool& killed);
+    // A player hit it: a wild wolf turns on them for a while.
+    void Provoke(uint16_t id, uint16_t player, double now);
+    // Tames a wild wolf for this player (false if it isn't one, or already has an owner).
+    bool Tame(uint16_t id, uint16_t player);
+    // Its box, for hit tests.
+    static Collision::AABB Box(const Creature& c);
 
     const std::vector<Creature>& All() const { return creatures; }
     const Creature* Find(uint16_t id) const;
@@ -82,4 +98,5 @@ private:
     bool naturalSpawning = true;
     double nextSpawnCheck = 0.0;
     double clock = 0.0;
+    ShootArrow shooter;
 };

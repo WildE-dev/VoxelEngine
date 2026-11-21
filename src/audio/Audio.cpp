@@ -34,13 +34,20 @@ const char* Audio::Material(BlockType type) {
     case BlockType::PRESSURE_PLATE:
     case BlockType::SPIKES:
     case BlockType::ICE:
-    case BlockType::PEBBLES: return "hard";
+    case BlockType::PEBBLES:
+    case BlockType::COAL_ORE:
+    case BlockType::IRON_ORE: return "hard";
     case BlockType::SAND:
     case BlockType::SNOW: return "sand";
     case BlockType::LOG:
     case BlockType::PLANKS:
     case BlockType::CHEST:
     case BlockType::BED:
+    case BlockType::LADDER:
+    case BlockType::CAMPFIRE:
+    case BlockType::SIGN:
+    case BlockType::DOOR:
+    case BlockType::DOOR_OPEN:
     case BlockType::CACTUS: return "wood";
     case BlockType::GLASS: return "glass";
     default: return "soft"; // grass, dirt, leaves, plants

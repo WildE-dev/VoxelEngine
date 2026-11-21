@@ -25,6 +25,8 @@ struct FrameParams {
     glm::vec3 sunDirection{0.35f, 0.75f, 0.55f}; // towards the sun, normalised
     glm::vec3 skyTint{1.0f};    // colour of the sky (warm at dawn and dusk)
     float rain = 0.0f;          // 0..1: how hard it rains here (0 when sheltered)
+    bool snow = false;          // it falls as snow here (cold ground around)
+    float rainbow = 0.0f;       // 0..1: a rainbow opposite the sun (a shower clearing by day)
     float overcast = 0.0f;      // 0..1: how grey the sky is
     glm::vec3 cameraPosition{0.0f};
     bool underwater = false;    // camera is inside water: tint the screen
@@ -36,6 +38,11 @@ struct FrameParams {
     std::vector<glm::vec3> highlightOutline; // the block's shape (Block::OutlineSegments)
     std::vector<PlayerModel> players; // other players
     std::vector<CreatureModel> creatures;
+    std::vector<ParticleModel> particles; // bits of broken blocks
+    std::vector<BoltModel> bolts;         // lightning
+    std::vector<ArrowModel> arrows;
+    std::vector<GlowModel> glows; // fireflies
+    std::vector<glm::vec4> handLights; // lights carried in hand: position, and strength (a light level)
 };
 
 // Owns all GPU resources outside the world: shaders, textures, the skybox,

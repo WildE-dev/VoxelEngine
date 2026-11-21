@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 26;
+constexpr uint32_t kProtocolVersion = 33;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -52,6 +52,10 @@ enum class MsgType : uint8_t {
     OpenChest,     // open the chest at a position (or close the open one)
     ChestMove,     // move units of a type between you and the open chest
     UseBed,        // right-clicked a bed: respawn there (and sleep, at night)
+    Shoot,         // shoot an arrow from your bow, this way
+    Cast,          // cast the fishing rod into the water here (or reel in)
+    WriteSign,     // set the text on a sign
+    Interact,      // right-clicked a creature (feeding a wolf tames it)
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -70,6 +74,11 @@ enum class MsgType : uint8_t {
     CreatureSnapshot, // the creatures near you
     PlayerName,    // a player's name, by id (for their name tag)
     ChestContents, // what's in the chest you have open (or that it closed)
+    Lightning,     // lightning struck here (in a storm)
+    Arrows,        // the arrows in flight (or stuck) near you, every tick
+    Bobber,        // where your bobber floats (or that it's reeled in), and bites
+    SignText,      // a sign's text (empty: gone)
+    Explosion,     // something blew up here (for the sound and the debris)
     Knockback,     // you were hit: a push to add to your velocity
 };
 
@@ -192,6 +201,7 @@ enum PlayerFlags : uint8_t {
     kFlagSwimming = 1 << 2,
     kFlagHurt = 1 << 3, // (from the server, in snapshots) just took damage: flashes red
     kFlagCrouching = 1 << 4, // crouching: a shorter body (Player::kCrouchHeight), drawn ducked
+    kFlagBoat = 1 << 5,      // sitting in a boat (drawn in one; no fall damage)
 };
 
 struct PlayerState {
@@ -295,6 +305,50 @@ struct PlayerSnapshot {
     std::vector<PlayerInfo> players;
     float timeOfDay = 0.0f; // 0..1: 0 sunrise, 0.25 noon, 0.5 sunset, 0.75 midnight
     uint8_t rain = 0;       // rain intensity, 0..255 (fades in and out)
+    uint8_t storm = 0;      // 1: the rain is a thunderstorm (darker, with lightning)
+};
+
+// Signs: what's written on one (the same message both ways: a player writes it, the
+// server tells everyone; empty text is a sign gone).
+constexpr size_t kMaxSignLength = 64;
+struct SignText {
+    glm::ivec3 pos{0};
+    std::string text;
+};
+
+// Fishing: cast into the water at `pos` (`cast` 0 reels in). The server answers with
+// Bobber: where it floats, and `bite` 1 when a fish takes it (and is caught).
+struct Cast {
+    glm::ivec3 pos{0};
+    uint8_t cast = 1;
+};
+struct Bobber {
+    glm::ivec3 pos{0};
+    uint8_t out = 0;  // 1: floating there
+    uint8_t bite = 0; // 1: a fish just bit (caught)
+};
+
+// Shooting: the direction the arrow leaves the eye (normalised by the server).
+struct Shoot {
+    glm::vec3 direction{ 0.0f, 0.0f, -1.0f };
+};
+struct ArrowInfo {
+    glm::vec3 position{ 0.0f }, velocity{ 0.0f }; // velocity zero: stuck in a block
+};
+struct Arrows {
+    std::vector<ArrowInfo> arrows;
+};
+constexpr size_t kMaxArrowsSent = 128;
+
+// An explosion (TNT) at the centre of this cell, this big.
+struct Explosion {
+    glm::ivec3 pos{0};
+    uint8_t radius = 3;
+};
+
+// Lightning struck the ground here (the top of the column).
+struct Lightning {
+    glm::ivec3 pos{0};
 };
 
 struct SkipTime {};
@@ -311,6 +365,10 @@ struct AttackPlayer {
     Tool tool = Tool::None;
 };
 constexpr uint8_t kCreatureHurt = 1 << 0; // flashes red
+constexpr uint8_t kCreatureTame = 1 << 1; // a wolf with an owner (wears a collar)
+struct Interact {
+    uint16_t creature = 0;
+};
 struct CreatureInfo {
     uint16_t id = 0;
     CreatureType type = CreatureType::Deer;
@@ -403,6 +461,7 @@ std::vector<uint8_t> Encode(const PlayerState& m);
 std::vector<uint8_t> Encode(const EditBreak& m);
 std::vector<uint8_t> Encode(const MineStart& m);
 std::vector<uint8_t> Encode(const Attack& m);
+std::vector<uint8_t> Encode(const Interact& m);
 std::vector<uint8_t> Encode(const AttackPlayer& m);
 std::vector<uint8_t> Encode(const Eat& m);
 std::vector<uint8_t> Encode(const OpenChest& m);
@@ -435,6 +494,13 @@ std::vector<uint8_t> Encode(const BlockDeltas& m);
 std::vector<uint8_t> Encode(const PlayerSnapshot& m);
 std::vector<uint8_t> Encode(const Correction& m);
 std::vector<uint8_t> Encode(const PlayerName& m);
+std::vector<uint8_t> Encode(const Lightning& m);
+std::vector<uint8_t> Encode(const Explosion& m);
+std::vector<uint8_t> Encode(const Shoot& m);
+std::vector<uint8_t> Encode(const Cast& m);
+std::vector<uint8_t> Encode(const SignText& m, bool fromPlayer);
+std::vector<uint8_t> Encode(const Bobber& m);
+std::vector<uint8_t> Encode(const Arrows& m);
 std::vector<uint8_t> Encode(const Knockback& m);
 
 bool Decode(ByteReader& in, Hello& m);
@@ -444,6 +510,7 @@ bool Decode(ByteReader& in, PlayerState& m);
 bool Decode(ByteReader& in, EditBreak& m);
 bool Decode(ByteReader& in, MineStart& m);
 bool Decode(ByteReader& in, Attack& m);
+bool Decode(ByteReader& in, Interact& m);
 bool Decode(ByteReader& in, AttackPlayer& m);
 bool Decode(ByteReader& in, Eat& m);
 bool Decode(ByteReader& in, OpenChest& m);
@@ -461,6 +528,13 @@ bool Decode(ByteReader& in, BlockDeltas& m);
 bool Decode(ByteReader& in, PlayerSnapshot& m);
 bool Decode(ByteReader& in, Correction& m);
 bool Decode(ByteReader& in, PlayerName& m);
+bool Decode(ByteReader& in, Lightning& m);
+bool Decode(ByteReader& in, Explosion& m);
+bool Decode(ByteReader& in, Shoot& m);
+bool Decode(ByteReader& in, Cast& m);
+bool Decode(ByteReader& in, SignText& m);
+bool Decode(ByteReader& in, Bobber& m);
+bool Decode(ByteReader& in, Arrows& m);
 bool Decode(ByteReader& in, Knockback& m);
 
 } // namespace net

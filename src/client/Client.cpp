@@ -35,6 +35,7 @@ double Client::Now() {
 bool Client::Connect(const std::string& host, uint16_t port, const std::string& name, std::string& error, int viewDistance) {
     if (!net.Connect(host, port, 5000, error)) return false;
     disconnectReason.clear();
+    myName = name;
     net::Hello hello;
     hello.name = name;
     hello.viewDistance = static_cast<uint8_t>(std::clamp(viewDistance, 0, 255));
@@ -95,6 +96,7 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         food = m.food;
         maxFood = m.foodMax;
         if (m.hurt) lastHurt = Now();
+        if (m.hurt && m.health == m.max) lastDeath = Now(); // (hurt, yet full: died and came back)
         break;
     }
     case net::MsgType::GameModeIs: {
@@ -174,6 +176,7 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         lastSnapshotTick = m.tick;
         timeOfDay = m.timeOfDay;
         rain = m.rain / 255.0f;
+        storm = m.storm != 0;
         const double now = Now();
         std::unordered_map<uint16_t, std::deque<Sample>> next;
         for (const auto& p : m.players) {
@@ -197,6 +200,38 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         else openChest.reset();
         break;
     }
+    case net::MsgType::SignText: {
+        net::SignText m;
+        if (!(ok = net::Decode(in, m))) break;
+        if (m.text.empty()) signs.erase(m.pos);
+        else signs[m.pos] = m.text;
+        break;
+    }
+    case net::MsgType::Bobber: {
+        net::Bobber m;
+        if (!(ok = net::Decode(in, m))) break;
+        if (m.out) bobber = m.pos;
+        else bobber.reset();
+        bite = bite || m.bite;
+        break;
+    }
+    case net::MsgType::Arrows: {
+        net::Arrows m;
+        if (!(ok = net::Decode(in, m))) break;
+        arrows = std::move(m.arrows);
+        arrowsAt = Now();
+        break;
+    }
+    case net::MsgType::Explosion: {
+        net::Explosion m;
+        if ((ok = net::Decode(in, m)) && explosions.size() < 32) explosions.push_back(m);
+        break;
+    }
+    case net::MsgType::Lightning: {
+        net::Lightning m;
+        if ((ok = net::Decode(in, m)) && lightning.size() < 16) lightning.push_back(m.pos);
+        break;
+    }
     case net::MsgType::PlayerName: {
         net::PlayerName m;
         if ((ok = net::Decode(in, m))) playerNames[m.id] = m.name;
@@ -212,7 +247,7 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         for (const auto& c : m.creatures) {
             auto& samples = next[c.id];
             if (auto it = creatures.find(c.id); it != creatures.end()) samples = std::move(it->second);
-            samples.push_back({ now, { c.id, c.type, c.feet, c.yaw, (c.flags & net::kCreatureHurt) != 0, 0.0f } });
+            samples.push_back({ now, { c.id, c.type, c.feet, c.yaw, (c.flags & net::kCreatureHurt) != 0, 0.0f, (c.flags & net::kCreatureTame) != 0 } });
             while (samples.size() > 2 && samples[1].time < now - 1.0) samples.pop_front();
         }
         creatures = std::move(next); // gone from the snapshot: gone (or out of range)
@@ -283,6 +318,7 @@ bool Client::CanCraft(int index, int count) const {
     const Recipe& recipe = recipes[index];
     if (recipe.tool != Tool::None && HasTool(recipe.tool)) return false;
     if (recipe.armour != ArmourPiece::Count && HasArmour(recipe.armour)) return false;
+    if (recipe.ironUpgrade && HasIron()) return false;
     return Crafting::TimesAffordable(recipe, resources) >= static_cast<uint32_t>(count);
 }
 
@@ -291,7 +327,8 @@ void Client::Craft(int index, int count) {
     // Predicted like edits; the server's answer (Resources) puts it right.
     const Recipe& recipe = Crafting::Recipes()[index];
     for (const auto& in : recipe.inputs) resources[static_cast<size_t>(in.type)] -= in.units * count;
-    if (recipe.tool != Tool::None) tools |= Crafting::ToolBit(recipe.tool);
+    if (recipe.ironUpgrade) tools |= Crafting::kIronBit;
+    else if (recipe.tool != Tool::None) tools |= Crafting::ToolBit(recipe.tool);
     else if (recipe.armour != ArmourPiece::Count) armour |= Armour::Bit(recipe.armour);
     else resources[static_cast<size_t>(recipe.output)] += recipe.outputUnits * count;
     net.Send(net::kChannelReliable, net::Encode(net::Craft{ static_cast<uint8_t>(index), static_cast<uint8_t>(count) }));
@@ -409,6 +446,30 @@ std::vector<Client::BlockEvent> Client::TakeBlockEvents() {
     return events;
 }
 
+void Client::WriteSign(const glm::ivec3& pos, const std::string& text) {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::SignText{ pos, text.substr(0, net::kMaxSignLength) }, true));
+}
+
+void Client::Cast(const glm::ivec3& pos, bool cast) {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::Cast{ pos, static_cast<uint8_t>(cast ? 1 : 0) }));
+    if (!cast) bobber.reset();
+}
+
+void Client::Shoot(const glm::vec3& direction) {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::Shoot{ direction }));
+}
+
+std::vector<net::ArrowInfo> Client::GetArrows() const {
+    // Moved on from the last update (smooth between the server's 20 a second).
+    const float since = static_cast<float>(std::min(0.1, Now() - arrowsAt));
+    std::vector<net::ArrowInfo> out = arrows;
+    for (auto& a : out) {
+        a.position += a.velocity * since;
+        a.velocity.y -= 18.0f * since;
+    }
+    return out;
+}
+
 void Client::UseBed(const glm::ivec3& pos) {
     if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::UseBed{ pos }));
 }
@@ -430,6 +491,10 @@ void Client::MoveChestItems(BlockType type, uint32_t units, bool intoChest) {
 void Client::Eat(BlockType item) {
     if (!welcomed) return;
     net.Send(net::kChannelReliable, net::Encode(net::Eat{ item }));
+}
+
+void Client::Interact(uint16_t creature) {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::Interact{ creature }));
 }
 
 void Client::AttackPlayer(uint16_t player, Tool tool) {

@@ -13,11 +13,12 @@
 #include "world/Block.h"
 
 // The sword is for fighting (see Combat in world/Creatures.h); it's quick on leaves too.
-enum class Tool : uint8_t { None, Pickaxe, Axe, Shovel, Sword, Count };
+enum class Tool : uint8_t { None, Pickaxe, Axe, Shovel, Sword, Bow, Rod, Count }; // (the bow shoots arrows, the rod fishes: right-click)
 
 namespace Mining {
 
 constexpr float kToolSpeed = 4.0f;
+constexpr float kIronToolSpeed = 6.0f; // with the iron upgrade (see world/Crafting.h)
 // A carved block takes time by its volume, but no less than this share of a full one.
 constexpr float kMinVolumeShare = 0.3f;
 // The server lets a break through this much early (network jitter), in seconds plus
@@ -30,6 +31,8 @@ inline const char* ToolName(Tool t) {
     case Tool::Axe: return "Axe";
     case Tool::Shovel: return "Shovel";
     case Tool::Sword: return "Sword";
+    case Tool::Bow: return "Bow";
+    case Tool::Rod: return "Fishing rod";
     default: return "Hand";
     }
 }
@@ -39,6 +42,8 @@ inline const char* ToolId(Tool t) {
     case Tool::Axe: return "axe";
     case Tool::Shovel: return "shovel";
     case Tool::Sword: return "sword";
+    case Tool::Bow: return "bow";
+    case Tool::Rod: return "rod";
     default: return "hand";
     }
 }
@@ -49,6 +54,8 @@ inline const char* ToolTexture(Tool t) {
     case Tool::Axe: return "tool_axe";
     case Tool::Shovel: return "tool_shovel";
     case Tool::Sword: return "tool_sword";
+    case Tool::Bow: return "tool_bow";
+    case Tool::Rod: return "tool_rod";
     default: return nullptr;
     }
 }
@@ -62,6 +69,10 @@ inline float Hardness(BlockType type) {
     case BlockType::FLOWER_RED:
     case BlockType::FLOWER_YELLOW:
     case BlockType::DEAD_BUSH:
+    case BlockType::CROP:
+    case BlockType::RIPE_WHEAT:
+    case BlockType::SAPLING:
+    case BlockType::PINE_SAPLING:
     case BlockType::PEBBLES: return 0.0f;
     case BlockType::LEAVES:
     case BlockType::PINE_LEAVES: return 0.3f;
@@ -81,12 +92,21 @@ inline float Hardness(BlockType type) {
     case BlockType::PLANKS: return 1.5f;
     case BlockType::CHEST: return 1.5f;
     case BlockType::BED: return 0.8f;
+    case BlockType::LADDER: return 0.5f;
+    case BlockType::CAMPFIRE: return 0.6f;
+    case BlockType::SIGN: return 0.5f;
+    case BlockType::TNT:
+    case BlockType::TNT_LIT: return 0.3f;
+    case BlockType::DOOR:
+    case BlockType::DOOR_OPEN: return 1.0f;
     case BlockType::GLASS: return 0.5f;
     case BlockType::SPIKES: return 2.0f;
     case BlockType::PUMP:
     case BlockType::PIPE:
     case BlockType::SLUICE: return 3.0f;
     case BlockType::STONE: return 4.0f;
+    case BlockType::COAL_ORE: return 4.5f;
+    case BlockType::IRON_ORE: return 6.0f;
     case BlockType::STONE_BRICK:
     case BlockType::MOSSY_BRICK: return 5.0f;
     default: return 1.0f;
@@ -97,6 +117,8 @@ inline float Hardness(BlockType type) {
 inline Tool BestTool(BlockType type) {
     switch (type) {
     case BlockType::STONE:
+    case BlockType::COAL_ORE:
+    case BlockType::IRON_ORE:
     case BlockType::STONE_BRICK:
     case BlockType::MOSSY_BRICK:
     case BlockType::CRUMBLING_BRICK:
@@ -111,6 +133,9 @@ inline Tool BestTool(BlockType type) {
     case BlockType::PLANKS:
     case BlockType::CHEST:
     case BlockType::BED:
+    case BlockType::LADDER:
+    case BlockType::DOOR:
+    case BlockType::DOOR_OPEN:
     case BlockType::CACTUS: return Tool::Axe;
     case BlockType::DIRT:
     case BlockType::GRASS:
@@ -126,11 +151,11 @@ inline Tool BestTool(BlockType type) {
 }
 
 // Seconds it takes to break this block with this tool (in survival).
-inline float Seconds(const Block& block, Tool tool) {
+inline float Seconds(const Block& block, Tool tool, bool iron = false) {
     float seconds = Hardness(block.type);
     if (seconds <= 0.0f) return 0.0f;
     const Tool best = BestTool(block.type);
-    if (best != Tool::None && tool == best) seconds /= kToolSpeed;
+    if (best != Tool::None && tool == best) seconds /= iron ? kIronToolSpeed : kToolSpeed;
     if (!block.IsFullBlock() && block.CanChisel())
         seconds *= std::max(kMinVolumeShare, block.ResourceUnits() / static_cast<float>(Block::kUnitsPerBlock));
     return seconds;

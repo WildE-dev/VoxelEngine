@@ -1,6 +1,7 @@
 #include "app/Application.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <fstream>
 #include <cstdio>
 #include <cstring>
@@ -30,6 +31,7 @@
 #include "net/Protocol.h"
 #include "render/Renderer.h"
 #include "server/Server.h"
+#include "world/Achievements.h"
 #include "world/Breathing.h"
 #include "world/Hunger.h"
 #include "world/Chunk.h"
@@ -53,7 +55,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -80,7 +82,7 @@ const char* HeightName(int eighths) {
 }
 
 // The tools the inventory offers, and the icon (atlas tile) for one.
-constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel, Tool::Sword };
+constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel, Tool::Sword, Tool::Bow, Tool::Rod };
 int ToolTile(const TextureAtlas& atlas, Tool tool) {
     const char* name = Mining::ToolTexture(tool);
     return name ? atlas.GetIndex(name) : 0;
@@ -91,6 +93,8 @@ const char* ToolHint(Tool tool) {
     case Tool::Axe: return "fast on wood";
     case Tool::Shovel: return "fast on dirt, grass, sand and snow";
     case Tool::Sword: return "for fighting: 3.5 hearts a hit (and quick on leaves)";
+    case Tool::Bow: return "right-click to shoot an arrow (2.5 hearts); needs arrows";
+    case Tool::Rod: return "right-click water to cast; wait for a bite (stay close)";
     default: return "";
     }
 }
@@ -137,6 +141,28 @@ const char* BlockName(BlockType type) {
     case BlockType::HIDE: return "Hide";
     case BlockType::CHEST: return "Chest";
     case BlockType::BED: return "Bed";
+    case BlockType::COAL_ORE: return "Coal ore";
+    case BlockType::IRON_ORE: return "Iron ore";
+    case BlockType::COAL: return "Coal";
+    case BlockType::IRON_INGOT: return "Iron ingot";
+    case BlockType::SEEDS: return "Seeds";
+    case BlockType::CROP: return "Young crop";
+    case BlockType::RIPE_WHEAT: return "Ripe wheat";
+    case BlockType::WHEAT: return "Wheat";
+    case BlockType::BREAD: return "Bread";
+    case BlockType::LADDER: return "Ladder";
+    case BlockType::DOOR: return "Door";
+    case BlockType::DOOR_OPEN: return "Open door";
+    case BlockType::ARROW: return "Arrow";
+    case BlockType::CAMPFIRE: return "Campfire";
+    case BlockType::SIGN: return "Sign";
+    case BlockType::TNT: return "TNT";
+    case BlockType::TNT_LIT: return "Lit TNT";
+    case BlockType::BOAT: return "Boat";
+    case BlockType::SAPLING: return "Sapling";
+    case BlockType::PINE_SAPLING: return "Pine sapling";
+    case BlockType::RAW_FISH: return "Raw fish";
+    case BlockType::COOKED_FISH: return "Cooked fish";
     default:               return "Air";
     }
 }
@@ -394,6 +420,10 @@ void Application::LoadBlockTextures() {
 
 void Application::Shutdown() {
     // Order matters: everything holding GL objects goes before the context.
+    if (mapTexture) {
+        glDeleteTextures(1, &mapTexture);
+        mapTexture = 0;
+    }
     audio.reset();
     if (client) client->Disconnect();
     client.reset();
@@ -441,7 +471,25 @@ void Application::Run() {
         UpdateNetwork();
         lap(0);
         HandleContinuousInput(deltaTime);
-        camera.SetPosition(player.GetEyePosition());
+        {
+            // A gentle bob while walking on the ground (eased in and out), and the view
+            // widening a few degrees while sprinting.
+            const glm::vec3 v = player.GetVelocity();
+            const float speed = glm::length(glm::vec2(v.x, v.z));
+            const float dt = static_cast<float>(deltaTime);
+            const bool walking = player.IsOnGround() && !player.IsFlying() && speed > 0.5f && settings.viewBobbing;
+            bobAmount += ((walking ? std::min(1.0f, speed / 4.5f) : 0.0f) - bobAmount) * std::min(1.0f, dt * 8.0f);
+            bobPhase += speed * dt * 1.9f;
+            const bool sprinting = speed > 5.5f && !player.IsFlying();
+            fovBoost += ((sprinting ? 8.0f : 0.0f) - fovBoost) * std::min(1.0f, dt * 6.0f);
+            camera.SetFov(settings.fov + fovBoost);
+            const float yaw = glm::radians(camera.GetYaw());
+            const glm::vec3 side(-std::sin(yaw), 0.0f, std::cos(yaw));
+            const glm::vec3 bob = glm::vec3(0.0f, std::abs(std::sin(bobPhase)) * 0.06f, 0.0f) + side * std::sin(bobPhase) * 0.035f;
+            const float t = static_cast<float>(glfwGetTime());
+            const glm::vec3 jolt = glm::vec3(std::sin(t * 47.0f), std::sin(t * 53.0f) * 0.6f, std::cos(t * 41.0f)) * 0.12f * shake * shake;
+            camera.SetPosition(player.GetEyePosition() + bob * bobAmount + jolt);
+        }
         world->Update(camera.GetPosition());
         lap(1);
 
@@ -456,6 +504,9 @@ void Application::Run() {
         params.fogEnd = static_cast<float>(world->GetViewDistance() * Chunk::CHUNK_SIZE);
         UpdateSky(deltaTime, params);
         UpdateSounds();
+        UpdateParticles(static_cast<float>(deltaTime));
+        UpdateLightning(static_cast<float>(deltaTime));
+        UpdateFireflies(static_cast<float>(deltaTime));
         if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
             params.highlightedBlock = hit->block;
             Block target;
@@ -471,6 +522,16 @@ void Application::Run() {
                 params.breakBoxSize = hi - lo;
             }
         }
+        // Light carried in hand: ours (a lamp or campfire selected, and some to hold), and
+        // other players'.
+        {
+            const BlockType mine = SelectedTool() == Tool::None ? SelectedBlock() : BlockType::AIR;
+            if (GetLightEmission(mine) > 0 && (client->IsCreative() || client->GetResources(mine) > 0))
+                params.handLights.push_back(glm::vec4(player.GetEyePosition() - glm::vec3(0.0f, 0.4f, 0.0f), static_cast<float>(GetLightEmission(mine))));
+            for (const auto& other : client->GetRemotePlayers())
+                if (GetLightEmission(other.heldBlock) > 0)
+                    params.handLights.push_back(glm::vec4(other.feet + glm::vec3(0.0f, 1.2f, 0.0f), static_cast<float>(GetLightEmission(other.heldBlock))));
+        }
         // Figures are lit by the light where they stand: the brighter of their feet's
         // cell (which may hold a slope or a plant) and the one above.
         auto lightAt = [&](const glm::vec3& feet) {
@@ -485,14 +546,52 @@ void Application::Run() {
                 best = glm::max(best, glm::vec2(skyLight, blockLight));
                 any = true;
             }
-            return any ? best : glm::vec2(15.0f, 0.0f);
+            if (!any) best = glm::vec2(15.0f, 0.0f);
+            // (And by lights carried nearby.)
+            for (const auto& h : params.handLights) best.y = std::max(best.y, h.w - glm::distance(feet + glm::vec3(0.0f, 0.9f, 0.0f), glm::vec3(h)));
+            return best;
         };
         for (const auto& c : client->GetCreatures())
-            params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet) });
+            params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet), c.tame });
+        for (const auto& b : bolts) params.bolts.push_back({ b.points, b.life / 0.35f });
+        for (const auto& f : fireflies) {
+            // Each blinks in its own rhythm, and fades in and out at the ends of its life.
+            const float blink = std::max(0.0f, std::sin(f.phase * 2.3f + f.home.x * 7.0f));
+            params.glows.push_back({ f.position, 0.06f, blink * std::min(1.0f, f.life * 0.5f) });
+        }
+        // Our bobber, floating on the water and bobbing; a splash when a fish bites.
+        if (client->TakeBite() && lastBobber) {
+            SpawnParticles(*lastBobber, BlockType::WATER, 14, 2.0f);
+            PlayAt("splash", *lastBobber, 0.8f);
+        }
+        lastBobber = client->GetBobber();
+        if (lastBobber) {
+            Block water;
+            float surface = 0.9f;
+            if (world->GetBlock(lastBobber->x, lastBobber->y, lastBobber->z, water)) surface = water.WaterShownLevel() / static_cast<float>(Block::kMaxWaterVolume);
+            const glm::vec3 at = glm::vec3(*lastBobber) + glm::vec3(0.5f, surface + 0.04f * std::sin(static_cast<float>(Client::Now()) * 3.0f), 0.5f);
+            glm::vec2 uv0, uv1;
+            renderer->GetAtlas().GetTileUV(renderer->GetAtlas().GetIndex("bobber"), uv0, uv1);
+            params.particles.push_back({ at, 0.18f, glm::vec4(uv0, uv1), lightAt(at) });
+        }
+        for (const auto& a : client->GetArrows()) {
+            // Flying arrows point where they're going; stuck ones keep the way they came in.
+            glm::vec3 dir = a.velocity;
+            if (glm::length(dir) < 1e-3f) {
+                auto& kept = arrowFacing[std::make_pair(static_cast<int>(a.position.x * 64.0f), static_cast<int>(a.position.z * 64.0f))];
+                dir = glm::length(kept) > 0.0f ? kept : glm::vec3(0.0f, -1.0f, 0.0f);
+            }
+            else arrowFacing[std::make_pair(static_cast<int>(a.position.x * 64.0f), static_cast<int>(a.position.z * 64.0f))] = dir;
+            params.arrows.push_back({ a.position, dir, lightAt(a.position) });
+        }
+        if (arrowFacing.size() > 512) arrowFacing.clear();
+        for (const auto& p : particles)
+            params.particles.push_back({ p.position, p.size * std::min(1.0f, p.life / (0.4f * p.maxLife)), p.uv, lightAt(p.position - glm::vec3(0.0f, 0.1f, 0.0f)) });
         const TextureAtlas& atlas = renderer->GetAtlas();
         for (const auto& other : client->GetRemotePlayers()) {
             PlayerModel model{ other.feet, other.yaw, other.pitch, PlayerModels::ColorFor(other.id), (other.flags & net::kFlagHurt) != 0, lightAt(other.feet) };
             model.crouching = (other.flags & net::kFlagCrouching) != 0;
+            model.boat = (other.flags & net::kFlagBoat) != 0;
             // What's in their hand: a tool's or an item's icon as a card, a block as a
             // little cube.
             int tile = -1;
@@ -531,6 +630,12 @@ void Application::Run() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         DrawNameTags(params.projection * params.view);
+        DrawSigns(params.projection * params.view);
+        if (showCompass) DrawCompass();
+        if (showMap) DrawMinimap();
+        DrawToast();
+        DrawDeath();
+        if (showPlayers) DrawPlayerList();
         DrawHotbar();
         DrawStatus();
         DrawChat();
@@ -610,12 +715,30 @@ void Application::UpdateSky(float deltaTime, FrameParams& params) {
         Block block;
         if (world->GetBlock(eye.x, y, eye.z, block) && !block.IsAir() && !block.IsPlant()) sheltered = true;
     }
+    // Snow where it's cold: the ground under the open sky here is snowy (snow, snowy
+    // grass, ice or a pine's needles).
+    {
+        bool snowy = false;
+        for (int y = eye.y + 2; y >= eye.y - 24; y--) {
+            Block block;
+            if (!world->GetBlock(eye.x, y, eye.z, block)) break;
+            if (block.IsAir() || block.IsPlant()) continue;
+            snowy = block.type == BlockType::SNOW || block.type == BlockType::SNOWY_GRASS || block.type == BlockType::ICE || block.type == BlockType::PINE_LEAVES;
+            break;
+        }
+        params.snow = snowy;
+    }
     const float target = (sheltered || params.underwater) ? 0.0f : rain;
     const float ease = std::min(1.0f, deltaTime * 4.0f);
     rainHere += (target - rainHere) * ease;
     params.rain = rainHere;
-    params.overcast = rain;
-    params.sunBrightness = day * (1.0f - 0.45f * rain);
+    // A rainbow while a daytime shower is light (fading in or out), the sun well up.
+    params.rainbow = (rain > 0.05f && rain < 0.6f && !client->IsStorm()) ? std::min(1.0f, (0.6f - rain) * 3.0f) * std::clamp(day * 2.0f - 0.5f, 0.0f, 1.0f) : 0.0f;
+    // A thunderstorm is darker still; a lightning flash lights everything up.
+    const float storm = client->IsStorm() ? rain : 0.0f;
+    params.overcast = std::min(1.0f, rain + 0.3f * storm);
+    params.sunBrightness = day * (1.0f - 0.45f * rain - 0.25f * storm);
+    params.sunBrightness = std::max(params.sunBrightness, lightningFlash);
 }
 
 void Application::UpdateNetwork() {
@@ -669,6 +792,236 @@ void Application::DrawCrosshair() {
         draw->AddLine(ImVec2(c.x, c.y - kArm), ImVec2(c.x, c.y - kGap), color, width);
         draw->AddLine(ImVec2(c.x, c.y + kGap), ImVec2(c.x, c.y + kArm), color, width);
     }
+}
+
+namespace {
+// The colour a block shows from above on the minimap (0xAABBGGRR).
+uint32_t MapColour(BlockType type) {
+    switch (type) {
+    case BlockType::GRASS: return 0xFF3E9A4Au;
+    case BlockType::LUSH_GRASS: return 0xFF2F8E36u;
+    case BlockType::DRY_GRASS: return 0xFF4FA7A6u;
+    case BlockType::SNOWY_GRASS:
+    case BlockType::SNOW: return 0xFFF0F0F0u;
+    case BlockType::DIRT: return 0xFF3C5A86u;
+    case BlockType::SAND: return 0xFF8CCDE0u;
+    case BlockType::STONE:
+    case BlockType::COAL_ORE:
+    case BlockType::IRON_ORE:
+    case BlockType::PEBBLES: return 0xFF808080u;
+    case BlockType::WATER: return 0xFFC07A3Cu;
+    case BlockType::ICE: return 0xFFF0D8B0u;
+    case BlockType::LEAVES: return 0xFF2A6E2Au;
+    case BlockType::PINE_LEAVES: return 0xFF2E5A2Eu;
+    case BlockType::LOG:
+    case BlockType::PLANKS:
+    case BlockType::CHEST:
+    case BlockType::DOOR:
+    case BlockType::LADDER: return 0xFF2E5C8Au;
+    case BlockType::CACTUS: return 0xFF2C8C3Cu;
+    case BlockType::STONE_BRICK:
+    case BlockType::MOSSY_BRICK:
+    case BlockType::CRUMBLING_BRICK: return 0xFF6A6A6Au;
+    case BlockType::LAMP: return 0xFF7AE0F8u;
+    case BlockType::GLASS: return 0xFFE0E0D0u;
+    case BlockType::BED: return 0xFF3030C0u;
+    case BlockType::CROP:
+    case BlockType::RIPE_WHEAT: return 0xFF46B4C8u;
+    default: return 0xFF707070u;
+    }
+}
+} // namespace
+
+void Application::DrawMinimap() {
+    if (!client->IsWelcomed()) return;
+    const glm::vec3 feet = player.GetFeetPosition();
+    const glm::ivec2 here(static_cast<int>(std::floor(feet.x)), static_cast<int>(std::floor(feet.z)));
+    if (!mapTexture) {
+        glGenTextures(1, &mapTexture);
+        glBindTexture(GL_TEXTURE_2D, mapTexture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        mapPixels.assign(kMapSize * kMapSize, 0xFF202020u);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kMapSize, kMapSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, mapPixels.data());
+        mapCentre = here;
+    }
+    // Moved far from the picture's centre: start again around here.
+    if (std::abs(here.x - mapCentre.x) > kMapSize / 6 || std::abs(here.y - mapCentre.y) > kMapSize / 6) {
+        mapCentre = here;
+        mapRow = 0;
+    }
+    // A few rows a frame: the topmost block of each column, from a little above the
+    // player down (so caves and overhangs below show the ground over them), shaded by
+    // whether the ground rises or falls toward the north.
+    const int top = static_cast<int>(feet.y) + 24, bottom = static_cast<int>(feet.y) - 40;
+    for (int rows = 0; rows < 6; rows++, mapRow = (mapRow + 1) % kMapSize) {
+        const int z = mapCentre.y - kMapSize / 2 + mapRow;
+        int previous = -100000;
+        for (int col = 0; col < kMapSize; col++) {
+            const int x = mapCentre.x - kMapSize / 2 + col;
+            uint32_t colour = 0xFF202020u;
+            int height = bottom;
+            for (int y = top; y >= bottom; y--) {
+                Block b;
+                if (!world->GetBlock(x, y, z, b)) break;
+                if (b.IsAir() || (b.IsPlant() && b.type != BlockType::CROP && b.type != BlockType::RIPE_WHEAT)) continue;
+                colour = MapColour(b.type);
+                height = y;
+                break;
+            }
+            // Relief: a column higher than the one north of it is lit, lower is shaded.
+            Block north;
+            int northHeight = height;
+            for (int y = top; y >= bottom; y--) {
+                if (!world->GetBlock(x, y, z - 1, north)) break;
+                if (!north.IsAir() && !north.IsPlant()) { northHeight = y; break; }
+            }
+            const float shade = std::clamp(1.0f + 0.12f * (height - northHeight), 0.65f, 1.3f);
+            auto channel = [&](int shift) { return static_cast<uint32_t>(std::min(255.0f, ((colour >> shift) & 0xFF) * shade)) << shift; };
+            mapPixels[mapRow * kMapSize + col] = 0xFF000000u | channel(0) | channel(8) | channel(16);
+            (void)previous;
+        }
+        glBindTexture(GL_TEXTURE_2D, mapTexture);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, mapRow, kMapSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, &mapPixels[mapRow * kMapSize]);
+    }
+    // Shown in the top-right corner, north up, with an arrow for the player.
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    constexpr float kShown = 170.0f;
+    const ImVec2 lo(viewport->WorkPos.x + viewport->WorkSize.x - kShown - 12.0f, viewport->WorkPos.y + 12.0f), hi(lo.x + kShown, lo.y + kShown);
+    draw->AddRectFilled(ImVec2(lo.x - 3.0f, lo.y - 3.0f), ImVec2(hi.x + 3.0f, hi.y + 3.0f), IM_COL32(0, 0, 0, 150), 4.0f);
+    draw->AddImage(static_cast<ImTextureID>(static_cast<uintptr_t>(mapTexture)), lo, hi);
+    const float scale = kShown / kMapSize;
+    const ImVec2 me(lo.x + (feet.x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (feet.z - (mapCentre.y - kMapSize / 2)) * scale);
+    // Other players: dots.
+    for (const auto& other : client->GetRemotePlayers()) {
+        const ImVec2 at(lo.x + (other.feet.x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (other.feet.z - (mapCentre.y - kMapSize / 2)) * scale);
+        if (at.x > lo.x && at.x < hi.x && at.y > lo.y && at.y < hi.y) draw->AddCircleFilled(at, 3.5f, IM_COL32(255, 220, 80, 255));
+    }
+    const float yaw = glm::radians(camera.GetYaw());
+    const ImVec2 f(std::cos(yaw), std::sin(yaw)), r(-f.y, f.x);
+    draw->AddTriangleFilled(ImVec2(me.x + f.x * 7.0f, me.y + f.y * 7.0f), ImVec2(me.x - f.x * 4.0f + r.x * 4.5f, me.y - f.y * 4.0f + r.y * 4.5f),
+                            ImVec2(me.x - f.x * 4.0f - r.x * 4.5f, me.y - f.y * 4.0f - r.y * 4.5f), IM_COL32(255, 255, 255, 255));
+    draw->AddText(ImVec2(lo.x + kShown * 0.5f - 4.0f, lo.y + 2.0f), IM_COL32(255, 110, 100, 255), "N");
+}
+
+void Application::DrawPlayerList() {
+    // Everyone here: you first, then the others with how far off they are and which way.
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 12.0f, viewport->WorkPos.y + 12.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.6f);
+    if (ImGui::Begin("Players", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings |
+                                             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoFocusOnAppearing)) {
+        const auto others = client->GetRemotePlayers();
+        ImGui::Text("Players online: %d", static_cast<int>(others.size()) + 1);
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.5f, 1.0f), "%s (you)", client->GetMyName().c_str());
+        const glm::vec3 me = player.GetFeetPosition();
+        for (const auto& o : others) {
+            const glm::vec3 d = o.feet - me;
+            const float bearing = std::fmod(glm::degrees(std::atan2(d.z, d.x)) + 90.0f + 720.0f, 360.0f);
+            static const char* kWays[] = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
+            ImGui::Text("%s   %d blocks %s", o.name.empty() ? "?" : o.name.c_str(), static_cast<int>(glm::length(d)),
+                        kWays[static_cast<int>((bearing + 22.5f) / 45.0f) % 8]);
+        }
+    }
+    ImGui::End();
+}
+
+void Application::DrawDeath() {
+    const double since = Client::Now() - client->GetLastDeath();
+    if (since > 4.0 || since < 0.0) return;
+    // How it happened: the latest line in chat about us dying ("Name was ...").
+    std::string how;
+    const std::string me = client->GetMyName() + " ";
+    for (const auto& line : client->GetChat())
+        if (line.text.rfind(me, 0) == 0) {
+            const std::string rest = line.text.substr(me.size());
+            for (const char* death : { "was ", "drowned", "suffocated", "ran out of breath", "starved", "fell ", "walked into" })
+                if (rest.rfind(death, 0) == 0) how = "You " + (rest.rfind("was ", 0) == 0 ? "were " + rest.substr(4) : rest);
+        }
+    const float fade = static_cast<float>(std::min(1.0, std::min(since * 6.0, (4.0 - since) * 1.5)));
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const ImVec2 lo = viewport->WorkPos, hi(lo.x + viewport->WorkSize.x, lo.y + viewport->WorkSize.y);
+    draw->AddRectFilledMultiColor(lo, hi, IM_COL32(90, 0, 0, static_cast<int>(150 * fade)), IM_COL32(90, 0, 0, static_cast<int>(150 * fade)),
+                                  IM_COL32(20, 0, 0, static_cast<int>(200 * fade)), IM_COL32(20, 0, 0, static_cast<int>(200 * fade)));
+    const char* title = "You died!";
+    const float cx = lo.x + viewport->WorkSize.x * 0.5f, cy = lo.y + viewport->WorkSize.y * 0.38f;
+    ImFont* font = ImGui::GetFont();
+    const float big = ImGui::GetFontSize() * 2.6f;
+    const ImVec2 titleSize = font->CalcTextSizeA(big, FLT_MAX, 0.0f, title);
+    draw->AddText(font, big, ImVec2(cx - titleSize.x * 0.5f + 3.0f, cy + 3.0f), IM_COL32(0, 0, 0, static_cast<int>(200 * fade)), title);
+    draw->AddText(font, big, ImVec2(cx - titleSize.x * 0.5f, cy), IM_COL32(255, 90, 80, static_cast<int>(255 * fade)), title);
+    if (!how.empty()) {
+        const ImVec2 size = ImGui::CalcTextSize(how.c_str());
+        draw->AddText(ImVec2(cx - size.x * 0.5f, cy + titleSize.y + 14.0f), IM_COL32(255, 230, 220, static_cast<int>(240 * fade)), how.c_str());
+    }
+}
+
+void Application::DrawToast() {
+    // Achievements arrive as chat lines starting with the toast mark: the newest shows
+    // as a banner under the compass for four seconds, sliding in and fading out.
+    const auto& chat = client->GetChat();
+    const std::string mark = Achievements::kToastMark;
+    if (chat.size() < chatSeen) chatSeen = 0;
+    for (; chatSeen < chat.size(); chatSeen++)
+        if (chat[chatSeen].text.rfind(mark, 0) == 0) {
+            toastText = chat[chatSeen].text.substr(mark.size());
+            toastUntil = Client::Now() + 4.0;
+            audio->PlayHere("craft", 0.7f);
+        }
+    const double left = toastUntil - Client::Now();
+    if (left <= 0.0 || toastText.empty()) return;
+    const float fade = static_cast<float>(std::min(1.0, std::min(left, 4.0 - left) * 3.0));
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const std::string title = "Achievement unlocked";
+    const ImVec2 textSize = ImGui::CalcTextSize(toastText.c_str()), titleSize = ImGui::CalcTextSize(title.c_str());
+    const float width = std::max(textSize.x, titleSize.x) + 40.0f, cx = viewport->WorkPos.x + viewport->WorkSize.x * 0.5f;
+    const float y = viewport->WorkPos.y + 62.0f - (1.0f - fade) * 20.0f;
+    const ImVec2 lo(cx - width * 0.5f, y), hi(cx + width * 0.5f, y + titleSize.y + textSize.y + 18.0f);
+    draw->AddRectFilled(lo, hi, IM_COL32(30, 24, 8, static_cast<int>(210 * fade)), 6.0f);
+    draw->AddRect(lo, hi, IM_COL32(240, 200, 80, static_cast<int>(255 * fade)), 6.0f, 0, 2.0f);
+    draw->AddText(ImVec2(cx - titleSize.x * 0.5f, y + 6.0f), IM_COL32(255, 214, 90, static_cast<int>(255 * fade)), title.c_str());
+    draw->AddText(ImVec2(cx - textSize.x * 0.5f, y + 10.0f + titleSize.y), IM_COL32(255, 255, 255, static_cast<int>(240 * fade)), toastText.c_str());
+}
+
+void Application::DrawCompass() {
+    // A strip across the top of the screen showing the way you face: N, E, S and W
+    // (north is -z) with ticks between, sliding as you turn; under it, where you are
+    // and the time of day.
+    if (!client->IsWelcomed()) return;
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const float width = 360.0f, cx = viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, top = viewport->WorkPos.y + 10.0f;
+    const float bearing = std::fmod(camera.GetYaw() + 90.0f + 720.0f, 360.0f); // degrees clockwise from north
+    draw->AddRectFilled(ImVec2(cx - width * 0.5f, top), ImVec2(cx + width * 0.5f, top + 26.0f), IM_COL32(0, 0, 0, 90), 4.0f);
+    draw->PushClipRect(ImVec2(cx - width * 0.5f, top), ImVec2(cx + width * 0.5f, top + 26.0f), true);
+    constexpr float kPixelsPerDegree = 2.0f; // 180 degrees across
+    for (int deg = 0; deg < 360; deg += 15) {
+        float offset = std::fmod(deg - bearing + 540.0f, 360.0f) - 180.0f;
+        const float x = cx + offset * kPixelsPerDegree;
+        if (std::abs(offset) > width * 0.5f / kPixelsPerDegree + 10.0f) continue;
+        const char* label = deg == 0 ? "N" : deg == 90 ? "E" : deg == 180 ? "S" : deg == 270 ? "W" : nullptr;
+        if (label) {
+            const ImVec2 size = ImGui::CalcTextSize(label);
+            draw->AddText(ImVec2(x - size.x * 0.5f, top + 5.0f), deg == 0 ? IM_COL32(255, 110, 100, 255) : IM_COL32(255, 255, 255, 235), label);
+        }
+        else draw->AddLine(ImVec2(x, top + (deg % 45 == 0 ? 7.0f : 11.0f)), ImVec2(x, top + 19.0f), IM_COL32(255, 255, 255, deg % 45 == 0 ? 200 : 120), 1.5f);
+    }
+    draw->PopClipRect();
+    draw->AddTriangleFilled(ImVec2(cx - 5.0f, top + 26.0f), ImVec2(cx + 5.0f, top + 26.0f), ImVec2(cx, top + 20.0f), IM_COL32(255, 230, 120, 255));
+    // Where, and when (the day runs from sunrise at 06:00).
+    const glm::vec3 feet = player.GetFeetPosition();
+    const float hours = std::fmod(client->GetTimeOfDay() * 24.0f + 6.0f, 24.0f);
+    const bool day = client->GetTimeOfDay() < 0.5f;
+    char line[96];
+    std::snprintf(line, sizeof line, "%d, %d, %d    %s %02d:%02d", static_cast<int>(std::floor(feet.x)), static_cast<int>(std::floor(feet.y)),
+                  static_cast<int>(std::floor(feet.z)), day ? "sun" : "moon", static_cast<int>(hours), static_cast<int>(std::fmod(hours, 1.0f) * 60.0f));
+    const ImVec2 size = ImGui::CalcTextSize(line);
+    draw->AddText(ImVec2(cx - size.x * 0.5f + 1.0f, top + 31.0f), IM_COL32(0, 0, 0, 200), line);
+    draw->AddText(ImVec2(cx - size.x * 0.5f, top + 30.0f), day ? IM_COL32(255, 244, 200, 235) : IM_COL32(190, 210, 255, 235), line);
 }
 
 void Application::DrawNameTags(const glm::mat4& viewProjection) {
@@ -947,6 +1300,11 @@ void Application::HandleContinuousInput(float deltaTime) {
     input.jump = down(GLFW_KEY_SPACE) || (player.IsFlying() && down(GLFW_KEY_E));
     input.descend = down(GLFW_KEY_Q) || down(GLFW_KEY_LEFT_CONTROL);
     input.crouch = down(GLFW_KEY_LEFT_CONTROL) && !player.IsFlying(); // (flying, Ctrl goes down)
+    // In a boat, Ctrl gets out (and doesn't crouch).
+    if (player.IsBoating() && input.crouch) {
+        player.SetBoating(false);
+        input.crouch = false;
+    }
     // Short of breath (thin or stale air, half the air gone): too winded to sprint.
     const Breathing::Cause cause = client->GetAirCause();
     const bool winded = (cause == Breathing::Cause::ThinAir || cause == Breathing::Cause::StaleAir) && client->GetAir() < Breathing::kShortOfBreath;
@@ -964,6 +1322,7 @@ void Application::HandleContinuousInput(float deltaTime) {
         if (player.IsOnGround()) flags |= net::kFlagOnGround;
         if (player.IsSwimming()) flags |= net::kFlagSwimming;
         if (player.IsCrouching()) flags |= net::kFlagCrouching;
+        if (player.IsBoating()) flags |= net::kFlagBoat;
         // What's in hand, for others to see (a survival player's empty slot holds nothing).
         const Tool heldTool = client->HasTool(SelectedTool()) ? SelectedTool() : Tool::None;
         BlockType heldBlock = SelectedTool() == Tool::None ? SelectedBlock() : BlockType::AIR;
@@ -1146,7 +1505,7 @@ void Application::OnKey(int key, int action) {
     }
     // The inventory takes I and Esc (to close) and the number keys (to pick a slot).
     if (inventoryOpen) {
-        if (key == GLFW_KEY_I || key == GLFW_KEY_ESCAPE) SetInventoryOpen(false);
+        if ((key == GLFW_KEY_I && !signMode) || key == GLFW_KEY_ESCAPE) SetInventoryOpen(false); // (writing a sign, I is a letter)
         else if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9) SelectSlot(key - GLFW_KEY_1);
         else if (key == GLFW_KEY_0) SelectSlot(9);
         return;
@@ -1199,6 +1558,15 @@ void Application::OnKey(int key, int action) {
     case GLFW_KEY_F3:
         ambientOcclusion = !ambientOcclusion;
         break;
+    case GLFW_KEY_F4:
+        showCompass = !showCompass;
+        break;
+    case GLFW_KEY_M:
+        showMap = !showMap;
+        break;
+    case GLFW_KEY_P:
+        showPlayers = !showPlayers;
+        break;
     case GLFW_KEY_F12:
         screenshotRequested = true;
         break;
@@ -1245,6 +1613,7 @@ void Application::SetInventoryOpen(bool open) {
         client->CloseChest();
         chestMode = chestSeenOpen = false;
     }
+    if (!open) signMode = false;
     // The cursor is needed to click blocks; give it back to the game on closing.
     if (open) cursorBeforeInventory = captureCursor;
     captureCursor = open ? false : cursorBeforeInventory;
@@ -1255,6 +1624,7 @@ void Application::SetInventoryOpen(bool open) {
 void Application::DrawInventory() {
     if (!inventoryOpen) return;
     if (chestMode) return DrawChest();
+    if (signMode) return DrawSignEditor();
     constexpr int kColumns = 7;
     constexpr float kIcon = 44.0f;
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -1321,7 +1691,9 @@ void Application::DrawInventory() {
         int column = 0;
         for (BlockType type : kInventoryBlocks) {
             const uint32_t held = client->GetResources(type);
-            if (survival && (held == 0 || type == BlockType::PEBBLES)) continue; // survival: only what you have (pebbles are stone)
+            // Survival: only what you have (and not what's counted as something else:
+            // pebbles are stone, coal ore is coal).
+            if (survival && (held == 0 || ResourceTypeOf(type) != type)) continue;
             if (column++ % kColumns != 0) ImGui::SameLine();
             const ImVec2 corner = ImGui::GetCursorScreenPos();
             glm::vec2 uv0, uv1;
@@ -1366,7 +1738,8 @@ void Application::DrawInventory() {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     glm::vec2 uv0, uv1;
-                    const int icon = recipe.tool != Tool::None              ? ToolTile(atlas, recipe.tool)
+                    const int icon = recipe.ironUpgrade                     ? atlas.GetIndex("iron_ingot")
+                                     : recipe.tool != Tool::None              ? ToolTile(atlas, recipe.tool)
                                      : recipe.armour != ArmourPiece::Count ? atlas.GetIndex(Armour::Texture(recipe.armour))
                                                                            : IconTile(recipe.output);
                     atlas.GetTileUV(icon, uv0, uv1);
@@ -1378,7 +1751,7 @@ void Application::DrawInventory() {
                     std::string needs;
                     for (const auto& in : recipe.inputs)
                         needs += (needs.empty() ? "" : " + ") + FormatBlocks(in.units) + " " + BlockName(in.type);
-                    const bool owned = (recipe.tool != Tool::None && client->HasTool(recipe.tool)) ||
+                    const bool owned = (recipe.ironUpgrade && client->HasIron()) || (recipe.tool != Tool::None && client->HasTool(recipe.tool)) ||
                                        (recipe.armour != ArmourPiece::Count && client->HasArmour(recipe.armour));
                     if (owned) ImGui::TextDisabled(recipe.armour != ArmourPiece::Count ? "worn" : "made");
                     else if (client->CanCraft(r)) ImGui::TextUnformatted(needs.c_str());
@@ -1506,6 +1879,33 @@ void Application::OnMouseButton(int button, int action) {
         }
     }
 
+    // Middle-click picks the block looked at into the hotbar slot (in survival, only
+    // what you have some of).
+    if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
+        Block looked;
+        if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach());
+            at && world->GetBlock(at->block.x, at->block.y, at->block.z, looked)) {
+            BlockType type = ResourceTypeOf(looked.type) == looked.type || IsItemType(ResourceTypeOf(looked.type)) ? looked.type : ResourceTypeOf(looked.type);
+            if (type == BlockType::DOOR_OPEN) type = BlockType::DOOR;
+            if (type == BlockType::TNT_LIT) type = BlockType::TNT;
+            if (!IsItemType(type) && (client->IsCreative() || client->GetResources(type) > 0)) {
+                hotbar[selectedSlot] = type;
+                hotbarTools[selectedSlot] = Tool::None;
+                SaveHotbar();
+            }
+        }
+        return;
+    }
+
+    // Right-click on a creature: feed it (raw venison tames a wild wolf).
+    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+        const FightTarget target = TargetInView();
+        if (target.creature) {
+            client->Interact(target.creature);
+            return;
+        }
+    }
+
     // Right-click on a chest within 6 blocks opens it (with Shift held, or further off,
     // it's built against instead).
     if (button == GLFW_MOUSE_BUTTON_RIGHT && glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) != GLFW_PRESS) {
@@ -1519,18 +1919,90 @@ void Application::OnMouseButton(int button, int action) {
             chestAskedAt = Client::Now();
             return;
         }
+        // A sign: write on it.
+        if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
+            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && target.type == BlockType::SIGN) {
+            OpenSign(at->block);
+            return;
+        }
         // A bed: respawn here (and sleep, at night).
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
-            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && target.type == BlockType::BED) {
+            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) &&
+            (target.type == BlockType::BED || target.type == BlockType::DOOR || target.type == BlockType::DOOR_OPEN || target.type == BlockType::CAMPFIRE ||
+             target.type == BlockType::TNT)) {
             client->UseBed(at->block);
             return;
         }
+    }
+
+    // Right-click with the rod: cast into the water looked at (the first water surface
+    // along the view, within 12 blocks), or reel in.
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::Rod) {
+        if (client->GetBobber()) {
+            client->Cast(*client->GetBobber(), false);
+            return;
+        }
+        if (!client->HasTool(Tool::Rod)) return;
+        const glm::vec3 eye = camera.GetPosition(), dir = camera.GetDirection();
+        for (float t = 0.5f; t < 12.0f; t += 0.1f) {
+            const glm::ivec3 cell(glm::floor(eye + dir * t));
+            Block b, above;
+            if (!world->GetBlock(cell.x, cell.y, cell.z, b)) break;
+            if (b.HasWater() && !(world->GetBlock(cell.x, cell.y + 1, cell.z, above) && above.HasWater())) {
+                client->Cast(cell, true);
+                audio->Play("splash", glm::vec3(cell) + glm::vec3(0.5f), 0.4f, 0.2f);
+                break;
+            }
+            if (!b.IsPassable()) break; // (hit something solid first)
+        }
+        return;
+    }
+
+    // Right-click with the bow drawn: shoot (if there's an arrow, in survival).
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::Bow) {
+        if (client->HasTool(Tool::Bow) && (client->IsCreative() || client->GetResources(BlockType::ARROW) >= Block::kUnitsPerBlock) &&
+            Client::Now() >= nextShot) {
+            client->Shoot(camera.GetDirection());
+            audio->PlayHere("bow", 0.7f);
+            nextShot = Client::Now() + 0.6;
+        }
+        return;
     }
 
     // Right-click with an item in hand uses it (wherever you look): food is eaten;
     // items are never placed.
     if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::None && IsItemType(SelectedBlock())) {
         const BlockType item = SelectedBlock();
+        // A boat: into it, on the water looked at (within 4 blocks).
+        if (item == BlockType::BOAT) {
+            const glm::vec3 eye = camera.GetPosition(), dir = camera.GetDirection();
+            for (float t = 0.5f; t < 4.0f && !player.IsBoating(); t += 0.1f) {
+                const glm::ivec3 cell(glm::floor(eye + dir * t));
+                Block b, above;
+                if (!world->GetBlock(cell.x, cell.y, cell.z, b)) break;
+                if (b.HasWater() && !(world->GetBlock(cell.x, cell.y + 1, cell.z, above) && above.HasWater())) {
+                    if (client->IsCreative() || client->GetResources(BlockType::BOAT) >= Block::kUnitsPerBlock) {
+                        player.Teleport(glm::vec3(cell) + glm::vec3(0.5f, b.WaterShownLevel() / static_cast<float>(Block::kMaxWaterVolume) - 0.15f, 0.5f));
+                        player.SetBoating(true);
+                        audio->Play("splash", glm::vec3(cell) + glm::vec3(0.5f), 0.4f, 0.2f);
+                    }
+                    break;
+                }
+                if (!b.IsPassable()) break;
+            }
+            return;
+        }
+        // Seeds are planted on the dirt or grass you're looking at.
+        if (item == BlockType::SEEDS) {
+            Block soil;
+            if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach());
+                at && at->normal == glm::ivec3(0, 1, 0) && world->GetBlock(at->block.x, at->block.y, at->block.z, soil) &&
+                (soil.type == BlockType::DIRT || IsGrassType(soil.type)) && client->CanAfford(BlockType::CROP, 8)) {
+                client->PlaceBlock(at->block + at->normal, BlockType::CROP);
+                PlayAt("place", at->block + at->normal, 0.5f);
+            }
+            return;
+        }
         if (Hunger::IsFood(item) && !client->IsCreative() && client->GetResources(item) >= Block::kUnitsPerBlock &&
             client->GetFood() < client->GetMaxFood()) {
             client->Eat(item);
@@ -1546,7 +2018,10 @@ void Application::OnMouseButton(int button, int action) {
         // Creative breaks at once; survival mines while the button is held (UpdateMining).
         if (client->IsCreative()) {
             Block broken;
-            if (world->GetBlock(hit->block.x, hit->block.y, hit->block.z, broken)) PlayAt(BreakSound(broken.type), hit->block);
+            if (world->GetBlock(hit->block.x, hit->block.y, hit->block.z, broken)) {
+                PlayAt(BreakSound(broken.type), hit->block);
+                if (!broken.IsLiquid()) SpawnParticles(hit->block, broken.type, 18);
+            }
             client->BreakBlock(hit->block);
         }
     }
@@ -1568,6 +2043,60 @@ void Application::OnMouseButton(int button, int action) {
         const int faceAxis = hit->normal.x != 0 ? 0 : hit->normal.z != 0 ? 2 : 1;
         client->PlaceBlock(place, placeBlock, height, faceAxis);
         PlayAt("place", place, 0.8f);
+        if (placeBlock == BlockType::SIGN) OpenSign(place); // and write on it
+    }
+}
+
+void Application::OpenSign(const glm::ivec3& pos) {
+    signAt = pos;
+    const auto& signs = client->GetSigns();
+    auto it = signs.find(pos);
+    std::snprintf(signText, sizeof signText, "%s", it != signs.end() ? it->second.c_str() : "");
+    SetInventoryOpen(true);
+    signMode = true;
+}
+
+void Application::DrawSignEditor() {
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.4f),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowBgAlpha(0.9f);
+    bool open = true;
+    if (ImGui::Begin("Sign", &open, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse)) {
+        ImGui::TextUnformatted("What's written on it (Enter to finish, Esc to leave it):");
+        ImGui::SetNextItemWidth(420.0f);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        if (ImGui::InputText("##sign", signText, net::kMaxSignLength + 1, ImGuiInputTextFlags_EnterReturnsTrue)) {
+            client->WriteSign(signAt, signText);
+            open = false;
+        }
+    }
+    ImGui::End();
+    if (!open) SetInventoryOpen(false);
+}
+
+void Application::DrawSigns(const glm::mat4& viewProjection) {
+    // Each sign's words over it, within 12 blocks and in sight, like a little plaque.
+    ImDrawList* draw = ImGui::GetBackgroundDrawList();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const glm::vec3 eye = camera.GetPosition();
+    for (const auto& [pos, text] : client->GetSigns()) {
+        const glm::vec3 at = glm::vec3(pos) + glm::vec3(0.5f, 0.95f, 0.5f);
+        const glm::vec3 to = at - eye;
+        const float distance = glm::length(to);
+        if (distance > 12.0f || distance < 0.3f) continue;
+        const glm::vec4 clip = viewProjection * glm::vec4(at, 1.0f);
+        if (clip.w <= 0.1f) continue;
+        const glm::vec2 ndc = glm::vec2(clip) / clip.w;
+        if (std::abs(ndc.x) > 1.1f || std::abs(ndc.y) > 1.1f) continue;
+        if (auto hit = Raycast(*world, eye, to / distance, distance - 0.6f); hit && hit->block != pos) continue;
+        const ImVec2 c(viewport->WorkPos.x + (ndc.x * 0.5f + 0.5f) * viewport->WorkSize.x, viewport->WorkPos.y + (0.5f - ndc.y * 0.5f) * viewport->WorkSize.y);
+        const float fade = std::clamp((12.0f - distance) / 3.0f, 0.0f, 1.0f);
+        const ImVec2 size = ImGui::CalcTextSize(text.c_str());
+        const ImVec2 lo(c.x - size.x * 0.5f - 7.0f, c.y - size.y - 6.0f), hi(c.x + size.x * 0.5f + 7.0f, c.y + 2.0f);
+        draw->AddRectFilled(lo, hi, IM_COL32(196, 160, 104, static_cast<int>(225 * fade)), 2.0f);
+        draw->AddRect(lo, hi, IM_COL32(110, 76, 38, static_cast<int>(255 * fade)), 2.0f, 0, 2.0f);
+        draw->AddText(ImVec2(lo.x + 7.0f, lo.y + 4.0f), IM_COL32(40, 26, 12, static_cast<int>(255 * fade)), text.c_str());
     }
 }
 
@@ -1638,7 +2167,7 @@ void Application::UpdateMining() {
         miningStart = now;
         client->StartMining(miningPos, tool);
     }
-    const double needed = Mining::Seconds(block, tool), elapsed = now - miningStart;
+    const double needed = Mining::Seconds(block, tool, client->HasIron() && !client->IsCreative()), elapsed = now - miningStart;
     mineProgress = needed > 0.0 ? static_cast<float>(std::min(1.0, elapsed / needed)) : 1.0f;
     // A tap on the block every so often while mining it.
     if (needed > 0.0 && now >= nextDig) {
@@ -1646,13 +2175,178 @@ void Application::UpdateMining() {
         PlayAt(material == "hard" || material == "glass" ? "dig_hard" : "dig_soft", miningPos, 0.6f);
         nextDig = now + 0.27;
     }
+    if (needed > 0.0 && now >= nextChip) {
+        SpawnParticles(miningPos, block.type, 2, 1.5f); // chips flying off while it's mined
+        nextChip = now + 0.12;
+    }
     if (elapsed >= needed) {
         PlayAt(BreakSound(block.type), miningPos);
+        SpawnParticles(miningPos, block.type, 18);
         client->BreakBlock(miningPos, tool);
         mining = false;
         mineProgress = 0.0f;
         nextMineAt = now + 0.15; // a moment before starting on the next block
     }
+}
+
+void Application::SpawnParticles(const glm::ivec3& pos, BlockType type, int count, float speed) {
+    if (type == BlockType::AIR) return;
+    static std::mt19937 rng(1234);
+    std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+    const TextureAtlas& atlas = renderer->GetAtlas();
+    glm::vec2 uv0, uv1;
+    atlas.GetTileUV(IconTile(type), uv0, uv1);
+    for (int i = 0; i < count && particles.size() < 600; i++) {
+        Particle p;
+        p.position = glm::vec3(pos) + glm::vec3(0.2f + 0.6f * unit(rng), 0.2f + 0.6f * unit(rng), 0.2f + 0.6f * unit(rng));
+        const glm::vec3 out = p.position - (glm::vec3(pos) + glm::vec3(0.5f));
+        p.velocity = out * speed * 2.0f + glm::vec3(0.0f, speed * (0.4f + 0.6f * unit(rng)), 0.0f);
+        p.maxLife = p.life = 0.5f + 0.6f * unit(rng);
+        p.size = 0.07f + 0.07f * unit(rng);
+        // A random quarter-by-quarter piece of the texture.
+        const glm::vec2 span = (uv1 - uv0) * 0.25f, at = uv0 + (uv1 - uv0 - span) * glm::vec2(unit(rng), unit(rng));
+        p.uv = glm::vec4(at, at + span);
+        particles.push_back(p);
+    }
+}
+
+void Application::UpdateLightning(float dt) {
+    static std::mt19937 rng(77);
+    std::uniform_real_distribution<float> spread(-1.0f, 1.0f);
+    const glm::vec3 ear = camera.GetPosition();
+    for (const glm::ivec3& at : client->TakeLightning()) {
+        // A jagged bolt from high in the sky down to where it struck, with a fork.
+        Bolt bolt{ {}, 0.35f };
+        glm::vec3 p = glm::vec3(at) + glm::vec3(0.5f, 70.0f, 0.5f);
+        const glm::vec3 ground = glm::vec3(at) + glm::vec3(0.5f, 0.0f, 0.5f);
+        bolt.points.push_back(p);
+        for (int i = 1; i <= 14; i++) {
+            const float t = i / 14.0f;
+            p = glm::mix(glm::vec3(ground.x, ground.y + 70.0f, ground.z), ground, t) + glm::vec3(spread(rng), 0.0f, spread(rng)) * 2.5f * (1.0f - t);
+            if (i == 14) p = ground;
+            bolt.points.push_back(p);
+        }
+        bolts.push_back(bolt);
+        const float distance = glm::distance(ear, ground);
+        lightningFlash = std::max(lightningFlash, std::clamp(1.2f - distance / 120.0f, 0.3f, 1.0f));
+        // Thunder: later and quieter the further off (sound is slowed down a bit, so
+        // it rolls in after the flash without a long wait).
+        thunder.emplace_back(Client::Now() + distance / 120.0, std::clamp(1.4f - distance / 80.0f, 0.25f, 1.0f));
+    }
+    // Explosions: a boom, smoke and debris, and the view shaking if it's close.
+    for (const auto& blast : client->TakeExplosions()) {
+        const glm::vec3 centre = glm::vec3(blast.pos) + glm::vec3(0.5f);
+        PlayAt("explosion", blast.pos, 1.0f);
+        SpawnParticles(blast.pos, BlockType::STONE, 30, 9.0f);
+        SpawnParticles(blast.pos, BlockType::DIRT, 20, 7.0f);
+        glm::vec2 uv0, uv1;
+        renderer->GetAtlas().GetTileUV(renderer->GetAtlas().GetIndex("smoke"), uv0, uv1);
+        for (int i = 0; i < 40 && particles.size() < 600; i++) {
+            Particle p;
+            p.position = centre + glm::vec3(spread(rng), spread(rng), spread(rng)) * static_cast<float>(blast.radius) * 0.8f;
+            p.velocity = (p.position - centre) * 0.8f;
+            p.maxLife = p.life = 1.5f + std::abs(spread(rng)) * 1.5f;
+            p.size = 0.35f + 0.25f * std::abs(spread(rng));
+            p.uv = glm::vec4(uv0, uv1);
+            p.rise = true;
+            particles.push_back(p);
+        }
+        shake = std::max(shake, std::clamp(1.2f - glm::distance(ear, centre) / 24.0f, 0.0f, 1.0f));
+        lightningFlash = std::max(lightningFlash, std::clamp(0.8f - glm::distance(ear, centre) / 40.0f, 0.0f, 0.8f));
+    }
+    shake = std::max(0.0f, shake - dt * 1.6f);
+    for (auto& b : bolts) b.life -= dt;
+    bolts.erase(std::remove_if(bolts.begin(), bolts.end(), [](const Bolt& b) { return b.life <= 0.0f; }), bolts.end());
+    lightningFlash = std::max(0.0f, lightningFlash - dt * 3.0f);
+    const double now = Client::Now();
+    for (auto it = thunder.begin(); it != thunder.end();) {
+        if (now >= it->first) {
+            audio->PlayHere("thunder", it->second, 0.1f);
+            it = thunder.erase(it);
+        }
+        else ++it;
+    }
+}
+
+void Application::UpdateFireflies(float dt) {
+    // Out on clear nights: up to 40 at a time, each living a while over a grassy spot
+    // within 20 blocks, drifting around it and blinking.
+    static std::mt19937 rng(4242);
+    std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+    const float night = std::clamp((0.25f - std::sin(client->GetTimeOfDay() * 6.2831853f)) * 4.0f, 0.0f, 1.0f) * (1.0f - client->GetRain());
+    const int wanted = static_cast<int>(40.0f * night);
+    const glm::vec3 me = player.GetFeetPosition();
+    for (int tries = 0; tries < 3 && static_cast<int>(fireflies.size()) < wanted; tries++) {
+        const glm::ivec3 cell(glm::floor(me + glm::vec3(unit(rng) * 40.0f - 20.0f, unit(rng) * 8.0f - 3.0f, unit(rng) * 40.0f - 20.0f)));
+        Block here, below;
+        if (!world->GetBlock(cell.x, cell.y, cell.z, here) || !world->GetBlock(cell.x, cell.y - 1, cell.z, below)) continue;
+        // Air (or a plant) over grass.
+        if (!(here.IsAir() || here.IsPlant()) || !IsGrassType(below.type)) continue;
+        const glm::vec3 home = glm::vec3(cell) + glm::vec3(unit(rng), 0.3f + unit(rng) * 1.2f, unit(rng));
+        fireflies.push_back({ home, home, unit(rng) * 100.0f, 8.0f + 12.0f * unit(rng) });
+    }
+    for (auto& f : fireflies) {
+        f.life -= dt * (night > 0.05f ? 1.0f : 6.0f); // (gone soon after dawn)
+        f.phase += dt;
+        f.position = f.home + glm::vec3(std::sin(f.phase * 0.7f) * 0.8f, std::sin(f.phase * 1.3f) * 0.3f, std::cos(f.phase * 0.5f) * 0.8f);
+    }
+    fireflies.erase(std::remove_if(fireflies.begin(), fireflies.end(),
+                                   [&](const Firefly& f) { return f.life <= 0.0f || glm::distance(f.home, me) > 28.0f; }),
+                    fireflies.end());
+}
+
+void Application::UpdateParticles(float dt) {
+    // Smoke from campfires near the player (found by a look round every second).
+    static std::mt19937 smokeRng(99);
+    std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+    const double now = Client::Now();
+    if (now >= nextFireScan) {
+        nextFireScan = now + 1.0;
+        campfires.clear();
+        const glm::ivec3 c(glm::floor(player.GetFeetPosition()));
+        for (int x = -16; x <= 16; x++)
+            for (int z = -16; z <= 16; z++)
+                for (int y = -6; y <= 6; y++) {
+                    Block b;
+                    if (world->GetBlock(c.x + x, c.y + y, c.z + z, b) && b.type == BlockType::CAMPFIRE) campfires.push_back(c + glm::ivec3(x, y, z));
+                }
+    }
+    if (!campfires.empty() && unit(smokeRng) < dt * 5.0f * std::min<size_t>(campfires.size(), 4)) {
+        const glm::ivec3 fire = campfires[static_cast<size_t>(unit(smokeRng) * campfires.size()) % campfires.size()];
+        glm::vec2 uv0, uv1;
+        renderer->GetAtlas().GetTileUV(renderer->GetAtlas().GetIndex("smoke"), uv0, uv1);
+        Particle p;
+        p.position = glm::vec3(fire) + glm::vec3(0.35f + 0.3f * unit(smokeRng), 0.6f, 0.35f + 0.3f * unit(smokeRng));
+        p.velocity = glm::vec3(0.2f * (unit(smokeRng) - 0.5f), 0.0f, 0.2f * (unit(smokeRng) - 0.5f));
+        p.maxLife = p.life = 2.5f + unit(smokeRng);
+        p.size = 0.08f + 0.07f * unit(smokeRng);
+        p.uv = glm::vec4(uv0, uv1);
+        p.rise = true;
+        if (particles.size() < 600) particles.push_back(p);
+    }
+    // Gravity, a little air drag, and they come to rest on whatever's under them
+    // (smoke rises instead, slowly).
+    for (auto& p : particles) {
+        p.life -= dt;
+        if (p.rise) {
+            p.velocity.y += (1.1f - p.velocity.y) * std::min(1.0f, dt * 2.0f);
+            p.position += p.velocity * dt;
+            continue;
+        }
+        p.velocity.y -= 18.0f * dt;
+        p.velocity *= std::exp(-1.5f * dt);
+        glm::vec3 next = p.position + p.velocity * dt;
+        Block below;
+        const glm::ivec3 cell(glm::floor(next - glm::vec3(0.0f, p.size * 0.5f, 0.0f)));
+        if (world->GetBlock(cell.x, cell.y, cell.z, below) && !below.IsPassable() && below.IsFullBlock()) {
+            next.y = std::max(next.y, static_cast<float>(cell.y + 1) + p.size * 0.5f);
+            p.velocity.y = -p.velocity.y * 0.25f;
+            p.velocity.x *= 0.6f;
+            p.velocity.z *= 0.6f;
+        }
+        p.position = next;
+    }
+    particles.erase(std::remove_if(particles.begin(), particles.end(), [](const Particle& p) { return p.life <= 0.0f; }), particles.end());
 }
 
 const char* Application::BreakSound(BlockType type) {
@@ -1694,7 +2388,12 @@ void Application::UpdateSounds() {
     }
     lastFeet = feet;
     // Into the water.
-    if (player.IsSwimming() && !wasSwimming) audio->Play("splash", feet, 0.6f);
+    if (player.IsSwimming() && !wasSwimming) {
+        audio->Play("splash", feet, 0.6f);
+        // Spray, more the harder you hit the water.
+        const float speed = std::abs(player.GetVelocity().y);
+        SpawnParticles(glm::ivec3(glm::floor(feet)), BlockType::WATER, std::clamp(static_cast<int>(speed * 2.5f), 4, 24), 2.0f + speed * 0.3f);
+    }
     wasSwimming = player.IsSwimming();
     // Hurt.
     if (client->GetLastHurt() > lastHurtHeard + 0.05) {
@@ -1702,10 +2401,27 @@ void Application::UpdateSounds() {
         audio->PlayHere("hurt", 0.8f);
     }
 
+    // Ambience outdoors (open sky, not raining hard): birds by day, crickets at night,
+    // now and then, from somewhere around.
+    if (now >= nextAmbience) {
+        static std::mt19937 ambienceRng(808);
+        std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+        nextAmbience = now + 5.0 + 9.0 * unit(ambienceRng);
+        const float sun = std::sin(client->GetTimeOfDay() * 6.2831853f);
+        if (!sheltered && client->GetRain() < 0.3f && std::abs(sun) > 0.15f) {
+            const float a = unit(ambienceRng) * 6.2831853f;
+            const glm::vec3 at = camera.GetPosition() + glm::vec3(std::cos(a) * 9.0f, 2.0f + 3.0f * unit(ambienceRng), std::sin(a) * 9.0f);
+            audio->Play(sun > 0.0f ? "birds" : "crickets", at, 0.35f, 0.08f);
+        }
+    }
+
     // What others broke and built (a few at a time: a collapse or the laser makes many).
     int played = 0;
-    for (const auto& event : client->TakeBlockEvents())
-        if (played++ < 4) PlayAt(event.placed ? "place" : BreakSound(event.type), event.pos, 0.8f);
+    for (const auto& event : client->TakeBlockEvents()) {
+        if (played < 4) PlayAt(event.placed ? "place" : BreakSound(event.type), event.pos, 0.8f);
+        if (!event.placed && played < 24 && event.type != BlockType::WATER) SpawnParticles(event.pos, event.type, played < 4 ? 14 : 4);
+        played++;
+    }
 
     // Other players' steps.
     for (auto& [id, w] : walkers) w.seen = false;

@@ -662,6 +662,50 @@ int main() {
         still.move = { 0.0f, 1.0f };
         for (int i = 0; i < 120; i++) under.Update(world, still, 1.0f / 60.0f);
         Check(!under.IsCrouching(), "and you stand once you're out");
+
+        // A ladder: a column of six at x = -1 (z = 0) on the floor.
+        for (int y = 0; y < 6; y++) world.blocks[{ -1, y, 0 }] = Block::Placed(BlockType::LADDER);
+        Check(!Block::Placed(BlockType::LADDER).IsFullBlock() && Block::Placed(BlockType::LADDER).IsPassable() &&
+                  !Block::Placed(BlockType::LADDER).IsReplaceableByWater(),
+              "a ladder is passable, and water doesn't wash it away");
+        Player climber(glm::vec3(-0.5f, 0.0f, 0.5f));
+        climber.Spawn(world);
+        PlayerInput up;
+        up.jump = true;
+        for (int i = 0; i < 90; i++) climber.Update(world, up, 1.0f / 60.0f); // 1.5 s
+        Check(climber.IsClimbing() && climber.GetFeetPosition().y > 3.5f, "holding jump climbs the ladder (to " + std::to_string(climber.GetFeetPosition().y) + ")");
+        PlayerInput hold;
+        hold.crouch = true;
+        const float heldAt = climber.GetFeetPosition().y;
+        for (int i = 0; i < 60; i++) climber.Update(world, hold, 1.0f / 60.0f);
+        Check(std::abs(climber.GetFeetPosition().y - heldAt) < 0.05f, "crouching holds on");
+        const float slideFrom = climber.GetFeetPosition().y;
+        for (int i = 0; i < 30; i++) climber.Update(world, PlayerInput{}, 1.0f / 60.0f); // half a second
+        const float slid = slideFrom - climber.GetFeetPosition().y;
+        Check(slid > 0.2f && slid < 1.0f, "letting go, you slide down slowly (" + std::to_string(slid) + " in half a second)");
+
+        // A boat on a pond: water at y = 0 over x 10..17 (the floor under it), stone
+        // shore beyond.
+        for (int x = 10; x <= 17; x++)
+            for (int z = -2; z <= 2; z++) {
+                world.blocks[{ x, -1, z }] = Block(BlockType::STONE);
+                world.blocks[{ x, 0, z }] = Block::Water(Block::kMaxWaterVolume);
+            }
+        for (int z = -2; z <= 2; z++) world.blocks[{ 18, 0, z }] = Block(BlockType::STONE);
+        Player boater(glm::vec3(10.5f, 0.85f, 0.5f));
+        boater.Spawn(world);
+        boater.Teleport(glm::vec3(10.5f, 0.85f, 0.5f));
+        boater.SetBoating(true);
+        PlayerInput row;
+        row.yaw = 0.0f;
+        row.move = { 0.0f, 1.0f };
+        for (int i = 0; i < 60; i++) boater.Update(world, row, 1.0f / 60.0f);
+        const float rowed = boater.GetFeetPosition().x - 10.5f;
+        Check(boater.IsBoating() && rowed > 2.0f && std::abs(boater.GetFeetPosition().y - 0.85f) < 0.2f,
+              "in a boat you glide over the water, sitting on it (" + std::to_string(rowed) + " blocks in a second)");
+        for (int i = 0; i < 240; i++) boater.Update(world, row, 1.0f / 60.0f);
+        Check(boater.IsBoating() && boater.GetFeetPosition().x < 18.0f && boater.GetFeetPosition().x > 16.5f,
+              "and the bow stops at the shore (at x " + std::to_string(boater.GetFeetPosition().x) + ")");
     }
 
     std::cout << (failures ? "SHAPE TEST FAILED (" : "ALL SHAPE CHECKS PASSED (") << failures << " failures)" << std::endl;

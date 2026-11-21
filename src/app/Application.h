@@ -2,7 +2,9 @@
 
 #include <array>
 #include <cstdint>
+#include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -145,7 +147,37 @@ private:
     glm::vec3 lastFeet{ 0.0f };
     float stepDistance = 0.0f;
     bool wasSwimming = false;
-    double lastHurtHeard = 0.0, nextDig = 0.0;
+    double lastHurtHeard = 0.0, nextDig = 0.0, nextChip = 0.0;
+    double nextAmbience = 0.0; // birdsong by day, crickets at night
+    // Bits of broken blocks, flying and falling (client-side only: just for show).
+    struct Particle {
+        glm::vec3 position, velocity;
+        float life, maxLife, size;
+        glm::vec4 uv;
+        bool rise = false; // smoke: drifts up instead of falling
+    };
+    std::vector<Particle> particles;
+    std::vector<glm::ivec3> campfires; // near the player, for smoke
+    double nextFireScan = 0.0;
+    double nextShot = 0.0; // the bow's next shot
+    std::optional<glm::ivec3> lastBobber; // where our bobber was (for the splash when a fish bites)
+    std::map<std::pair<int, int>, glm::vec3> arrowFacing; // which way arrows were going before they stuck
+    // Lightning: the bolts still showing, how bright the flash is (0..1), and thunder
+    // on its way (when it's heard, how loud).
+    struct Bolt { std::vector<glm::vec3> points; float life; };
+    std::vector<Bolt> bolts;
+    float lightningFlash = 0.0f;
+    std::vector<std::pair<double, float>> thunder;
+    void UpdateLightning(float dt);
+    float shake = 0.0f; // the camera shaking from a blast nearby (0..1, fading)
+    // Fireflies over grass on clear nights near the player (just for show).
+    struct Firefly { glm::vec3 home, position; float phase, life; };
+    std::vector<Firefly> fireflies;
+    void UpdateFireflies(float dt);
+    // Throws `count` bits of this block out of the cell at `pos` (a burst when it breaks,
+    // a few while it's mined).
+    void SpawnParticles(const glm::ivec3& pos, BlockType type, int count, float speed = 3.0f);
+    void UpdateParticles(float dt);
     struct Walker { glm::vec3 feet{ 0.0f }; float distance = 0.0f; bool seen = false; bool hurt = false; };
     std::unordered_map<uint16_t, Walker> walkers;
     struct CreatureSound { bool hurt = false; double nextGroan = 0.0; bool seen = false; };
@@ -203,10 +235,38 @@ private:
     // A chest is open (in place of the inventory): asked for at chestAskedAt, and seen
     // open by the server since.
     bool chestMode = false, chestSeenOpen = false;
+    // Writing on a sign (in place of the inventory): which one, and the text so far.
+    bool signMode = false;
+    glm::ivec3 signAt{ 0 };
+    char signText[72] = {};
+    void OpenSign(const glm::ivec3& pos);
+    void DrawSignEditor();
+    void DrawSigns(const glm::mat4& viewProjection); // the texts, floating over their signs
     double chestAskedAt = 0.0;
     void DrawChest();
     double scrollAccumulator = 0.0;
     bool showDebug = false;
+    bool showCompass = true; // F4: the compass, coordinates and clock at the top
+    // Walking bobs the view (how far into the stride), and sprinting widens it a little.
+    float bobPhase = 0.0f, bobAmount = 0.0f, fovBoost = 0.0f;
+    void DrawCompass();
+    // The minimap (M): a top-down picture of the ground around the player, refreshed
+    // a few rows a frame into a small texture.
+    static constexpr int kMapSize = 96;
+    bool showMap = true;
+    unsigned int mapTexture = 0;
+    std::vector<uint32_t> mapPixels;
+    int mapRow = 0;
+    glm::ivec2 mapCentre{ 0 };   // the column the picture is centred on
+    void DrawMinimap();
+    // The newest achievement toast (from chat), shown for a few seconds.
+    std::string toastText;
+    double toastUntil = 0.0;
+    size_t chatSeen = 0;
+    void DrawToast();
+    void DrawDeath(); // "You died", for a few seconds after dying
+    bool showPlayers = false; // P: who's online
+    void DrawPlayerList();
     bool vsync = true;
     // VOXEL_BENCH: per-section frame timing, printed once a second.
     bool bench = false;

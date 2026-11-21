@@ -70,7 +70,7 @@ const CreatureSystem::Creature* CreatureSystem::Find(uint16_t id) const {
     return nullptr;
 }
 
-bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, double now, bool& killed) {
+bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, bool iron, double now, bool& killed) {
     killed = false;
     auto it = std::find_if(creatures.begin(), creatures.end(), [&](const Creature& c) { return c.id == id; });
     if (it == creatures.end()) return false;
@@ -80,8 +80,16 @@ bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, double
     const Collision::AABB box = BoxAt(c.feet, spec);
     const glm::vec3 nearest = glm::clamp(eye, box.min, box.max);
     if (glm::distance(eye, nearest) > Combat::kReach + 0.5f) return false; // (slack for movement in flight)
+    return Damage(id, Combat::Damage(tool, iron), eye, now, killed);
+}
 
-    c.health -= Combat::Damage(tool);
+bool CreatureSystem::Damage(uint16_t id, int damage, const glm::vec3& from, double now, bool& killed) {
+    killed = false;
+    auto it = std::find_if(creatures.begin(), creatures.end(), [&](const Creature& c) { return c.id == id; });
+    if (it == creatures.end()) return false;
+    Creature& c = *it;
+    const glm::vec3 eye = from;
+    c.health -= damage;
     c.hurtUntil = now + 0.3;
     // Knocked back, away from the hitter.
     glm::vec2 away(c.feet.x - eye.x, c.feet.z - eye.z);
@@ -90,7 +98,7 @@ bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, double
     c.velocity.z = away.y * 6.0f;
     c.velocity.y = 5.0f;
     c.onGround = false;
-    if (c.type == CreatureType::Deer) {
+    if (c.type == CreatureType::Deer || c.type == CreatureType::Bat) {
         c.fleeUntil = now + 5.0;
         c.fleeFrom = eye;
     }
@@ -99,6 +107,27 @@ bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, double
         creatures.erase(it);
     }
     return true;
+}
+
+Collision::AABB CreatureSystem::Box(const Creature& c) { return BoxAt(c.feet, SpecOf(c.type)); }
+
+void CreatureSystem::Provoke(uint16_t id, uint16_t player, double now) {
+    for (auto& c : creatures)
+        if (c.id == id && c.type == CreatureType::Wolf && c.owner == 0) {
+            c.angryAt = player;
+            c.angryUntil = now + 20.0;
+        }
+}
+
+bool CreatureSystem::Tame(uint16_t id, uint16_t player) {
+    for (auto& c : creatures)
+        if (c.id == id && c.type == CreatureType::Wolf && c.owner == 0) {
+            c.owner = player;
+            c.angryAt = 0;
+            c.health = SpecOf(c.type).maxHealth;
+            return true;
+        }
+    return false;
 }
 
 bool CreatureSystem::Burning(ServerWorld& world, const Creature& c, float daylight) const {
@@ -125,6 +154,71 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
         speed = spec.walkSpeed;
     };
 
+    if (c.type == CreatureType::Wolf) {
+        auto chaseAndBite = [&](const glm::vec3& at, auto bite) {
+            glm::vec2 to(at.x - c.feet.x, at.z - c.feet.z);
+            const float reach = spec.halfWidth + 0.3f + spec.attackReach;
+            if (glm::length(to) > 0.4f) move = glm::normalize(to);
+            speed = glm::length(to) > reach * 0.7f ? spec.runSpeed : 0.0f;
+            if (glm::length(to) <= reach && std::abs(at.y - c.feet.y) < 1.8f && now >= c.nextAttack) {
+                c.nextAttack = now + 0.9;
+                bite();
+            }
+        };
+        const Player* owner = nullptr;
+        for (const auto& p : players)
+            if (p.id == c.owner) owner = &p;
+        if (c.owner != 0 && owner) {
+            // Tame: fights the hostile creature nearest its owner (within 10 blocks),
+            // else keeps close, and catches up if left far behind.
+            Creature* foe = nullptr;
+            float best = 10.0f;
+            for (auto& other : creatures)
+                if (SpecOf(other.type).hostile && other.health > 0) {
+                    const float d = glm::distance(other.feet, owner->feet);
+                    if (d < best) best = d, foe = &other;
+                }
+            if (foe) {
+                chaseAndBite(foe->feet, [&] {
+                    foe->health -= 4;
+                    foe->hurtUntil = now + 0.3;
+                });
+                return;
+            }
+            const float d = HorizontalDistance(owner->feet, c.feet);
+            if (d > 24.0f) {
+                c.feet = owner->feet + glm::vec3(1.0f, 0.5f, 1.0f); // (caught up)
+                c.velocity = glm::vec3(0.0f);
+            }
+            if (d > 3.0f) {
+                move = glm::normalize(glm::vec2(owner->feet.x - c.feet.x, owner->feet.z - c.feet.z));
+                speed = d > 8.0f ? spec.runSpeed : spec.walkSpeed * 1.5f;
+            }
+            return;
+        }
+        // Wild and provoked: after whoever hit it, for a while.
+        if (c.angryAt != 0 && now < c.angryUntil)
+            for (const auto& p : players)
+                if (p.id == c.angryAt && p.vulnerable) {
+                    chaseAndBite(p.feet, [&] { hurt(p.id, spec.attackDamage, "was mauled by a wolf"); });
+                    return;
+                }
+        wander();
+        return;
+    }
+
+    if (c.type == CreatureType::Bat) {
+        // Flits: a new direction every second or so (never resting).
+        if (now >= c.nextDecision) {
+            c.nextDecision = now + 0.6 + unit(rng);
+            const float a = unit(rng) * 6.2831853f;
+            c.wander = glm::vec2(std::cos(a), std::sin(a));
+        }
+        move = c.wander;
+        speed = now < c.fleeUntil ? spec.runSpeed : spec.walkSpeed;
+        return;
+    }
+
     if (c.type == CreatureType::Deer) {
         if (now < c.fleeUntil) {
             glm::vec2 away(c.feet.x - c.fleeFrom.x, c.feet.z - c.fleeFrom.z);
@@ -148,6 +242,25 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
         return;
     }
     glm::vec2 to(target->feet.x - c.feet.x, target->feet.z - c.feet.z);
+    if (c.type == CreatureType::Skeleton) {
+        // Keeps 7 to 14 blocks off, edging sideways, and shoots every couple of seconds.
+        const float d = glm::length(to);
+        const glm::vec2 toward = d > 1e-3f ? to / d : glm::vec2(1.0f, 0.0f);
+        if (d < 7.0f) move = -toward, speed = spec.runSpeed;
+        else if (d > 14.0f) move = toward, speed = spec.runSpeed;
+        else move = glm::vec2(-toward.y, toward.x) * (std::sin(static_cast<float>(now) * 0.7f + c.id) > 0.0f ? 1.0f : -1.0f), speed = spec.walkSpeed * 0.5f;
+        c.yaw = glm::degrees(std::atan2(toward.y, toward.x)); // (faces its target even backing off)
+        if (d > 3.0f && d < 20.0f && now >= c.nextAttack && shooter) {
+            c.nextAttack = now + 2.2 + unit(rng);
+            const glm::vec3 eye = c.feet + glm::vec3(0.0f, 1.55f, 0.0f);
+            // Aimed high by as much as the arrow will drop on the way (its speed and
+            // gravity are the server's: 25.6 and 18 blocks a second).
+            const float flight = d / 25.6f;
+            const glm::vec3 aim = target->feet + glm::vec3(0.0f, 1.0f + 0.5f * 18.0f * flight * flight, 0.0f);
+            shooter(eye + glm::normalize(aim - eye) * 0.6f, glm::normalize(aim - eye));
+        }
+        return;
+    }
     const float reach = spec.halfWidth + 0.3f + spec.attackReach; // to the player's box edge, plus its reach
     if (glm::length(to) > 0.6f) move = glm::normalize(to);
     speed = glm::length(to) > reach * 0.7f ? spec.runSpeed : 0.0f;
@@ -159,6 +272,25 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
 
 void CreatureSystem::Move(ServerWorld& world, Creature& c, const glm::vec2& move, float speed, float dt) {
     const CreatureSpec& spec = SpecOf(c.type);
+    if (c.type == CreatureType::Bat) {
+        // Flies: no gravity, a fluttering wander in three dimensions, bouncing off what
+        // it meets.
+        std::uniform_real_distribution<float> unit(-1.0f, 1.0f);
+        const glm::vec3 want(move.x * speed, std::sin(static_cast<float>(clock) * 2.3f + c.id) * 1.2f + unit(rng) * 0.6f, move.y * speed);
+        c.velocity += (want - c.velocity) * std::min(1.0f, dt * 3.0f);
+        if (glm::length(move) > 0.1f) c.yaw = glm::degrees(std::atan2(move.y, move.x));
+        for (int axis = 0; axis < 3; axis++) {
+            glm::vec3 next = c.feet;
+            next[axis] += c.velocity[axis] * dt;
+            if (Collision::BoxBlocked(world, BoxAt(next, spec))) {
+                c.velocity[axis] = -c.velocity[axis] * 0.5f;
+                if (axis != 1) c.wander = -c.wander;
+            }
+            else c.feet = next;
+        }
+        c.onGround = false;
+        return;
+    }
     // Steer toward the wanted velocity: firmly on the ground, barely in the air (so a
     // knockback carries).
     const glm::vec2 want = move * speed;
@@ -244,10 +376,12 @@ void CreatureSystem::SpawnNaturally(ServerWorld& world, const std::vector<Player
                 if (!grass) break;
                 uint8_t block = 0, sky = 0;
                 if (!LightAt(world, { x, y, z }, block, sky) || sky < 12) break; // out in the open
-                const int herd = 1 + static_cast<int>(unit(rng) * 3.0f);
+                // Now and then a pair of wolves instead of a herd of deer.
+                const bool wolves = unit(rng) < 0.15f;
+                const int herd = wolves ? 2 : 1 + static_cast<int>(unit(rng) * 3.0f);
                 for (int i = 0; i < herd; i++) {
                     const glm::vec3 at(x + 0.5f + (i % 2) * 1.5f, static_cast<float>(y), z + 0.5f + (i / 2) * 1.5f);
-                    if (farFromPlayers(at) && Spawn(CreatureType::Deer, at)) animals++;
+                    if (farFromPlayers(at) && Spawn(wolves ? CreatureType::Wolf : CreatureType::Deer, at)) animals++;
                 }
                 break;
             }
@@ -266,7 +400,10 @@ void CreatureSystem::SpawnNaturally(ServerWorld& world, const std::vector<Player
                 const float light = std::max(static_cast<float>(block), sky * (daylight > 0.5f ? 1.0f : 0.25f));
                 const glm::vec3 at(x + 0.5f, static_cast<float>(y), z + 0.5f);
                 if (light <= 4.0f && farFromPlayers(at)) {
-                    Spawn(CreatureType::Ghoul, at);
+                    // Underground (no sky at all), now and then bats instead; three in
+                    // ten of the rest are skeletons.
+                    if (sky == 0 && unit(rng) < 0.3f) Spawn(CreatureType::Bat, at + glm::vec3(0.0f, 1.0f, 0.0f));
+                    else Spawn(unit(rng) < 0.3f ? CreatureType::Skeleton : CreatureType::Ghoul, at);
                     hostiles++;
                 }
                 break;
@@ -288,6 +425,10 @@ void CreatureSystem::Update(ServerWorld& world, const std::vector<Player>& playe
         // player who's just joined hasn't said where they are yet).
         float nearest = players.empty() ? 0.0f : 1e9f;
         for (const auto& p : players) nearest = std::min(nearest, glm::distance(p.feet, c.feet));
+        // (A tame wolf stays while its owner's here: it catches up.)
+        if (c.owner != 0)
+            for (const auto& p : players)
+                if (p.id == c.owner) nearest = 0.0f;
         if (nearest > kDespawnDistance || c.feet.y < -1000.0f) {
             it = creatures.erase(it);
             continue;

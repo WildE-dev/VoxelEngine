@@ -10,6 +10,7 @@
 #include "server/WorldStorage.h"
 #include "world/Collision.h"
 #include "world/Dungeons.h"
+#include "world/Noise.h"
 
 namespace {
 
@@ -46,6 +47,17 @@ constexpr float kSurvivalReach = 7.5f;
 constexpr float kChestReach = kSurvivalReach;
 // Players count as asleep for this long after getting into bed (so everyone can get in).
 constexpr double kSleepWindow = 6.0;
+// Falls up to this many blocks are safe; each block beyond costs half a heart.
+constexpr float kSafeFall = 3.0f;
+// Arrows: how fast they leave the bow, how fast they fall, what a hit does, and how
+// often a bow can shoot.
+constexpr float kArrowSpeed = 32.0f, kArrowGravity = 18.0f;
+constexpr int kArrowDamage = 5;
+constexpr double kShotInterval = 0.6;
+constexpr uint16_t kCreatureShooter = 0xFFFF; // an arrow a skeleton shot
+// TNT: seconds from lighting to the bang, and how far the blast reaches.
+constexpr double kTntFuse = 3.0;
+constexpr int kTntRadius = 3;
 
 // A player's body; a crouching player's is shorter (net::kFlagCrouching).
 constexpr float kCrouchHeight = 1.45f; // as Player::kCrouchHeight
@@ -135,11 +147,18 @@ bool Server::Start(const Options& opts) {
     defaultMode = storage ? static_cast<net::GameMode>(storage->GetDefaultMode()) : options.defaultMode;
     LoadOperators();
     for (const auto& name : options.operators) SetOperator(name, true);
-    if (storage)
+    creatures.SetShooter([this](const glm::vec3& from, const glm::vec3& dir) {
+        arrows.push_back({ from, dir * kArrowSpeed * 0.8f, kCreatureShooter, Now() });
+    });
+    if (storage) {
         for (const auto& [pos, held] : storage->GetChests()) chests[pos] = held;
+        for (const auto& pos : storage->GetCrops()) crops.insert(pos);
+        for (const auto& [pos, text] : storage->GetSigns()) signs[pos] = text;
+    }
     weatherSeed ^= static_cast<uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
     weatherMode = options.weather;
-    raining = options.weather == Options::Weather::Rain;
+    raining = options.weather == Options::Weather::Rain || options.weather == Options::Weather::Storm;
+    storm = options.weather == Options::Weather::Storm;
     rainLevel = raining ? 1.0f : 0.0f;
     weatherTimer = 10.0 * 60.0; // the first shower comes after a while
     if (storage) {
@@ -217,6 +236,7 @@ void Server::StorePlayer(const ClientState& client) {
     record.food = client.food;
     record.armour = client.armour;
     record.bed = client.bed;
+    record.achievements = client.achievements;
     storage->StorePlayer(client.name, record);
 }
 
@@ -228,6 +248,8 @@ void Server::Save(bool shuttingDown) {
     for (const auto& [peer, client] : clients) StorePlayer(client);
     storage->SetTimeOfDay(static_cast<float>(timeOfDay));
     storage->SetChests({ chests.begin(), chests.end() });
+    storage->SetCrops({ crops.begin(), crops.end() });
+    storage->SetSigns({ signs.begin(), signs.end() });
     const size_t saved = world->SaveAll();
     const bool ok = storage->Flush();
     lastSaveTime = Now();
@@ -295,9 +317,29 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
         if ((ok = net::Decode(in, m))) HandleAttack(client, m.creature, m.tool);
         break;
     }
+    case net::MsgType::Interact: {
+        net::Interact m;
+        if ((ok = net::Decode(in, m))) HandleInteract(client, m.creature);
+        break;
+    }
     case net::MsgType::AttackPlayer: {
         net::AttackPlayer m;
         if ((ok = net::Decode(in, m))) HandleAttackPlayer(client, m.player, m.tool);
+        break;
+    }
+    case net::MsgType::WriteSign: {
+        net::SignText m;
+        if ((ok = net::Decode(in, m))) HandleWriteSign(client, m.pos, m.text);
+        break;
+    }
+    case net::MsgType::Cast: {
+        net::Cast m;
+        if ((ok = net::Decode(in, m))) HandleCast(client, m.pos, m.cast != 0);
+        break;
+    }
+    case net::MsgType::Shoot: {
+        net::Shoot m;
+        if ((ok = net::Decode(in, m))) HandleShoot(client, m.direction);
         break;
     }
     case net::MsgType::UseBed: {
@@ -413,6 +455,7 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
             client.food = std::clamp(saved->food, 0, Hunger::kMaxFood);
             client.armour = saved->armour;
             client.bed = saved->bed;
+            client.achievements = saved->achievements;
             welcome.spawn = saved->feet;
             welcome.yaw = saved->yaw;
             welcome.pitch = saved->pitch;
@@ -424,6 +467,8 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
     net.Send(client.peer, net::kChannelReliable, net::Encode(welcome));
     Log(client.name + " joined as player " + std::to_string(client.id));
     Broadcast(net::ChatMessage::Kind::Info, client.name + " joined the game");
+    // Every sign's text (there aren't many).
+    for (const auto& [pos, text] : signs) net.Send(client.peer, net::kChannelReliable, net::Encode(net::SignText{ pos, text }, false));
     // Names for name tags: theirs to everyone, everyone else's to them.
     for (const auto& [peer, other] : clients) {
         if (!other.welcomed) continue;
@@ -474,7 +519,9 @@ void Server::HandlePlayerState(ClientState& client, const net::PlayerState& stat
     client.blockedStates = blocked ? client.blockedStates + 1 : 0;
     if (client.blockedStates >= kBlockedStatesBeforeCorrection) return correct(client.lastValid, "inside solid blocks");
 
+    const bool first = !client.hasState;
     client.hasState = true;
+    UpdateFall(client, state, first || flying);
     client.feet = state.feet;
     client.yaw = state.yaw;
     client.pitch = state.pitch;
@@ -483,6 +530,35 @@ void Server::HandlePlayerState(ClientState& client, const net::PlayerState& stat
     client.heldBlock = state.heldBlock;
     client.lastStateTime = now;
     if (!blocked) client.lastValid = state.feet;
+}
+
+void Server::UpdateFall(ClientState& client, const net::PlayerState& state, bool reset) {
+    // Falls count from the highest point since last on the ground (or in water); a
+    // landing more than kSafeFall below it hurts. Teleports, respawns, flying, swimming
+    // and creative start the count afresh.
+    // On the ground: as the server sees it (ground just under the feet), not as the
+    // client says, so a client can't skip landing.
+    bool unknown = false;
+    const bool grounded = Collision::GroundHeight(*world, BodyAt(state.feet, 0.05f, (state.flags & net::kFlagCrouching) != 0), 0.05f, 0.1f, unknown).has_value() || unknown;
+    Block at;
+    const glm::ivec3 cell(glm::floor(state.feet + glm::vec3(0.0f, 0.1f, 0.0f)));
+    Block above;
+    const bool swimming = (state.flags & (net::kFlagSwimming | net::kFlagBoat)) != 0 || (world->GetBlock(cell.x, cell.y, cell.z, at) && (at.HasWater() || at.type == BlockType::LADDER)) ||
+                          (world->GetBlock(cell.x, cell.y + 1, cell.z, above) && above.type == BlockType::LADDER); // (a ladder ends a fall too)
+    if (reset || swimming || Creative(client)) {
+        client.fallPeak = state.feet.y;
+        client.falling = false;
+        return;
+    }
+    if (!grounded) {
+        client.fallPeak = client.falling ? std::max(client.fallPeak, state.feet.y) : std::max(client.feet.y, state.feet.y);
+        client.falling = true;
+        return;
+    }
+    const float fall = client.falling ? client.fallPeak - state.feet.y : 0.0f;
+    client.falling = false;
+    client.fallPeak = state.feet.y;
+    if (fall > kSafeFall + 0.5f) Hurt(client, static_cast<int>(std::lround(fall - kSafeFall)), "fell from a high place", false);
 }
 
 float Server::EditReach(const ClientState& client) const {
@@ -508,15 +584,23 @@ void Server::HandleCraft(ClientState& client, int recipeIndex, int count) {
     if (Creative(client) || recipeIndex < 0 || recipeIndex >= static_cast<int>(recipes.size())) return;
     const Recipe& recipe = recipes[recipeIndex];
     if (recipe.MadeOnce()) {
-        const bool made = recipe.tool != Tool::None ? (client.tools & Crafting::ToolBit(recipe.tool)) != 0 : (client.armour & Armour::Bit(recipe.armour)) != 0;
+        const bool made = recipe.ironUpgrade       ? (client.tools & Crafting::kIronBit) != 0
+                          : recipe.tool != Tool::None ? (client.tools & Crafting::ToolBit(recipe.tool)) != 0
+                                                      : (client.armour & Armour::Bit(recipe.armour)) != 0;
         if (made) return SendResources(client); // made already
         count = 1;
     }
     if (Crafting::TimesAffordable(recipe, client.resources) < static_cast<uint32_t>(count)) return SendResources(client); // can't afford
     for (const auto& in : recipe.inputs) client.resources[static_cast<size_t>(in.type)] -= in.units * count;
-    if (recipe.tool != Tool::None) client.tools |= Crafting::ToolBit(recipe.tool);
+    if (recipe.ironUpgrade) client.tools |= Crafting::kIronBit;
+    else if (recipe.tool != Tool::None) client.tools |= Crafting::ToolBit(recipe.tool);
     else if (recipe.armour != ArmourPiece::Count) client.armour |= Armour::Bit(recipe.armour);
     else client.resources[static_cast<size_t>(recipe.output)] += recipe.outputUnits * count;
+    if (recipe.tool != Tool::None) Award(client, Achievement::Toolmaker);
+    if (recipe.ironUpgrade) Award(client, Achievement::IronAge);
+    if (recipe.output == BlockType::COOKED_VENISON) Award(client, Achievement::Cook);
+    if (recipe.output == BlockType::BREAD) Award(client, Achievement::Baker);
+    if (client.armour == (Armour::Bit(ArmourPiece::Cap) | Armour::Bit(ArmourPiece::Tunic) | Armour::Bit(ArmourPiece::Boots))) Award(client, Achievement::Armoured);
     SendResources(client);
 }
 
@@ -529,7 +613,9 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
     const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
     const CreatureSystem::Creature* target = creatures.Find(creature);
     const CreatureType type = target ? target->type : CreatureType::Count;
-    if (creatures.Attack(creature, eye, tool, now, killed) && killed) {
+    const bool landed = creatures.Attack(creature, eye, tool, (client.tools & Crafting::kIronBit) != 0, now, killed);
+    if (landed && !killed) creatures.Provoke(creature, client.id, now);
+    if (landed && killed) {
         std::string spoils;
         // A deer gives venison (one or two).
         if (type == CreatureType::Deer) {
@@ -539,8 +625,33 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
             SendResources(client);
             spoils = " (+" + std::to_string(venison) + " raw venison, +1 hide)";
         }
+        // A skeleton leaves some of its arrows.
+        if (type == CreatureType::Skeleton) {
+            client.resources[static_cast<size_t>(BlockType::ARROW)] += 2 * Block::kUnitsPerBlock;
+            SendResources(client);
+            spoils = " (+2 arrows)";
+        }
         SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id + spoils);
+        if (type != CreatureType::Skeleton) Award(client, type == CreatureType::Deer ? Achievement::Hunter : Achievement::GhoulSlayer);
     }
+}
+
+void Server::HandleInteract(ClientState& client, uint16_t creature) {
+    const CreatureSystem::Creature* c = creatures.Find(creature);
+    if (!c || c->type != CreatureType::Wolf || c->owner != 0) return;
+    const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
+    const Collision::AABB box = CreatureSystem::Box(*c);
+    if (glm::distance(eye, glm::clamp(eye, box.min, box.max)) > Combat::kReach + 0.5f) return;
+    // Raw venison in hand tames it.
+    uint32_t& venison = client.resources[static_cast<size_t>(BlockType::RAW_VENISON)];
+    if (client.heldBlock != BlockType::RAW_VENISON || (!Creative(client) && venison < Block::kUnitsPerBlock)) return;
+    if (!creatures.Tame(creature, client.id)) return;
+    if (!Creative(client)) {
+        venison -= Block::kUnitsPerBlock;
+        SendResources(client);
+    }
+    SendChat(client, net::ChatMessage::Kind::Info, "The wolf is yours: it'll follow you, and fight for you");
+    Award(client, Achievement::BestFriend);
 }
 
 void Server::HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool) {
@@ -560,7 +671,7 @@ void Server::HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool)
         // Knocked back, away from the hitter and a little up (as creatures are). The
         // target moves itself, so it's told to; a slain player respawns instead.
         const double before = target.invulnerableUntil;
-        Hurt(target, Combat::Damage(tool), "was slain by " + client.name);
+        Hurt(target, Combat::Damage(tool, (client.tools & Crafting::kIronBit) != 0), "was slain by " + client.name);
         if (target.health > 0 && target.lastHurt >= now && target.invulnerableUntil == before) {
             glm::vec2 away(target.feet.x - client.feet.x, target.feet.z - client.feet.z);
             away = glm::length(away) > 1e-3f ? glm::normalize(away) : glm::vec2(1.0f, 0.0f);
@@ -598,7 +709,8 @@ void Server::SendCreatures() {
         m.tick = tickCount;
         for (const auto& c : creatures.All()) {
             if (glm::distance(c.feet, client.feet) > kSendRange) continue;
-            m.creatures.push_back({ c.id, c.type, c.feet, c.yaw, static_cast<uint8_t>(now < c.hurtUntil ? net::kCreatureHurt : 0) });
+            m.creatures.push_back({ c.id, c.type, c.feet, c.yaw,
+                                    static_cast<uint8_t>((now < c.hurtUntil ? net::kCreatureHurt : 0) | (c.owner != 0 ? net::kCreatureTame : 0)) });
         }
         net.Send(peer, net::kChannelUnreliable, net::Encode(m));
     }
@@ -620,7 +732,7 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
     }
     // Survival: only once it's been mined for long enough, with that tool.
     if (!Creative(client)) {
-        const double needed = Mining::Seconds(block, tool);
+        const double needed = Mining::Seconds(block, tool, (client.tools & Crafting::kIronBit) != 0);
         const bool started = client.mining && client.miningPos == pos && client.miningTool == tool;
         const double mined = started ? Now() - client.miningSince : 0.0;
         if (needed > 0.0 && mined < needed * (1.0 - Mining::kSlackShare) - Mining::kSlackSeconds) {
@@ -632,8 +744,33 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
     // Breaking a waterlogged block leaves its water behind.
     world->SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
     if (block.type == BlockType::CHEST) RemoveChest(pos, &client);
+    if (block.type == BlockType::CROP) crops.erase(pos);
+    if (block.type == BlockType::SIGN && signs.erase(pos)) BroadcastSign(pos);
+    // A door goes as a whole: the other half too (its worth is counted once, below).
+    if (block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN)
+        for (const int dy : { 1, -1 }) {
+            Block other;
+            if (world->GetBlock(pos.x, pos.y + dy, pos.z, other) && other.type == block.type) {
+                world->SetBlock(pos.x, pos.y + dy, pos.z, Block());
+                break;
+            }
+        }
+    if (!Creative(client)) {
+        // Ripe wheat also gives seeds (one or two); tall grass now and then a seed.
+        const float roll = Noise::Random01(pos.x, pos.y, pos.z, static_cast<uint32_t>(tickCount));
+        uint32_t seeds = 0;
+        if (block.type == BlockType::RIPE_WHEAT) seeds = roll < 0.5f ? 1 : 2;
+        if (block.type == BlockType::TALL_GRASS && roll < 0.3f) seeds = 1;
+        client.resources[static_cast<size_t>(BlockType::SEEDS)] += seeds * Block::kUnitsPerBlock;
+        // Leaves now and then drop a sapling (a pine's, from pine needles).
+        if (IsLeavesType(block.type) && roll > 0.88f)
+            client.resources[static_cast<size_t>(block.type == BlockType::PINE_LEAVES ? BlockType::PINE_SAPLING : BlockType::SAPLING)] += Block::kUnitsPerBlock;
+    }
     // Survival: the block's worth goes to the player.
     if (!Creative(client)) {
+        Award(client, Achievement::FirstBlock);
+        if (block.type == BlockType::IRON_ORE) Award(client, Achievement::Miner);
+        if (block.type == BlockType::RIPE_WHEAT) Award(client, Achievement::Farmer);
         uint32_t& held = client.resources[static_cast<size_t>(block.ResourceType())]; // (pebbles are stone)
         held += static_cast<uint32_t>(block.ResourceUnits());
         SendResources(client);
@@ -650,6 +787,22 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
         return Echo(client, pos);
     }
 
+    // A door needs room for its upper half too.
+    if (type == BlockType::DOOR) {
+        Block upper;
+        if (!world->GetBlock(pos.x, pos.y + 1, pos.z, upper) || !upper.IsPassable() || upper.type == BlockType::DOOR_OPEN) {
+            if (!Creative(client)) SendResources(client);
+            return Echo(client, pos);
+        }
+    }
+    // Seeds are planted on dirt or grass.
+    if (type == BlockType::CROP || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING) {
+        Block soil;
+        if (!world->GetBlock(pos.x, pos.y - 1, pos.z, soil) || !(soil.type == BlockType::DIRT || IsGrassType(soil.type)) || !soil.IsFullBlock()) {
+            if (!Creative(client)) SendResources(client);
+            return Echo(client, pos);
+        }
+    }
     const Block placed = Block::Placed(type, height, faceAxis);
     // Survival: it costs its worth, which the player must have. Water can't be
     // collected (only moved, with pumps), so it can't be placed either.
@@ -670,6 +823,8 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
     }
     world->SetBlock(pos.x, pos.y, pos.z, placed);
     if (type == BlockType::CHEST) chests[pos] = ChestItems{}; // a new chest is empty
+    if (type == BlockType::CROP || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING) crops.insert(pos);
+    if (type == BlockType::DOOR) world->SetBlock(pos.x, pos.y + 1, pos.z, Block(BlockType::DOOR)); // its upper half (part of the one door)
     if (!Creative(client)) {
         held -= cost;
         SendResources(client);
@@ -731,14 +886,16 @@ void Server::UpdateSky() {
         return lo + (hi - lo) * (weatherSeed >> 8) / double(1u << 24);
     };
     switch (weatherMode) {
-    case Options::Weather::Clear: raining = false; break;
-    case Options::Weather::Rain: raining = true; break;
+    case Options::Weather::Clear: raining = storm = false; break;
+    case Options::Weather::Rain: raining = true, storm = false; break;
+    case Options::Weather::Storm: raining = storm = true; break;
     case Options::Weather::Auto:
         weatherTimer -= dt;
         if (weatherTimer <= 0.0) {
             raining = !raining;
+            storm = raining && randomRange(0.0, 1.0) < 0.3; // three showers in ten are thunderstorms
             weatherTimer = raining ? randomRange(2.0 * 60.0, 5.0 * 60.0) : randomRange(10.0 * 60.0, 25.0 * 60.0);
-            Log(raining ? "it starts to rain" : "the rain stops");
+            Log(raining ? (storm ? "a thunderstorm starts" : "it starts to rain") : "the rain stops");
         }
         break;
     }
@@ -746,6 +903,42 @@ void Server::UpdateSky() {
     const float step = static_cast<float>(dt / 10.0); // fades over ten seconds
     rainLevel = rainLevel < target ? std::min(target, rainLevel + step) : std::max(target, rainLevel - step);
     world->GetWater().SetRaining(rainLevel > 0.5f);
+    UpdateStorm();
+}
+
+void Server::UpdateStorm() {
+    const double now = Now();
+    if (!storm || rainLevel < 0.7f || now < nextLightning) return;
+    std::vector<ClientState*> players;
+    for (auto& [peer, client] : clients)
+        if (client.welcomed && client.hasState) players.push_back(&client);
+    weatherSeed = weatherSeed * 1664525u + 1013904223u;
+    auto random01 = [&] {
+        weatherSeed = weatherSeed * 1664525u + 1013904223u;
+        return (weatherSeed >> 8) / double(1u << 24);
+    };
+    nextLightning = now + 3.0 + 9.0 * random01();
+    if (players.empty()) return;
+    // Somewhere within 40 blocks of a random player, on top of whatever's there.
+    const ClientState& near = *players[static_cast<size_t>(random01() * players.size()) % players.size()];
+    const double angle = random01() * 6.283185307179586, distance = 4.0 + 36.0 * random01();
+    const int x = static_cast<int>(std::floor(near.feet.x + std::cos(angle) * distance)), z = static_cast<int>(std::floor(near.feet.z + std::sin(angle) * distance));
+    std::optional<glm::ivec3> top;
+    for (int y = static_cast<int>(near.feet.y) + 48; y > static_cast<int>(near.feet.y) - 48; y--) {
+        Block b;
+        if (!world->GetBlock(x, y, z, b)) continue;
+        if (!b.IsAir() && !b.IsPlant()) {
+            top = glm::ivec3(x, y + 1, z);
+            break;
+        }
+    }
+    if (!top) return;
+    const auto packet = net::Encode(net::Lightning{ *top });
+    for (auto& [peer, client] : clients)
+        if (client.welcomed) net.Send(peer, net::kChannelReliable, packet);
+    // Anyone close by is struck: three hearts (armour helps).
+    for (ClientState* p : players)
+        if (glm::distance(p->feet, glm::vec3(*top) + glm::vec3(0.5f, 0.0f, 0.5f)) < 3.0f) Hurt(*p, 6, "was struck by lightning");
 }
 
 // --- Traps and health -------------------------------------------------------------
@@ -847,7 +1040,23 @@ void Server::DropOnDeath(ClientState& client) {
 
 void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     Block block;
-    if (!InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block) || block.type != BlockType::BED) return;
+    if (!InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block)) return;
+    if (block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN) return ToggleDoor(pos, block.type == BlockType::DOOR);
+    if (block.type == BlockType::TNT) return LightTnt(pos, kTntFuse);
+    if (block.type == BlockType::CAMPFIRE) {
+        // Cooks one of the raw food in their hand.
+        const BlockType cooked = client.heldBlock == BlockType::RAW_VENISON ? BlockType::COOKED_VENISON
+                               : client.heldBlock == BlockType::RAW_FISH    ? BlockType::COOKED_FISH
+                                                                             : BlockType::AIR;
+        uint32_t& raw = client.resources[static_cast<size_t>(client.heldBlock)];
+        if (cooked == BlockType::AIR || raw < Block::kUnitsPerBlock) return;
+        raw -= Block::kUnitsPerBlock;
+        client.resources[static_cast<size_t>(cooked)] += Block::kUnitsPerBlock;
+        SendResources(client);
+        if (cooked == BlockType::COOKED_VENISON) Award(client, Achievement::Cook);
+        return;
+    }
+    if (block.type != BlockType::BED) return;
     if (client.bed != pos) {
         client.bed = pos;
         SendChat(client, net::ChatMessage::Kind::Info, "You'll respawn at this bed");
@@ -870,7 +1079,33 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     timeOfDay = 0.02; // just after sunrise
     for (auto& [peer, other] : clients) other.sleptAt = -1000.0;
     Broadcast(net::ChatMessage::Kind::Info, everyone > 1 ? "Everyone slept: it's morning" : "You slept: it's morning");
+    for (auto& [peer, other] : clients)
+        if (other.welcomed) Award(other, Achievement::SweetDreams);
     Log("night skipped by sleeping");
+}
+
+void Server::ToggleDoor(const glm::ivec3& pos, bool open) {
+    // This half and the one above or below it.
+    const BlockType from = open ? BlockType::DOOR : BlockType::DOOR_OPEN, to = open ? BlockType::DOOR_OPEN : BlockType::DOOR;
+    std::vector<glm::ivec3> halves{ pos };
+    for (const int dy : { 1, -1 }) {
+        Block other;
+        if (world->GetBlock(pos.x, pos.y + dy, pos.z, other) && other.type == from) {
+            halves.push_back(pos + glm::ivec3(0, dy, 0));
+            break;
+        }
+    }
+    // It won't close on anyone standing in it.
+    if (!open)
+        for (const auto& [peer, other] : clients) {
+            if (!other.welcomed || !other.hasState) continue;
+            const Collision::AABB body = BodyAt(other.feet, 0.0f, (other.flags & net::kFlagCrouching) != 0);
+            for (const auto& h : halves) {
+                const glm::vec3 lo(h), hi = lo + glm::vec3(1.0f);
+                if (glm::all(glm::lessThan(lo, body.max)) && glm::all(glm::greaterThan(hi, body.min))) return;
+            }
+        }
+    for (const auto& h : halves) world->SetBlock(h.x, h.y, h.z, Block::Placed(to));
 }
 
 glm::vec3 Server::RespawnPoint(const ClientState& client, std::string& why) const {
@@ -974,6 +1209,7 @@ void Server::HandleEat(ClientState& client, BlockType food) {
     if (value == 0 || Creative(client) || held < Block::kUnitsPerBlock || client.food >= Hunger::kMaxFood) return SendResources(client);
     held -= Block::kUnitsPerBlock;
     client.food = std::min(Hunger::kMaxFood, client.food + value);
+    Award(client, Achievement::FirstMeal);
     SendResources(client);
     SendHealth(client, false);
 }
@@ -983,7 +1219,10 @@ void Server::HandleOpenChest(ClientState& client, const glm::ivec3& pos, bool op
     Block block;
     if (open && InReach(client, pos, kChestReach) && world->GetBlock(pos.x, pos.y, pos.z, block) && block.type == BlockType::CHEST) {
         client.openChest = pos;
-        ChestAt(pos);
+        const bool unopened = chests.count(pos) == 0;
+        const ChestItems& chest = ChestAt(pos);
+        // The first look into a dungeon's chest.
+        if (unopened && std::any_of(chest.begin(), chest.end(), [](uint32_t u) { return u > 0; })) Award(client, Achievement::TreasureHunter);
     }
     SendChest(client);
 }
@@ -1049,6 +1288,301 @@ void Server::RemoveChest(const glm::ivec3& pos, ClientState* breaker) {
         }
 }
 
+void Server::HandleShoot(ClientState& client, const glm::vec3& direction) {
+    const double now = Now();
+    // A bow of their own, an arrow to shoot (survival), and not too often.
+    if (now < client.nextShot || Usable(client, Tool::Bow) != Tool::Bow) return;
+    uint32_t& held = client.resources[static_cast<size_t>(BlockType::ARROW)];
+    if (!Creative(client)) {
+        if (held < Block::kUnitsPerBlock) return SendResources(client);
+        held -= Block::kUnitsPerBlock;
+        SendResources(client);
+    }
+    client.nextShot = now + kShotInterval * 0.8; // (a little slack for timing)
+    const glm::vec3 dir = glm::normalize(direction);
+    const glm::vec3 eye = client.feet + glm::vec3(0.0f, (client.flags & net::kFlagCrouching) ? 1.27f : kEyeHeight, 0.0f);
+    arrows.push_back({ eye + dir * 0.4f, dir * kArrowSpeed, client.id, now });
+    if (arrows.size() > 256) arrows.erase(arrows.begin()); // (the oldest go first)
+}
+
+void Server::LightTnt(const glm::ivec3& pos, double fuse) {
+    if (fuses.count(pos)) return;
+    world->SetBlock(pos.x, pos.y, pos.z, Block(BlockType::TNT_LIT));
+    fuses[pos] = Now() + fuse;
+}
+
+void Server::UpdateTnt() {
+    const double now = Now();
+    std::vector<glm::ivec3> due;
+    for (auto it = fuses.begin(); it != fuses.end();) {
+        Block b;
+        if (world->GetBlock(it->first.x, it->first.y, it->first.z, b) && b.type != BlockType::TNT_LIT) { it = fuses.erase(it); continue; } // (broken first)
+        if (now >= it->second) {
+            due.push_back(it->first);
+            it = fuses.erase(it);
+        }
+        else ++it;
+    }
+    for (const auto& p : due) Explode(p, kTntRadius);
+}
+
+void Server::Explode(const glm::ivec3& pos, int radius) {
+    // Everything in a ball goes (water and dungeon bricks too; a chest's contents are
+    // lost), and TNT caught in it is set off on a short fuse.
+    for (int x = -radius; x <= radius; x++)
+        for (int y = -radius; y <= radius; y++)
+            for (int z = -radius; z <= radius; z++) {
+                if (x * x + y * y + z * z > radius * radius + 1) continue;
+                const glm::ivec3 p = pos + glm::ivec3(x, y, z);
+                Block b;
+                if (!world->GetBlock(p.x, p.y, p.z, b) || b.IsAir()) continue;
+                if (b.type == BlockType::TNT && p != pos) {
+                    LightTnt(p, 0.4 + 0.1 * (std::abs(x) + std::abs(z)));
+                    continue;
+                }
+                if (b.type == BlockType::CHEST) RemoveChest(p, nullptr);
+                if (b.type == BlockType::SIGN && signs.erase(p)) BroadcastSign(p);
+                world->SetBlock(p.x, p.y, p.z, Block());
+            }
+    const auto packet = net::Encode(net::Explosion{ pos, static_cast<uint8_t>(radius) });
+    const glm::vec3 centre = glm::vec3(pos) + glm::vec3(0.5f);
+    for (auto& [peer, client] : clients) {
+        if (!client.welcomed) continue;
+        net.Send(peer, net::kChannelReliable, packet);
+        // Hurt (more the closer), and thrown away from it.
+        const float d = glm::distance(client.feet + glm::vec3(0.0f, 0.9f, 0.0f), centre);
+        if (d > radius * 2.0f) continue;
+        const int damage = static_cast<int>(std::lround(10.0f * (1.0f - d / (radius * 2.0f))));
+        if (damage > 0) Hurt(client, damage, "was blown up");
+        glm::vec3 away = client.feet - centre;
+        away.y = 0.0f;
+        away = glm::length(away) > 1e-3f ? glm::normalize(away) : glm::vec3(1.0f, 0.0f, 0.0f);
+        net.Send(peer, net::kChannelReliable, net::Encode(net::Knockback{ away * 8.0f * (1.0f - d / (radius * 2.0f)) + glm::vec3(0.0f, 6.0f, 0.0f) }));
+    }
+    // Creatures too (ids first: a killed one leaves the list).
+    std::vector<std::pair<uint16_t, int>> struck;
+    for (const auto& c : creatures.All()) {
+        const float d = glm::distance(c.feet, centre);
+        if (d <= radius * 2.0f) struck.emplace_back(c.id, static_cast<int>(std::lround(12.0f * (1.0f - d / (radius * 2.0f)))) + 1);
+    }
+    for (const auto& [id, damage] : struck) {
+        bool killed = false;
+        creatures.Damage(id, damage, centre, Now(), killed);
+    }
+}
+
+void Server::HandleWriteSign(ClientState& client, const glm::ivec3& pos, const std::string& raw) {
+    Block block;
+    if (!InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block) || block.type != BlockType::SIGN) return;
+    // Printable characters only.
+    std::string text;
+    for (char c : raw)
+        if (c >= 32 && c < 127) text += c;
+    signs[pos] = text.substr(0, net::kMaxSignLength);
+    BroadcastSign(pos);
+}
+
+void Server::BroadcastSign(const glm::ivec3& pos) {
+    auto it = signs.find(pos);
+    const auto packet = net::Encode(net::SignText{ pos, it != signs.end() ? it->second : std::string() }, false);
+    for (auto& [peer, client] : clients)
+        if (client.welcomed) net.Send(peer, net::kChannelReliable, packet);
+}
+
+void Server::HandleCast(ClientState& client, const glm::ivec3& pos, bool cast) {
+    client.bobber.reset();
+    Block water;
+    // Into water (with nothing on top of it) within 12 blocks, with a rod of their own.
+    if (cast && Usable(client, Tool::Rod) == Tool::Rod && InReach(client, pos, 12.5f) && world->GetBlock(pos.x, pos.y, pos.z, water) && water.HasWater()) {
+        Block above;
+        if (!world->GetBlock(pos.x, pos.y + 1, pos.z, above) || !above.HasWater()) {
+            client.bobber = pos;
+            client.castFrom = client.feet;
+            weatherSeed = weatherSeed * 1664525u + 1013904223u;
+            client.biteAt = Now() + (4.0 + 10.0 * ((weatherSeed >> 8) / double(1u << 24))) / std::max(0.1f, options.fishingRate);
+        }
+    }
+    net.Send(client.peer, net::kChannelReliable, net::Encode(net::Bobber{ pos, static_cast<uint8_t>(client.bobber ? 1 : 0), 0 }));
+}
+
+void Server::UpdateFishing() {
+    const double now = Now();
+    for (auto& [peer, client] : clients) {
+        if (!client.bobber) continue;
+        const glm::ivec3 at = *client.bobber;
+        Block water;
+        // Walked off (or the water's gone): the line's reeled in.
+        if (glm::distance(client.feet, client.castFrom) > 3.0f || !world->GetBlock(at.x, at.y, at.z, water) || !water.HasWater()) {
+            client.bobber.reset();
+            net.Send(peer, net::kChannelReliable, net::Encode(net::Bobber{ at, 0, 0 }));
+            continue;
+        }
+        if (now < client.biteAt) continue;
+        // A bite: the fish is theirs.
+        client.bobber.reset();
+        client.resources[static_cast<size_t>(BlockType::RAW_FISH)] += Block::kUnitsPerBlock;
+        SendResources(client);
+        SendChat(client, net::ChatMessage::Kind::Info, "You caught a fish!");
+        net.Send(peer, net::kChannelReliable, net::Encode(net::Bobber{ at, 0, 1 }));
+        Award(client, Achievement::Angler);
+    }
+}
+
+void Server::UpdateArrows() {
+    const double now = Now();
+    constexpr float dt = 1.0f / kTickRate;
+    constexpr int kSteps = 6;
+    for (auto it = arrows.begin(); it != arrows.end();) {
+        Arrow& a = *it;
+        // Stuck arrows stay a while; flying ones don't fly forever.
+        if ((a.stuckAt >= 0.0 && now - a.stuckAt > 6.0) || (a.stuckAt < 0.0 && now - a.born > 8.0)) {
+            it = arrows.erase(it);
+            continue;
+        }
+        if (a.stuckAt >= 0.0) { ++it; continue; }
+        bool gone = false;
+        for (int step = 0; step < kSteps && !gone && a.stuckAt < 0.0; step++) {
+            a.velocity.y -= kArrowGravity * dt / kSteps;
+            const glm::vec3 next = a.position + a.velocity * (dt / kSteps);
+            // Into a block: stuck there.
+            const glm::ivec3 cell(glm::floor(next));
+            Block b;
+            if (world->GetBlock(cell.x, cell.y, cell.z, b) && !b.IsPassable() &&
+                (b.IsFullBlock() || next.y - cell.y <= b.SurfaceHeight(next.x - cell.x, next.z - cell.z))) {
+                a.stuckAt = now;
+                a.velocity = glm::vec3(0.0f);
+                break;
+            }
+            a.position = next;
+            auto inside = [&](const Collision::AABB& box) {
+                return glm::all(glm::greaterThanEqual(a.position, box.min - 0.1f)) && glm::all(glm::lessThanEqual(a.position, box.max + 0.1f));
+            };
+            // A creature.
+            for (const auto& c : creatures.All()) {
+                if (!inside(CreatureSystem::Box(c))) continue;
+                bool killed = false;
+                const uint16_t id = c.id;
+                const CreatureType type = c.type;
+                creatures.Damage(id, kArrowDamage, a.position - a.velocity * 0.05f, now, killed);
+                if (!killed && a.shooter != kCreatureShooter) creatures.Provoke(id, a.shooter, now);
+                if (killed)
+                    for (auto& [peer, shooter] : clients)
+                        if (shooter.id == a.shooter) {
+                            SendChat(shooter, net::ChatMessage::Kind::Info, std::string("You shot a ") + SpecOf(type).id);
+                            Award(shooter, Achievement::Marksman);
+                            if (type != CreatureType::Skeleton) Award(shooter, type == CreatureType::Deer ? Achievement::Hunter : Achievement::GhoulSlayer);
+                        }
+                gone = true;
+                break;
+            }
+            if (gone) break;
+            // A player (not the shooter as it leaves the bow; not when PvP is off).
+            for (auto& [peer, target] : clients) {
+                if (!target.welcomed || !target.hasState || (target.noclip && (target.flags & net::kFlagFlying))) continue;
+                if (target.id == a.shooter && now - a.born < 0.3) continue;
+                if (!inside(BodyAt(target.feet, 0.0f, (target.flags & net::kFlagCrouching) != 0))) continue;
+                if (options.pvp || target.id == a.shooter || a.shooter == kCreatureShooter) {
+                    std::string by = a.shooter == kCreatureShooter ? "a skeleton" : "someone";
+                    for (const auto& [p2, s] : clients)
+                        if (s.id == a.shooter) by = s.name;
+                    const double before = target.invulnerableUntil;
+                    Hurt(target, kArrowDamage, "was shot by " + by);
+                    if (target.health > 0 && target.lastHurt >= now && target.invulnerableUntil == before) {
+                        const glm::vec2 push = glm::length(glm::vec2(a.velocity.x, a.velocity.z)) > 1e-3f ? glm::normalize(glm::vec2(a.velocity.x, a.velocity.z)) : glm::vec2(0.0f);
+                        net.Send(target.peer, net::kChannelReliable, net::Encode(net::Knockback{ glm::vec3(push.x * 5.0f, 4.0f, push.y * 5.0f) }));
+                    }
+                }
+                gone = true;
+                break;
+            }
+        }
+        if (gone) it = arrows.erase(it);
+        else ++it;
+    }
+}
+
+void Server::SendArrows() {
+    constexpr float kSendRange = 96.0f;
+    for (auto& [peer, client] : clients) {
+        if (!client.welcomed) continue;
+        net::Arrows m;
+        for (const auto& a : arrows)
+            if (glm::distance(a.position, client.feet) < kSendRange) m.arrows.push_back({ a.position, a.velocity });
+        if (m.arrows.empty() && !client.sentArrows) continue; // (nothing, and they know it)
+        client.sentArrows = !m.arrows.empty();
+        net.Send(peer, net::kChannelUnreliable, net::Encode(m));
+    }
+}
+
+void Server::Award(ClientState& client, Achievement a) {
+    if (Creative(client) || (client.achievements & Achievements::Bit(a))) return;
+    client.achievements |= Achievements::Bit(a);
+    SendChat(client, net::ChatMessage::Kind::Info, std::string(Achievements::kToastMark) + Achievements::Name(a) + ": " + Achievements::Description(a));
+    for (auto& [peer, other] : clients)
+        if (other.welcomed && other.id != client.id) SendChat(other, net::ChatMessage::Kind::Info, client.name + " earned " + Achievements::Name(a));
+}
+
+bool Server::GrowTree(const glm::ivec3& at, bool pine) {
+    const int height = 4 + static_cast<int>(Noise::Random01(at.x, at.y, at.z, 0x7EE5u) * 3.0f); // 4..6
+    auto open = [&](const glm::ivec3& p) { Block b; return world->GetBlock(p.x, p.y, p.z, b) && (b.IsAir() || b.IsPlant()); };
+    for (int y = 1; y <= height + 1; y++)
+        if (!open(at + glm::ivec3(0, y, 0))) return false; // no room
+    // Leaves first (into open cells), then the trunk through them.
+    const Block leaves(pine ? BlockType::PINE_LEAVES : BlockType::LEAVES);
+    if (pine) {
+        // A cone: wide near the bottom of the crown, narrowing to a tip.
+        for (int y = 2; y <= height + 1; y++) {
+            const int r = std::max(0, (height + 1 - y) / 2 + (y < height ? 1 : 0));
+            for (int x = -r; x <= r; x++)
+                for (int z = -r; z <= r; z++)
+                    if (std::abs(x) + std::abs(z) <= r + 1 && open(at + glm::ivec3(x, y, z))) world->SetBlock(at.x + x, at.y + y, at.z + z, leaves);
+        }
+    }
+    else {
+        // A round crown around the top of the trunk.
+        const glm::ivec3 top = at + glm::ivec3(0, height, 0);
+        for (int x = -2; x <= 2; x++)
+            for (int y = -2; y <= 1; y++)
+                for (int z = -2; z <= 2; z++) {
+                    if (x * x + y * y * 2 + z * z > 6) continue;
+                    const glm::ivec3 p = top + glm::ivec3(x, y, z);
+                    if (open(p)) world->SetBlock(p.x, p.y, p.z, leaves);
+                }
+    }
+    for (int y = 0; y < height; y++) world->SetBlock(at.x, at.y + y, at.z, Block(BlockType::LOG));
+    return true;
+}
+
+void Server::UpdateCrops() {
+    // Once a second, each crop (in a loaded chunk) may ripen: on average after 90 s.
+    const double now = Now();
+    if (now < nextCropUpdate) return;
+    nextCropUpdate = now + 1.0;
+    const float chance = std::min(1.0f, options.cropGrowthRate / 90.0f);
+    for (auto it = crops.begin(); it != crops.end();) {
+        Block b;
+        const glm::ivec3 p = *it;
+        if (!world->GetBlock(p.x, p.y, p.z, b)) { ++it; continue; } // not loaded: waits
+        const bool sapling = b.type == BlockType::SAPLING || b.type == BlockType::PINE_SAPLING;
+        if (b.type != BlockType::CROP && !sapling) { it = crops.erase(it); continue; } // trampled, washed away
+        if (sapling) {
+            // Saplings take longer (two minutes on average), and need room to grow.
+            if (Noise::Random01(p.x, p.y, p.z, static_cast<uint32_t>(tickCount) * 2246822519u) < chance * 0.75f && GrowTree(p, b.type == BlockType::PINE_SAPLING)) {
+                it = crops.erase(it);
+                continue;
+            }
+            ++it;
+            continue;
+        }
+        if (Noise::Random01(p.x, p.y, p.z, static_cast<uint32_t>(tickCount) * 2654435761u) < chance) {
+            world->SetBlock(p.x, p.y, p.z, Block::Plant(BlockType::RIPE_WHEAT, b.edgeData.edges[0]));
+            it = crops.erase(it);
+            continue;
+        }
+        ++it;
+    }
+}
+
 void Server::UpdateTraps() {
     const double now = Now();
     // Breath goes by real time, not ticks: on a slow, overloaded machine ticks run late,
@@ -1090,12 +1624,13 @@ void Server::UpdateTraps() {
                 underCells[n] = glm::ivec3(glm::floor(client.feet + glm::vec3(dx, -0.05f, dz)));
                 n++;
             }
-        bool spiked = false;
+        bool spiked = false, burning = false;
         for (int i = 0; i < 4; i++) {
             Block b;
             const glm::ivec3& f = feetCells[i];
             if (world->GetBlock(f.x, f.y, f.z, b)) {
                 if (b.type == BlockType::SPIKES) spiked = true;
+                if (b.type == BlockType::CAMPFIRE) burning = true;
                 if (b.type == BlockType::PRESSURE_PLATE) {
                     auto it = plateReady.find(f);
                     if (it == plateReady.end() || now >= it->second) {
@@ -1110,6 +1645,10 @@ void Server::UpdateTraps() {
         if (spiked && now >= client.nextSpikeHit) {
             client.nextSpikeHit = now + kSpikeInterval;
             Hurt(client, kSpikeDamage, "was impaled on spikes");
+        }
+        if (burning && now >= client.nextSpikeHit) {
+            client.nextSpikeHit = now + 0.75;
+            Hurt(client, 1, "walked into a campfire");
         }
     }
 
@@ -1139,6 +1678,10 @@ void Server::Tick() {
     UpdateSky();
     UpdateTraps();
     UpdateCreatures();
+    UpdateCrops();
+    UpdateArrows();
+    UpdateFishing();
+    UpdateTnt();
     if (storage && options.autosaveSeconds > 0.0f && Now() - lastSaveTime >= options.autosaveSeconds) Save(false);
 
     std::vector<glm::ivec3> centers;
@@ -1155,6 +1698,7 @@ void Server::Tick() {
         if (client.welcomed) StreamWorld(client);
     BroadcastPlayers();
     SendCreatures();
+    SendArrows();
     net.Flush();
 }
 
@@ -1304,6 +1848,7 @@ void Server::BroadcastPlayers() {
     snapshot.tick = tickCount;
     snapshot.timeOfDay = static_cast<float>(timeOfDay);
     snapshot.rain = static_cast<uint8_t>(std::lround(rainLevel * 255.0f));
+    snapshot.storm = storm ? 1 : 0;
     for (const auto& [peer, client] : clients) {
         if (!client.welcomed || !client.hasState) continue;
         // Flashes red for others while just hurt.

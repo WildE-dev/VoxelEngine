@@ -5,7 +5,8 @@
 //  - at night one player alone sleeps through to the morning; with two, it's morning
 //    only once both are in bed,
 //  - a player who dies comes back at their bed, still after a restart,
-//  - with the bed gone, they're back at the world's spawn point, and told why.
+//  - with the bed gone, they're back at the world's spawn point, and told why,
+//  - doors: placed two tall, opened and closed (not on anyone), broken as a whole.
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -134,6 +135,33 @@ int main() {
         Check(Night(a.client), "it's still night");
         b.client.UseBed(bedAt);
         Check(both(20.0, [&] { return Count(a, "Everyone slept: it's morning") == 1 && !Night(a.client); }), "once both are in bed, it's morning");
+
+        std::cout << "Doors" << std::endl;
+        const glm::ivec3 doorAt{ 17, 0, 22 };
+        auto typeAt = [&](const glm::ivec3& p) { Block t; return a.world.GetBlock(p.x, p.y, p.z, t) ? t.type : BlockType::COUNT; };
+        const glm::ivec3 upper = doorAt + glm::ivec3(0, 1, 0);
+        server.QueueConsoleCommand("give door 1 Sleeper");
+        both(20.0, [&] { return a.client.GetResources(BlockType::DOOR) == kBlock; });
+        a.client.PlaceBlock(doorAt, BlockType::DOOR);
+        Check(both(20.0, [&] { return typeAt(doorAt) == BlockType::DOOR && typeAt(upper) == BlockType::DOOR; }) && a.client.GetResources(BlockType::DOOR) == 0,
+              "a door is placed two blocks tall, for one door");
+        a.client.UseBed(doorAt);
+        Check(both(20.0, [&] { return typeAt(doorAt) == BlockType::DOOR_OPEN && typeAt(upper) == BlockType::DOOR_OPEN; }), "right-clicking opens both halves");
+        server.QueueConsoleCommand("tp Owl 17.5 0 22.5"); // in the doorway
+        both(20.0, [&] { return std::abs(b.feet.x - 17.5f) < 0.1f && std::abs(b.feet.z - 22.5f) < 0.1f; });
+        a.client.UseBed(upper);
+        both(1.0, [] { return false; });
+        Check(typeAt(doorAt) == BlockType::DOOR_OPEN, "it won't close on someone standing in it");
+        server.QueueConsoleCommand("tp Owl 21.5 0 21.5");
+        both(20.0, [&] { return std::abs(b.feet.x - 21.5f) < 0.1f; });
+        a.client.UseBed(upper);
+        Check(both(20.0, [&] { return typeAt(doorAt) == BlockType::DOOR && typeAt(upper) == BlockType::DOOR; }), "once they're out, it closes (from either half)");
+        server.QueueConsoleCommand("gamemode creative Sleeper");
+        both(20.0, [&] { return a.client.IsCreative(); });
+        a.client.BreakBlock(upper);
+        Check(both(20.0, [&] { return typeAt(doorAt) == BlockType::AIR && typeAt(upper) == BlockType::AIR; }), "breaking either half removes the whole door");
+        server.QueueConsoleCommand("gamemode survival Sleeper");
+        both(20.0, [&] { return !a.client.IsCreative(); });
 
         std::cout << "Respawning" << std::endl;
         auto kill = [&](TestClient& victim, const std::string& name, TestClient& killer, const std::string& killerName) {

@@ -233,6 +233,11 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
     worldShader.SetUniform("aoStrength", params.ambientOcclusion ? 1.0f : 0.0f);
     worldShader.SetUniform("sunBrightness", params.sunBrightness);
     worldShader.SetUniform("blockLightColor", kBlockLightColor);
+    {
+        const int count = static_cast<int>(std::min<size_t>(params.handLights.size(), 8));
+        worldShader.SetUniform("handLightCount", count);
+        if (count > 0) glUniform4fv(worldShader.GetLocation("handLights"), count, &params.handLights[0][0]);
+    }
     worldShader.SetUniform("cameraPos", params.cameraPosition);
     SetFogUniforms(worldShader, params, 1);
     world.Render(worldShader, params.view, params.projection, params.time);
@@ -250,6 +255,10 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
     SetFogUniforms(playerShader, params, 1);
     playerModels.Draw(playerShader, params.view, params.projection, params.players);
     playerModels.DrawCreatures(playerShader, params.view, params.projection, params.creatures, params.time);
+    playerModels.DrawParticles(playerShader, params.view, params.projection, params.particles);
+    playerModels.DrawBolts(playerShader, params.view, params.projection, params.bolts);
+    playerModels.DrawArrows(playerShader, params.view, params.projection, params.arrows);
+    playerModels.DrawGlows(playerShader, params.view, params.projection, params.glows);
 
     DrawSkybox(params);
 
@@ -263,7 +272,7 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
 
     DrawWater(world, params);
 
-    rain.Draw(rainShader, params.view, params.projection, params.cameraPosition, params.time, params.rain, 0.25f + 0.75f * params.sunBrightness);
+    rain.Draw(rainShader, params.view, params.projection, params.cameraPosition, params.time, params.snow, params.rain, 0.25f + 0.75f * params.sunBrightness);
 
     // --- Composite to the default framebuffer ---
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -393,6 +402,10 @@ void Renderer::DrawSkybox(const FrameParams& params) {
     skyboxShader.SetUniform("brightness", 0.05f + 0.95f * params.sunBrightness);
     skyboxShader.SetUniform("tint", params.skyTint);
     skyboxShader.SetUniform("overcast", params.overcast);
+    skyboxShader.SetUniform("sunDirection", params.sunDirection);
+    skyboxShader.SetUniform("night", std::clamp(1.0f - params.sunBrightness * 2.5f, 0.0f, 1.0f));
+    skyboxShader.SetUniform("time", params.time);
+    skyboxShader.SetUniform("rainbow", params.rainbow);
 
     glBindVertexArray(skyboxVAO);
     glActiveTexture(GL_TEXTURE0);

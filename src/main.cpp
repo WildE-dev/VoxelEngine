@@ -62,6 +62,7 @@ bool ParseWeather(const std::string& text, Server::Options::Weather& weather) {
     if (text == "auto") weather = Server::Options::Weather::Auto;
     else if (text == "clear") weather = Server::Options::Weather::Clear;
     else if (text == "rain") weather = Server::Options::Weather::Rain;
+    else if (text == "storm") weather = Server::Options::Weather::Storm;
     else return false;
     return true;
 }
@@ -133,7 +134,7 @@ int main(int argc, char** argv)
         }
         else if (arg == "--weather" && i + 1 < argc) {
             if (!ParseWeather(argv[++i], sky.weather)) {
-                std::cerr << "Weather must be clear, rain or auto" << std::endl;
+                std::cerr << "Weather must be clear, rain, storm or auto" << std::endl;
                 return EXIT_FAILURE;
             }
         }

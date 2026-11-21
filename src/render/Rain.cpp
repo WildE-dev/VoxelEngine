@@ -43,7 +43,7 @@ Rain::~Rain() {
     glDeleteBuffers(1, &vbo);
 }
 
-void Rain::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPosition, float time,
+void Rain::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPosition, float time, bool snow,
                 float intensity, float brightness) {
     if (intensity <= 0.0f) return;
     shader.Use();
@@ -55,8 +55,9 @@ void Rain::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projecti
     shader.SetUniform("brightness", brightness);
     shader.SetUniform("radius", kRadius);
     shader.SetUniform("height", kHeight);
-    shader.SetUniform("speed", kSpeed);
-    shader.SetUniform("streak", kLength);
+    shader.SetUniform("speed", snow ? kSpeed * 0.1f : kSpeed);
+    shader.SetUniform("streak", snow ? 0.07f : kLength);
+    shader.SetUniform("snow", snow ? 1.0f : 0.0f);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
