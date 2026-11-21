@@ -285,6 +285,7 @@ private:
     bool bench = false;
     bool ignoreMouse = false; // VOXEL_NO_MOUSE
     bool holdMine = false;    // VOXEL_HOLD_MINE: mine as if the left button were held
+    double rightClickAt = 0.0; // VOXEL_RIGHT_CLICK: one right-click at this time
     std::string startCommands; // VOXEL_RUN: chat lines sent once joined, ';' between them
     double landedAt = 0.0;     // when we first stood on the ground (glfwGetTime)
     double benchSections[7] = {};

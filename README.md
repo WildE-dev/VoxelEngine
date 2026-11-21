@@ -852,6 +852,10 @@ The client is only told what's in a chest while it has it open. `ChestTest` chec
 
 ## Air power
 
+With a block in hand, right-clicking machinery builds against it (a wheel onto a
+shaft, a pipe onto a compressor, a valve or tank onto a pipe); with an empty hand or
+a tool, it's used or described instead.
+
 Machines run on **compressed air**. A **compressor** makes it, turned by **water
 wheels** through **shafts**:
 
@@ -877,7 +881,8 @@ wheels** through **shafts**:
   more air than the machines use and keeping them going when the water stops. (It's
   more to fill, too: a network with a tank takes longer to reach running pressure.)
 - A **valve** joins the pipes either side of it only while it's open; shut, the two
-  sides are separate networks, each keeping its own air. Right-click opens and shuts
+  sides are separate networks, each keeping its own air. Right-click (with an empty
+  hand or a tool) opens and shuts
   it, or give it a channel (see [Signals](#signals)) and it opens while that's on. Breaking a pipe lets
   out what it held, and the two halves of a network keep their pressure. Pipes are
   drawn as thin tubes, joined to what they connect to (they still stop you like a
@@ -900,6 +905,7 @@ The machines:
 
 Look at a wheel, compressor, pump or drill to see how it's doing under the
 crosshair, and right-click any part (wheel, shaft, compressor, pipe, pump or drill)
+with an empty hand or a tool
 for the details in chat: how fast a wheel turns and how much water passes it, whether
 it reaches a compressor, the wheels on a compressor's shafts, and the network's
 pressure, pipes and working machines.
@@ -947,7 +953,8 @@ channel is heard by everything listening to it within **64 blocks**.
 | **Sluice gate** | with a channel, opens out of the way while it's on, letting water through, and closes when it's off, pushing any water in its cell up or aside (it waits if there's nowhere for it to go); with none, it stays shut |
 
 Placing a lever, a logic gate or a signal lamp opens a small window to set its
-channels; right-click a gate or a lamp, or crouch and right-click any signal block
+channels; right-click a gate or a lamp (with an empty hand or a tool), or crouch and
+right-click any signal block
 (lever, plate, gate, lamp, valve or sluice gate), to change them. Looking at one shows
 its channels (and a lever's, gate's or valve's state) under the crosshair. Gates work
 out their answer from what they heard and send it from the next update, a tenth of

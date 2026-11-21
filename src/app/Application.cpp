@@ -262,6 +262,10 @@ bool Application::Init(const ClientOptions& options) {
         glfwSwapInterval(0);
     }
     if (const char* yaw = std::getenv("VOXEL_START_YAW")) camera.SetYaw(static_cast<float>(std::atof(yaw)));
+    // VOXEL_START_PITCH sets the initial pitch (degrees), and VOXEL_RIGHT_CLICK="seconds"
+    // right-clicks once that long after start (for unattended checks of building).
+    if (const char* pitch = std::getenv("VOXEL_START_PITCH")) camera.SetLook(camera.GetDirectionAngles().y, static_cast<float>(std::atof(pitch)));
+    if (const char* click = std::getenv("VOXEL_RIGHT_CLICK")) rightClickAt = std::atof(click);
 
     // Installed before ImGui so its backend chains to ours.
     glfwSetWindowUserPointer(window, this);
@@ -485,6 +489,10 @@ void Application::Run() {
         };
         UpdateNetwork();
         lap(0);
+        if (rightClickAt > 0.0 && glfwGetTime() >= rightClickAt) {
+            rightClickAt = 0.0;
+            OnMouseButton(GLFW_MOUSE_BUTTON_RIGHT, GLFW_PRESS);
+        }
         HandleContinuousInput(deltaTime);
         {
             // A gentle bob while walking on the ground (eased in and out), and the view
@@ -2051,11 +2059,15 @@ void Application::OnMouseButton(int button, int action) {
             chestAskedAt = Client::Now();
             return;
         }
+        // With a block in hand, right-clicking machinery builds against it (a wheel on a
+        // shaft, a pipe on a compressor); with an empty hand or a tool, it's used.
+        const bool building = SelectedTool() == Tool::None && SelectedBlock() != BlockType::AIR && !IsItemType(SelectedBlock());
         // A signal block: crouching, set its channels; a gate or a lamp (nothing else to
-        // do with them), likewise.
+        // do with them), likewise when not building.
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
             at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Signals::KindOf(target.type) != Signals::Kind::None &&
-            (player.IsCrouching() || target.type == BlockType::LOGIC_GATE || target.type == BlockType::SIGNAL_LAMP || target.type == BlockType::SIGNAL_LAMP_ON)) {
+            (player.IsCrouching() ||
+             (!building && (target.type == BlockType::LOGIC_GATE || target.type == BlockType::SIGNAL_LAMP || target.type == BlockType::SIGNAL_LAMP_ON)))) {
             OpenSignalEditor(at->block, target.type);
             return;
         }
@@ -2069,14 +2081,14 @@ void Application::OnMouseButton(int button, int action) {
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
             at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) &&
             (target.type == BlockType::BED || target.type == BlockType::DOOR || target.type == BlockType::DOOR_OPEN || target.type == BlockType::CAMPFIRE ||
-             target.type == BlockType::TNT || target.type == BlockType::LEVER || target.type == BlockType::LEVER_ON || target.type == BlockType::VALVE ||
-             target.type == BlockType::VALVE_OPEN)) {
+             target.type == BlockType::TNT || target.type == BlockType::LEVER || target.type == BlockType::LEVER_ON ||
+             (!building && (target.type == BlockType::VALVE || target.type == BlockType::VALVE_OPEN)))) {
             client->UseBed(at->block);
             return;
         }
         // Part of an air network: how it's doing (the server says, in chat).
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
-            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Power::IsPart(target.type)) {
+            at && !building && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Power::IsPart(target.type)) {
             client->Inspect(at->block);
             return;
         }
@@ -2256,7 +2268,7 @@ void Application::DrawSignalEditor() {
         else {
             channel("Listens to", signalA);
             if (kind == Signals::Kind::Lamp) ImGui::TextDisabled("Lights while the channel is on.");
-            if (kind == Signals::Kind::Valve) ImGui::TextDisabled("Opens while the channel is on. With none, right-click opens and shuts it.");
+            if (kind == Signals::Kind::Valve) ImGui::TextDisabled("Opens while the channel is on. With none, right-click (empty-handed) opens and shuts it.");
             if (kind == Signals::Kind::Sluice) ImGui::TextDisabled("Opens while the channel is on, and closes again when it's off.");
         }
         if (ImGui::Button("Done") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
