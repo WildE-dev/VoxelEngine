@@ -143,6 +143,10 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
     // even for a surface only a 32nd high.
     constexpr int kUnitsPer32nd = Block::kMaxWaterVolume / 32;
     constexpr int kFullUnits = Block::kMaxWaterVolume;
+    // An open water surface is drawn a little below the top of its cell even when the
+    // cell is full, so it never lies flush with the tops of blocks beside it (no ties in
+    // depth to fight over, and blocks level with the water stand just out of it).
+    constexpr int kOpenSurfaceTop = 30; // 32nds
     constexpr int kCornerOfEdge[4][2] = { { 0, 1 }, { 1, 0 }, { 0, 0 }, { 1, 1 } }; // EdgeData order
     const glm::ivec3 up(0, 1, 0);
     // Height of a column's water surface relative to the base of row p.y, in units, or
@@ -198,7 +202,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
         // Otherwise the columns' mean, at most the cell's top and at least a 32nd (so a
         // film on dry ground never folds into it).
         const int average = (sum + (sum >= 0 ? n / 2 : -n / 2)) / n;
-        return std::clamp((average + kUnitsPer32nd / 2) / kUnitsPer32nd, onWater ? 0 : 1, 32);
+        return std::clamp((average + kUnitsPer32nd / 2) / kUnitsPer32nd, onWater ? 0 : 1, kOpenSurfaceTop);
     };
     // Side faces: our two edges on that side, and the neighbour's edges they touch.
     struct SideEdges { int ours[2], theirs[2]; };
@@ -221,7 +225,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
             // Water in a partial block stands flat at its own level (not sloping up to
             // the water beside it, over the block's quarters).
             top32[e] = covered ? 32
-                     : self.IsPartial() ? std::clamp((self.WaterShownLevel() + kUnitsPer32nd / 2) / kUnitsPer32nd, 1, 32)
+                     : self.IsPartial() ? std::clamp((self.WaterShownLevel() + kUnitsPer32nd / 2) / kUnitsPer32nd, 1, kOpenSurfaceTop)
                                         : cornerHeight(here, kCornerOfEdge[e][0], kCornerOfEdge[e][1]);
             top[e] = static_cast<uint8_t>((top32[e] + 3) / 4);
             fine[e] = static_cast<uint8_t>(top[e] * 4 - top32[e]);

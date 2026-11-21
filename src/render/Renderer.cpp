@@ -320,16 +320,10 @@ void Renderer::DrawWater(ClientWorld& world, const FrameParams& params) {
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, refractDepth);
     glDisable(GL_CULL_FACE);
-    // Water often lies exactly on, or a hair above, the ground it covers: a shore's
-    // waterlogged slopes rise to the surface, and thin water sits just over the floor.
-    // Depth precision can't separate those (worse at grazing angles), so the ground
-    // would poke through in jagged slivers. Pull the water slightly toward the camera
-    // so it wins those ties; the offset is within depth precision, so nothing that's
-    // really in front of the water is affected.
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(-1.0f, -2.0f);
+    // (No depth offset: the mesher keeps open water surfaces a little below the top of
+    // their cells, so they don't tie with the tops of the blocks around them, and a
+    // pulled-forward surface would show over blocks level with it.)
     world.RenderWater(waterShader, params.view, params.projection, params.time);
-    glDisable(GL_POLYGON_OFFSET_FILL);
     glEnable(GL_CULL_FACE);
 
     glActiveTexture(GL_TEXTURE3);
