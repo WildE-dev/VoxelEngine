@@ -200,6 +200,16 @@ int main() {
     a.client.Eat(BlockType::BREAD);
     Check(Pump(a, 20.0, [&] { return a.client.GetFood() >= beforeBread + 5; }), "which is good for 6 food");
 
+    std::cout << "Achievements" << std::endl;
+    Check(Has(a, "First Meal: eat something") && Has(a, "Hunter: bring down a deer") && Has(a, "Cook: cook some venison") && Has(a, "Farmer: harvest ripe wheat") &&
+              Has(a, "Baker: bake bread"),
+          "eating, hunting, cooking, farming and baking each earn an achievement");
+    a.client.SendChat("/achievements");
+    Check(Pump(a, 20.0, [&] { return Has(a, " of 14 achievements") && Has(a, "Still to do:"); }), "/achievements lists the earned ones and what's still to do");
+    size_t meals = 0;
+    for (const auto& line : a.client.GetChat()) meals += line.text.find("First Meal: eat") != std::string::npos;
+    Check(meals == 1, "each is earned only once (" + std::to_string(meals) + " first meals, after three)");
+
     std::cout << "Creative" << std::endl;
     server.QueueConsoleCommand("gamemode creative Eater");
     server.QueueConsoleCommand("food 10 Eater");

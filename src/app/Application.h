@@ -239,6 +239,11 @@ private:
     int mapRow = 0;
     glm::ivec2 mapCentre{ 0 };   // the column the picture is centred on
     void DrawMinimap();
+    // The newest achievement toast (from chat), shown for a few seconds.
+    std::string toastText;
+    double toastUntil = 0.0;
+    size_t chatSeen = 0;
+    void DrawToast();
     bool vsync = true;
     // VOXEL_BENCH: per-section frame timing, printed once a second.
     bool bench = false;

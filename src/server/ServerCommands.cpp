@@ -103,6 +103,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Operator, "/summon <deer|ghoul> [x y z] - bring a creature (default: a few blocks ahead of you)" },
     { Level::Operator, "/creatures [clear] - count the creatures, or remove them all" },
     { Level::Everyone, "/food - how hungry you are" },
+    { Level::Everyone, "/achievements - the milestones you've reached, and those still to come" },
     { Level::Operator, "/food <0-20> [player] - set how fed someone is (20: full)" },
     { Level::Everyone, "/pvp - whether players can hurt each other" },
     { Level::Operator, "/pvp <on|off> - let players hurt each other, or not" },
@@ -375,6 +376,21 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         for (int t = 0; t < static_cast<int>(CreatureType::Count); t++)
             text += std::string(t ? ", " : ": ") + std::to_string(counts[t]) + " " + SpecOf(static_cast<CreatureType>(t)).id;
         reply(Kind::Info, text);
+    }
+    else if (command == "achievements" || command == "ach") {
+        if (!sender) return reply(Kind::Error, "Only players have achievements");
+        int earned = 0;
+        std::string have, todo;
+        for (int i = 0; i < static_cast<int>(Achievement::Count); i++) {
+            const Achievement a = static_cast<Achievement>(i);
+            if (sender->achievements & Achievements::Bit(a)) {
+                earned++;
+                have += (have.empty() ? "" : ", ") + std::string(Achievements::Name(a));
+            }
+            else todo += (todo.empty() ? "" : "; ") + std::string(Achievements::Description(a));
+        }
+        reply(Kind::Info, std::to_string(earned) + " of " + std::to_string(static_cast<int>(Achievement::Count)) + " achievements" + (have.empty() ? "" : ": " + have));
+        if (!todo.empty()) reply(Kind::Info, "Still to do: " + todo);
     }
     else if (command == "food") {
         if (words.size() == 1) {

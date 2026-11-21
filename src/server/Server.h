@@ -21,6 +21,7 @@
 #include "net/Transport.h"
 #include "server/Creatures.h"
 #include "world/Breathing.h"
+#include "world/Achievements.h"
 #include "world/Hunger.h"
 #include "world/Crafting.h"
 #include "world/Coords.h"
@@ -220,6 +221,7 @@ private:
         double miningSince = 0.0;
         double nextAttack = 0.0; // hitting creatures: at most this often
         double nextShot = 0.0;   // the bow: at most this often
+        uint32_t achievements = 0; // earned (Achievements::Bit each)
         bool sentArrows = false; // the last Arrows they were sent had some in it
 
         // Chunks the client has, with the version of the light it has for each.
@@ -341,6 +343,9 @@ private:
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> crops;
     double nextCropUpdate = 0.0;
     void UpdateCrops();
+    // Gives them an achievement if they haven't got it (survival only): a toast for them,
+    // a line for everyone else.
+    void Award(ClientState& client, Achievement a);
     // Arrows: flying (with gravity) until they hit a block (then stuck there a while), a
     // creature or a player.
     struct Arrow {

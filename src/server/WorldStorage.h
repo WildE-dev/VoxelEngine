@@ -52,6 +52,7 @@ public:
         int food = 20;   // world/Hunger.h
         uint8_t armour = 0; // armour worn (Armour::Bit each)
         std::optional<glm::ivec3> bed; // where they respawn
+        uint32_t achievements = 0;     // Achievements::Bit each
     };
 
     // Chests' contents (units by block type), by position (format 8 on).

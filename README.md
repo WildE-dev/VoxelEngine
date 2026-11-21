@@ -890,6 +890,18 @@ to check:
 - recovery on the ground;
 - creative.
 
+## Achievements
+
+Survival players earn achievements for milestones, once each: breaking a first block,
+making a tool, bringing down a deer, defeating a ghoul, cooking venison, eating,
+harvesting wheat, baking bread, digging out iron ore, the iron upgrade, a full set of
+armour, opening a dungeon chest, sleeping through a night, and taking something down
+with an arrow (fourteen in all). Earning one shows a banner under the compass for a
+few seconds (with a chime) and tells everyone else. They're saved with you.
+`/achievements` lists what you've earned and what's still to do. `FoodTest` checks
+the ones it passes on the way, that `/achievements` answers, and that each is earned
+only once.
+
 ## Chat and commands
 
 Press T (or Enter) to chat: Enter sends the line to everyone, Esc closes the box. New
@@ -920,6 +932,7 @@ ones you're allowed to use:
 | `/summon <deer\|ghoul> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
 | `/creatures [clear]` | operators | count the creatures, or remove them all |
 | `/pvp`, `/food` | everyone | whether players can hurt each other; how fed you are |
+| `/achievements` | everyone | the milestones you've reached, and those still to come |
 | `/pvp <on\|off>` | operators | let players hurt each other, or not |
 | `/food <0-20> [player]` | operators | set how fed someone is |
 | `/stop` | console | shut the server down |

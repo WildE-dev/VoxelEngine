@@ -30,6 +30,7 @@
 #include "net/Protocol.h"
 #include "render/Renderer.h"
 #include "server/Server.h"
+#include "world/Achievements.h"
 #include "world/Breathing.h"
 #include "world/Hunger.h"
 #include "world/Chunk.h"
@@ -567,6 +568,7 @@ void Application::Run() {
         DrawNameTags(params.projection * params.view);
         if (showCompass) DrawCompass();
         if (showMap) DrawMinimap();
+        DrawToast();
         DrawHotbar();
         DrawStatus();
         DrawChat();
@@ -819,6 +821,34 @@ void Application::DrawMinimap() {
     draw->AddTriangleFilled(ImVec2(me.x + f.x * 7.0f, me.y + f.y * 7.0f), ImVec2(me.x - f.x * 4.0f + r.x * 4.5f, me.y - f.y * 4.0f + r.y * 4.5f),
                             ImVec2(me.x - f.x * 4.0f - r.x * 4.5f, me.y - f.y * 4.0f - r.y * 4.5f), IM_COL32(255, 255, 255, 255));
     draw->AddText(ImVec2(lo.x + kShown * 0.5f - 4.0f, lo.y + 2.0f), IM_COL32(255, 110, 100, 255), "N");
+}
+
+void Application::DrawToast() {
+    // Achievements arrive as chat lines starting with the toast mark: the newest shows
+    // as a banner under the compass for four seconds, sliding in and fading out.
+    const auto& chat = client->GetChat();
+    const std::string mark = Achievements::kToastMark;
+    if (chat.size() < chatSeen) chatSeen = 0;
+    for (; chatSeen < chat.size(); chatSeen++)
+        if (chat[chatSeen].text.rfind(mark, 0) == 0) {
+            toastText = chat[chatSeen].text.substr(mark.size());
+            toastUntil = Client::Now() + 4.0;
+            audio->PlayHere("craft", 0.7f);
+        }
+    const double left = toastUntil - Client::Now();
+    if (left <= 0.0 || toastText.empty()) return;
+    const float fade = static_cast<float>(std::min(1.0, std::min(left, 4.0 - left) * 3.0));
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const std::string title = "Achievement unlocked";
+    const ImVec2 textSize = ImGui::CalcTextSize(toastText.c_str()), titleSize = ImGui::CalcTextSize(title.c_str());
+    const float width = std::max(textSize.x, titleSize.x) + 40.0f, cx = viewport->WorkPos.x + viewport->WorkSize.x * 0.5f;
+    const float y = viewport->WorkPos.y + 62.0f - (1.0f - fade) * 20.0f;
+    const ImVec2 lo(cx - width * 0.5f, y), hi(cx + width * 0.5f, y + titleSize.y + textSize.y + 18.0f);
+    draw->AddRectFilled(lo, hi, IM_COL32(30, 24, 8, static_cast<int>(210 * fade)), 6.0f);
+    draw->AddRect(lo, hi, IM_COL32(240, 200, 80, static_cast<int>(255 * fade)), 6.0f, 0, 2.0f);
+    draw->AddText(ImVec2(cx - titleSize.x * 0.5f, y + 6.0f), IM_COL32(255, 214, 90, static_cast<int>(255 * fade)), title.c_str());
+    draw->AddText(ImVec2(cx - textSize.x * 0.5f, y + 10.0f + titleSize.y), IM_COL32(255, 255, 255, static_cast<int>(240 * fade)), toastText.c_str());
 }
 
 void Application::DrawCompass() {

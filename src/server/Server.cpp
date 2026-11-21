@@ -228,6 +228,7 @@ void Server::StorePlayer(const ClientState& client) {
     record.food = client.food;
     record.armour = client.armour;
     record.bed = client.bed;
+    record.achievements = client.achievements;
     storage->StorePlayer(client.name, record);
 }
 
@@ -430,6 +431,7 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
             client.food = std::clamp(saved->food, 0, Hunger::kMaxFood);
             client.armour = saved->armour;
             client.bed = saved->bed;
+            client.achievements = saved->achievements;
             welcome.spawn = saved->feet;
             welcome.yaw = saved->yaw;
             welcome.pitch = saved->pitch;
@@ -568,6 +570,11 @@ void Server::HandleCraft(ClientState& client, int recipeIndex, int count) {
     else if (recipe.tool != Tool::None) client.tools |= Crafting::ToolBit(recipe.tool);
     else if (recipe.armour != ArmourPiece::Count) client.armour |= Armour::Bit(recipe.armour);
     else client.resources[static_cast<size_t>(recipe.output)] += recipe.outputUnits * count;
+    if (recipe.tool != Tool::None) Award(client, Achievement::Toolmaker);
+    if (recipe.ironUpgrade) Award(client, Achievement::IronAge);
+    if (recipe.output == BlockType::COOKED_VENISON) Award(client, Achievement::Cook);
+    if (recipe.output == BlockType::BREAD) Award(client, Achievement::Baker);
+    if (client.armour == (Armour::Bit(ArmourPiece::Cap) | Armour::Bit(ArmourPiece::Tunic) | Armour::Bit(ArmourPiece::Boots))) Award(client, Achievement::Armoured);
     SendResources(client);
 }
 
@@ -591,6 +598,7 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
             spoils = " (+" + std::to_string(venison) + " raw venison, +1 hide)";
         }
         SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id + spoils);
+        Award(client, type == CreatureType::Deer ? Achievement::Hunter : Achievement::GhoulSlayer);
     }
 }
 
@@ -703,6 +711,9 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
     }
     // Survival: the block's worth goes to the player.
     if (!Creative(client)) {
+        Award(client, Achievement::FirstBlock);
+        if (block.type == BlockType::IRON_ORE) Award(client, Achievement::Miner);
+        if (block.type == BlockType::RIPE_WHEAT) Award(client, Achievement::Farmer);
         uint32_t& held = client.resources[static_cast<size_t>(block.ResourceType())]; // (pebbles are stone)
         held += static_cast<uint32_t>(block.ResourceUnits());
         SendResources(client);
@@ -997,6 +1008,8 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     timeOfDay = 0.02; // just after sunrise
     for (auto& [peer, other] : clients) other.sleptAt = -1000.0;
     Broadcast(net::ChatMessage::Kind::Info, everyone > 1 ? "Everyone slept: it's morning" : "You slept: it's morning");
+    for (auto& [peer, other] : clients)
+        if (other.welcomed) Award(other, Achievement::SweetDreams);
     Log("night skipped by sleeping");
 }
 
@@ -1125,6 +1138,7 @@ void Server::HandleEat(ClientState& client, BlockType food) {
     if (value == 0 || Creative(client) || held < Block::kUnitsPerBlock || client.food >= Hunger::kMaxFood) return SendResources(client);
     held -= Block::kUnitsPerBlock;
     client.food = std::min(Hunger::kMaxFood, client.food + value);
+    Award(client, Achievement::FirstMeal);
     SendResources(client);
     SendHealth(client, false);
 }
@@ -1134,7 +1148,10 @@ void Server::HandleOpenChest(ClientState& client, const glm::ivec3& pos, bool op
     Block block;
     if (open && InReach(client, pos, kChestReach) && world->GetBlock(pos.x, pos.y, pos.z, block) && block.type == BlockType::CHEST) {
         client.openChest = pos;
-        ChestAt(pos);
+        const bool unopened = chests.count(pos) == 0;
+        const ChestItems& chest = ChestAt(pos);
+        // The first look into a dungeon's chest.
+        if (unopened && std::any_of(chest.begin(), chest.end(), [](uint32_t u) { return u > 0; })) Award(client, Achievement::TreasureHunter);
     }
     SendChest(client);
 }
@@ -1255,7 +1272,11 @@ void Server::UpdateArrows() {
                 creatures.Damage(id, kArrowDamage, a.position - a.velocity * 0.05f, now, killed);
                 if (killed)
                     for (auto& [peer, shooter] : clients)
-                        if (shooter.id == a.shooter) SendChat(shooter, net::ChatMessage::Kind::Info, std::string("You shot a ") + SpecOf(type).id);
+                        if (shooter.id == a.shooter) {
+                            SendChat(shooter, net::ChatMessage::Kind::Info, std::string("You shot a ") + SpecOf(type).id);
+                            Award(shooter, Achievement::Marksman);
+                            Award(shooter, type == CreatureType::Deer ? Achievement::Hunter : Achievement::GhoulSlayer);
+                        }
                 gone = true;
                 break;
             }
@@ -1296,6 +1317,14 @@ void Server::SendArrows() {
         client.sentArrows = !m.arrows.empty();
         net.Send(peer, net::kChannelUnreliable, net::Encode(m));
     }
+}
+
+void Server::Award(ClientState& client, Achievement a) {
+    if (Creative(client) || (client.achievements & Achievements::Bit(a))) return;
+    client.achievements |= Achievements::Bit(a);
+    SendChat(client, net::ChatMessage::Kind::Info, std::string(Achievements::kToastMark) + Achievements::Name(a) + ": " + Achievements::Description(a));
+    for (auto& [peer, other] : clients)
+        if (other.welcomed && other.id != client.id) SendChat(other, net::ChatMessage::Kind::Info, client.name + " earned " + Achievements::Name(a));
 }
 
 void Server::UpdateCrops() {
