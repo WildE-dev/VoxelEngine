@@ -47,6 +47,7 @@ inline const std::vector<Recipe>& Recipes() {
         { "sluice", "Sluice gate", { { BlockType::STONE_BRICK, kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::SLUICE, kBlock },
         { "pressure_plate", "Pressure plate", { { BlockType::STONE, kBlock / 4 } }, BlockType::PRESSURE_PLATE, kBlock },
         { "chest", "Chest", { { BlockType::PLANKS, 2 * kBlock } }, BlockType::CHEST, kBlock },
+        { "bed", "Bed", { { BlockType::PLANKS, 3 * kBlock }, { BlockType::HIDE, kBlock } }, BlockType::BED, kBlock },
         { "spikes", "Spikes", { { BlockType::STONE, kBlock } }, BlockType::SPIKES, kBlock },
         // Cooked over a little wood.
         { "cooked_venison", "Cooked venison", { { BlockType::RAW_VENISON, kBlock }, { BlockType::LOG, kBlock / 4 } }, BlockType::COOKED_VENISON, kBlock },

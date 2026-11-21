@@ -167,6 +167,8 @@ public:
     // Chests: ask to open the one at `pos` (the server answers with its contents), close
     // it, and move units of a type into or out of it (the server's answer updates both).
     void OpenChest(const glm::ivec3& pos);
+    // Right-clicked a bed: respawn there (and sleep, at night). The server says so in chat.
+    void UseBed(const glm::ivec3& pos);
     void CloseChest();
     void MoveChestItems(BlockType type, uint32_t units, bool intoChest);
     // The chest open now (none until the server says it's open, or once it's closed),

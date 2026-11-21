@@ -409,6 +409,10 @@ std::vector<Client::BlockEvent> Client::TakeBlockEvents() {
     return events;
 }
 
+void Client::UseBed(const glm::ivec3& pos) {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::UseBed{ pos }));
+}
+
 void Client::OpenChest(const glm::ivec3& pos) {
     if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::OpenChest{ pos, 1 }));
 }

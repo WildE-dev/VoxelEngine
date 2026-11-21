@@ -33,7 +33,8 @@ GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
 `BreathTest` (see [Breathing](#breathing)), `CreatureTest` (see
 [Creatures](#creatures) and [PvP](#pvp)), `CraftTest` (see [Crafting](#crafting)),
 `FoodTest` (see [Food and hunger](#food-and-hunger)), `ChestTest` (see
-[Chests](#chests)) and `SoundTest` (see [Sound](#sound)).
+[Chests](#chests)), `BedTest` (see [Beds](#beds)) and `SoundTest` (see
+[Sound](#sound)).
 
 `ctest` in the build directory runs them all, and `ctest -j15` runs them all at
 once. They're written to pass even then, on a loaded machine:
@@ -530,7 +531,7 @@ work the same for everyone:
 The screen flashes red when you're hurt. Hearts come back one every 4 seconds once
 nothing has hurt you for 5, as long as you're well fed (see
 [Food and hunger](#food-and-hunger)). With none left, everyone hears how you died and you
-respawn at the spawn point with full health (and three seconds' grace). In survival,
+respawn at the spawn point (or your bed: see [Beds](#beds)) with full health (and three seconds' grace). In survival,
 half of every kind of block and item you carry (rounded down) is left behind in a
 chest placed where you died (or just beside or above, in the nearest open cell), and
 the chat tells you where; anyone can open it, so a killer can take it. Your tools and
@@ -671,6 +672,24 @@ The client is only told what's in a chest while it has it open. `ChestTest` chec
 - breaking it (it closes, and the contents go to the breaker);
 - the chest and its contents after a restart.
 
+## Beds
+
+A **bed** (3 planks and a hide) is half a block high. Right-click one within 6 blocks
+to make it where you respawn: when you die you come back on it (or standing beside
+it, if something's over it). If the bed has been broken, or is boxed in, you're back
+at the world's spawn point and told why. Your bed is saved with you.
+
+At night (the sun below the horizon) right-clicking a bed also puts you to sleep. On
+your own, that skips to the morning. With others online, everyone has to get into a
+bed within a few seconds of each other; the chat says how many are asleep. By day it
+just says you can only sleep at night. `BedTest` checks:
+
+- making and placing a bed;
+- setting the respawn point, and not sleeping by day;
+- sleeping through the night alone, and with two players only once both are in bed;
+- respawning at the bed, also after a restart;
+- going back to the spawn point once the bed is gone.
+
 ## Food and hunger
 
 In survival you also get hungry. Ten drumsticks sit above the right end of the hotbar,
@@ -725,6 +744,7 @@ makes four.
 | Cooked venison | 1 raw venison + 0.25 log |
 | Sword | 0.5 planks + 2 stone |
 | Chest | 2 planks |
+| Bed | 3 planks + 1 hide |
 | Hide cap / tunic / boots | 2 / 4 / 2 hide |
 
 Amounts are in blocks, using the same resource units as building (a block is 64).
@@ -992,6 +1012,6 @@ src/
             Breathing, Creatures, Crafting, Hunger, Armour
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
-            BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest, ChestTest
+            BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest, ChestTest, BedTest
 tools/      make_sounds.py (sound effects), make_item_textures.py (item icons)
 ```

@@ -40,6 +40,7 @@ const char* Audio::Material(BlockType type) {
     case BlockType::LOG:
     case BlockType::PLANKS:
     case BlockType::CHEST:
+    case BlockType::BED:
     case BlockType::CACTUS: return "wood";
     case BlockType::GLASS: return "glass";
     default: return "soft"; // grass, dirt, leaves, plants

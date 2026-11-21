@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 24;
+constexpr uint32_t kProtocolVersion = 25;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -51,6 +51,7 @@ enum class MsgType : uint8_t {
     Eat,           // eat a food item (survival)
     OpenChest,     // open the chest at a position (or close the open one)
     ChestMove,     // move units of a type between you and the open chest
+    UseBed,        // right-clicked a bed: respawn there (and sleep, at night)
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -362,6 +363,11 @@ struct ChestContents {
     std::vector<std::pair<BlockType, uint32_t>> held;
 };
 
+// Right-clicked a bed (in reach).
+struct UseBed {
+    glm::ivec3 pos{0};
+};
+
 // Eat one of a food item you hold.
 struct Eat {
     BlockType food = BlockType::AIR;
@@ -399,6 +405,7 @@ std::vector<uint8_t> Encode(const Attack& m);
 std::vector<uint8_t> Encode(const AttackPlayer& m);
 std::vector<uint8_t> Encode(const Eat& m);
 std::vector<uint8_t> Encode(const OpenChest& m);
+std::vector<uint8_t> Encode(const UseBed& m);
 std::vector<uint8_t> Encode(const ChestMove& m);
 std::vector<uint8_t> Encode(const ChestContents& m);
 std::vector<uint8_t> Encode(const Craft& m);
@@ -439,6 +446,7 @@ bool Decode(ByteReader& in, Attack& m);
 bool Decode(ByteReader& in, AttackPlayer& m);
 bool Decode(ByteReader& in, Eat& m);
 bool Decode(ByteReader& in, OpenChest& m);
+bool Decode(ByteReader& in, UseBed& m);
 bool Decode(ByteReader& in, ChestMove& m);
 bool Decode(ByteReader& in, ChestContents& m);
 bool Decode(ByteReader& in, Craft& m);

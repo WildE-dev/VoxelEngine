@@ -80,6 +80,7 @@ inline float Hardness(BlockType type) {
     case BlockType::LOG: return 2.0f;
     case BlockType::PLANKS: return 1.5f;
     case BlockType::CHEST: return 1.5f;
+    case BlockType::BED: return 0.8f;
     case BlockType::GLASS: return 0.5f;
     case BlockType::SPIKES: return 2.0f;
     case BlockType::PUMP:
@@ -109,6 +110,7 @@ inline Tool BestTool(BlockType type) {
     case BlockType::LOG:
     case BlockType::PLANKS:
     case BlockType::CHEST:
+    case BlockType::BED:
     case BlockType::CACTUS: return Tool::Axe;
     case BlockType::DIRT:
     case BlockType::GRASS:

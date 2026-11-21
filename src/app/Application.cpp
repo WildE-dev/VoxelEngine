@@ -53,7 +53,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -136,6 +136,7 @@ const char* BlockName(BlockType type) {
     case BlockType::COOKED_VENISON: return "Cooked venison";
     case BlockType::HIDE: return "Hide";
     case BlockType::CHEST: return "Chest";
+    case BlockType::BED: return "Bed";
     default:               return "Air";
     }
 }
@@ -1513,6 +1514,12 @@ void Application::OnMouseButton(int button, int action) {
             chestMode = true;
             chestSeenOpen = false;
             chestAskedAt = Client::Now();
+            return;
+        }
+        // A bed: respawn here (and sleep, at night).
+        if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
+            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && target.type == BlockType::BED) {
+            client->UseBed(at->block);
             return;
         }
     }

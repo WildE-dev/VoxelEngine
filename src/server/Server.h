@@ -184,6 +184,8 @@ private:
         uint8_t tools = 0; // tools made (Crafting::ToolBit each; creative has them all)
         uint8_t armour = 0; // armour worn (Armour::Bit each)
         std::optional<glm::ivec3> openChest; // the chest they have open
+        std::optional<glm::ivec3> bed;       // where they respawn (if it's still a bed)
+        double sleptAt = -1000.0;            // when they last got into bed at night
         Tool heldTool = Tool::None;          // in their hand, for others to see
         BlockType heldBlock = BlockType::AIR;
 
@@ -287,6 +289,10 @@ private:
     void SendChestToViewers(const glm::ivec3& pos);
     void RemoveChest(const glm::ivec3& pos, ClientState* breaker); // gone: contents to whoever broke it
     void DropOnDeath(ClientState& client); // half of what they carry, into a chest where they died
+    void HandleUseBed(ClientState& client, const glm::ivec3& pos);
+    // Where they come back after dying: on (or beside) their bed if it's still there and
+    // there's room, otherwise the world's spawn point (`why` says what was wrong).
+    glm::vec3 RespawnPoint(const ClientState& client, std::string& why) const;
     // Damage in half hearts. `armourHelps`: a hit or a trap (armour takes some off),
     // not drowning, bad air or starving.
     void Hurt(ClientState& client, int amount, const std::string& deathMessage, bool armourHelps = true);

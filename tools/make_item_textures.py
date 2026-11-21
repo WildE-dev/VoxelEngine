@@ -201,6 +201,47 @@ dddddddddddddddd
 """.replace(".", "d")
 CHEST_COLOURS = {"d": (74, 48, 24), "w": (156, 110, 60), "W": (176, 128, 74), "l": (122, 84, 44), "i": (70, 70, 76), "k": (40, 40, 44)}
 
+# The bed, half a block high: a red blanket with a pale pillow at one end on top; the
+# sides show the lower half of their texture (the half-height block's side), so the
+# frame and blanket edge are drawn there.
+BED_TOP = """
+pppppppppppppppp
+pPPPPPPPPPPPPPPp
+pPPPPPPPPPPPPPPp
+pPPPPPPPPPPPPPPp
+pppppppppppppppp
+rrrrrrrrrrrrrrrr
+rRrrrrrRrrrrrRrr
+rrrrRrrrrrRrrrrr
+rrrrrrrrrrrrrrrr
+rRrrrrRrrrrrRrrr
+rrrrrrrrrrrrrrrr
+rrrRrrrrrRrrrrRr
+rrrrrrrrrrrrrrrr
+rrRrrrrrRrrrrrrr
+rrrrrrrrrrrrrrrr
+RRRRRRRRRRRRRRRR
+"""
+BED_SIDE = """
+wwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwww
+rrrrrrrrrrrrrrrr
+RrrrRrrrrRrrrrRr
+rrrrrrrrrrrrrrrr
+dddddddddddddddd
+dwwwwwwwwwwwwwwd
+dwWwwwwwwwwWwwwd
+dwwwwwwWwwwwwwwd
+dddddddddddddddd
+"""
+BED_COLOURS = {"p": (210, 206, 196), "P": (238, 236, 228), "r": (168, 40, 38), "R": (196, 62, 56), "d": (74, 48, 24), "w": (156, 110, 60), "W": (176, 128, 74)}
+
 
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
@@ -212,6 +253,8 @@ def main():
     draw("armour_boots", BOOTS, ARMOUR_COLOURS, seed=17)
     draw("chest_side", CHEST_SIDE, CHEST_COLOURS, jitter=6, seed=18)
     draw("chest_top", CHEST_TOP, CHEST_COLOURS, jitter=6, seed=19)
+    draw("bed_top", BED_TOP, BED_COLOURS, jitter=6, seed=20)
+    draw("bed_side", BED_SIDE, BED_COLOURS, jitter=6, seed=21)
 
 
 if __name__ == "__main__":

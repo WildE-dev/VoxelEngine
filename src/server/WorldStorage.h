@@ -51,6 +51,7 @@ public:
         int health = 20; // half hearts
         int food = 20;   // world/Hunger.h
         uint8_t armour = 0; // armour worn (Armour::Bit each)
+        std::optional<glm::ivec3> bed; // where they respawn
     };
 
     // Chests' contents (units by block type), by position (format 8 on).

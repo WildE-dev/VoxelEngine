@@ -359,6 +359,17 @@ std::vector<uint8_t> Encode(const Eat& m) {
     return std::move(w.data);
 }
 
+std::vector<uint8_t> Encode(const UseBed& m) {
+    ByteWriter w;
+    Begin(w, MsgType::UseBed);
+    w.IVec3(m.pos);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, UseBed& m) {
+    return in.IVec3(m.pos) && in.AtEnd();
+}
+
 std::vector<uint8_t> Encode(const OpenChest& m) {
     ByteWriter w;
     Begin(w, MsgType::OpenChest);

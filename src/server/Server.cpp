@@ -43,6 +43,8 @@ constexpr float kLaserReach = 112.0f;
 // from that close in any mode.
 constexpr float kSurvivalReach = 7.5f;
 constexpr float kChestReach = kSurvivalReach;
+// Players count as asleep for this long after getting into bed (so everyone can get in).
+constexpr double kSleepWindow = 6.0;
 
 Collision::AABB BodyAt(const glm::vec3& feet, float shrink = 0.0f) {
     const float half = kPlayerWidth * 0.5f - shrink;
@@ -210,6 +212,7 @@ void Server::StorePlayer(const ClientState& client) {
     record.health = client.health;
     record.food = client.food;
     record.armour = client.armour;
+    record.bed = client.bed;
     storage->StorePlayer(client.name, record);
 }
 
@@ -291,6 +294,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     case net::MsgType::AttackPlayer: {
         net::AttackPlayer m;
         if ((ok = net::Decode(in, m))) HandleAttackPlayer(client, m.player, m.tool);
+        break;
+    }
+    case net::MsgType::UseBed: {
+        net::UseBed m;
+        if ((ok = net::Decode(in, m))) HandleUseBed(client, m.pos);
         break;
     }
     case net::MsgType::OpenChest: {
@@ -400,6 +408,7 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
             client.health = std::clamp(saved->health, 1, kMaxHealth);
             client.food = std::clamp(saved->food, 0, Hunger::kMaxFood);
             client.armour = saved->armour;
+            client.bed = saved->bed;
             welcome.spawn = saved->feet;
             welcome.yaw = saved->yaw;
             welcome.pitch = saved->pitch;
@@ -790,7 +799,9 @@ void Server::Hurt(ClientState& client, int amount, const std::string& deathMessa
     client.exhaustion = 0.0f;
     client.hasHungerFeet = false;
     client.invulnerableUntil = now + 3.0;
-    Teleport(client, SpawnPoint());
+    std::string why;
+    Teleport(client, RespawnPoint(client, why));
+    if (!why.empty()) SendChat(client, net::ChatMessage::Kind::Info, why);
     SendHealth(client, true);
 }
 
@@ -828,6 +839,54 @@ void Server::DropOnDeath(ClientState& client) {
     char where[64];
     std::snprintf(where, sizeof where, "%d, %d, %d", spot->x, spot->y, spot->z);
     SendChat(client, net::ChatMessage::Kind::Info, std::string("Half of what you carried is in a chest where you died (") + where + ")");
+}
+
+void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
+    Block block;
+    if (!InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block) || block.type != BlockType::BED) return;
+    if (client.bed != pos) {
+        client.bed = pos;
+        SendChat(client, net::ChatMessage::Kind::Info, "You'll respawn at this bed");
+    }
+    // At night (the sun below the horizon), they sleep; once everyone here is asleep
+    // (in bed within the last few seconds), it's morning.
+    if (std::sin(timeOfDay * 6.283185307179586) >= 0.0) return SendChat(client, net::ChatMessage::Kind::Info, "You can only sleep at night");
+    const double now = Now();
+    client.sleptAt = now;
+    int sleeping = 0, everyone = 0;
+    for (const auto& [peer, other] : clients) {
+        if (!other.welcomed) continue;
+        everyone++;
+        sleeping += now - other.sleptAt < kSleepWindow;
+    }
+    if (sleeping < everyone) {
+        Broadcast(net::ChatMessage::Kind::Info, client.name + " is in bed (" + std::to_string(sleeping) + " of " + std::to_string(everyone) + " asleep)");
+        return;
+    }
+    timeOfDay = 0.02; // just after sunrise
+    for (auto& [peer, other] : clients) other.sleptAt = -1000.0;
+    Broadcast(net::ChatMessage::Kind::Info, everyone > 1 ? "Everyone slept: it's morning" : "You slept: it's morning");
+    Log("night skipped by sleeping");
+}
+
+glm::vec3 Server::RespawnPoint(const ClientState& client, std::string& why) const {
+    if (!client.bed) return SpawnPoint();
+    const glm::ivec3 bed = *client.bed;
+    Block b;
+    if (!world->GetBlock(bed.x, bed.y, bed.z, b) || b.type != BlockType::BED) {
+        why = "Your bed is gone, so you're back at the spawn point";
+        return SpawnPoint();
+    }
+    auto open = [&](const glm::ivec3& p) { Block c; return world->GetBlock(p.x, p.y, p.z, c) && c.IsPassable(); };
+    // On the bed, if there's headroom over it.
+    if (open(bed + glm::ivec3(0, 1, 0)) && open(bed + glm::ivec3(0, 2, 0))) return glm::vec3(bed) + glm::vec3(0.5f, 0.55f, 0.5f);
+    // Or standing beside it.
+    for (const glm::ivec3 side : { glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0), glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1) }) {
+        const glm::ivec3 p = bed + side;
+        if (open(p) && open(p + glm::ivec3(0, 1, 0)) && !open(p - glm::ivec3(0, 1, 0))) return glm::vec3(p) + glm::vec3(0.5f, 0.0f, 0.5f);
+    }
+    why = "Your bed is blocked in, so you're back at the spawn point";
+    return SpawnPoint();
 }
 
 void Server::TriggerPlate(ClientState& client, const glm::ivec3& plate) {

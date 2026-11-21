@@ -123,6 +123,9 @@ enum class BlockType : uint8_t {
     // A chest: right-click to open it and store things in it (kept by the server, see
     // Server::HandleChestMove).
     CHEST,
+    // A bed (a half-height block): right-click to make it where you respawn, and at
+    // night to sleep (see Server::HandleUseBed).
+    BED,
     COUNT
 };
 
@@ -268,6 +271,11 @@ struct Block {
     // A plant whose sprite is drawn `dropEighths` (0..8) below its cell's floor, so it
     // stands on a sloped block underneath. Stored in the otherwise unused edge data.
     // A pressure plate: a slab an eighth of a block high.
+    static Block Bed() {
+        EdgeData edges;
+        for (int e = 0; e < 4; e++) edges.SetTopY(e, 4); // half a block high
+        return Block(BlockType::BED, edges);
+    }
     static Block PressurePlate() {
         EdgeData edges;
         for (int e = 0; e < 4; e++) edges.SetTopY(e, 1);
@@ -416,6 +424,7 @@ struct Block {
 inline Block Block::Placed(BlockType t, int heightEighths, int faceAxis) {
     if (t == BlockType::WATER) return Water(kMaxWaterVolume);
     if (t == BlockType::PRESSURE_PLATE) return PressurePlate();
+    if (t == BlockType::BED) return Bed();
     if (IsPlantType(t)) return Plant(t, 0);
     if (heightEighths >= 8 || heightEighths <= 0 || !CanShape(t)) return Block(t).Turned(faceAxis);
     EdgeData slab;
