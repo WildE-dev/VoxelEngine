@@ -313,6 +313,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
         if ((ok = net::Decode(in, m))) HandleAttackPlayer(client, m.player, m.tool);
         break;
     }
+    case net::MsgType::Cast: {
+        net::Cast m;
+        if ((ok = net::Decode(in, m))) HandleCast(client, m.pos, m.cast != 0);
+        break;
+    }
     case net::MsgType::Shoot: {
         net::Shoot m;
         if ((ok = net::Decode(in, m))) HandleShoot(client, m.direction);
@@ -1234,6 +1239,45 @@ void Server::HandleShoot(ClientState& client, const glm::vec3& direction) {
     if (arrows.size() > 256) arrows.erase(arrows.begin()); // (the oldest go first)
 }
 
+void Server::HandleCast(ClientState& client, const glm::ivec3& pos, bool cast) {
+    client.bobber.reset();
+    Block water;
+    // Into water (with nothing on top of it) within 12 blocks, with a rod of their own.
+    if (cast && Usable(client, Tool::Rod) == Tool::Rod && InReach(client, pos, 12.5f) && world->GetBlock(pos.x, pos.y, pos.z, water) && water.HasWater()) {
+        Block above;
+        if (!world->GetBlock(pos.x, pos.y + 1, pos.z, above) || !above.HasWater()) {
+            client.bobber = pos;
+            client.castFrom = client.feet;
+            weatherSeed = weatherSeed * 1664525u + 1013904223u;
+            client.biteAt = Now() + (4.0 + 10.0 * ((weatherSeed >> 8) / double(1u << 24))) / std::max(0.1f, options.fishingRate);
+        }
+    }
+    net.Send(client.peer, net::kChannelReliable, net::Encode(net::Bobber{ pos, static_cast<uint8_t>(client.bobber ? 1 : 0), 0 }));
+}
+
+void Server::UpdateFishing() {
+    const double now = Now();
+    for (auto& [peer, client] : clients) {
+        if (!client.bobber) continue;
+        const glm::ivec3 at = *client.bobber;
+        Block water;
+        // Walked off (or the water's gone): the line's reeled in.
+        if (glm::distance(client.feet, client.castFrom) > 3.0f || !world->GetBlock(at.x, at.y, at.z, water) || !water.HasWater()) {
+            client.bobber.reset();
+            net.Send(peer, net::kChannelReliable, net::Encode(net::Bobber{ at, 0, 0 }));
+            continue;
+        }
+        if (now < client.biteAt) continue;
+        // A bite: the fish is theirs.
+        client.bobber.reset();
+        client.resources[static_cast<size_t>(BlockType::RAW_FISH)] += Block::kUnitsPerBlock;
+        SendResources(client);
+        SendChat(client, net::ChatMessage::Kind::Info, "You caught a fish!");
+        net.Send(peer, net::kChannelReliable, net::Encode(net::Bobber{ at, 0, 1 }));
+        Award(client, Achievement::Angler);
+    }
+}
+
 void Server::UpdateArrows() {
     const double now = Now();
     constexpr float dt = 1.0f / kTickRate;
@@ -1439,6 +1483,7 @@ void Server::Tick() {
     UpdateCreatures();
     UpdateCrops();
     UpdateArrows();
+    UpdateFishing();
     if (storage && options.autosaveSeconds > 0.0f && Now() - lastSaveTime >= options.autosaveSeconds) Save(false);
 
     std::vector<glm::ivec3> centers;

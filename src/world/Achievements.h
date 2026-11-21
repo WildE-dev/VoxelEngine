@@ -19,6 +19,7 @@ enum class Achievement : uint8_t {
     TreasureHunter, // open a chest in a dungeon
     SweetDreams,    // sleep through a night
     Marksman,       // kill something with an arrow
+    Angler,         // catch a fish
     Count
 };
 
@@ -45,6 +46,7 @@ inline const char* Name(Achievement a) {
     case Achievement::TreasureHunter: return "Treasure Hunter";
     case Achievement::SweetDreams: return "Sweet Dreams";
     case Achievement::Marksman: return "Marksman";
+    case Achievement::Angler: return "Angler";
     default: return "?";
     }
 }
@@ -65,6 +67,7 @@ inline const char* Description(Achievement a) {
     case Achievement::TreasureHunter: return "open a chest in a dungeon";
     case Achievement::SweetDreams: return "sleep through the night";
     case Achievement::Marksman: return "take something down with an arrow";
+    case Achievement::Angler: return "catch a fish";
     default: return "";
     }
 }

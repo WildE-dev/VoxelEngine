@@ -198,6 +198,14 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         else openChest.reset();
         break;
     }
+    case net::MsgType::Bobber: {
+        net::Bobber m;
+        if (!(ok = net::Decode(in, m))) break;
+        if (m.out) bobber = m.pos;
+        else bobber.reset();
+        bite = bite || m.bite;
+        break;
+    }
     case net::MsgType::Arrows: {
         net::Arrows m;
         if (!(ok = net::Decode(in, m))) break;
@@ -422,6 +430,11 @@ std::vector<Client::BlockEvent> Client::TakeBlockEvents() {
     std::vector<BlockEvent> events;
     events.swap(blockEvents);
     return events;
+}
+
+void Client::Cast(const glm::ivec3& pos, bool cast) {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::Cast{ pos, static_cast<uint8_t>(cast ? 1 : 0) }));
+    if (!cast) bobber.reset();
 }
 
 void Client::Shoot(const glm::vec3& direction) {

@@ -91,6 +91,7 @@ int main() {
     options.dayLengthSeconds = 100000.0f;
     options.hungerRate = 10.0f; // a point every 5 s; starving hurts every 0.4 s
     options.cropGrowthRate = 200.0f; // crops ripen within a second or two
+    options.fishingRate = 20.0f;     // fish bite within a second
     if (!server.Start(options)) return EXIT_FAILURE;
     server.RunInBackground();
 
@@ -200,12 +201,37 @@ int main() {
     a.client.Eat(BlockType::BREAD);
     Check(Pump(a, 20.0, [&] { return a.client.GetFood() >= beforeBread + 5; }), "which is good for 6 food");
 
+    std::cout << "Fishing" << std::endl;
+    // A one-block pond (dug and filled in creative), then back to survival with a rod.
+    server.QueueConsoleCommand("gamemode creative Eater");
+    sync();
+    a.client.BreakBlock({ 9, -1, 9 });
+    Pump(a, 20.0, [&] { Block g; return a.world.GetBlock(9, -1, 9, g) && g.IsAir(); });
+    a.client.PlaceBlock({ 9, -1, 9 }, BlockType::WATER);
+    Pump(a, 20.0, [&] { Block g; return a.world.GetBlock(9, -1, 9, g) && g.HasWater(); });
+    server.QueueConsoleCommand("gamemode survival Eater");
+    server.QueueConsoleCommand("give rod Eater");
+    sync();
+    Pump(a, 20.0, [&] { return a.client.HasTool(Tool::Rod) && !a.client.IsCreative(); });
+    a.client.Cast({ 9, 0, 9 }, true); // (dry ground: no)
+    wait(0.5);
+    Check(!a.client.GetBobber(), "a line cast onto dry ground doesn't stay out");
+    a.client.Cast({ 9, -1, 9 }, true);
+    Check(Pump(a, 20.0, [&] { return a.client.GetBobber().has_value(); }), "cast into the pond, the bobber floats");
+    Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::RAW_FISH) == Block::kUnitsPerBlock; }) && a.client.TakeBite() && Has(a, "You caught a fish!"),
+          "a fish bites, and it's caught");
+    Check(!a.client.GetBobber() && Has(a, "Angler: catch a fish"), "the line comes in (and that's an achievement)");
+    server.QueueConsoleCommand("give log 1 Eater");
+    sync();
+    a.client.Craft(Crafting::Find("cooked_fish"), 1);
+    Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::COOKED_FISH) == Block::kUnitsPerBlock; }), "and cooks with a little wood");
+
     std::cout << "Achievements" << std::endl;
     Check(Has(a, "First Meal: eat something") && Has(a, "Hunter: bring down a deer") && Has(a, "Cook: cook some venison") && Has(a, "Farmer: harvest ripe wheat") &&
               Has(a, "Baker: bake bread"),
           "eating, hunting, cooking, farming and baking each earn an achievement");
     a.client.SendChat("/achievements");
-    Check(Pump(a, 20.0, [&] { return Has(a, " of 14 achievements") && Has(a, "Still to do:"); }), "/achievements lists the earned ones and what's still to do");
+    Check(Pump(a, 20.0, [&] { return Has(a, " of 15 achievements") && Has(a, "Still to do:"); }), "/achievements lists the earned ones and what's still to do");
     size_t meals = 0;
     for (const auto& line : a.client.GetChat()) meals += line.text.find("First Meal: eat") != std::string::npos;
     Check(meals == 1, "each is earned only once (" + std::to_string(meals) + " first meals, after three)");

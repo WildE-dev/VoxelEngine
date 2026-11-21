@@ -148,6 +148,8 @@ enum class BlockType : uint8_t {
     DOOR,
     DOOR_OPEN,
     ARROW, // item: what a bow shoots
+    RAW_FISH,    // items: caught with a fishing rod
+    COOKED_FISH,
     COUNT
 };
 
@@ -155,7 +157,7 @@ enum class BlockType : uint8_t {
 inline bool IsItemType(BlockType type) {
     return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE || type == BlockType::COAL ||
            type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD ||
-           type == BlockType::ARROW;
+           type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH;
 }
 
 inline bool IsPlantType(BlockType type) {

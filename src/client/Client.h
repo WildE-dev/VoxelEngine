@@ -176,6 +176,11 @@ public:
     void UseBed(const glm::ivec3& pos);
     // Shoot an arrow from the bow, this way (the server checks the bow and the arrow).
     void Shoot(const glm::vec3& direction);
+    // Fishing: cast into the water at `pos`, or reel in.
+    void Cast(const glm::ivec3& pos, bool cast);
+    // Where our bobber floats (none if it's in), and whether a fish bit since the last call.
+    std::optional<glm::ivec3> GetBobber() const { return bobber; }
+    bool TakeBite() { const bool b = bite; bite = false; return b; }
     // Arrows near us, as of the last update, moved on by their speed since.
     std::vector<net::ArrowInfo> GetArrows() const;
     void CloseChest();
@@ -215,6 +220,8 @@ private:
     bool storm = false;
     std::vector<glm::ivec3> lightning;
     std::vector<net::ArrowInfo> arrows;
+    std::optional<glm::ivec3> bobber;
+    bool bite = false;
     double arrowsAt = 0.0;
     std::optional<glm::ivec3> openChest;
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> chestHeld{};

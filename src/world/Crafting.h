@@ -53,6 +53,7 @@ inline const std::vector<Recipe>& Recipes() {
         { "bed", "Bed", { { BlockType::PLANKS, 3 * kBlock }, { BlockType::HIDE, kBlock } }, BlockType::BED, kBlock },
         { "spikes", "Spikes", { { BlockType::STONE, kBlock } }, BlockType::SPIKES, kBlock },
         { "bread", "Bread", { { BlockType::WHEAT, 3 * kBlock } }, BlockType::BREAD, kBlock },
+        { "cooked_fish", "Cooked fish", { { BlockType::RAW_FISH, kBlock }, { BlockType::LOG, kBlock / 4 } }, BlockType::COOKED_FISH, kBlock },
         // Cooked over a little wood.
         { "cooked_venison", "Cooked venison", { { BlockType::RAW_VENISON, kBlock }, { BlockType::LOG, kBlock / 4 } }, BlockType::COOKED_VENISON, kBlock },
         { "pickaxe", "Pickaxe", { { BlockType::PLANKS, kBlock }, { BlockType::STONE, kBlock * 3 / 2 } }, BlockType::AIR, 0, Tool::Pickaxe },
@@ -60,6 +61,7 @@ inline const std::vector<Recipe>& Recipes() {
         { "shovel", "Shovel", { { BlockType::PLANKS, kBlock }, { BlockType::STONE, kBlock / 2 } }, BlockType::AIR, 0, Tool::Shovel },
         { "sword", "Sword", { { BlockType::PLANKS, kBlock / 2 }, { BlockType::STONE, 2 * kBlock } }, BlockType::AIR, 0, Tool::Sword },
         { "bow", "Bow", { { BlockType::PLANKS, kBlock }, { BlockType::HIDE, kBlock } }, BlockType::AIR, 0, Tool::Bow },
+        { "rod", "Fishing rod", { { BlockType::PLANKS, kBlock }, { BlockType::HIDE, kBlock / 4 } }, BlockType::AIR, 0, Tool::Rod },
         { "arrows", "4 arrows", { { BlockType::PLANKS, kBlock / 2 }, { BlockType::STONE, kBlock / 4 } }, BlockType::ARROW, 4 * kBlock },
         // Armour, from deer hide.
         { "cap", "Hide cap", { { BlockType::HIDE, 2 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Cap },

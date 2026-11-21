@@ -691,6 +691,16 @@ crop just gives its seed back, and water washes crops away. Three wheat bake int
 (format 9). `FoodTest` checks planting (not in mid air), ripening, harvesting, bread
 and eating it.
 
+## Fishing
+
+A **fishing rod** (a plank and a quarter of a hide) is a tool. With it in hand,
+right-click water within 12 blocks to cast: a red and white bobber floats on the
+surface. Somewhere between 4 and 14 seconds later a fish bites, with a splash, and
+lands in your inventory as **raw fish** (2 food); a little wood cooks it into
+**cooked fish** (6 food). Walk more than 3 blocks from where you cast and the line
+comes in empty; right-click again to reel in. The server runs it all. `FoodTest`
+checks casting (not onto dry ground), the bite, the catch and cooking it.
+
 ## Swords and armour
 
 The **sword** is a tool made for fighting: 3.5 hearts a hit, against creatures or
@@ -788,6 +798,8 @@ To eat, put food in the hotbar and right-click with it, looking anywhere:
 | Raw venison | 3 | killing a deer (one or two each, and a hide) |
 | Cooked venison | 8 | crafting: 1 raw venison + 0.25 log |
 | Bread | 6 | crafting: 3 wheat (see [Farming](#farming)) |
+| Raw fish | 2 | fishing (see [Fishing](#fishing)) |
+| Cooked fish | 6 | crafting: 1 raw fish + 0.25 log |
 
 Food is an item: it lives in the inventory and the hotbar like blocks do, but can't be
 placed. You can't eat when you're full. Creative players don't get hungry. Your food
@@ -827,6 +839,8 @@ makes four.
 | Cooked venison | 1 raw venison + 0.25 log |
 | Sword | 0.5 planks + 2 stone |
 | Bow | 1 planks + 1 hide |
+| Fishing rod | 1 planks + 0.25 hide |
+| Cooked fish | 1 raw fish + 0.25 log |
 | 4 arrows | 0.5 planks + 0.25 stone |
 | Chest | 2 planks |
 | 3 ladders | 1 planks |
@@ -896,7 +910,7 @@ Survival players earn achievements for milestones, once each: breaking a first b
 making a tool, bringing down a deer, defeating a ghoul, cooking venison, eating,
 harvesting wheat, baking bread, digging out iron ore, the iron upgrade, a full set of
 armour, opening a dungeon chest, sleeping through a night, and taking something down
-with an arrow (fourteen in all). Earning one shows a banner under the compass for a
+with an arrow, and catching a fish (fifteen in all). Earning one shows a banner under the compass for a
 few seconds (with a chime) and tells everyone else. They're saved with you.
 `/achievements` lists what you've earned and what's still to do. `FoodTest` checks
 the ones it passes on the way, that `/achievements` answers, and that each is earned

@@ -127,6 +127,8 @@ public:
         bool creatures = true;
         // Survival players who die leave half of what they carry in a chest there.
         bool dropOnDeath = true;
+        // How fast fish bite (1: normal, 4 to 14 seconds; tests speed it up).
+        float fishingRate = 1.0f;
         // How fast crops ripen (1: normal, a minute and a half on average; tests speed it up).
         float cropGrowthRate = 1.0f;
         // How fast players get hungry (1: normal; tests speed it up).
@@ -223,6 +225,11 @@ private:
         double nextShot = 0.0;   // the bow: at most this often
         uint32_t achievements = 0; // earned (Achievements::Bit each)
         bool sentArrows = false; // the last Arrows they were sent had some in it
+        // Fishing: where their bobber floats (if it's out), where they cast from, and
+        // when a fish will bite.
+        std::optional<glm::ivec3> bobber;
+        glm::vec3 castFrom{ 0.0f };
+        double biteAt = 0.0;
 
         // Chunks the client has, with the version of the light it has for each.
         std::unordered_map<glm::ivec3, uint32_t, Coords::IVec3Hash> sent;
@@ -357,6 +364,8 @@ private:
     void HandleShoot(ClientState& client, const glm::vec3& direction);
     void UpdateArrows();
     void SendArrows();
+    void HandleCast(ClientState& client, const glm::ivec3& pos, bool cast);
+    void UpdateFishing(); // bites, and lines snapped by walking off
     double lastCreatureTime = 0.0;
     std::unique_ptr<WorldStorage> storage; // declared before `world`, which uses it
     std::unique_ptr<ServerWorld> world;

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -155,6 +156,7 @@ private:
     };
     std::vector<Particle> particles;
     double nextShot = 0.0; // the bow's next shot
+    std::optional<glm::ivec3> lastBobber; // where our bobber was (for the splash when a fish bites)
     std::map<std::pair<int, int>, glm::vec3> arrowFacing; // which way arrows were going before they stuck
     // Lightning: the bolts still showing, how bright the flash is (0..1), and thunder
     // on its way (when it's heard, how loud).

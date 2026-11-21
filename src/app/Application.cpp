@@ -54,7 +54,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -81,7 +81,7 @@ const char* HeightName(int eighths) {
 }
 
 // The tools the inventory offers, and the icon (atlas tile) for one.
-constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel, Tool::Sword, Tool::Bow };
+constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel, Tool::Sword, Tool::Bow, Tool::Rod };
 int ToolTile(const TextureAtlas& atlas, Tool tool) {
     const char* name = Mining::ToolTexture(tool);
     return name ? atlas.GetIndex(name) : 0;
@@ -93,6 +93,7 @@ const char* ToolHint(Tool tool) {
     case Tool::Shovel: return "fast on dirt, grass, sand and snow";
     case Tool::Sword: return "for fighting: 3.5 hearts a hit (and quick on leaves)";
     case Tool::Bow: return "right-click to shoot an arrow (2.5 hearts); needs arrows";
+    case Tool::Rod: return "right-click water to cast; wait for a bite (stay close)";
     default: return "";
     }
 }
@@ -152,6 +153,8 @@ const char* BlockName(BlockType type) {
     case BlockType::DOOR: return "Door";
     case BlockType::DOOR_OPEN: return "Open door";
     case BlockType::ARROW: return "Arrow";
+    case BlockType::RAW_FISH: return "Raw fish";
+    case BlockType::COOKED_FISH: return "Cooked fish";
     default:               return "Air";
     }
 }
@@ -511,6 +514,21 @@ void Application::Run() {
         for (const auto& c : client->GetCreatures())
             params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet) });
         for (const auto& b : bolts) params.bolts.push_back({ b.points, b.life / 0.35f });
+        // Our bobber, floating on the water and bobbing; a splash when a fish bites.
+        if (client->TakeBite() && lastBobber) {
+            SpawnParticles(*lastBobber, BlockType::WATER, 14, 2.0f);
+            PlayAt("splash", *lastBobber, 0.8f);
+        }
+        lastBobber = client->GetBobber();
+        if (lastBobber) {
+            Block water;
+            float surface = 0.9f;
+            if (world->GetBlock(lastBobber->x, lastBobber->y, lastBobber->z, water)) surface = water.WaterShownLevel() / static_cast<float>(Block::kMaxWaterVolume);
+            const glm::vec3 at = glm::vec3(*lastBobber) + glm::vec3(0.5f, surface + 0.04f * std::sin(static_cast<float>(Client::Now()) * 3.0f), 0.5f);
+            glm::vec2 uv0, uv1;
+            renderer->GetAtlas().GetTileUV(renderer->GetAtlas().GetIndex("bobber"), uv0, uv1);
+            params.particles.push_back({ at, 0.18f, glm::vec4(uv0, uv1), lightAt(at) });
+        }
         for (const auto& a : client->GetArrows()) {
             // Flying arrows point where they're going; stuck ones keep the way they came in.
             glm::vec3 dir = a.velocity;
@@ -1752,6 +1770,29 @@ void Application::OnMouseButton(int button, int action) {
             client->UseBed(at->block);
             return;
         }
+    }
+
+    // Right-click with the rod: cast into the water looked at (the first water surface
+    // along the view, within 12 blocks), or reel in.
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::Rod) {
+        if (client->GetBobber()) {
+            client->Cast(*client->GetBobber(), false);
+            return;
+        }
+        if (!client->HasTool(Tool::Rod)) return;
+        const glm::vec3 eye = camera.GetPosition(), dir = camera.GetDirection();
+        for (float t = 0.5f; t < 12.0f; t += 0.1f) {
+            const glm::ivec3 cell(glm::floor(eye + dir * t));
+            Block b, above;
+            if (!world->GetBlock(cell.x, cell.y, cell.z, b)) break;
+            if (b.HasWater() && !(world->GetBlock(cell.x, cell.y + 1, cell.z, above) && above.HasWater())) {
+                client->Cast(cell, true);
+                audio->Play("splash", glm::vec3(cell) + glm::vec3(0.5f), 0.4f, 0.2f);
+                break;
+            }
+            if (!b.IsPassable()) break; // (hit something solid first)
+        }
+        return;
     }
 
     // Right-click with the bow drawn: shoot (if there's an arrow, in survival).

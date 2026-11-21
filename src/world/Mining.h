@@ -13,7 +13,7 @@
 #include "world/Block.h"
 
 // The sword is for fighting (see Combat in world/Creatures.h); it's quick on leaves too.
-enum class Tool : uint8_t { None, Pickaxe, Axe, Shovel, Sword, Bow, Count }; // (the bow shoots arrows: right-click)
+enum class Tool : uint8_t { None, Pickaxe, Axe, Shovel, Sword, Bow, Rod, Count }; // (the bow shoots arrows, the rod fishes: right-click)
 
 namespace Mining {
 
@@ -32,6 +32,7 @@ inline const char* ToolName(Tool t) {
     case Tool::Shovel: return "Shovel";
     case Tool::Sword: return "Sword";
     case Tool::Bow: return "Bow";
+    case Tool::Rod: return "Fishing rod";
     default: return "Hand";
     }
 }
@@ -42,6 +43,7 @@ inline const char* ToolId(Tool t) {
     case Tool::Shovel: return "shovel";
     case Tool::Sword: return "sword";
     case Tool::Bow: return "bow";
+    case Tool::Rod: return "rod";
     default: return "hand";
     }
 }
@@ -53,6 +55,7 @@ inline const char* ToolTexture(Tool t) {
     case Tool::Shovel: return "tool_shovel";
     case Tool::Sword: return "tool_sword";
     case Tool::Bow: return "tool_bow";
+    case Tool::Rod: return "tool_rod";
     default: return nullptr;
     }
 }

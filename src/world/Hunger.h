@@ -28,6 +28,8 @@ inline int FoodValue(BlockType type) {
     case BlockType::RAW_VENISON: return 3;
     case BlockType::COOKED_VENISON: return 8;
     case BlockType::BREAD: return 6;
+    case BlockType::RAW_FISH: return 2;
+    case BlockType::COOKED_FISH: return 6;
     default: return 0;
     }
 }
