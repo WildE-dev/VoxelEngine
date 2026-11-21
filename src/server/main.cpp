@@ -46,7 +46,8 @@ int main(int argc, char** argv) {
             if (w == "auto") options.weather = Server::Options::Weather::Auto;
             else if (w == "clear") options.weather = Server::Options::Weather::Clear;
             else if (w == "rain") options.weather = Server::Options::Weather::Rain;
-            else { std::cerr << "Weather must be clear, rain or auto" << std::endl; return EXIT_FAILURE; }
+            else if (w == "storm") options.weather = Server::Options::Weather::Storm;
+            else { std::cerr << "Weather must be clear, rain, storm or auto" << std::endl; return EXIT_FAILURE; }
             continue;
         }
         if (arg == "--day-length" && i + 1 < argc) {

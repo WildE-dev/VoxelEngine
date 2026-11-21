@@ -42,6 +42,13 @@ struct ParticleModel {
     glm::vec2 light{ 15.0f, 0.0f };
 };
 
+// A lightning bolt: a jagged line of points from the sky down to where it struck,
+// drawn glowing, fading with `brightness` (0..1).
+struct BoltModel {
+    std::vector<glm::vec3> points;
+    float brightness = 1.0f;
+};
+
 // Draws other players as simple box figures: a body, and a head that turns and tilts
 // with their view, with a dark visor on the side they're facing.
 // Must be created and destroyed while the GL context is current.
@@ -55,6 +62,7 @@ public:
 
     void Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<PlayerModel>& players);
     // Creatures, from boxes too: a deer, a ghoul. `time` swings their legs.
+    void DrawBolts(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<BoltModel>& bolts);
     // Bits of broken blocks (tiny textured cubes).
     void DrawParticles(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ParticleModel>& particles);
     void DrawCreatures(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<CreatureModel>& creatures, float time);

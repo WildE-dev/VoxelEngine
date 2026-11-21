@@ -214,6 +214,24 @@ int main() {
         const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - c0).count();
         Check(ran && took > 0.8, "the clock runs (a twentieth of a 20 s day in " + std::to_string(took) + " s)");
         Check(pump(15.0, [&] { return client.GetRain() > 0.99f; }), "the forced rain reaches the client, faded in");
+        // A thunderstorm: darker, with lightning near players (so this one stands
+        // somewhere, telling the server where).
+        server->QueueConsoleCommand("weather storm");
+        std::vector<glm::ivec3> strikes;
+        auto standing = [&](double seconds, const std::function<bool()>& done) {
+            return WaitFor(seconds, [&] {
+                client.Poll();
+                client.SendPlayerState(client.GetSpawn(), glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround);
+                for (const auto& s : client.TakeLightning()) strikes.push_back(s);
+                return done();
+            });
+        };
+        Check(standing(20.0, [&] { return client.IsStorm(); }), "/weather storm makes it a thunderstorm, and the client knows");
+        Check(standing(30.0, [&] { return !strikes.empty(); }), "lightning strikes near the player (" + std::to_string(strikes.size()) + ")");
+        Check(!strikes.empty() && glm::distance(glm::vec2(strikes[0].x, strikes[0].z), glm::vec2(client.GetSpawn().x, client.GetSpawn().z)) < 42.0f,
+              "within 40 blocks of them");
+        server->QueueConsoleCommand("weather rain");
+        standing(20.0, [&] { return !client.IsStorm(); });
 
         client.SkipTime();
         Check(pump(20.0, [&] { return client.GetTimeOfDay() >= 0.6f && client.GetTimeOfDay() < 0.7f; }), "skipping by day jumps to the evening");

@@ -91,7 +91,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Everyone, "/time, /weather - show the time and weather" },
     { Level::Everyone, "/ops - list the operators" },
     { Level::Operator, "/time <day|noon|dusk|night|midnight|dawn|HH:MM> - set the time of day" },
-    { Level::Operator, "/weather <clear|rain|auto> - set the weather" },
+    { Level::Operator, "/weather <clear|rain|storm|auto> - set the weather" },
     { Level::Operator, "/tp <x> <y> <z> | /tp <player> | /tp <player> <x> <y> <z> - teleport (~ for relative)" },
     { Level::Operator, "/save - save the world now" },
     { Level::Operator, "/kick <player> [reason] - remove a player" },
@@ -447,17 +447,20 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         Broadcast(Kind::Info, who + " set the time to " + FormatTime(timeOfDay));
     }
     else if (command == "weather") {
-        auto name = [](Options::Weather w) { return w == Options::Weather::Clear ? "clear" : w == Options::Weather::Rain ? "rain" : "auto"; };
+        auto name = [](Options::Weather w) {
+            return w == Options::Weather::Clear ? "clear" : w == Options::Weather::Rain ? "rain" : w == Options::Weather::Storm ? "storm" : "auto";
+        };
         if (words.size() < 2)
-            return reply(Kind::Info, std::string(raining ? "It's raining" : "It's clear") + " (weather: " + name(weatherMode) + ")");
+            return reply(Kind::Info, std::string(storm && raining ? "There's a thunderstorm" : raining ? "It's raining" : "It's clear") + " (weather: " + name(weatherMode) + ")");
         const std::string arg = Lower(words[1]);
         if (arg == "clear" || arg == "sun") weatherMode = Options::Weather::Clear;
         else if (arg == "rain") weatherMode = Options::Weather::Rain;
+        else if (arg == "storm" || arg == "thunder") weatherMode = Options::Weather::Storm;
         else if (arg == "auto") {
             weatherMode = Options::Weather::Auto;
             weatherTimer = raining ? 3.0 * 60.0 : 15.0 * 60.0; // carry on with the current weather for a while
         }
-        else return usage("/weather [clear|rain|auto]");
+        else return usage("/weather [clear|rain|storm|auto]");
         Broadcast(Kind::Info, who + " set the weather to " + name(weatherMode));
     }
     else if (command == "tp" || command == "teleport") {

@@ -174,6 +174,7 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         lastSnapshotTick = m.tick;
         timeOfDay = m.timeOfDay;
         rain = m.rain / 255.0f;
+        storm = m.storm != 0;
         const double now = Now();
         std::unordered_map<uint16_t, std::deque<Sample>> next;
         for (const auto& p : m.players) {
@@ -195,6 +196,11 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
             for (const auto& [type, units] : m.held) chestHeld[static_cast<size_t>(type)] = units;
         }
         else openChest.reset();
+        break;
+    }
+    case net::MsgType::Lightning: {
+        net::Lightning m;
+        if ((ok = net::Decode(in, m)) && lightning.size() < 16) lightning.push_back(m.pos);
         break;
     }
     case net::MsgType::PlayerName: {

@@ -891,7 +891,7 @@ ones you're allowed to use:
 | `/spawn` | everyone | back to the spawn point |
 | `/time`, `/weather`, `/ops` | everyone | show the time, the weather, the operators |
 | `/time <day\|noon\|dusk\|night\|midnight\|dawn\|HH:MM>` | operators | set the time (sunrise is 06:00) |
-| `/weather <clear\|rain\|auto>` | operators | set the weather |
+| `/weather <clear\|rain\|storm\|auto>` | operators | set the weather |
 | `/tp <x> <y> <z>`, `/tp <player>`, `/tp <player> <x> <y> <z>` | operators | teleport; `~` means relative (`/tp ~ ~10 ~`) |
 | `/save` | operators | save the world now |
 | `/kick <player> [reason]` | operators | remove a player |
@@ -942,10 +942,18 @@ in and out over ten seconds. Rain greys and dims the sky, falls as streaks aroun
 the player (not under a roof or underwater), and tops up lakes and pools (see
 [Water](#water)).
 
-`--day-length SECONDS` and `--weather clear|rain|auto` change these, on `VoxelEngine`
+Three showers in ten are **thunderstorms**: the sky goes darker still, and every 3
+to 12 seconds lightning strikes the ground somewhere within 40 blocks of a player. A
+strike is a jagged glowing bolt from high in the sky, with a flash that lights up the
+whole world for a moment, then thunder that rolls in later the further off it was.
+Anyone within 3 blocks of a strike takes three hearts (armour helps). Operators can
+call one with `/weather storm`.
+
+`--day-length SECONDS` and `--weather clear|rain|storm|auto` change these, on `VoxelEngine`
 (singleplayer or `--server`) and `VoxelServer`. `WeatherTest` checks thin water, that
 rain fills a drained pool to the brim and no further while leaving full, covered and
-dry-ground water alone, and that the clock runs, saves, resumes and can be skipped.
+dry-ground water alone, that the clock runs, saves, resumes and can be skipped, and
+that a storm reaches the client and strikes near the player.
 
 ## Fog
 

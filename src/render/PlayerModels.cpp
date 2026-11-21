@@ -128,6 +128,36 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
     }
 }
 
+void PlayerModels::DrawBolts(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<BoltModel>& bolts) {
+    if (bolts.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 1.0f);
+    shader.SetUniform("textured", 0.0f);
+    glBindVertexArray(vao);
+    for (const auto& bolt : bolts) {
+        shader.SetUniform("color", glm::mix(glm::vec3(0.3f, 0.35f, 0.5f), glm::vec3(0.92f, 0.95f, 1.0f), bolt.brightness));
+        for (size_t i = 0; i + 1 < bolt.points.size(); i++) {
+            // A thin box along the segment: its y axis turned onto the segment.
+            const glm::vec3 a = bolt.points[i], b = bolt.points[i + 1], d = b - a;
+            const float length = glm::length(d);
+            if (length < 1e-3f) continue;
+            const glm::vec3 y = d / length;
+            const glm::vec3 x = glm::normalize(std::abs(y.x) < 0.9f ? glm::cross(y, glm::vec3(1, 0, 0)) : glm::cross(y, glm::vec3(0, 0, 1)));
+            const glm::vec3 z = glm::cross(x, y);
+            glm::mat4 model(1.0f);
+            model[0] = glm::vec4(x * 0.18f, 0.0f);
+            model[1] = glm::vec4(d, 0.0f);
+            model[2] = glm::vec4(z * 0.18f, 0.0f);
+            model[3] = glm::vec4((a + b) * 0.5f, 1.0f);
+            shader.SetUniform("model", model);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
+    }
+    shader.SetUniform("glow", 0.0f);
+}
+
 void PlayerModels::DrawParticles(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ParticleModel>& particles) {
     if (particles.empty()) return;
     shader.Use();

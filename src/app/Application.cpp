@@ -469,6 +469,7 @@ void Application::Run() {
         UpdateSky(deltaTime, params);
         UpdateSounds();
         UpdateParticles(static_cast<float>(deltaTime));
+        UpdateLightning(static_cast<float>(deltaTime));
         if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
             params.highlightedBlock = hit->block;
             Block target;
@@ -502,6 +503,7 @@ void Application::Run() {
         };
         for (const auto& c : client->GetCreatures())
             params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet) });
+        for (const auto& b : bolts) params.bolts.push_back({ b.points, b.life / 0.35f });
         for (const auto& p : particles)
             params.particles.push_back({ p.position, p.size * std::min(1.0f, p.life / (0.4f * p.maxLife)), p.uv, lightAt(p.position - glm::vec3(0.0f, 0.1f, 0.0f)) });
         const TextureAtlas& atlas = renderer->GetAtlas();
@@ -629,8 +631,11 @@ void Application::UpdateSky(float deltaTime, FrameParams& params) {
     const float ease = std::min(1.0f, deltaTime * 4.0f);
     rainHere += (target - rainHere) * ease;
     params.rain = rainHere;
-    params.overcast = rain;
-    params.sunBrightness = day * (1.0f - 0.45f * rain);
+    // A thunderstorm is darker still; a lightning flash lights everything up.
+    const float storm = client->IsStorm() ? rain : 0.0f;
+    params.overcast = std::min(1.0f, rain + 0.3f * storm);
+    params.sunBrightness = day * (1.0f - 0.45f * rain - 0.25f * storm);
+    params.sunBrightness = std::max(params.sunBrightness, lightningFlash);
 }
 
 void Application::UpdateNetwork() {
@@ -1711,6 +1716,42 @@ void Application::SpawnParticles(const glm::ivec3& pos, BlockType type, int coun
         const glm::vec2 span = (uv1 - uv0) * 0.25f, at = uv0 + (uv1 - uv0 - span) * glm::vec2(unit(rng), unit(rng));
         p.uv = glm::vec4(at, at + span);
         particles.push_back(p);
+    }
+}
+
+void Application::UpdateLightning(float dt) {
+    static std::mt19937 rng(77);
+    std::uniform_real_distribution<float> spread(-1.0f, 1.0f);
+    const glm::vec3 ear = camera.GetPosition();
+    for (const glm::ivec3& at : client->TakeLightning()) {
+        // A jagged bolt from high in the sky down to where it struck, with a fork.
+        Bolt bolt{ {}, 0.35f };
+        glm::vec3 p = glm::vec3(at) + glm::vec3(0.5f, 70.0f, 0.5f);
+        const glm::vec3 ground = glm::vec3(at) + glm::vec3(0.5f, 0.0f, 0.5f);
+        bolt.points.push_back(p);
+        for (int i = 1; i <= 14; i++) {
+            const float t = i / 14.0f;
+            p = glm::mix(glm::vec3(ground.x, ground.y + 70.0f, ground.z), ground, t) + glm::vec3(spread(rng), 0.0f, spread(rng)) * 2.5f * (1.0f - t);
+            if (i == 14) p = ground;
+            bolt.points.push_back(p);
+        }
+        bolts.push_back(bolt);
+        const float distance = glm::distance(ear, ground);
+        lightningFlash = std::max(lightningFlash, std::clamp(1.2f - distance / 120.0f, 0.3f, 1.0f));
+        // Thunder: later and quieter the further off (sound is slowed down a bit, so
+        // it rolls in after the flash without a long wait).
+        thunder.emplace_back(Client::Now() + distance / 120.0, std::clamp(1.4f - distance / 80.0f, 0.25f, 1.0f));
+    }
+    for (auto& b : bolts) b.life -= dt;
+    bolts.erase(std::remove_if(bolts.begin(), bolts.end(), [](const Bolt& b) { return b.life <= 0.0f; }), bolts.end());
+    lightningFlash = std::max(0.0f, lightningFlash - dt * 3.0f);
+    const double now = Client::Now();
+    for (auto it = thunder.begin(); it != thunder.end();) {
+        if (now >= it->first) {
+            audio->PlayHere("thunder", it->second, 0.1f);
+            it = thunder.erase(it);
+        }
+        else ++it;
     }
 }
 

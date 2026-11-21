@@ -142,6 +142,12 @@ def main():
         bite = envelope(mix(lowpass(noise(secs(0.07), bite_rng), 1800), [0.4 * s for s in highpass(noise(secs(0.07), bite_rng), 3000)]), 0.002, 0.065, 2.5)
         bites += bite + [0.0] * secs(0.05)
     save("eat", bites)
+
+    # Thunder: a sharp crack, then a long low rumble rolling away (its own random stream).
+    thunder_rng = random.Random(61)
+    crack = envelope(highpass(noise(secs(0.25), thunder_rng), 1200), 0.002, 0.24, 3.0)
+    rumble = envelope(lowpass(lowpass(noise(secs(3.5), thunder_rng), 140), 220), 0.08, 3.4, 1.4)
+    save("thunder", mix(crack + [0.0] * (len(rumble) - len(crack)), [1.6 * s for s in rumble]))
     print("sounds written to", os.path.normpath(OUT))
 
 

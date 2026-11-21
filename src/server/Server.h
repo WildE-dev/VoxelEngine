@@ -113,7 +113,7 @@ public:
         // Generator for a new world (a saved world keeps the one it was created with).
         TerrainGenerator::Type worldType = TerrainGenerator::Type::Normal;
         float dayLengthSeconds = 20.0f * 60.0f;
-        enum class Weather { Auto, Clear, Rain } weather = Weather::Auto;
+        enum class Weather { Auto, Clear, Rain, Storm } weather = Weather::Auto;
         // Always an operator (singleplayer: the local player). Empty: nobody.
         std::string ownerName;
         // Made operators at startup, besides those in ops.txt (--op NAME).
@@ -349,6 +349,9 @@ private:
     net::GameMode defaultMode = net::GameMode::Survival; // new players' (from the save, or the options)
     Options::Weather weatherMode = Options::Weather::Auto; // starts as options.weather; /weather changes it
     bool raining = false;
+    bool storm = false;          // the rain is a thunderstorm
+    double nextLightning = 0.0;
+    void UpdateStorm();          // lightning strikes near players while a storm rages
     float rainLevel = 0.0f;      // 0..1, fades toward `raining`
     double weatherTimer = 0.0;   // seconds until the weather changes (Auto)
     uint32_t weatherSeed = 0x9E3779B9u;

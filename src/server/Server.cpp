@@ -144,7 +144,8 @@ bool Server::Start(const Options& opts) {
     }
     weatherSeed ^= static_cast<uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
     weatherMode = options.weather;
-    raining = options.weather == Options::Weather::Rain;
+    raining = options.weather == Options::Weather::Rain || options.weather == Options::Weather::Storm;
+    storm = options.weather == Options::Weather::Storm;
     rainLevel = raining ? 1.0f : 0.0f;
     weatherTimer = 10.0 * 60.0; // the first shower comes after a while
     if (storage) {
@@ -807,14 +808,16 @@ void Server::UpdateSky() {
         return lo + (hi - lo) * (weatherSeed >> 8) / double(1u << 24);
     };
     switch (weatherMode) {
-    case Options::Weather::Clear: raining = false; break;
-    case Options::Weather::Rain: raining = true; break;
+    case Options::Weather::Clear: raining = storm = false; break;
+    case Options::Weather::Rain: raining = true, storm = false; break;
+    case Options::Weather::Storm: raining = storm = true; break;
     case Options::Weather::Auto:
         weatherTimer -= dt;
         if (weatherTimer <= 0.0) {
             raining = !raining;
+            storm = raining && randomRange(0.0, 1.0) < 0.3; // three showers in ten are thunderstorms
             weatherTimer = raining ? randomRange(2.0 * 60.0, 5.0 * 60.0) : randomRange(10.0 * 60.0, 25.0 * 60.0);
-            Log(raining ? "it starts to rain" : "the rain stops");
+            Log(raining ? (storm ? "a thunderstorm starts" : "it starts to rain") : "the rain stops");
         }
         break;
     }
@@ -822,6 +825,42 @@ void Server::UpdateSky() {
     const float step = static_cast<float>(dt / 10.0); // fades over ten seconds
     rainLevel = rainLevel < target ? std::min(target, rainLevel + step) : std::max(target, rainLevel - step);
     world->GetWater().SetRaining(rainLevel > 0.5f);
+    UpdateStorm();
+}
+
+void Server::UpdateStorm() {
+    const double now = Now();
+    if (!storm || rainLevel < 0.7f || now < nextLightning) return;
+    std::vector<ClientState*> players;
+    for (auto& [peer, client] : clients)
+        if (client.welcomed && client.hasState) players.push_back(&client);
+    weatherSeed = weatherSeed * 1664525u + 1013904223u;
+    auto random01 = [&] {
+        weatherSeed = weatherSeed * 1664525u + 1013904223u;
+        return (weatherSeed >> 8) / double(1u << 24);
+    };
+    nextLightning = now + 3.0 + 9.0 * random01();
+    if (players.empty()) return;
+    // Somewhere within 40 blocks of a random player, on top of whatever's there.
+    const ClientState& near = *players[static_cast<size_t>(random01() * players.size()) % players.size()];
+    const double angle = random01() * 6.283185307179586, distance = 4.0 + 36.0 * random01();
+    const int x = static_cast<int>(std::floor(near.feet.x + std::cos(angle) * distance)), z = static_cast<int>(std::floor(near.feet.z + std::sin(angle) * distance));
+    std::optional<glm::ivec3> top;
+    for (int y = static_cast<int>(near.feet.y) + 48; y > static_cast<int>(near.feet.y) - 48; y--) {
+        Block b;
+        if (!world->GetBlock(x, y, z, b)) continue;
+        if (!b.IsAir() && !b.IsPlant()) {
+            top = glm::ivec3(x, y + 1, z);
+            break;
+        }
+    }
+    if (!top) return;
+    const auto packet = net::Encode(net::Lightning{ *top });
+    for (auto& [peer, client] : clients)
+        if (client.welcomed) net.Send(peer, net::kChannelReliable, packet);
+    // Anyone close by is struck: three hearts (armour helps).
+    for (ClientState* p : players)
+        if (glm::distance(p->feet, glm::vec3(*top) + glm::vec3(0.5f, 0.0f, 0.5f)) < 3.0f) Hurt(*p, 6, "was struck by lightning");
 }
 
 // --- Traps and health -------------------------------------------------------------
@@ -1427,6 +1466,7 @@ void Server::BroadcastPlayers() {
     snapshot.tick = tickCount;
     snapshot.timeOfDay = static_cast<float>(timeOfDay);
     snapshot.rain = static_cast<uint8_t>(std::lround(rainLevel * 255.0f));
+    snapshot.storm = storm ? 1 : 0;
     for (const auto& [peer, client] : clients) {
         if (!client.welcomed || !client.hasState) continue;
         // Flashes red for others while just hurt.

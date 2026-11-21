@@ -37,6 +37,7 @@ struct FrameParams {
     std::vector<PlayerModel> players; // other players
     std::vector<CreatureModel> creatures;
     std::vector<ParticleModel> particles; // bits of broken blocks
+    std::vector<BoltModel> bolts;         // lightning
 };
 
 // Owns all GPU resources outside the world: shaders, textures, the skybox,

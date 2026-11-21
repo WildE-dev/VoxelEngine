@@ -153,6 +153,13 @@ private:
         glm::vec4 uv;
     };
     std::vector<Particle> particles;
+    // Lightning: the bolts still showing, how bright the flash is (0..1), and thunder
+    // on its way (when it's heard, how loud).
+    struct Bolt { std::vector<glm::vec3> points; float life; };
+    std::vector<Bolt> bolts;
+    float lightningFlash = 0.0f;
+    std::vector<std::pair<double, float>> thunder;
+    void UpdateLightning(float dt);
     // Throws `count` bits of this block out of the cell at `pos` (a burst when it breaks,
     // a few while it's mined).
     void SpawnParticles(const glm::ivec3& pos, BlockType type, int count, float speed = 3.0f);

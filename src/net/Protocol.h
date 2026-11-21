@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 26;
+constexpr uint32_t kProtocolVersion = 27;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -70,6 +70,7 @@ enum class MsgType : uint8_t {
     CreatureSnapshot, // the creatures near you
     PlayerName,    // a player's name, by id (for their name tag)
     ChestContents, // what's in the chest you have open (or that it closed)
+    Lightning,     // lightning struck here (in a storm)
     Knockback,     // you were hit: a push to add to your velocity
 };
 
@@ -295,6 +296,12 @@ struct PlayerSnapshot {
     std::vector<PlayerInfo> players;
     float timeOfDay = 0.0f; // 0..1: 0 sunrise, 0.25 noon, 0.5 sunset, 0.75 midnight
     uint8_t rain = 0;       // rain intensity, 0..255 (fades in and out)
+    uint8_t storm = 0;      // 1: the rain is a thunderstorm (darker, with lightning)
+};
+
+// Lightning struck the ground here (the top of the column).
+struct Lightning {
+    glm::ivec3 pos{0};
 };
 
 struct SkipTime {};
@@ -435,6 +442,7 @@ std::vector<uint8_t> Encode(const BlockDeltas& m);
 std::vector<uint8_t> Encode(const PlayerSnapshot& m);
 std::vector<uint8_t> Encode(const Correction& m);
 std::vector<uint8_t> Encode(const PlayerName& m);
+std::vector<uint8_t> Encode(const Lightning& m);
 std::vector<uint8_t> Encode(const Knockback& m);
 
 bool Decode(ByteReader& in, Hello& m);
@@ -461,6 +469,7 @@ bool Decode(ByteReader& in, BlockDeltas& m);
 bool Decode(ByteReader& in, PlayerSnapshot& m);
 bool Decode(ByteReader& in, Correction& m);
 bool Decode(ByteReader& in, PlayerName& m);
+bool Decode(ByteReader& in, Lightning& m);
 bool Decode(ByteReader& in, Knockback& m);
 
 } // namespace net

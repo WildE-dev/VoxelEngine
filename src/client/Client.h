@@ -115,6 +115,9 @@ public:
     int GetMaxAir() const { return maxAir; }
     Breathing::Cause GetAirCause() const { return airCause; }
     float GetRain() const { return rain; }
+    bool IsStorm() const { return storm; }
+    // Lightning strikes since the last call.
+    std::vector<glm::ivec3> TakeLightning() { std::vector<glm::ivec3> out; out.swap(lightning); return out; }
     // Game mode, and in survival the resource units held of each block type (predicted
     // on edits, put right by the server).
     net::GameMode GetMode() const { return mode; }
@@ -205,6 +208,8 @@ private:
     uint32_t stateSequence = 0;
     uint16_t correctionId = 0;
     glm::vec3 pendingKnockback{ 0.0f };
+    bool storm = false;
+    std::vector<glm::ivec3> lightning;
     std::optional<glm::ivec3> openChest;
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> chestHeld{};
     std::optional<glm::vec3> pendingCorrection;
