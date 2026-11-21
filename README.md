@@ -561,6 +561,17 @@ your own. `TrapTest` checks spikes, death and respawn, crumbling floors, pressur
 plates and sluice gates, falls (safe from 3 blocks, four hearts from 11), and that
 no-clip and the laser are operators' only.
 
+## TNT
+
+**TNT** (a sand and half a coal) explodes. Right-click it to light it: it turns white
+and three seconds later blows a round crater three blocks out in every direction.
+Everything in the blast goes (dungeon bricks and water too, and a chest's contents
+are lost), and other TNT caught in it goes off a moment later, so a row of it sets
+off a chain. Players within six blocks take up to five hearts, the closer the worse
+(armour helps), and are thrown back; creatures are hurt too. Everyone hears the boom,
+sees smoke and debris fly, and the view shakes if it was close. `TrapTest` checks
+lighting it, the crater and its size, and the damage.
+
 ## Mining
 
 In survival, breaking a block takes time: hold the left button on it, and cracks
@@ -882,6 +893,7 @@ makes four.
 | Door | 2 planks |
 | Campfire | 1 log + 0.25 stone |
 | 2 signs | 1 planks |
+| TNT | 1 sand + 0.5 coal |
 | Bed | 3 planks + 1 hide |
 | Iron ingot | 1 iron ore + 0.25 coal |
 | Lamp (with coal) | 0.5 glass + 0.25 coal |

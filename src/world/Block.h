@@ -156,6 +156,9 @@ enum class BlockType : uint8_t {
     // A sign on a post (a sprite, passable) with a line of text on it, written after
     // placing it (or rewritten with a right-click); the server keeps the texts.
     SIGN,
+    // TNT: right-click to light it; three seconds later it explodes (the server runs it).
+    TNT,
+    TNT_LIT, // (flashing, about to go)
     COUNT
 };
 
@@ -183,6 +186,7 @@ inline BlockType ResourceTypeOf(BlockType type) {
     case BlockType::CROP: return BlockType::SEEDS;       // (an unripe crop gives its seed back; planting costs one)
     case BlockType::RIPE_WHEAT: return BlockType::WHEAT; // (and the server adds seeds)
     case BlockType::DOOR_OPEN: return BlockType::DOOR;
+    case BlockType::TNT_LIT: return BlockType::TNT;
     default: return type;
     }
 }

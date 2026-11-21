@@ -369,6 +369,11 @@ private:
     // Signs' texts, by position (saved with the world).
     std::unordered_map<glm::ivec3, std::string, Coords::IVec3Hash> signs;
     void HandleWriteSign(ClientState& client, const glm::ivec3& pos, const std::string& text);
+    // TNT burning down: where, and when it goes.
+    std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> fuses;
+    void LightTnt(const glm::ivec3& pos, double fuse);
+    void UpdateTnt();
+    void Explode(const glm::ivec3& pos, int radius);
     void BroadcastSign(const glm::ivec3& pos);
     void UpdateFishing(); // bites, and lines snapped by walking off
     double lastCreatureTime = 0.0;

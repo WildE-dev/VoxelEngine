@@ -169,6 +169,7 @@ private:
     float lightningFlash = 0.0f;
     std::vector<std::pair<double, float>> thunder;
     void UpdateLightning(float dt);
+    float shake = 0.0f; // the camera shaking from a blast nearby (0..1, fading)
     // Fireflies over grass on clear nights near the player (just for show).
     struct Firefly { glm::vec3 home, position; float phase, life; };
     std::vector<Firefly> fireflies;

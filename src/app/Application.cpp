@@ -54,7 +54,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -155,6 +155,8 @@ const char* BlockName(BlockType type) {
     case BlockType::ARROW: return "Arrow";
     case BlockType::CAMPFIRE: return "Campfire";
     case BlockType::SIGN: return "Sign";
+    case BlockType::TNT: return "TNT";
+    case BlockType::TNT_LIT: return "Lit TNT";
     case BlockType::RAW_FISH: return "Raw fish";
     case BlockType::COOKED_FISH: return "Cooked fish";
     default:               return "Air";
@@ -480,7 +482,9 @@ void Application::Run() {
             const float yaw = glm::radians(camera.GetYaw());
             const glm::vec3 side(-std::sin(yaw), 0.0f, std::cos(yaw));
             const glm::vec3 bob = glm::vec3(0.0f, std::abs(std::sin(bobPhase)) * 0.06f, 0.0f) + side * std::sin(bobPhase) * 0.035f;
-            camera.SetPosition(player.GetEyePosition() + bob * bobAmount);
+            const float t = static_cast<float>(glfwGetTime());
+            const glm::vec3 jolt = glm::vec3(std::sin(t * 47.0f), std::sin(t * 53.0f) * 0.6f, std::cos(t * 41.0f)) * 0.12f * shake * shake;
+            camera.SetPosition(player.GetEyePosition() + bob * bobAmount + jolt);
         }
         world->Update(camera.GetPosition());
         lap(1);
@@ -1823,7 +1827,8 @@ void Application::OnMouseButton(int button, int action) {
         // A bed: respawn here (and sleep, at night).
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
             at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) &&
-            (target.type == BlockType::BED || target.type == BlockType::DOOR || target.type == BlockType::DOOR_OPEN || target.type == BlockType::CAMPFIRE)) {
+            (target.type == BlockType::BED || target.type == BlockType::DOOR || target.type == BlockType::DOOR_OPEN || target.type == BlockType::CAMPFIRE ||
+             target.type == BlockType::TNT)) {
             client->UseBed(at->block);
             return;
         }
@@ -2108,6 +2113,28 @@ void Application::UpdateLightning(float dt) {
         // it rolls in after the flash without a long wait).
         thunder.emplace_back(Client::Now() + distance / 120.0, std::clamp(1.4f - distance / 80.0f, 0.25f, 1.0f));
     }
+    // Explosions: a boom, smoke and debris, and the view shaking if it's close.
+    for (const auto& blast : client->TakeExplosions()) {
+        const glm::vec3 centre = glm::vec3(blast.pos) + glm::vec3(0.5f);
+        PlayAt("explosion", blast.pos, 1.0f);
+        SpawnParticles(blast.pos, BlockType::STONE, 30, 9.0f);
+        SpawnParticles(blast.pos, BlockType::DIRT, 20, 7.0f);
+        glm::vec2 uv0, uv1;
+        renderer->GetAtlas().GetTileUV(renderer->GetAtlas().GetIndex("smoke"), uv0, uv1);
+        for (int i = 0; i < 40 && particles.size() < 600; i++) {
+            Particle p;
+            p.position = centre + glm::vec3(spread(rng), spread(rng), spread(rng)) * static_cast<float>(blast.radius) * 0.8f;
+            p.velocity = (p.position - centre) * 0.8f;
+            p.maxLife = p.life = 1.5f + std::abs(spread(rng)) * 1.5f;
+            p.size = 0.35f + 0.25f * std::abs(spread(rng));
+            p.uv = glm::vec4(uv0, uv1);
+            p.rise = true;
+            particles.push_back(p);
+        }
+        shake = std::max(shake, std::clamp(1.2f - glm::distance(ear, centre) / 24.0f, 0.0f, 1.0f));
+        lightningFlash = std::max(lightningFlash, std::clamp(0.8f - glm::distance(ear, centre) / 40.0f, 0.0f, 0.8f));
+    }
+    shake = std::max(0.0f, shake - dt * 1.6f);
     for (auto& b : bolts) b.life -= dt;
     bolts.erase(std::remove_if(bolts.begin(), bolts.end(), [](const Bolt& b) { return b.life <= 0.0f; }), bolts.end());
     lightningFlash = std::max(0.0f, lightningFlash - dt * 3.0f);

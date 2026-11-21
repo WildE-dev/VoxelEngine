@@ -617,6 +617,45 @@ SIGN = """
 """
 SIGN_COLOURS = {"b": (110, 76, 38), "w": (196, 160, 104), "k": (90, 64, 34), "p": (120, 84, 44)}
 
+TNT_SIDE = """
+rrRrrrRrrrrRrrRr
+rRrrrRrrrRrrrRrr
+rrrrrrrrrrrrrrrr
+rrRrrrrRrrrRrrrr
+wwwwwwwwwwwwwwww
+wkkkwkkkwkwwkkkw
+wwkwwkwkwkkwwkww
+wwkwwkwkwkwkwkww
+wwkwwkwkwkwwkkww
+wwwwwwwwwwwwwwww
+rrrRrrrrrRrrrrRr
+rRrrrrRrrrrrRrrr
+rrrrRrrrrrRrrrrr
+rrRrrrrrRrrrrRrr
+rrrrrRrrrrrrrrrr
+rRrrrrrRrrrRrrrR
+"""
+TNT_TOP = """
+rrrrrrrrrrrrrrrr
+rRrrRrrRrrRrrRrr
+rrrrrrrrrrrrrrrr
+rrRrrrrkkrrrrRrr
+rrrrrrkkkkrrrrrr
+rrRrrkkkkkkrrRrr
+rrrrrkkggkkrrrrr
+rrRrrkkggkkrrRrr
+rrrrrkkkkkkrrrrr
+rrRrrrkkkkrrrRrr
+rrrrrrrkkrrrrrrr
+rrRrrrrrrrrrrRrr
+rrrrrrrrrrrrrrrr
+rRrrRrrRrrRrrRrr
+rrrrrrrrrrrrrrrr
+rrrrrrrrrrrrrrrr
+"""
+TNT_COLOURS = {"r": (196, 48, 40), "R": (220, 70, 60), "w": (236, 232, 220), "k": (40, 36, 34), "g": (120, 120, 120)}
+TNT_LIT_COLOURS = {"r": (255, 210, 200), "R": (255, 236, 230), "w": (255, 255, 255), "k": (120, 110, 100), "g": (255, 220, 120)}
+
 
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
@@ -651,6 +690,9 @@ def main():
     draw("campfire", CAMPFIRE, CAMPFIRE_COLOURS, jitter=8, seed=40)
     draw("smoke", SMOKE, SMOKE_COLOURS, jitter=6, seed=41)
     draw("sign", SIGN, SIGN_COLOURS, jitter=5, seed=42)
+    draw("tnt_side", TNT_SIDE, TNT_COLOURS, jitter=5, seed=43)
+    draw("tnt_top", TNT_TOP, TNT_COLOURS, jitter=5, seed=44)
+    draw("tnt_lit", TNT_SIDE, TNT_LIT_COLOURS, jitter=5, seed=45)
 
 
 if __name__ == "__main__":

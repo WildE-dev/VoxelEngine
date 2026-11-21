@@ -55,6 +55,9 @@ constexpr float kArrowSpeed = 32.0f, kArrowGravity = 18.0f;
 constexpr int kArrowDamage = 5;
 constexpr double kShotInterval = 0.6;
 constexpr uint16_t kCreatureShooter = 0xFFFF; // an arrow a skeleton shot
+// TNT: seconds from lighting to the bang, and how far the blast reaches.
+constexpr double kTntFuse = 3.0;
+constexpr int kTntRadius = 3;
 
 // A player's body; a crouching player's is shorter (net::kFlagCrouching).
 constexpr float kCrouchHeight = 1.45f; // as Player::kCrouchHeight
@@ -1036,6 +1039,7 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     Block block;
     if (!InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block)) return;
     if (block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN) return ToggleDoor(pos, block.type == BlockType::DOOR);
+    if (block.type == BlockType::TNT) return LightTnt(pos, kTntFuse);
     if (block.type == BlockType::CAMPFIRE) {
         // Cooks one of the raw food in their hand.
         const BlockType cooked = client.heldBlock == BlockType::RAW_VENISON ? BlockType::COOKED_VENISON
@@ -1296,6 +1300,72 @@ void Server::HandleShoot(ClientState& client, const glm::vec3& direction) {
     const glm::vec3 eye = client.feet + glm::vec3(0.0f, (client.flags & net::kFlagCrouching) ? 1.27f : kEyeHeight, 0.0f);
     arrows.push_back({ eye + dir * 0.4f, dir * kArrowSpeed, client.id, now });
     if (arrows.size() > 256) arrows.erase(arrows.begin()); // (the oldest go first)
+}
+
+void Server::LightTnt(const glm::ivec3& pos, double fuse) {
+    if (fuses.count(pos)) return;
+    world->SetBlock(pos.x, pos.y, pos.z, Block(BlockType::TNT_LIT));
+    fuses[pos] = Now() + fuse;
+}
+
+void Server::UpdateTnt() {
+    const double now = Now();
+    std::vector<glm::ivec3> due;
+    for (auto it = fuses.begin(); it != fuses.end();) {
+        Block b;
+        if (world->GetBlock(it->first.x, it->first.y, it->first.z, b) && b.type != BlockType::TNT_LIT) { it = fuses.erase(it); continue; } // (broken first)
+        if (now >= it->second) {
+            due.push_back(it->first);
+            it = fuses.erase(it);
+        }
+        else ++it;
+    }
+    for (const auto& p : due) Explode(p, kTntRadius);
+}
+
+void Server::Explode(const glm::ivec3& pos, int radius) {
+    // Everything in a ball goes (water and dungeon bricks too; a chest's contents are
+    // lost), and TNT caught in it is set off on a short fuse.
+    for (int x = -radius; x <= radius; x++)
+        for (int y = -radius; y <= radius; y++)
+            for (int z = -radius; z <= radius; z++) {
+                if (x * x + y * y + z * z > radius * radius + 1) continue;
+                const glm::ivec3 p = pos + glm::ivec3(x, y, z);
+                Block b;
+                if (!world->GetBlock(p.x, p.y, p.z, b) || b.IsAir()) continue;
+                if (b.type == BlockType::TNT && p != pos) {
+                    LightTnt(p, 0.4 + 0.1 * (std::abs(x) + std::abs(z)));
+                    continue;
+                }
+                if (b.type == BlockType::CHEST) RemoveChest(p, nullptr);
+                if (b.type == BlockType::SIGN && signs.erase(p)) BroadcastSign(p);
+                world->SetBlock(p.x, p.y, p.z, Block());
+            }
+    const auto packet = net::Encode(net::Explosion{ pos, static_cast<uint8_t>(radius) });
+    const glm::vec3 centre = glm::vec3(pos) + glm::vec3(0.5f);
+    for (auto& [peer, client] : clients) {
+        if (!client.welcomed) continue;
+        net.Send(peer, net::kChannelReliable, packet);
+        // Hurt (more the closer), and thrown away from it.
+        const float d = glm::distance(client.feet + glm::vec3(0.0f, 0.9f, 0.0f), centre);
+        if (d > radius * 2.0f) continue;
+        const int damage = static_cast<int>(std::lround(10.0f * (1.0f - d / (radius * 2.0f))));
+        if (damage > 0) Hurt(client, damage, "was blown up");
+        glm::vec3 away = client.feet - centre;
+        away.y = 0.0f;
+        away = glm::length(away) > 1e-3f ? glm::normalize(away) : glm::vec3(1.0f, 0.0f, 0.0f);
+        net.Send(peer, net::kChannelReliable, net::Encode(net::Knockback{ away * 8.0f * (1.0f - d / (radius * 2.0f)) + glm::vec3(0.0f, 6.0f, 0.0f) }));
+    }
+    // Creatures too (ids first: a killed one leaves the list).
+    std::vector<std::pair<uint16_t, int>> struck;
+    for (const auto& c : creatures.All()) {
+        const float d = glm::distance(c.feet, centre);
+        if (d <= radius * 2.0f) struck.emplace_back(c.id, static_cast<int>(std::lround(12.0f * (1.0f - d / (radius * 2.0f)))) + 1);
+    }
+    for (const auto& [id, damage] : struck) {
+        bool killed = false;
+        creatures.Damage(id, damage, centre, Now(), killed);
+    }
 }
 
 void Server::HandleWriteSign(ClientState& client, const glm::ivec3& pos, const std::string& raw) {
@@ -1567,6 +1637,7 @@ void Server::Tick() {
     UpdateCrops();
     UpdateArrows();
     UpdateFishing();
+    UpdateTnt();
     if (storage && options.autosaveSeconds > 0.0f && Now() - lastSaveTime >= options.autosaveSeconds) Save(false);
 
     std::vector<glm::ivec3> centers;

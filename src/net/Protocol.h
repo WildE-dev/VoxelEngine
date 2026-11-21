@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 31;
+constexpr uint32_t kProtocolVersion = 32;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -78,6 +78,7 @@ enum class MsgType : uint8_t {
     Arrows,        // the arrows in flight (or stuck) near you, every tick
     Bobber,        // where your bobber floats (or that it's reeled in), and bites
     SignText,      // a sign's text (empty: gone)
+    Explosion,     // something blew up here (for the sound and the debris)
     Knockback,     // you were hit: a push to add to your velocity
 };
 
@@ -338,6 +339,12 @@ struct Arrows {
 };
 constexpr size_t kMaxArrowsSent = 128;
 
+// An explosion (TNT) at the centre of this cell, this big.
+struct Explosion {
+    glm::ivec3 pos{0};
+    uint8_t radius = 3;
+};
+
 // Lightning struck the ground here (the top of the column).
 struct Lightning {
     glm::ivec3 pos{0};
@@ -487,6 +494,7 @@ std::vector<uint8_t> Encode(const PlayerSnapshot& m);
 std::vector<uint8_t> Encode(const Correction& m);
 std::vector<uint8_t> Encode(const PlayerName& m);
 std::vector<uint8_t> Encode(const Lightning& m);
+std::vector<uint8_t> Encode(const Explosion& m);
 std::vector<uint8_t> Encode(const Shoot& m);
 std::vector<uint8_t> Encode(const Cast& m);
 std::vector<uint8_t> Encode(const SignText& m, bool fromPlayer);
@@ -520,6 +528,7 @@ bool Decode(ByteReader& in, PlayerSnapshot& m);
 bool Decode(ByteReader& in, Correction& m);
 bool Decode(ByteReader& in, PlayerName& m);
 bool Decode(ByteReader& in, Lightning& m);
+bool Decode(ByteReader& in, Explosion& m);
 bool Decode(ByteReader& in, Shoot& m);
 bool Decode(ByteReader& in, Cast& m);
 bool Decode(ByteReader& in, SignText& m);

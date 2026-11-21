@@ -183,6 +183,22 @@ int main() {
     server.QueueConsoleCommand("food 20 Tester"); // (healing needs food)
     both(40.0, [&] { return a.client.GetHealth() == 20; }); // (healed again before the checks below)
 
+    std::cout << "TNT" << std::endl;
+    server.QueueConsoleCommand("tp Tester 66.5 0 7.5");
+    server.QueueConsoleCommand("give tnt 1 Tester");
+    both(20.0, [&] { return std::abs(a.player.GetFeetPosition().x - 66.5f) < 0.2f && a.player.IsOnGround() && a.client.GetResources(BlockType::TNT) == 64; });
+    a.client.PlaceBlock({ 70, 0, 7 }, BlockType::TNT);
+    both(20.0, [&] { return TypeAt(b, { 70, 0, 7 }) == BlockType::TNT; });
+    const int beforeBlast = a.client.GetHealth();
+    a.client.UseBed({ 70, 0, 7 });
+    Check(both(20.0, [&] { return TypeAt(b, { 70, 0, 7 }) == BlockType::TNT_LIT; }), "right-clicking TNT lights it");
+    Check(both(20.0, [&] { return TypeAt(b, { 70, -1, 7 }) == BlockType::AIR && TypeAt(b, { 70, -3, 7 }) == BlockType::AIR; }), "a few seconds later it blows a crater");
+    Check(TypeAt(b, { 70, -5, 7 }) != BlockType::AIR, "about three blocks across");
+    Check(both(5.0, [&] { return a.client.GetHealth() < beforeBlast; }), "and hurts whoever's close");
+    server.QueueConsoleCommand("food 20 Tester");
+    server.QueueConsoleCommand("tp Tester 60.5 0 7.5");
+    both(40.0, [&] { return a.client.GetHealth() == 20; });
+
     std::cout << "No-clip and the laser" << std::endl;
     a.client.SendChat("/noclip");
     Check(both(20.0, [&] { return Has(a, "Only operators can do that"); }) && !(a.client.GetAbilities() & net::kAbilityNoclip), "a player can't turn on no-clip");

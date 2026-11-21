@@ -274,6 +274,18 @@ bool Decode(ByteReader& in, Arrows& m) {
     return in.AtEnd();
 }
 
+std::vector<uint8_t> Encode(const Explosion& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Explosion);
+    w.IVec3(m.pos);
+    w.U8(m.radius);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Explosion& m) {
+    return in.IVec3(m.pos) && in.U8(m.radius) && m.radius <= 8 && in.AtEnd();
+}
+
 bool Decode(ByteReader& in, Lightning& m) {
     return in.IVec3(m.pos) && in.AtEnd();
 }

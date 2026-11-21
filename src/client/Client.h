@@ -119,6 +119,8 @@ public:
     bool IsStorm() const { return storm; }
     // Lightning strikes since the last call.
     std::vector<glm::ivec3> TakeLightning() { std::vector<glm::ivec3> out; out.swap(lightning); return out; }
+    // Explosions since the last call (where, and how big).
+    std::vector<net::Explosion> TakeExplosions() { std::vector<net::Explosion> out; out.swap(explosions); return out; }
     // Game mode, and in survival the resource units held of each block type (predicted
     // on edits, put right by the server).
     net::GameMode GetMode() const { return mode; }
@@ -226,6 +228,7 @@ private:
     glm::vec3 pendingKnockback{ 0.0f };
     bool storm = false;
     std::vector<glm::ivec3> lightning;
+    std::vector<net::Explosion> explosions;
     std::vector<net::ArrowInfo> arrows;
     std::optional<glm::ivec3> bobber;
     bool bite = false;

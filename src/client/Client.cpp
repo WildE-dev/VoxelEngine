@@ -220,6 +220,11 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         arrowsAt = Now();
         break;
     }
+    case net::MsgType::Explosion: {
+        net::Explosion m;
+        if ((ok = net::Decode(in, m)) && explosions.size() < 32) explosions.push_back(m);
+        break;
+    }
     case net::MsgType::Lightning: {
         net::Lightning m;
         if ((ok = net::Decode(in, m)) && lightning.size() < 16) lightning.push_back(m.pos);

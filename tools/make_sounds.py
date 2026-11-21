@@ -166,6 +166,11 @@ def main():
         pulse = [0.4 * math.sin(2 * math.pi * 4200 * i / RATE) * (1 if (i // secs(0.012)) % 2 == 0 else 0) for i in range(secs(0.15))]
         cricket += envelope(pulse, 0.01, 0.14, 1.0) + [0.0] * secs(0.18)
     save("crickets", cricket)
+    # An explosion: a hard thump, a roar, and debris pattering down.
+    boom_rng = random.Random(91)
+    thump = envelope(mix(tone(90, 30, 0.5), lowpass(noise(secs(0.5), boom_rng), 300)), 0.002, 0.48, 2.0)
+    roar = envelope(lowpass(noise(secs(1.6), boom_rng), 900), 0.01, 1.55, 1.6)
+    save("explosion", mix([1.4 * s for s in thump] + [0.0] * (len(roar) - len(thump)), roar))
     save("thunder", mix(crack + [0.0] * (len(rumble) - len(crack)), [1.6 * s for s in rumble]))
     print("sounds written to", os.path.normpath(OUT))
 

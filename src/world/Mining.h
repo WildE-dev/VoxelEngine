@@ -93,6 +93,8 @@ inline float Hardness(BlockType type) {
     case BlockType::LADDER: return 0.5f;
     case BlockType::CAMPFIRE: return 0.6f;
     case BlockType::SIGN: return 0.5f;
+    case BlockType::TNT:
+    case BlockType::TNT_LIT: return 0.3f;
     case BlockType::DOOR:
     case BlockType::DOOR_OPEN: return 1.0f;
     case BlockType::GLASS: return 0.5f;
