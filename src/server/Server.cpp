@@ -1071,6 +1071,14 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     if (block.type == BlockType::TNT) return LightTnt(pos, kTntFuse);
     // A lever flips; a valve with no channel opens or shuts by hand.
     if (block.type == BlockType::LEVER || block.type == BlockType::LEVER_ON) {
+        // A dungeon lever vault's levers, gates and floor gate get their channels the
+        // first time one of its levers is flipped.
+        if (!signalBlocks.count(pos))
+            for (const auto& [p, config] : Dungeons::LeverVaultAt(terrain, pos).wiring)
+                if (!signalBlocks.count(p)) {
+                    signalBlocks[p].config = config;
+                    BroadcastSignal(p);
+                }
         Block flipped = block;
         flipped.type = block.type == BlockType::LEVER ? BlockType::LEVER_ON : BlockType::LEVER;
         world->SetBlock(pos.x, pos.y, pos.z, flipped);

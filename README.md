@@ -325,12 +325,14 @@ repeats one once it has used them all:
 | Pump room | a pump in a sunken basin with a pipe up into a raised tub (it stands idle until someone brings it air) |
 | Shrine | a lamp on a plinth, pews facing it |
 | Flood chamber | a pressure plate in the floor sets a latch gate in the ceiling, which opens the sluice gates beside it and keeps them open: the reservoir above pours in, and goes on pouring after you step off. A lever hidden in a wall by a corner resets the latch (and, left on, disarms the trap) |
+| Lever vault | four levers in a row by one wall, with a lamp in the wall over some of them; set the ones under lamps on and the rest off, and a gate in the middle of the floor opens over a pit with a chest of vault loot in it. Logic gates in the ceiling do the sums (NOT for the levers that should be off, AND for all four), and the gate closes again if you change them |
 
 **Traps.** Some long corridors have a spike pit across them: either hidden under
 crumbling bricks (three long; they're cracked, if you look) or open (two long, so you
 can jump it). A vault's lit pedestal is ringed by crumbling floor over spikes. Fall in
 and there's no climbing out. Flood chambers flood when you step on their plate, and
-keep flooding until someone finds the lever.
+keep flooding until someone finds the lever. Lever vaults are puzzles, not traps:
+the lamps say which levers to set.
 
 **Loot.** Dungeons hide chests: the prize on every vault's pedestal (past the trap),
 one by each archive's reading table, grave goods at the end of a crypt's aisle,
@@ -358,7 +360,10 @@ that every room type turns up, layouts and chunks are deterministic, every room 
 be reached from the entrance across chunk borders, shafts reach the surface, water
 can't spill, rooms stay deep, gardens and archives are furnished all over regardless
 of chunk borders, pump rooms are wired up, and vault and archive chests are there with
-loot in them (and none for a chest outside a dungeon).
+loot in them (and none for a chest outside a dungeon). For lever vaults, it checks
+the levers, floor gate and chest are there, works the wiring through for all 16 ways
+the levers can be set (the gate opens for the room's pattern and no other), and
+checks the lamps match the pattern.
 
 ## Water
 

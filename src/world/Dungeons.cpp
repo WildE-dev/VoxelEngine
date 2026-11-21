@@ -62,6 +62,7 @@ bool Fits(RoomType type, int w, int d) {
     case RoomType::Archive:
     case RoomType::Shrine:
     case RoomType::FloodChamber: return w >= 7 && d >= 7;
+    case RoomType::LeverVault: return w >= 9 && d >= 7;
     default: return true;
     }
 }
@@ -91,6 +92,23 @@ Box VaultPit(const Room& r) {
 Box Reservoir(const Room& r) {
     return { { r.inner.min.x + 1, r.inner.max.y + 2, r.inner.min.z + 1 }, { r.inner.max.x - 1, r.inner.max.y + 4, r.inner.max.z - 1 } };
 }
+// A lever vault's parts: its levers along the -z wall (two apart), the lamps over them,
+// the gate in the floor's middle and the chest in the pit under it, and its logic
+// gates in a row in the ceiling.
+unsigned VaultPattern(const Room& r) { return 1u + (r.seed >> 3) % 15u; }
+glm::ivec3 VaultLever(const Room& r, int i) {
+    const glm::ivec3 c = Centre(r.inner);
+    return { c.x - 3 + 2 * i, r.inner.min.y, r.inner.min.z };
+}
+glm::ivec3 VaultGate(const Room& r) {
+    const glm::ivec3 c = Centre(r.inner);
+    return { c.x, r.inner.min.y - 1, c.z };
+}
+glm::ivec3 VaultLogic(const Room& r, int k) {
+    const glm::ivec3 c = Centre(r.inner);
+    return { c.x - 3 + k, r.inner.max.y + 1, c.z + 1 };
+}
+
 // A flood chamber's latch gate (in the ceiling, beside the sluice gates) and the
 // lever that resets it (in the wall, at head height, by a corner).
 glm::ivec3 FloodLatch(const Room& r) {
@@ -298,6 +316,28 @@ void Furnish(Stamper& s, const Room& r, const std::vector<Box>& corridors) {
         break;
     }
 
+    case RoomType::LeverVault: {
+        // The levers, a lamp over each that should be on; the floor gate over the pit
+        // and its chest; the logic in the ceiling (wired: LeverVaultAt).
+        const unsigned pattern = VaultPattern(r);
+        for (int i = 0; i < 4; i++) {
+            const glm::ivec3 lever = VaultLever(r, i);
+            s.Set(lever, Block::Plant(BlockType::LEVER, 0));
+            if (pattern & (1u << i)) s.SetIfWall(lever + glm::ivec3(0, 2, -1), kLamp);
+        }
+        const glm::ivec3 gate = VaultGate(r), chest = gate - glm::ivec3(0, 1, 0);
+        for (const glm::ivec3 d : { glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0), glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1), glm::ivec3(0, -1, 0) })
+            s.Set(chest + d, kBrick);
+        s.Set(chest, kChest);
+        s.Set(gate, Block(BlockType::SLUICE));
+        for (int k = 0; k < 7; k++) s.Set(VaultLogic(r, k), Block(BlockType::LOGIC_GATE));
+        // Light from the other three walls.
+        s.SetIfWall({ x0 - 1, y0 + 2, c.z }, kLamp);
+        s.SetIfWall({ x1 + 1, y0 + 2, c.z }, kLamp);
+        s.SetIfWall({ c.x, y0 + 2, z1 + 1 }, kLamp);
+        break;
+    }
+
     case RoomType::Collapsed:
         // Heaps of rubble away from the walls (so doorways stay clear).
         for (int x = x0 + 2; x <= x1 - 2; x++)
@@ -380,6 +420,7 @@ const char* RoomName(RoomType type) {
     case RoomType::PumpRoom: return "pump room";
     case RoomType::Shrine: return "shrine";
     case RoomType::FloodChamber: return "flood chamber";
+    case RoomType::LeverVault: return "lever vault";
     default: return "room";
     }
 }
@@ -658,15 +699,65 @@ std::vector<std::pair<glm::ivec3, Signals::Config>> FloodChamberSignals(const Te
     return out;
 }
 
+LeverVault LeverVaultAt(const TerrainGenerator& terrain, const glm::ivec3& pos) {
+    LeverVault out;
+    const Layout layout = LayoutFor(terrain, FloorDiv(pos.x, kRegionSize), FloorDiv(pos.z, kRegionSize));
+    if (!layout.exists) return out;
+    for (const auto& r : layout.rooms) {
+        if (r.type != RoomType::LeverVault || !Expand(r.inner, 1).Contains(pos)) continue;
+        // Channels of the room's own (high up, out of players' way): 0-3 the levers,
+        // 4-7 their NOTs, 8 and 9 the first two ANDs, 10 the last (to the gate).
+        auto channel = [&](uint32_t n) { return static_cast<uint8_t>(200 + (r.seed + n) % 56); };
+        out.pattern = VaultPattern(r);
+        out.gate = VaultGate(r);
+        out.chest = out.gate - glm::ivec3(0, 1, 0);
+        uint8_t term[4];
+        for (int i = 0; i < 4; i++) {
+            Signals::Config lever;
+            lever.kind = Signals::Kind::Lever;
+            lever.out = channel(i);
+            out.levers.push_back(VaultLever(r, i));
+            out.wiring.emplace_back(VaultLever(r, i), lever);
+            if (out.pattern & (1u << i)) term[i] = channel(i);
+            else {
+                Signals::Config inverse;
+                inverse.kind = Signals::Kind::Gate;
+                inverse.mode = Signals::Mode::Not;
+                inverse.a = channel(i);
+                inverse.out = term[i] = channel(4 + i);
+                out.wiring.emplace_back(VaultLogic(r, i), inverse);
+            }
+        }
+        auto gate = [&](int k, uint8_t a, uint8_t b, uint8_t to) {
+            Signals::Config c;
+            c.kind = Signals::Kind::Gate;
+            c.mode = Signals::Mode::And;
+            c.a = a;
+            c.b = b;
+            c.out = to;
+            out.wiring.emplace_back(VaultLogic(r, k), c);
+        };
+        gate(4, term[0], term[1], channel(8));
+        gate(5, term[2], term[3], channel(9));
+        gate(6, channel(8), channel(9), channel(10));
+        Signals::Config sluice;
+        sluice.kind = Signals::Kind::Sluice;
+        sluice.a = channel(10);
+        out.wiring.emplace_back(out.gate, sluice);
+        break;
+    }
+    return out;
+}
+
 std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos) {
     std::vector<std::pair<BlockType, uint32_t>> loot;
     const Layout layout = LayoutFor(terrain, FloorDiv(pos.x, kRegionSize), FloorDiv(pos.z, kRegionSize));
     if (!layout.exists) return loot;
     const Room* room = nullptr;
     for (const auto& r : layout.rooms)
-        if (Expand(r.inner, 1).Contains(pos)) room = &r;
+        if (Expand(r.inner, 1).Contains(pos) || (r.type == RoomType::LeverVault && pos == VaultGate(r) - glm::ivec3(0, 1, 0))) room = &r;
     if (!room) return loot;
-    const bool rich = room->type == RoomType::Vault;
+    const bool rich = room->type == RoomType::Vault || room->type == RoomType::LeverVault;
     struct Entry { BlockType type; int least, most; };
     static const Entry kCommon[] = {
         { BlockType::COOKED_VENISON, 1, 3 }, { BlockType::RAW_VENISON, 1, 2 }, { BlockType::HIDE, 1, 3 }, { BlockType::LAMP, 1, 3 },

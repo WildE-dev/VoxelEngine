@@ -47,6 +47,7 @@ enum class RoomType : uint8_t {
     PumpRoom,  // a pump lifting water from a sunken basin up into a raised tub
     Shrine,    // a lamp on a plinth with pews (logs) facing it
     FloodChamber, // a pressure plate opens sluice gates in the ceiling: the reservoir above floods in
+    LeverVault,   // four levers; set right (the ones under lamps on), a floor gate opens over a chest
     Count
 };
 const char* RoomName(RoomType type);
@@ -90,6 +91,21 @@ Layout LayoutFor(const TerrainGenerator& terrain, int regionX, int regionZ);
 // others hold a few useful things. The server rolls it the first time the chest is
 // opened or broken and keeps it from then on.
 std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos);
+
+// A lever vault's puzzle: four levers in a row by one wall, a lamp in the wall over
+// each that should be on; a sluice gate in the middle of the floor over a pit with a
+// rich chest in it. Logic gates in the ceiling open the gate while the levers are set
+// just so: the ones under lamps on, the others off (NOT gates for those, AND gates
+// for all four). If `pos` is in one, its wiring (world/Signals.h; the server sets it
+// up the first time one of the levers is flipped), and the lever pattern (bit i: the
+// i-th lever, counting from -x, should be on). Empty elsewhere.
+struct LeverVault {
+    std::vector<std::pair<glm::ivec3, Signals::Config>> wiring;
+    std::vector<glm::ivec3> levers;
+    unsigned pattern = 0;
+    glm::ivec3 gate{ 0 }, chest{ 0 };
+};
+LeverVault LeverVaultAt(const TerrainGenerator& terrain, const glm::ivec3& pos);
 
 // A flood chamber's wiring (world/Signals.h): if `pos` is in one, its pressure plate
 // sets a latch gate (in the ceiling) that opens its sluice gates and keeps them open,
