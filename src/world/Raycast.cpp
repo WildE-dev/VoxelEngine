@@ -49,8 +49,13 @@ void WalkVoxels(const glm::vec3& origin, const glm::vec3& direction, float maxDi
 
 // Whether the ray, between tEnter and tExit (inside the block's cell), touches the
 // block's actual shape: all of a full block or a plant's cell; a stepped block's four
-// quarter-columns; under a slope's surface.
-bool HitsShape(const Block& block, const glm::ivec3& cell, const glm::vec3& origin, const glm::vec3& direction, float tEnter, float tExit) {
+// quarter-columns; under a slope's surface. `onTop` is set when it meets the shape
+// inside the cell (a slope's surface, a quarter's top, a step) rather than right
+// where it came into the cell: the face it touched is the block's top, not the side
+// of the cell it entered by.
+bool HitsShape(const Block& block, const glm::ivec3& cell, const glm::vec3& origin, const glm::vec3& direction, float tEnter, float tExit,
+               bool& onTop) {
+    onTop = false;
     if (block.IsFullBlock() || block.IsPlant()) return true;
     const glm::vec3 base(cell);
     if (block.IsStepped()) {
@@ -71,7 +76,10 @@ bool HitsShape(const Block& block, const glm::ivec3& cell, const glm::vec3& orig
                     t0 = std::max(t0, ta);
                     t1 = std::min(t1, tb);
                 }
-                if (t0 <= t1) return true;
+                if (t0 <= t1) {
+                    onTop = t0 > tEnter + 1e-4f;
+                    return true;
+                }
             }
         return false;
     }
@@ -80,7 +88,10 @@ bool HitsShape(const Block& block, const glm::ivec3& cell, const glm::vec3& orig
     for (int i = 0; i <= kSamples; i++) {
         const glm::vec3 p = origin + direction * (tEnter + (tExit - tEnter) * i / kSamples) - base;
         const float fx = std::clamp(p.x, 0.0f, 1.0f), fz = std::clamp(p.z, 0.0f, 1.0f);
-        if (p.y <= block.SurfaceHeight(fx, fz)) return true;
+        if (p.y <= block.SurfaceHeight(fx, fz)) {
+            onTop = i > 0;
+            return true;
+        }
     }
     return false;
 }
@@ -93,9 +104,11 @@ std::optional<RaycastHit> Raycast(const BlockAccess& world, const glm::vec3& ori
         Block block;
         // Rays pass through water (you click the sea floor, not the surface), and
         // through the open part of a partial block (aiming past a slope or a step).
+        bool onTop = false;
         if (world.GetBlock(pos.x, pos.y, pos.z, block) && !block.IsAir() && !block.IsLiquid() &&
-            HitsShape(block, pos, origin, direction, tEnter, tExit)) {
-            hit = RaycastHit{ pos, normal };
+            HitsShape(block, pos, origin, direction, tEnter, tExit, onTop)) {
+            // Met the shape inside the cell (over a slope, onto a quarter): its top.
+            hit = RaycastHit{ pos, onTop ? glm::ivec3(0, 1, 0) : normal };
             return false;
         }
         return true;

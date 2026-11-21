@@ -38,8 +38,8 @@
 
 namespace {
 
-constexpr int kWindowWidth = 800;
-constexpr int kWindowHeight = 600;
+constexpr int kWindowWidth = 1200;
+constexpr int kWindowHeight = 900;
 constexpr const char* kGlslVersion = "#version 330 core";
 
 constexpr float kReach = 50.0f;

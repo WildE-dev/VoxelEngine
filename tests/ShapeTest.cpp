@@ -330,6 +330,22 @@ int main() {
         Check(hit && hit->block == glm::ivec3(3, 0, 0), "aiming over a slope hits what's beyond it");
         hit = Raycast(world, { -1.0f, 0.2f, 0.5f }, east, 10.0f);
         Check(hit && hit->block == glm::ivec3(1, 0, 0), "aiming into it below its surface hits the slope");
+        // A thin slope (an eighth to a quarter high), aimed at from above and to the side:
+        // the ray comes into its cell through the side, above the slope, and meets the
+        // surface inside. The face is the top, so a block placed there goes on top (not
+        // into the cell beside it).
+        world.blocks[{ 1, 0, 0 }] = Shaped(BlockType::DIRT, 1, 2, 1, 2);
+        const glm::vec3 from(-1.0f, 1.0f, 0.5f), to(1.5f, 0.1f, 0.5f);
+        hit = Raycast(world, from, glm::normalize(to - from), 10.0f);
+        Check(hit && hit->block == glm::ivec3(1, 0, 0) && hit->normal == glm::ivec3(0, 1, 0),
+              "aiming down onto a thin slope over its side hits its top face (" +
+                  (hit ? std::to_string(hit->normal.x) + "," + std::to_string(hit->normal.y) + "," + std::to_string(hit->normal.z) : std::string("miss")) + ")");
+        world.blocks[{ 1, 0, 0 }] = Shaped(BlockType::STONE_BRICK, 2, 2, 2, 2); // a quarter-high stepped slab
+        hit = Raycast(world, from, glm::normalize(to - from), 10.0f);
+        Check(hit && hit->block == glm::ivec3(1, 0, 0) && hit->normal == glm::ivec3(0, 1, 0), "and onto a low stepped slab, its top too");
+        world.blocks[{ 1, 0, 0 }] = Block(BlockType::STONE);
+        hit = Raycast(world, from, glm::normalize(to - from), 10.0f);
+        Check(hit && hit->normal == glm::ivec3(-1, 0, 0), "while a full block there is hit on its side, as before");
 
         Check(Block(BlockType::STONE).OutlineSegments().size() == 24, "a full block's outline is a cube (12 edges)");
         Check(Block::PressurePlate().OutlineSegments().size() == 24, "a pressure plate's is one thin box");
