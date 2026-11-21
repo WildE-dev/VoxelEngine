@@ -5,7 +5,13 @@
 //  - the smelter smelts it there (iron ore into twice the iron, sand into glass, iron
 //    and coal into steel), lit
 //    while it works,
-//  - right-clicking the smelter describes it.
+//  - right-clicking the smelter describes it,
+//  - an extractor sorts a chest's contents along item pipes, a filter pipe set (by
+//    right-clicking it with glass in hand) to glass taking the glass and keeping the
+//    rest out,
+//  - a crafter, set the same way, makes stone bricks from stone in its chest,
+//  - a harvester reaps ripe wheat into its chest and replants it.
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -37,13 +43,14 @@ struct TestClient {
     Client client{ world };
     glm::vec3 feet{ 0.0f };
     bool joined = false;
+    BlockType held = BlockType::AIR; // what they're holding (the server sees it)
     void Update() {
         client.Poll();
         if (!joined && client.IsWelcomed()) joined = true, feet = client.GetSpawn();
         if (auto c = client.TakeCorrection()) feet = *c;
         if (!joined) return;
         world.Update(feet + glm::vec3(0.0f, 1.62f, 0.0f));
-        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround);
+        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround, Tool::None, held);
     }
 };
 
@@ -141,6 +148,97 @@ int main() {
         Check(pump(6.0, [&] { return blockAt(smelter) == BlockType::SMELTER; }), "and dark again once there's nothing left to smelt");
         a.client.Inspect(smelter);
         Check(pump(5.0, [&] { return Has(a.client, "Smelter: nothing to smelt") && Has(a.client, "1 chest joined"); }), "right-clicking it says it has nothing to smelt, with 1 chest");
+
+
+        std::cout << "Sorting" << std::endl;
+        // An extractor on the chest (facing it, -x), pipes from its back to a chest A,
+        // and a filter pipe set to glass branching off to a chest B; air from the
+        // smelter's network.
+        const glm::ivec3 extractor{ 16, 0, 8 }, chestA{ 19, 0, 8 }, filter{ 17, 0, 9 }, chestB{ 17, 0, 10 };
+        server.QueueConsoleCommand("tp Builder 17.5 0 6.5");
+        pump(10.0, [&] { return a.feet.z < 7.0f; });
+        a.client.CloseChest();
+        a.client.PlaceBlock(extractor, BlockType::EXTRACTOR, 8, 1);
+        fill({ 17, 0, 8 }, { 18, 0, 8 }, "item_pipe");
+        fill(chestA, chestA, "chest");
+        fill(filter, filter, "filter_pipe");
+        fill(chestB, chestB, "chest");
+        fill({ 16, 1, 8 }, { 18, 1, 8 }, "air_pipe");
+        Check(pump(10.0, [&] {
+                  Block e;
+                  return a.world.GetBlock(extractor.x, extractor.y, extractor.z, e) && e.type == BlockType::EXTRACTOR && e.axis == 1 && blockAt(chestB) == BlockType::CHEST;
+              }),
+              "an extractor facing the chest, pipes to chest A, and a filter pipe to chest B");
+        a.held = BlockType::GLASS;
+        wait(0.3);
+        a.client.UseBed(filter);
+        Check(pump(5.0, [&] { return Has(a.client, "lets only glass through"); }), "right-clicking the filter with glass in hand sets it to glass");
+        Check(pump(5.0, [&] {
+                  Block f;
+                  return a.world.GetBlock(filter.x, filter.y, filter.z, f) && f.FilterType() == BlockType::GLASS;
+              }),
+              "(kept in the block)");
+        a.held = BlockType::AIR;
+        a.client.OpenChest(chestB);
+        bool sorted = false;
+        for (int i = 0; i < 20 && !sorted; i++) {
+            server.QueueConsoleCommand("pressurise 12 1 8");
+            sorted = pump(1.0, [&] { return a.client.GetChestUnits(BlockType::GLASS) == 2 * Crafting::kBlock; });
+        }
+        Check(sorted, "the glass goes through the filter to chest B");
+        a.client.OpenChest(chestA);
+        Check(pump(10.0, [&] {
+                  return a.client.GetOpenChest() == chestA && a.client.GetChestUnits(BlockType::IRON_INGOT) == 2 * Crafting::kBlock &&
+                         a.client.GetChestUnits(BlockType::STEEL_INGOT) == 2 * Crafting::kBlock && a.client.GetChestUnits(BlockType::GLASS) == 0;
+              }),
+              "the iron and steel to chest A (the filter keeps them out of B)");
+
+        std::cout << "Crafting" << std::endl;
+        // A crafter on chest A, set to stone bricks; stone put in the chest.
+        const glm::ivec3 crafter{ 19, 1, 8 };
+        fill(crafter, crafter, "crafter");
+        pump(5.0, [&] { return blockAt(crafter) == BlockType::CRAFTER; });
+        wait(1.0);
+        a.client.Inspect(crafter);
+        Check(pump(5.0, [&] { return Has(a.client, "Crafter: no recipe"); }), "a crafter with no recipe says so");
+        a.held = BlockType::STONE_BRICK;
+        wait(0.3);
+        a.client.UseBed(crafter);
+        Check(pump(5.0, [&] { return Has(a.client, "The crafter makes Stone bricks"); }), "right-clicking it with stone bricks in hand sets it to make them");
+        a.held = BlockType::AIR;
+        server.QueueConsoleCommand("give stone 2 Builder");
+        pump(5.0, [&] { return a.client.GetResources(BlockType::STONE) >= 2 * Crafting::kBlock; });
+        a.client.MoveChestItems(BlockType::STONE, 2 * Crafting::kBlock, true);
+        pump(5.0, [&] { return a.client.GetChestUnits(BlockType::STONE) > 0; });
+        // (Whatever went in: a block of stone makes a block of bricks.)
+        bool crafted = false;
+        uint32_t total = 0;
+        for (int i = 0; i < 20 && !crafted; i++) {
+            server.QueueConsoleCommand("pressurise 12 1 8");
+            crafted = pump(1.0, [&] {
+                total = std::max(total, a.client.GetChestUnits(BlockType::STONE) + a.client.GetChestUnits(BlockType::STONE_BRICK));
+                return a.client.GetChestUnits(BlockType::STONE_BRICK) >= 2 * Crafting::kBlock;
+            });
+        }
+        Check(crafted && a.client.GetChestUnits(BlockType::STONE) + a.client.GetChestUnits(BlockType::STONE_BRICK) == total,
+              "it makes the stone in chest A into stone bricks, a block for a block (stone " + std::to_string(a.client.GetChestUnits(BlockType::STONE)) +
+                  ", bricks " + std::to_string(a.client.GetChestUnits(BlockType::STONE_BRICK)) + ")");
+
+        std::cout << "Harvesting" << std::endl;
+        // A harvester beside chest A, with ripe wheat near it.
+        const glm::ivec3 harvester{ 19, 0, 7 };
+        fill(harvester, harvester, "harvester");
+        fill({ 19, 1, 7 }, { 19, 1, 7 }, "air_pipe");
+        fill({ 21, 0, 5 }, { 21, 0, 6 }, "ripe_wheat");
+        pump(5.0, [&] { return blockAt({ 21, 0, 5 }) == BlockType::RIPE_WHEAT && blockAt(harvester) == BlockType::HARVESTER; });
+        bool reaped = false;
+        for (int i = 0; i < 20 && !reaped; i++) {
+            server.QueueConsoleCommand("pressurise 12 1 8");
+            reaped = pump(1.0, [&] { return a.client.GetChestUnits(BlockType::WHEAT) == 2 * Crafting::kBlock; });
+        }
+        Check(reaped, "the harvester reaps both crops of wheat into chest A");
+        Check(pump(3.0, [&] { return blockAt({ 21, 0, 5 }) == BlockType::CROP && blockAt({ 21, 0, 6 }) == BlockType::CROP; }),
+              std::string("and replants them (") + BlockId(blockAt({ 21, 0, 5 })) + ", " + BlockId(blockAt({ 21, 0, 6 })) + ")");
 
         a.client.Disconnect();
         Pump(a, 0.3, [] { return false; });

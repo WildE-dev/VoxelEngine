@@ -56,7 +56,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::SPRING, BlockType::PUMP, BlockType::PIPE,
-    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::DRILL, BlockType::SMELTER, BlockType::ITEM_PIPE, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
+    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::DRILL, BlockType::SMELTER, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
     BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::STEEL_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
@@ -145,6 +145,10 @@ const char* BlockName(BlockType type) {
     case BlockType::SMELTER_LIT: return "Smelter (lit)";
     case BlockType::SPRING: return "Spring";
     case BlockType::STEEL_INGOT: return "Steel ingot";
+    case BlockType::EXTRACTOR: return "Extractor";
+    case BlockType::FILTER_PIPE: return "Filter pipe";
+    case BlockType::CRAFTER: return "Crafter";
+    case BlockType::HARVESTER: return "Harvester";
     case BlockType::STONE_BRICK: return "Stone bricks";
     case BlockType::MOSSY_BRICK: return "Mossy bricks";
     case BlockType::SPIKES: return "Spikes";
@@ -876,6 +880,13 @@ void Application::DrawCrosshair() {
         label(text);
         return;
     }
+    // Looking at a filter pipe: what it lets through.
+    if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
+        at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && target.type == BlockType::FILTER_PIPE) {
+        const BlockType only = target.FilterType();
+        label(only == BlockType::AIR ? std::string("Filter pipe: lets anything through").c_str() : (std::string("Filter pipe: lets only ") + BlockName(only) + " through").c_str());
+        return;
+    }
     // Looking at a water wheel or a machine: how it's doing, under the crosshair.
     if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
         at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Power::IsMachine(target.type)) {
@@ -895,6 +906,17 @@ void Application::DrawCrosshair() {
                               state == Power::DrillState::Working ? ("making " + std::string(m.depth < static_cast<uint8_t>(BlockType::COUNT) ? BlockName(static_cast<BlockType>(m.depth)) : "?")).c_str()
                               : state == Power::DrillState::NoPressure ? "needs air pressure" : state == Power::DrillState::NoChest ? "needs a chest" : "nothing to smelt",
                               pressure);
+            else if (target.type == BlockType::EXTRACTOR || target.type == BlockType::CRAFTER || target.type == BlockType::HARVESTER) {
+                const char* name = target.type == BlockType::EXTRACTOR ? "Extractor" : target.type == BlockType::CRAFTER ? "Crafter" : "Harvester";
+                std::string what;
+                if (target.type == BlockType::CRAFTER) {
+                    const int index = static_cast<int>(target.axis) - 1;
+                    what = index >= 0 && index < static_cast<int>(Crafting::Recipes().size()) ? std::string(" making ") + Crafting::Recipes()[index].name : " (no recipe)";
+                }
+                const char* doing = state == Power::DrillState::Working ? "working" : state == Power::DrillState::NoPressure ? "needs air pressure"
+                                  : state == Power::DrillState::NoChest ? "needs a chest" : state == Power::DrillState::Blocked ? "no recipe" : "idle";
+                std::snprintf(text, sizeof text, "%s%s: %s - air %d%%", name, what.c_str(), doing, pressure);
+            }
             else if (target.type == BlockType::PISTON || target.type == BlockType::PISTON_HEAD || target.type == BlockType::PRESSURE_SENSOR) continue;
             else if (target.type == BlockType::PUMP)
                 std::snprintf(text, sizeof text, "Pump: %s - air %d%%", state == Power::DrillState::Working ? "pumping" : state == Power::DrillState::NoPressure ? "needs air pressure" : "nothing to pump", pressure);
@@ -2110,6 +2132,13 @@ void Application::OnMouseButton(int button, int action) {
             chestMode = true;
             chestSeenOpen = false;
             chestAskedAt = Client::Now();
+            return;
+        }
+        // A filter pipe or a crafter: set it to what's in hand (with Shift held, it's
+        // built against instead).
+        if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
+            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && (target.type == BlockType::FILTER_PIPE || target.type == BlockType::CRAFTER)) {
+            client->UseBed(at->block);
             return;
         }
         // With a block in hand, right-clicking machinery builds against it (a wheel on a

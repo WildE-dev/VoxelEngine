@@ -210,16 +210,28 @@ enum class BlockType : uint8_t {
     // An item: steel, which only a smelter makes (from iron ingots and coal, see
     // world/Smelting.h), for the steel upgrade and drills.
     STEEL_INGOT,
+    // Automation (air machines; see world/Power.h). An extractor (facing, like a
+    // piston) takes things out of the chest in front of it and sends them out of its
+    // back along item pipes to other chests. A filter pipe is an item pipe that lets
+    // only one type through (kept in its `axis`: see Block::FilterType). A crafter makes
+    // a recipe (chosen, kept in its `axis`) from what's in a chest joined to it. A
+    // harvester reaps ripe wheat around it, replants it, and puts the wheat in a chest.
+    EXTRACTOR,
+    FILTER_PIPE,
+    CRAFTER,
+    HARVESTER,
     COUNT
 };
 
 // Solid blocks drawn by a model of their own (turning wheels and shafts), and pipes
 // drawn as thin tubes: neither hides what's beside it or blocks light.
 inline bool IsModelType(BlockType type) { return type == BlockType::WATER_WHEEL || type == BlockType::SHAFT; }
-inline bool IsPipeType(BlockType type) { return type == BlockType::PIPE || type == BlockType::AIR_PIPE || type == BlockType::ITEM_PIPE; }
+inline bool IsPipeType(BlockType type) {
+    return type == BlockType::PIPE || type == BlockType::AIR_PIPE || type == BlockType::ITEM_PIPE || type == BlockType::FILTER_PIPE;
+}
 // Blocks that face one of six ways (their `axis` holds the Face they point to): a
 // piston and its head.
-inline bool IsFacingType(BlockType type) { return type == BlockType::PISTON || type == BlockType::PISTON_HEAD; }
+inline bool IsFacingType(BlockType type) { return type == BlockType::PISTON || type == BlockType::PISTON_HEAD || type == BlockType::EXTRACTOR; }
 
 // Things held in the inventory that aren't blocks: they can't be placed.
 inline bool IsItemType(BlockType type) {
@@ -367,10 +379,14 @@ struct Block {
     uint8_t shown = 0;
     // Which way an orientable block (a log) runs: kUpright, kAlongX or kAlongZ. Its
     // ends face that way and its grain runs along it. A facing block (a piston) keeps
-    // the Face it points to here (0..5) instead. Always 0 for others.
+    // the Face it points to here (0..5) instead; a filter pipe the BlockType it lets
+    // through (0, air: anything); a crafter its recipe (index + 1; 0: none). Always 0
+    // for others.
     uint8_t axis = 0;
     static constexpr uint8_t kUpright = 0, kAlongX = 1, kAlongZ = 2;
     static constexpr uint8_t kMaxAxis = 5; // (a facing block's Face)
+    // A filter pipe's type (AIR: it lets anything through).
+    BlockType FilterType() const { return axis < static_cast<uint8_t>(BlockType::COUNT) ? static_cast<BlockType>(axis) : BlockType::AIR; }
     // A facing block's direction (a unit step).
     glm::ivec3 Facing() const { return glm::ivec3(kFaceOffsets[axis % 6][0], kFaceOffsets[axis % 6][1], kFaceOffsets[axis % 6][2]); }
     static bool IsOrientable(BlockType t) { return t == BlockType::LOG || t == BlockType::WATER_WHEEL || t == BlockType::SHAFT; }

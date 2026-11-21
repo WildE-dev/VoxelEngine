@@ -39,6 +39,23 @@
 //       the chests joined to it (touching it, or at the far end of item pipes): the
 //       first thing it finds it can smelt (world/Smelting.h), the result going back
 //       into the same chest. It's lit while it works.
+//     . An extractor (facing; placed, it faces the way you look) takes a block's
+//       worth of something from the chest in front of it every kExtractInterval, for
+//       kExtractAir, and sends it out of its back along item pipes to another chest:
+//       one behind a filter pipe set to it if there is one, else one that already
+//       holds some of it (so a row of chests sorts itself by example), else the
+//       nearest. Things nothing can take stay put; it
+//       goes through what the chest has in turn.
+//     . A filter pipe passes only its type (none set: anything). Right-click one
+//       with something in hand to set it to that (empty-handed: anything). Drills and
+//       extractors send things only through filters that pass them; smelters and
+//       crafters reach only through unset ones.
+//     . A crafter makes its recipe every kCraftInterval for kCraftAir, from a chest
+//       joined to it that has all it takes, putting it back in the same chest.
+//       Right-click one with what you want it to make in hand to choose the recipe.
+//     . A harvester reaps a ripe crop of wheat within kHarvestReach (and a block up or
+//       down) every kHarvestInterval for kHarvestAir, replants it, and puts the
+//       wheat in a chest joined to it.
 //     . A pump (see Water.h) lifts water: kPumpAir for every unit of water raised a
 //       block (at least a block, even on the level). It's cheap: the air a wheel
 //       makes from water pouring past it lifts kPumpGain times that water as high as
@@ -77,16 +94,25 @@ constexpr int kPushLimit = 12;                // blocks a piston can push in a r
 constexpr float kSmeltAir = 6.0f;             // air for each block smelted
 constexpr double kSmeltInterval = 2.0;        // seconds per block smelted
 constexpr int kMaxItemNetwork = 512;          // item pipes a drill or smelter looks through, at most
+constexpr float kExtractAir = 1.0f;           // air for each block's worth an extractor moves
+constexpr double kExtractInterval = 0.5;      // seconds between its moves
+constexpr float kCraftAir = 4.0f;             // air for each thing a crafter makes
+constexpr double kCraftInterval = 2.0;        // seconds per thing made
+constexpr float kHarvestAir = 3.0f;           // air for each crop a harvester reaps
+constexpr double kHarvestInterval = 1.5;      // seconds per crop
+constexpr int kHarvestReach = 4;              // blocks round a harvester it reaps (and one up or down)
 
 // Parts of an air network (wheels and shafts aren't: they turn compressors).
 // (A valve is part of the network only while it's open: shut, it divides it.)
 inline bool IsAirPart(BlockType t) {
     return t == BlockType::AIR_PIPE || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
-           t == BlockType::VALVE_OPEN || t == BlockType::PISTON || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT;
+           t == BlockType::VALVE_OPEN || t == BlockType::PISTON || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
+           t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER;
 }
 // What item pipes join: each other, chests, and the machines that fill or empty them.
 inline bool IsItemPart(BlockType t) {
-    return t == BlockType::ITEM_PIPE || t == BlockType::CHEST || t == BlockType::DRILL || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT;
+    return t == BlockType::ITEM_PIPE || t == BlockType::FILTER_PIPE || t == BlockType::CHEST || t == BlockType::DRILL || t == BlockType::SMELTER ||
+           t == BlockType::SMELTER_LIT || t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER;
 }
 // How much air a part holds when full.
 inline float CapacityOf(BlockType t) { return t == BlockType::AIR_TANK ? kAirPerTank : kAirPerCell; }
@@ -96,7 +122,8 @@ inline bool IsPart(BlockType t) { return IsAirPart(t) || t == BlockType::WATER_W
 // shafts, which it finds from them).
 inline bool IsMachine(BlockType t) {
     return t == BlockType::WATER_WHEEL || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
-           t == BlockType::PISTON || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT;
+           t == BlockType::PISTON || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
+           t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER;
 }
 
 // Whether a pipe (drawn as a thin tube) reaches across to this neighbour: water pipes
@@ -104,7 +131,7 @@ inline bool IsMachine(BlockType t) {
 inline bool PipeJoins(BlockType pipe, BlockType other) {
     if (pipe == BlockType::PIPE) return other == BlockType::PIPE || other == BlockType::PUMP;
     if (pipe == BlockType::AIR_PIPE) return IsAirPart(other) || other == BlockType::VALVE;
-    if (pipe == BlockType::ITEM_PIPE) return IsItemPart(other);
+    if (pipe == BlockType::ITEM_PIPE || pipe == BlockType::FILTER_PIPE) return IsItemPart(other);
     return false;
 }
 

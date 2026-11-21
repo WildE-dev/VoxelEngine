@@ -1318,6 +1318,157 @@ sSssSssssSsswwss
 SPRING_COLOURS = {"s": (96, 104, 100), "S": (118, 128, 122), "w": (70, 96, 104), "b": (60, 110, 170), "B": (120, 170, 230), "W": (80, 120, 120)}
 
 
+EXTRACTOR_INTAKE = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIkkkkkkkkkkkkIi
+iIkKKKKKKKKKKkIi
+iIkKkkkkkkkkKkIi
+iIkKkKKKKKKkKkIi
+iIkKkKkkkkKkKkIi
+iIkKkKkyykKkKkIi
+iIkKkKkyykKkKkIi
+iIkKkKkkkkKkKkIi
+iIkKkKKKKKKkKkIi
+iIkKkkkkkkkkKkIi
+iIkKKKKKKKKKKkIi
+iIkkkkkkkkkkkkIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+EXTRACTOR_OUT = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIwwwwwwIIIIi
+iIIIwWWWWWWwIIIi
+iIIwWWWWWWWWwIIi
+iIIwWWkkkkWWwIIi
+iIIwWWkkkkWWwIIi
+iIIwWWkkkkWWwIIi
+iIIwWWkkkkWWwIIi
+iIIwWWWWWWWWwIIi
+iIIIwWWWWWWwIIIi
+iIIIIwwwwwwIIIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+EXTRACTOR_SIDE = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIIIIIyIIIIIIIIi
+iIIIIIyyIIIIIIIi
+iIyyyyyyyIIIIIIi
+iIyyyyyyyyIIIIIi
+iIyyyyyyyIIIIIIi
+iIIIIIyyIIIIIIIi
+iIIIIIyIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iwwwwwwwwwwwwwwi
+iWWWWWWWWWWWWWWi
+iwwwwwwwwwwwwwwi
+iWWWWWWWWWWWWWWi
+iwwwwwwwwwwwwwwi
+iiiiiiiiiiiiiiii
+"""
+EXTRACTOR_COLOURS = {"i": (72, 74, 80), "I": (140, 142, 150), "k": (30, 30, 34), "K": (60, 60, 66), "y": (210, 170, 60),
+                     "w": (132, 96, 56), "W": (164, 124, 76)}
+FILTER_PIPE_COLOURS = {"o": (40, 30, 22), "O": (70, 52, 36), "w": (60, 110, 120), "W": (90, 150, 160), "i": (110, 112, 118)}
+CRAFTER_TOP = """
+wwwwwwwwwwwwwwww
+wWWWWWWWWWWWWWWw
+wWiiiiWiiiiWiiWw
+wWiIIiWiIIiWiIWw
+wWiIIiWiIIiWiIWw
+wWiiiiWiiiiWiiWw
+wWWWWWWWWWWWWWWw
+wWiiiiWiiiiWiiWw
+wWiIIiWiIIiWiIWw
+wWiIIiWiIIiWiIWw
+wWiiiiWiiiiWiiWw
+wWWWWWWWWWWWWWWw
+wWiiiiWiiiiWiiWw
+wWiIIiWiIIiWiIWw
+wWWWWWWWWWWWWWWw
+wwwwwwwwwwwwwwww
+"""
+CRAFTER_SIDE = """
+wwwwwwwwwwwwwwww
+wWWWWWWWWWWWWWWw
+wWssssssssssssWw
+wWsggggggggggsWw
+wWsgSSgggSSggsWw
+wWsgSSgggSSggsWw
+wWsggggggggggsWw
+wWsggggSSggggsWw
+wWsggggSSggggsWw
+wWsggggggggggsWw
+wWssssssssssssWw
+wWWWWWWWWWWWWWWw
+wwwwwwwwwwwwwwww
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+wwwwwwwwwwwwwwww
+"""
+CRAFTER_BOTTOM = """
+iiiiiiiiiiiiiiii
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iIIwwwwwwwwwwIIi
+iIIwWWWWWWWWwIIi
+iIIwWWWWWWWWwIIi
+iIIwWWWWWWWWwIIi
+iIIwWWWWWWWWwIIi
+iIIwWWWWWWWWwIIi
+iIIwWWWWWWWWwIIi
+iIIwWWWWWWWWwIIi
+iIIwWWWWWWWWwIIi
+iIIwwwwwwwwwwIIi
+iIIIIIIIIIIIIIIi
+iIIIIIIIIIIIIIIi
+iiiiiiiiiiiiiiii
+"""
+CRAFTER_COLOURS = {"w": (132, 96, 56), "W": (164, 124, 76), "i": (72, 74, 80), "I": (140, 142, 150), "s": (60, 60, 66),
+                   "g": (180, 182, 190), "S": (90, 120, 200)}
+HARVESTER_TOP = """
+wwwwwwwwwwwwwwww
+wWWWWWWWWWWWWWWw
+wWWWWWiiiiWWWWWw
+wWWWWiIIIIiWWWWw
+wWWWiIyyyyIiWWWw
+wWWiIyiyyiyIiWWw
+wWiIyyyyyyyyIiWw
+wWiIyyyiiyyyIiWw
+wWiIyyyiiyyyIiWw
+wWiIyyyyyyyyIiWw
+wWWiIyiyyiyIiWWw
+wWWWiIyyyyIiWWWw
+wWWWWiIIIIiWWWWw
+wWWWWWiiiiWWWWWw
+wWWWWWWWWWWWWWWw
+wwwwwwwwwwwwwwww
+"""
+HARVESTER_SIDE = """
+wwwwwwwwwwwwwwww
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+iiiiiiiiiiiiiiii
+IyIyIyIyIyIyIyIy
+yIyIyIyIyIyIyIyI
+IyIyIyIyIyIyIyIy
+iiiiiiiiiiiiiiii
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+wwwwwwwwwwwwwwww
+"""
+HARVESTER_COLOURS = {"w": (132, 96, 56), "W": (164, 124, 76), "i": (72, 74, 80), "I": (170, 172, 180), "y": (214, 180, 70)}
+
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
     draw("cooked_venison", VENISON, COOKED, seed=12)
@@ -1396,6 +1547,16 @@ def main():
     # Steel: the ingot's shape, blue-grey and brighter.
     steel = {k: (min(255, int(v[0] * 0.8 + 40)), min(255, int(v[1] * 0.85 + 50)), min(255, int(v[2] * 0.95 + 70))) for k, v in INGOT_COLOURS.items()}
     draw("steel_ingot", INGOT, steel, jitter=4, seed=85)
+    draw("extractor_intake", EXTRACTOR_INTAKE, EXTRACTOR_COLOURS, jitter=4, seed=86)
+    draw("extractor_out", EXTRACTOR_OUT, EXTRACTOR_COLOURS, jitter=4, seed=87)
+    draw("extractor_side", EXTRACTOR_SIDE, EXTRACTOR_COLOURS, jitter=4, seed=88)
+    draw("filter_pipe", ITEM_PIPE, FILTER_PIPE_COLOURS, jitter=5, seed=89)
+    draw("filter_pipe_end", ITEM_PIPE_END, FILTER_PIPE_COLOURS, jitter=5, seed=90)
+    draw("crafter_top", CRAFTER_TOP, CRAFTER_COLOURS, jitter=4, seed=91)
+    draw("crafter_side", CRAFTER_SIDE, CRAFTER_COLOURS, jitter=4, seed=92)
+    draw("crafter_bottom", CRAFTER_BOTTOM, CRAFTER_COLOURS, jitter=4, seed=93)
+    draw("harvester_top", HARVESTER_TOP, HARVESTER_COLOURS, jitter=4, seed=94)
+    draw("harvester_side", HARVESTER_SIDE, HARVESTER_COLOURS, jitter=4, seed=95)
 
 
 if __name__ == "__main__":

@@ -46,6 +46,10 @@ const char* Audio::Material(BlockType type) {
     case BlockType::ITEM_PIPE:
     case BlockType::SMELTER:
     case BlockType::SMELTER_LIT:
+    case BlockType::EXTRACTOR:
+    case BlockType::FILTER_PIPE:
+    case BlockType::CRAFTER:
+    case BlockType::HARVESTER:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
     case BlockType::SPIKES:

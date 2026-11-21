@@ -117,6 +117,10 @@ inline float Hardness(BlockType type) {
     case BlockType::ITEM_PIPE:
     case BlockType::SMELTER:
     case BlockType::SMELTER_LIT:
+    case BlockType::EXTRACTOR:
+    case BlockType::FILTER_PIPE:
+    case BlockType::CRAFTER:
+    case BlockType::HARVESTER:
     case BlockType::SLUICE: return 3.0f;
     case BlockType::WATER_SENSOR:
     case BlockType::DAYLIGHT_SENSOR:
@@ -168,6 +172,10 @@ inline Tool BestTool(BlockType type) {
     case BlockType::ITEM_PIPE:
     case BlockType::SMELTER:
     case BlockType::SMELTER_LIT:
+    case BlockType::EXTRACTOR:
+    case BlockType::FILTER_PIPE:
+    case BlockType::CRAFTER:
+    case BlockType::HARVESTER:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE: return Tool::Pickaxe;
     case BlockType::WATER_WHEEL:

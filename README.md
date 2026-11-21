@@ -962,6 +962,25 @@ The machines:
   joined to it by item pipes, dig and smelt ore on their own.
 - **Item pipes** (thin wooden tubes) join face to face and to chests, drills and
   smelters: a drill or smelter reaches every chest along them (up to 512 pipes).
+- An **extractor** faces the way you look when you place it: put it against a chest.
+  Twice a second, for 1 unit of air, it takes a block's worth of something out of
+  that chest and sends it out of its back along item pipes to another chest: one
+  behind a filter pipe set to it if there is one, else one that already holds some of
+  it (so a row of chests sorts itself by example), else the nearest. It works through
+  what the chest holds in turn, and leaves what nowhere will take.
+- A **filter pipe** (a blue item pipe) lets only one thing through. Right-click it
+  with something in hand to set it to that, or empty-handed to let anything through
+  (Shift-right-click builds against it). Drills and extractors send things through a
+  filter only if it passes them; smelters and crafters reach only through unset ones.
+  Look at one to see what it passes.
+- A **crafter** makes one recipe over and over: right-click it with what it should
+  make in hand to choose (empty-handed, it says what it makes). Every 2 seconds, for 4
+  units of air, it takes what the recipe needs from a chest joined to it (touching
+  it, or along item pipes) and puts what it makes back in the same chest. It won't
+  make tools, armour or upgrades.
+- A **harvester** reaps ripe wheat within 4 blocks of it (and a block up or down),
+  one crop every 1.5 seconds for 3 units of air, replanting it from its own seed, and
+  puts the wheat in a chest joined to it.
 - The **piston** pushes the way you were looking when you placed it (level, up or
   down). Give it a channel (see [Signals](#signals)) and join it to air pipes: while
   the channel is on it pushes the row of blocks in front of it (up to 12) a block on,
@@ -988,7 +1007,10 @@ from an iron ingot and 2 stone; 4 air pipes from a stone and a quarter of an iro
 ingot; an air tank from 2 iron ingots and half a glass; a valve from half an iron
 ingot and a stone; a drill from a steel ingot, an iron ingot and 2 stone; a piston from a planks, a
 stone and half an iron ingot; a smelter from 4 stone bricks and an iron ingot; 4 item
-pipes from a planks and a quarter of an iron ingot.
+pipes from a planks and a quarter of an iron ingot; an extractor from an iron ingot and
+a planks; a filter pipe from an item pipe and a quarter of an iron ingot; a crafter
+from a steel ingot, an iron ingot and 2 planks; a harvester from half a steel ingot
+and 2 planks.
 
 The server runs it all four times a second (`Server::UpdatePower`,
 `src/server/Power.cpp`; the rules and numbers are in `src/world/Power.h`): the water
@@ -1017,7 +1039,12 @@ to a drill and a pump) and checks:
 a chest, a smelter on the chest and air pipes to both, and checks that the drill's
 sand comes down the item pipes into the chest, the smelter turns both blocks of sand
 into glass and both of iron ore into four iron ingots, glowing while it works and
-going dark when there's nothing left, and that right-clicking it describes it.
+going dark when there's nothing left, and that right-clicking it describes it. Then
+an extractor on that chest sorts it along item pipes: a filter pipe, set by
+right-clicking it with glass in hand, takes the glass to one chest and keeps the iron
+and steel out, which go to another. A crafter on that chest, set to stone bricks,
+turns the stone put in it into bricks block for block, and a harvester beside it
+reaps two ripe crops of wheat into it and replants them.
 
 ## Signals
 
@@ -1055,7 +1082,7 @@ sensor) and a quarter of an iron ingot, with a quarter of sand (water), glass
 The server runs it ten times a second (`Server::UpdateSignals`,
 `src/server/Signals.cpp`; the rules are in `src/world/Signals.h`), keeps every
 block's channels and saves them with the world (world format 11), and tells everyone
-about each block's channels and state as they change (`SignalInfo`, protocol 40).
+about each block's channels and state as they change (`SignalInfo`, protocol 41).
 `SignalTest` checks:
 
 - a lamp lights and goes out with a lever on its channel, and one on another channel

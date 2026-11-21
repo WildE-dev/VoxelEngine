@@ -309,6 +309,10 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* SMELTER_LIT */ {{ "smelter_top", "smelter_top", "smelter_front_lit", "smelter_side", "smelter_side", "smelter_side" }},
     /* SPRING      */ {{ "spring", "spring", "spring", "spring", "spring", "spring" }},
     /* STEEL_INGOT */ {{ "steel_ingot", "steel_ingot", "steel_ingot", "steel_ingot", "steel_ingot", "steel_ingot" }},
+    /* EXTRACTOR   */ {{ "extractor_intake", "extractor_out", "extractor_side", "extractor_side", "extractor_side", "extractor_side" }},
+    /* FILTER_PIPE */ {{ "filter_pipe_end", "filter_pipe_end", "filter_pipe", "filter_pipe", "filter_pipe", "filter_pipe" }},
+    /* CRAFTER     */ {{ "crafter_top", "crafter_bottom", "crafter_side", "crafter_side", "crafter_side", "crafter_side" }},
+    /* HARVESTER   */ {{ "harvester_top", "crafter_bottom", "harvester_side", "harvester_side", "harvester_side", "harvester_side" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -343,6 +347,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "water_wheel", "air_pipe", "drill", "shaft", "compressor", "lever", "lever_on", "logic_gate", "signal_lamp", "signal_lamp_on", "air_tank", "valve", "valve_open",
     "piston", "piston_head", "water_sensor", "pressure_sensor", "daylight_sensor", "player_sensor",
     "item_pipe", "smelter", "smelter_lit", "spring", "steel_ingot",
+    "extractor", "filter_pipe", "crafter", "harvester",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");
@@ -449,7 +454,7 @@ void Block::AddSteppedFaces(std::vector<uint32_t>& vertices, Face face, int x, i
             v[i].sky = shading.sky[ia][ib];
         }
         const int inside = carved ? carvedTexture : -1;
-        if (axis != kUpright || inside >= 0) OrientGrain(v, 4, face, GrainAxis(), textures, inside);
+        if ((axis != kUpright && IsOrientable(type)) || inside >= 0) OrientGrain(v, 4, face, GrainAxis(), textures, inside);
         // (The engine's front faces wind clockwise as seen from outside.)
         for (const VertexData& p : { v[0], v[2], v[1], v[1], v[2], v[3] }) {
             vertices.push_back(p.PackPosition());
@@ -540,7 +545,7 @@ void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, i
         const int texture = f == towards ? t.top : f == (towards ^ 1) ? t.bottom : t.front;
         for (auto& vertex : v) vertex.textureIndex = texture;
     }
-    else if (axis != kUpright) OrientGrain(v.data(), static_cast<int>(v.size()), face, GrainAxis(), GetTextureData(type));
+    else if (axis != kUpright && IsOrientable(type)) OrientGrain(v.data(), static_cast<int>(v.size()), face, GrainAxis(), GetTextureData(type));
 
     // Work out which face corner each vertex sits on. Horizontal coordinates are
     // always 0 or 1 within the block; vertical ones may be partial heights, so any
@@ -832,6 +837,10 @@ bool Block::CanChisel() const {
     case BlockType::ITEM_PIPE:
     case BlockType::SMELTER:
     case BlockType::SMELTER_LIT:
+    case BlockType::EXTRACTOR:
+    case BlockType::FILTER_PIPE:
+    case BlockType::CRAFTER:
+    case BlockType::HARVESTER:
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE:
     case BlockType::GLASS:

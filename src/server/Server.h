@@ -409,6 +409,14 @@ private:
     std::unordered_map<glm::ivec3, Wheel, Coords::IVec3Hash> wheels;
     std::unordered_map<glm::ivec3, Drill, Coords::IVec3Hash> drills;
     std::unordered_map<glm::ivec3, Smelter, Coords::IVec3Hash> smelters;
+    // Extractors, crafters and harvesters: when they next work, and how it went.
+    struct Worker {
+        double next = 0.0;
+        double last = -1e9;
+        Power::DrillState state = Power::DrillState::Idle; // Blocked: a crafter with no recipe
+        size_t cursor = 0;                                 // an extractor's place in its chest
+    };
+    std::unordered_map<glm::ivec3, Worker, Coords::IVec3Hash> workers;
     std::unordered_map<glm::ivec3, Compressor, Coords::IVec3Hash> compressors;
     std::unordered_map<glm::ivec3, Power::DrillState, Coords::IVec3Hash> pumpStates;
     std::unordered_map<glm::ivec3, Power::DrillState, Coords::IVec3Hash> pistonStates; // Idle (in), Working (out), NoPressure, Blocked
@@ -425,8 +433,14 @@ private:
     // beside it. Returns whether it dug.
     bool DrillDig(const glm::ivec3& pos, Drill& drill);
     // The chests joined to a machine: touching it, or at the ends of item pipes from it
-    // (nearest first).
-    std::vector<glm::ivec3> ChestsJoined(const glm::ivec3& pos) const;
+    // (nearest first). For things of `type` (filter pipes pass only theirs; COUNT:
+    // anything, through unset filters only). With `face`, only out of that side.
+    std::vector<glm::ivec3> ChestsJoined(const glm::ivec3& pos, BlockType type = BlockType::COUNT, const glm::ivec3* face = nullptr) const;
+    // An extractor's, a crafter's or a harvester's turn (it has the air): whether it did
+    // something.
+    bool Extract(const glm::ivec3& pos, const Block& extractor, Worker& w);
+    bool CraftAt(const glm::ivec3& pos, const Block& crafter, Worker& w);
+    bool Harvest(const glm::ivec3& pos, Worker& w);
     // A smelter's turn (it has the air): smelts a block in a chest joined to it.
     // Returns whether it did.
     bool Smelt(const glm::ivec3& pos, Smelter& smelter);

@@ -92,6 +92,11 @@ inline const std::vector<Recipe>& Recipes() {
         { "air_pipe", "4 air pipes", { { BlockType::STONE, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::AIR_PIPE, 4 * kBlock },
         { "smelter", "Smelter", { { BlockType::STONE_BRICK, 4 * kBlock }, { BlockType::IRON_INGOT, kBlock } }, BlockType::SMELTER, kBlock },
         { "item_pipe", "4 item pipes", { { BlockType::PLANKS, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::ITEM_PIPE, 4 * kBlock },
+        // Automation.
+        { "extractor", "Extractor", { { BlockType::IRON_INGOT, kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::EXTRACTOR, kBlock },
+        { "filter_pipe", "Filter pipe", { { BlockType::ITEM_PIPE, kBlock }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::FILTER_PIPE, kBlock },
+        { "crafter", "Crafter", { { BlockType::STEEL_INGOT, kBlock }, { BlockType::IRON_INGOT, kBlock }, { BlockType::PLANKS, 2 * kBlock } }, BlockType::CRAFTER, kBlock },
+        { "harvester", "Harvester", { { BlockType::STEEL_INGOT, kBlock / 2 }, { BlockType::PLANKS, 2 * kBlock } }, BlockType::HARVESTER, kBlock },
         // (Steel comes from a smelter: a drill is the next step after one.)
         { "drill", "Drill", { { BlockType::STEEL_INGOT, kBlock }, { BlockType::IRON_INGOT, kBlock }, { BlockType::STONE, 2 * kBlock } }, BlockType::DRILL, kBlock },
         { "coal_lamp", "Lamp (with coal)", { { BlockType::GLASS, kBlock / 2 }, { BlockType::COAL, kBlock / 4 } }, BlockType::LAMP, kBlock },

@@ -7,6 +7,7 @@
 
 #include "server/Server.h"
 #include "server/ServerWorld.h"
+#include "world/Crafting.h"
 #include "world/Smelting.h"
 
 namespace {
@@ -79,6 +80,7 @@ void Server::UpdatePower() {
     prune(pumpStates);
     prune(pistonStates);
     prune(smelters);
+    prune(workers);
 
     // A piston's head with no piston behind it (broken, or turned) goes too.
     for (const auto& pos : machineList) {
@@ -145,7 +147,7 @@ void Server::UpdatePower() {
             }
 
         std::vector<std::pair<glm::ivec3, Drill*>> netDrills;
-        std::vector<glm::ivec3> netPumps, netPistons, netSmelters;
+        std::vector<glm::ivec3> netPumps, netPistons, netSmelters, netWorkers;
         for (const auto& m : members) {
             auto a = air.find(m);
             if (a != air.end()) net.air += a->second;
@@ -167,6 +169,9 @@ void Server::UpdatePower() {
             case BlockType::PISTON: netPistons.push_back(m); break;
             case BlockType::SMELTER:
             case BlockType::SMELTER_LIT: netSmelters.push_back(m); break;
+            case BlockType::EXTRACTOR:
+            case BlockType::CRAFTER:
+            case BlockType::HARVESTER: netWorkers.push_back(m); break;
             default: break;
             }
         }
@@ -239,6 +244,25 @@ void Server::UpdatePower() {
             if (blockAt(p).type != shown) world->SetBlock(p.x, p.y, p.z, Block(shown));
         }
 
+        // Extractors, crafters and harvesters, each at its own pace.
+        for (const auto& p : netWorkers) {
+            Worker& w = workers[p];
+            const Block b = blockAt(p);
+            const double interval = b.type == BlockType::EXTRACTOR ? Power::kExtractInterval : b.type == BlockType::CRAFTER ? Power::kCraftInterval : Power::kHarvestInterval;
+            const float cost = b.type == BlockType::EXTRACTOR ? Power::kExtractAir : b.type == BlockType::CRAFTER ? Power::kCraftAir : Power::kHarvestAir;
+            if (now >= w.next) {
+                if (net.Pressure() < Power::kMinPressure || net.air < cost) w.state = Power::DrillState::NoPressure;
+                else if (b.type == BlockType::EXTRACTOR ? Extract(p, b, w) : b.type == BlockType::CRAFTER ? CraftAt(p, b, w) : Harvest(p, w)) {
+                    net.air -= cost;
+                    w.next = now + interval;
+                    w.last = now;
+                }
+                else w.next = now + 0.5;
+            }
+            if (now - w.last < interval * 1.5) w.state = Power::DrillState::Working;
+            if (w.state == Power::DrillState::Working) net.working++;
+        }
+
         // What the pumps may lift until the next update: the air above the running
         // pressure, less what the drills and smelters need for their next blocks (they
         // come first), shared between them (none below it).
@@ -256,19 +280,115 @@ void Server::UpdatePower() {
     SendMachines();
 }
 
-std::vector<glm::ivec3> Server::ChestsJoined(const glm::ivec3& pos) const {
+std::vector<glm::ivec3> Server::ChestsJoined(const glm::ivec3& pos, BlockType type, const glm::ivec3* face) const {
     std::vector<glm::ivec3> chestsFound, pipes{ pos };
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> seen{ pos };
     for (size_t i = 0; i < pipes.size() && pipes.size() < static_cast<size_t>(Power::kMaxItemNetwork); i++)
         for (const auto& d : kFaces) {
+            if (i == 0 && face && d != *face) continue;
             const glm::ivec3 n = pipes[i] + d;
             Block b;
             if (seen.count(n) || !world->GetBlock(n.x, n.y, n.z, b)) continue;
             seen.insert(n);
             if (b.type == BlockType::CHEST) chestsFound.push_back(n);
             else if (b.type == BlockType::ITEM_PIPE) pipes.push_back(n);
+            else if (b.type == BlockType::FILTER_PIPE && (b.FilterType() == BlockType::AIR || (type != BlockType::COUNT && b.FilterType() == type))) pipes.push_back(n);
         }
     return chestsFound;
+}
+
+bool Server::Extract(const glm::ivec3& pos, const Block& extractor, Worker& w) {
+    const glm::ivec3 from = pos + extractor.Facing(), back = -extractor.Facing();
+    Block source;
+    if (!world->GetBlock(from.x, from.y, from.z, source) || source.type != BlockType::CHEST) {
+        w.state = Power::DrillState::NoChest;
+        return false;
+    }
+    ChestItems& held = ChestAt(from);
+    // Through what the chest has in turn, the first thing somewhere will take.
+    constexpr size_t kTypes = static_cast<size_t>(BlockType::COUNT);
+    for (size_t k = 1; k <= kTypes; k++) {
+        const size_t t = (w.cursor + k) % kTypes;
+        if (held[t] == 0) continue;
+        const BlockType type = static_cast<BlockType>(t);
+        std::vector<glm::ivec3> to = ChestsJoined(pos, type, &back);
+        to.erase(std::remove(to.begin(), to.end(), from), to.end());
+        if (to.empty()) continue;
+        // Where it goes: a chest behind a filter set to it (one already holding some
+        // first), else one already holding some, else the nearest.
+        const std::vector<glm::ivec3> open = ChestsJoined(pos, BlockType::COUNT, &back); // (through unset filters only)
+        auto filtered = [&](const glm::ivec3& c) { return std::find(open.begin(), open.end(), c) == open.end(); };
+        auto pick = [&](bool needFilter, bool needSome) -> std::optional<glm::ivec3> {
+            for (const auto& c : to)
+                if ((!needFilter || filtered(c)) && (!needSome || ChestAt(c)[t] > 0)) return c;
+            return std::nullopt;
+        };
+        glm::ivec3 dest = to.front();
+        if (auto c = pick(true, true)) dest = *c;
+        else if (auto c2 = pick(true, false)) dest = *c2;
+        else if (auto c3 = pick(false, true)) dest = *c3;
+        const uint32_t units = std::min<uint32_t>(held[t], Block::kUnitsPerBlock);
+        held[t] -= units;
+        ChestAt(dest)[t] += units;
+        SendChestToViewers(from);
+        SendChestToViewers(dest);
+        w.cursor = t;
+        w.state = Power::DrillState::Working;
+        return true;
+    }
+    w.state = Power::DrillState::Idle;
+    return false;
+}
+
+bool Server::CraftAt(const glm::ivec3& pos, const Block& crafter, Worker& w) {
+    const auto& recipes = Crafting::Recipes();
+    const int index = static_cast<int>(crafter.axis) - 1;
+    if (index < 0 || index >= static_cast<int>(recipes.size()) || recipes[index].MadeOnce()) {
+        w.state = Power::DrillState::Blocked; // (no recipe)
+        return false;
+    }
+    const Recipe& recipe = recipes[index];
+    const auto joined = ChestsJoined(pos);
+    if (joined.empty()) {
+        w.state = Power::DrillState::NoChest;
+        return false;
+    }
+    for (const auto& c : joined) {
+        ChestItems& chest = ChestAt(c);
+        if (Crafting::TimesAffordable(recipe, chest) < 1) continue;
+        for (const auto& in : recipe.inputs) chest[static_cast<size_t>(in.type)] -= in.units;
+        chest[static_cast<size_t>(recipe.output)] += recipe.outputUnits;
+        SendChestToViewers(c);
+        w.state = Power::DrillState::Working;
+        return true;
+    }
+    w.state = Power::DrillState::Idle;
+    return false;
+}
+
+bool Server::Harvest(const glm::ivec3& pos, Worker& w) {
+    const auto joined = ChestsJoined(pos, BlockType::WHEAT);
+    if (joined.empty()) {
+        w.state = Power::DrillState::NoChest;
+        return false;
+    }
+    const int r = Power::kHarvestReach;
+    for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -r; dx <= r; dx++)
+            for (int dz = -r; dz <= r; dz++) {
+                const glm::ivec3 p = pos + glm::ivec3(dx, dy, dz);
+                Block b;
+                if (!world->GetBlock(p.x, p.y, p.z, b) || b.type != BlockType::RIPE_WHEAT) continue;
+                // Reaped and replanted from its own seed: a young crop again.
+                world->SetBlock(p.x, p.y, p.z, Block::Plant(BlockType::CROP, b.edgeData.edges[0]));
+                crops.insert(p);
+                ChestAt(joined.front())[static_cast<size_t>(BlockType::WHEAT)] += Block::kUnitsPerBlock;
+                SendChestToViewers(joined.front());
+                w.state = Power::DrillState::Working;
+                return true;
+            }
+    w.state = Power::DrillState::Idle;
+    return false;
 }
 
 bool Server::Smelt(const glm::ivec3& pos, Smelter& smelter) {
@@ -297,11 +417,20 @@ bool Server::DrillDig(const glm::ivec3& pos, Drill& drill) {
     // Somewhere to put what it digs: a chest touching it or joined to it by item pipes
     // (not under it, where it digs).
     std::optional<glm::ivec3> chestAt;
-    for (const auto& c : ChestsJoined(pos))
-        if (c != pos - glm::ivec3(0, 1, 0)) {
-            chestAt = c;
-            break;
+    {
+        // (What it would dig next decides which filters it may go through.)
+        BlockType next = BlockType::COUNT;
+        for (int depth = 1; depth <= Power::kDrillDepth && next == BlockType::COUNT; depth++) {
+            Block b;
+            if (!world->GetBlock(pos.x, pos.y - depth, pos.z, b)) break;
+            if (!b.IsAir()) next = b.ResourceType();
         }
+        for (const auto& c : ChestsJoined(pos, next))
+            if (c != pos - glm::ivec3(0, 1, 0)) {
+                chestAt = c;
+                break;
+            }
+    }
     if (!chestAt) {
         drill.state = Power::DrillState::NoChest;
         return false;
@@ -420,6 +549,12 @@ void Server::SendMachines() {
                 info.state = static_cast<uint8_t>(s->second.state);
                 info.depth = static_cast<uint8_t>(s->second.made);
             }
+            else if (auto wk = workers.find(pos); wk != workers.end()) {
+                Block t;
+                world->GetBlock(pos.x, pos.y, pos.z, t);
+                info.type = static_cast<uint8_t>(t.type);
+                info.state = static_cast<uint8_t>(wk->second.state);
+            }
             else if (Block t; world->GetBlock(pos.x, pos.y, pos.z, t) && t.type == BlockType::AIR_TANK) {
                 info.type = static_cast<uint8_t>(BlockType::AIR_TANK);
             }
@@ -485,6 +620,25 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
             text += sm.state == Power::DrillState::Working ? "Smelter: smelting. " : sm.state == Power::DrillState::NoPressure ? "Smelter: waiting for air pressure. "
                   : sm.state == Power::DrillState::NoChest ? "Smelter: needs a chest touching it or joined by item pipes. " : "Smelter: nothing to smelt in its chests. ";
             text += std::to_string(chestCount) + (chestCount == 1 ? " chest joined. " : " chests joined. ");
+        }
+        else if (b.type == BlockType::EXTRACTOR || b.type == BlockType::CRAFTER || b.type == BlockType::HARVESTER) {
+            const Worker w = workers.count(pos) ? workers[pos] : Worker{};
+            const char* name = b.type == BlockType::EXTRACTOR ? "Extractor" : b.type == BlockType::CRAFTER ? "Crafter" : "Harvester";
+            text += std::string(name) + ": ";
+            switch (w.state) {
+            case Power::DrillState::Working: text += "working. "; break;
+            case Power::DrillState::NoPressure: text += "waiting for air pressure. "; break;
+            case Power::DrillState::NoChest:
+                text += b.type == BlockType::EXTRACTOR ? "needs a chest in front of it. " : "needs a chest touching it or joined by item pipes. ";
+                break;
+            case Power::DrillState::Blocked: text += "no recipe (right-click it with what it should make in hand). "; break;
+            default:
+                text += b.type == BlockType::EXTRACTOR ? "nothing it can send anywhere. " : b.type == BlockType::CRAFTER ? "its chests don't have what it takes. " : "no ripe wheat near. ";
+            }
+            if (b.type == BlockType::CRAFTER) {
+                const int index = static_cast<int>(b.axis) - 1;
+                if (index >= 0 && index < static_cast<int>(Crafting::Recipes().size())) text += std::string("Makes: ") + Crafting::Recipes()[index].name + ". ";
+            }
         }
         else if (b.type == BlockType::PRESSURE_SENSOR) {
             text += "Pressure sensor. ";

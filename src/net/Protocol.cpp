@@ -83,7 +83,8 @@ bool ReadBlock(ByteReader& in, Block& b) {
     for (int e = 0; e < 4; e++)
         if (!in.U8(b.edgeData.edges[e])) return false;
     if (!in.U8(b.water) || !in.U8(b.shown) || !in.U8(b.axis)) return false;
-    return b.water <= Block::kMaxWaterVolume && b.shown <= Block::kMaxWaterVolume && b.axis <= Block::kMaxAxis;
+    // (The axis byte means different things to different blocks: any value is fine.)
+    return b.water <= Block::kMaxWaterVolume && b.shown <= Block::kMaxWaterVolume;
 }
 
 void EncodeBlockPlanes(ByteWriter& out, const ChunkBlocks& blocks) {
@@ -125,10 +126,7 @@ bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis) {
     if (!withAxis) {
         for (auto& b : blocks) b.axis = Block::kUpright;
     }
-    else if (!DecodePlane(in, [&](int i, uint8_t v) {
-                 if (v > Block::kMaxAxis) valid = false;
-                 blocks[i].axis = v;
-             }))
+    else if (!DecodePlane(in, [&](int i, uint8_t v) { blocks[i].axis = v; }))
         return false;
     return valid;
 }

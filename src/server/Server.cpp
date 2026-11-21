@@ -1087,6 +1087,32 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
         world->SetBlock(pos.x, pos.y, pos.z, flipped);
         return;
     }
+    // A filter pipe or a crafter: set to what's in hand.
+    if (block.type == BlockType::FILTER_PIPE || block.type == BlockType::CRAFTER) {
+        const BlockType held = client.heldBlock == BlockType::AIR ? BlockType::AIR : ResourceTypeOf(client.heldBlock);
+        Block set = block;
+        if (block.type == BlockType::FILTER_PIPE) {
+            set.axis = static_cast<uint8_t>(held);
+            SendChat(client, net::ChatMessage::Kind::Info, held == BlockType::AIR ? "The filter lets anything through" : std::string("The filter lets only ") + BlockId(held) + " through");
+        }
+        else {
+            const auto& recipes = Crafting::Recipes();
+            int found = -1;
+            for (int i = 0; i < static_cast<int>(recipes.size()) && found < 0; i++)
+                if (!recipes[i].MadeOnce() && recipes[i].output == held && held != BlockType::AIR) found = i;
+            if (held == BlockType::AIR) {
+                const int index = static_cast<int>(block.axis) - 1;
+                return SendChat(client, net::ChatMessage::Kind::Info,
+                                index >= 0 && index < static_cast<int>(recipes.size()) ? std::string("The crafter makes ") + recipes[index].name
+                                                                                       : "The crafter has no recipe: right-click it with what it should make in hand");
+            }
+            if (found < 0) return SendChat(client, net::ChatMessage::Kind::Info, std::string("Nothing a crafter can make gives ") + BlockId(held));
+            set.axis = static_cast<uint8_t>(found + 1);
+            SendChat(client, net::ChatMessage::Kind::Info, std::string("The crafter makes ") + recipes[found].name);
+        }
+        world->SetBlock(pos.x, pos.y, pos.z, set);
+        return;
+    }
     if (block.type == BlockType::VALVE || block.type == BlockType::VALVE_OPEN) {
         auto sig = signalBlocks.find(pos);
         if (sig != signalBlocks.end() && sig->second.config.a != 0) {
