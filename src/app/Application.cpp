@@ -68,6 +68,15 @@ std::string FormatBlocks(uint32_t units) {
     return s;
 }
 
+const char* HeightName(int eighths) {
+    switch (eighths) {
+    case 2: return "1/4";
+    case 4: return "1/2";
+    case 6: return "3/4";
+    default: return "full";
+    }
+}
+
 // The tools the inventory offers, and the icon (atlas tile) for one.
 constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel };
 int ToolTile(const TextureAtlas& atlas, Tool tool) {
@@ -880,12 +889,15 @@ void Application::DrawHotbar() {
                                    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
                                    ImGuiWindowFlags_NoBringToFrontOnFocus;
     if (ImGui::Begin("Hotbar", nullptr, flags)) {
-        // Just the selected item's name, centred above the slots (reddish if it can't
-        // be used: a tool not made yet, or a block we haven't enough of).
+        // The selected item's name, centred above the slots, with the height building
+        // blocks are placed at (V); reddish if it can't be used (a tool not made yet,
+        // or a block we haven't enough of).
         const BlockType selected = SelectedBlock();
         const Tool selectedTool = SelectedTool();
         const bool survival = !client->IsCreative();
-        const std::string label = selectedTool != Tool::None ? Mining::ToolName(selectedTool) : BlockName(selected);
+        std::string label = selectedTool != Tool::None ? Mining::ToolName(selectedTool) : BlockName(selected);
+        if (selectedTool == Tool::None && Block::CanShape(selected))
+            label += std::string(" - ") + HeightName(placeHeight) + (placeHeight < 8 ? " height" : " block") + " (V)";
         const bool affordable = selectedTool != Tool::None ? client->HasTool(selectedTool)
                                                            : client->CanAfford(selected, Block::CanShape(selected) ? placeHeight : 8);
         const bool affordableShown = affordable;

@@ -471,8 +471,8 @@ There are two, and each player is in one:
 A full block is worth 64 units. Shaped blocks are worth their volume: a half slab is
 32, a quarter slab 16, and a chiselled block whatever's left of it (a slope its mean
 height). Press V to pick the height you place building blocks at (full, 3/4, 1/2,
-1/4; Shift+V goes back up). The hotbar shows the selected item's name, reddish when
-you can't use it (not enough of a block, or a tool not made yet), and how much you
+1/4; Shift+V goes back up). The hotbar shows the selected item's name and, for building
+blocks, the height they're placed at; it's reddish when you can't use it (not enough of a block, or a tool not made yet), and how much you
 have on each slot. Counts are shown in blocks, so 32 units reads as 0.5. Chiselling a
 block down gives back what it takes off, and building it up costs the same.
 Plants, pumps, pipes, sluices and pressure plates can't be shaped, so they're
