@@ -332,12 +332,29 @@ std::vector<uint8_t> Encode(const Health& m) {
     w.U8(m.air);
     w.U8(m.airMax);
     w.U8(m.airCause);
+    w.U8(m.food);
+    w.U8(m.foodMax);
     return std::move(w.data);
 }
 
+std::vector<uint8_t> Encode(const Eat& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Eat);
+    w.U8(static_cast<uint8_t>(m.food));
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Eat& m) {
+    uint8_t type;
+    if (!in.U8(type) || type >= static_cast<uint8_t>(BlockType::COUNT)) return false;
+    m.food = static_cast<BlockType>(type);
+    return in.AtEnd();
+}
+
 bool Decode(ByteReader& in, Health& m) {
-    return in.U8(m.health) && in.U8(m.max) && in.U8(m.hurt) && in.U8(m.air) && in.U8(m.airMax) && in.U8(m.airCause) && m.max > 0 &&
-           m.health <= m.max && m.airMax > 0 && m.air <= m.airMax && m.airCause <= 3 && in.AtEnd();
+    return in.U8(m.health) && in.U8(m.max) && in.U8(m.hurt) && in.U8(m.air) && in.U8(m.airMax) && in.U8(m.airCause) && in.U8(m.food) &&
+           in.U8(m.foodMax) && m.max > 0 && m.health <= m.max && m.airMax > 0 && m.air <= m.airMax && m.airCause <= 3 && m.foodMax > 0 &&
+           m.food <= m.foodMax && in.AtEnd();
 }
 
 std::vector<uint8_t> Encode(const ChatSend& m) {

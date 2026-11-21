@@ -102,6 +102,8 @@ constexpr HelpLine kHelp[] = {
     { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64), or /give <tool> [player]" },
     { Level::Operator, "/summon <deer|ghoul> [x y z] - bring a creature (default: a few blocks ahead of you)" },
     { Level::Operator, "/creatures [clear] - count the creatures, or remove them all" },
+    { Level::Everyone, "/food - how hungry you are" },
+    { Level::Operator, "/food <0-20> [player] - set how fed someone is (20: full)" },
     { Level::Everyone, "/pvp - whether players can hurt each other" },
     { Level::Operator, "/pvp <on|off> - let players hurt each other, or not" },
     { Level::Console, "/stop - shut the server down" },
@@ -114,7 +116,7 @@ Level RequiredLevel(const std::string& command, size_t argumentCount) {
     if (command == "tp" || command == "teleport" || command == "save" || command == "kick" || command == "op" || command == "deop" ||
         command == "noclip" || command == "give" || command == "summon" || command == "creatures")
         return Level::Operator;
-    if ((command == "time" || command == "weather" || command == "gamemode" || command == "pvp") && argumentCount > 0) return Level::Operator;
+    if ((command == "time" || command == "weather" || command == "gamemode" || command == "pvp" || command == "food") && argumentCount > 0) return Level::Operator;
     return Level::Everyone;
 }
 
@@ -362,6 +364,20 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         for (int t = 0; t < static_cast<int>(CreatureType::Count); t++)
             text += std::string(t ? ", " : ": ") + std::to_string(counts[t]) + " " + SpecOf(static_cast<CreatureType>(t)).id;
         reply(Kind::Info, text);
+    }
+    else if (command == "food") {
+        if (words.size() == 1) {
+            if (!sender) return usage("food <0-20> <player>");
+            return reply(Kind::Info, "Food: " + std::to_string(sender->food) + "/" + std::to_string(Hunger::kMaxFood));
+        }
+        double points = 0.0;
+        if (!ParseNumber(words[1], points) || points < 0.0 || points > Hunger::kMaxFood) return usage("/food <0-20> [player]");
+        ClientState* target = words.size() > 2 ? FindPlayer(words[2]) : sender;
+        if (!target) return reply(Kind::Error, words.size() > 2 ? "No player called " + words[2] : "Name a player");
+        target->food = static_cast<int>(points);
+        target->exhaustion = 0.0f;
+        SendHealth(*target, false);
+        reply(Kind::Info, "Set " + target->name + "'s food to " + std::to_string(target->food));
     }
     else if (command == "pvp") {
         if (words.size() == 1) return reply(Kind::Info, std::string("PvP is ") + (options.pvp ? "on" : "off"));

@@ -92,6 +92,8 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         air = m.air;
         maxAir = m.airMax;
         airCause = static_cast<Breathing::Cause>(m.airCause);
+        food = m.food;
+        maxFood = m.foodMax;
         if (m.hurt) lastHurt = Now();
         break;
     }
@@ -280,7 +282,7 @@ bool Client::CanAfford(BlockType type, int heightEighths) const {
 }
 
 void Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths, int faceAxis) {
-    if (!welcomed || !CanAfford(type, heightEighths)) return;
+    if (!welcomed || IsItemType(type) || !CanAfford(type, heightEighths)) return; // (items aren't placed)
     const Block placed = Block::Placed(type, heightEighths, faceAxis);
     world.SetBlock(pos.x, pos.y, pos.z, placed);
     if (!IsCreative()) resources[static_cast<size_t>(ResourceTypeOf(type))] -= static_cast<uint32_t>(placed.ResourceUnits());
@@ -380,6 +382,11 @@ std::vector<Client::BlockEvent> Client::TakeBlockEvents() {
     std::vector<BlockEvent> events;
     events.swap(blockEvents);
     return events;
+}
+
+void Client::Eat(BlockType item) {
+    if (!welcomed) return;
+    net.Send(net::kChannelReliable, net::Encode(net::Eat{ item }));
 }
 
 void Client::AttackPlayer(uint16_t player, Tool tool) {

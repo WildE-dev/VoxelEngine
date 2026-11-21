@@ -20,6 +20,7 @@
 #include "net/Transport.h"
 #include "server/Creatures.h"
 #include "world/Breathing.h"
+#include "world/Hunger.h"
 #include "world/Crafting.h"
 #include "world/Coords.h"
 #include "world/TerrainGenerator.h"
@@ -122,6 +123,8 @@ public:
         // Creatures spawn by themselves around players (normal worlds only; /summon
         // works anywhere).
         bool creatures = true;
+        // How fast players get hungry (1: normal; tests speed it up).
+        float hungerRate = 1.0f;
         // Players can hurt each other (operators switch it with /pvp).
         bool pvp = true;
         // Chunks loaded and sent around each player (2..12): less is lighter on the
@@ -189,6 +192,14 @@ private:
         int sentAir = -1;
         Breathing::Cause sentAirCause = Breathing::Cause::None;
         double nextBreathHit = 0.0;
+        // Hunger (UpdateHunger): food left, drain not yet taken, where they were last
+        // tick (walking drains it), when starving next hurts, what the client was told.
+        int food = Hunger::kMaxFood;
+        float exhaustion = 0.0f;
+        glm::vec3 hungerFeet{ 0.0f };
+        bool hasHungerFeet = false;
+        double nextStarve = 0.0;
+        int sentFood = -1;
         // Mining (survival): the block they're breaking, with what, since when.
         bool mining = false;
         glm::ivec3 miningPos{ 0 };
@@ -259,6 +270,8 @@ private:
     // A tick of a player's breathing: drains or refills their air, and hurts them
     // once it has run out (see world/Breathing.h).
     void UpdateBreath(ClientState& client, float dt);
+    void UpdateHunger(ClientState& client, float dt);
+    void HandleEat(ClientState& client, BlockType food);
     void Hurt(ClientState& client, int amount, const std::string& deathMessage);
     void SendHealth(ClientState& client, bool hurt);
     // A pressure plate at `plate` was stepped on: opens the sluice gates near it.

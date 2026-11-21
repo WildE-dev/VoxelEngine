@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 20;
+constexpr uint32_t kProtocolVersion = 21;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -48,6 +48,7 @@ enum class MsgType : uint8_t {
     Attack,        // hit a creature
     Craft,         // make something from resources (survival)
     AttackPlayer,  // hit another player (when PvP is on)
+    Eat,           // eat a food item (survival)
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -116,6 +117,7 @@ public:
         return true;
     }
     bool Vec3(glm::vec3& v) { return F32(v.x) && F32(v.y) && F32(v.z); }
+    bool Skip(size_t n) { if (n > Remaining()) return false; p += n; return true; }
     bool IVec3(glm::ivec3& v) { return I32(v.x) && I32(v.y) && I32(v.z); }
 
     size_t Remaining() const { return static_cast<size_t>(end - p); }
@@ -317,6 +319,13 @@ struct Health {
     // it (Breathing::Cause; 0 none).
     uint8_t air = 20, airMax = 20;
     uint8_t airCause = 0;
+    // Hunger (survival, world/Hunger.h): food points, 0..foodMax.
+    uint8_t food = 20, foodMax = 20;
+};
+
+// Eat one of a food item you hold.
+struct Eat {
+    BlockType food = BlockType::AIR;
 };
 
 // Chat: what a player typed, and lines for the chat log.
@@ -349,6 +358,7 @@ std::vector<uint8_t> Encode(const EditBreak& m);
 std::vector<uint8_t> Encode(const MineStart& m);
 std::vector<uint8_t> Encode(const Attack& m);
 std::vector<uint8_t> Encode(const AttackPlayer& m);
+std::vector<uint8_t> Encode(const Eat& m);
 std::vector<uint8_t> Encode(const Craft& m);
 std::vector<uint8_t> Encode(const CreatureSnapshot& m);
 std::vector<uint8_t> Encode(const EditPlace& m);
@@ -384,6 +394,7 @@ bool Decode(ByteReader& in, EditBreak& m);
 bool Decode(ByteReader& in, MineStart& m);
 bool Decode(ByteReader& in, Attack& m);
 bool Decode(ByteReader& in, AttackPlayer& m);
+bool Decode(ByteReader& in, Eat& m);
 bool Decode(ByteReader& in, Craft& m);
 bool Decode(ByteReader& in, CreatureSnapshot& m);
 bool Decode(ByteReader& in, EditPlace& m);

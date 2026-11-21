@@ -133,6 +133,15 @@ def main():
         k = i / fade
         loop[i] = loop[i] * k + rain[n + i] * (1 - k)
     save("rain_loop", loop)
+
+    # Eating: a few soft crunchy bites (its own random stream, so adding it didn't
+    # change the sounds above).
+    bite_rng = random.Random(51)
+    bites = []
+    for k in range(3):
+        bite = envelope(mix(lowpass(noise(secs(0.07), bite_rng), 1800), [0.4 * s for s in highpass(noise(secs(0.07), bite_rng), 3000)]), 0.002, 0.065, 2.5)
+        bites += bite + [0.0] * secs(0.05)
+    save("eat", bites)
     print("sounds written to", os.path.normpath(OUT))
 
 

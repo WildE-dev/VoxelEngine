@@ -200,6 +200,8 @@ void Server::StorePlayer(const ClientState& client) {
     record.mode = static_cast<uint8_t>(client.mode);
     record.resources = client.resources;
     record.tools = client.tools;
+    record.health = client.health;
+    record.food = client.food;
     storage->StorePlayer(client.name, record);
 }
 
@@ -280,6 +282,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     case net::MsgType::AttackPlayer: {
         net::AttackPlayer m;
         if ((ok = net::Decode(in, m))) HandleAttackPlayer(client, m.player, m.tool);
+        break;
+    }
+    case net::MsgType::Eat: {
+        net::Eat m;
+        if ((ok = net::Decode(in, m))) HandleEat(client, m.food);
         break;
     }
     case net::MsgType::Craft: {
@@ -371,6 +378,8 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
             client.resources = saved->resources;
             client.tools = saved->tools;
             client.flags = saved->flags;
+            client.health = std::clamp(saved->health, 1, kMaxHealth);
+            client.food = std::clamp(saved->food, 0, Hunger::kMaxFood);
             welcome.spawn = saved->feet;
             welcome.yaw = saved->yaw;
             welcome.pitch = saved->pitch;
@@ -473,8 +482,17 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
     const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
     const CreatureSystem::Creature* target = creatures.Find(creature);
     const CreatureType type = target ? target->type : CreatureType::Count;
-    if (creatures.Attack(creature, eye, tool, now, killed) && killed)
-        SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id);
+    if (creatures.Attack(creature, eye, tool, now, killed) && killed) {
+        std::string spoils;
+        // A deer gives venison (one or two).
+        if (type == CreatureType::Deer) {
+            const uint32_t venison = 1 + static_cast<uint32_t>(tickCount % 2);
+            client.resources[static_cast<size_t>(BlockType::RAW_VENISON)] += venison * Block::kUnitsPerBlock;
+            SendResources(client);
+            spoils = " (+" + std::to_string(venison) + " raw venison)";
+        }
+        SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id + spoils);
+    }
 }
 
 void Server::HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool) {
@@ -575,9 +593,13 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
 
 void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType type, int height, int faceAxis) {
     Block existing;
-    const bool valid = type != BlockType::AIR && InReach(client, pos, kReach) && world->GetBlock(pos.x, pos.y, pos.z, existing) &&
+    const bool valid = type != BlockType::AIR && !IsItemType(type) && InReach(client, pos, kReach) && world->GetBlock(pos.x, pos.y, pos.z, existing) &&
                        existing.IsPassable();
-    if (!valid) return Echo(client, pos);
+    if (!valid) {
+        // The client took the cost when it predicted the placement: put its count right.
+        if (!Creative(client)) SendResources(client);
+        return Echo(client, pos);
+    }
 
     const Block placed = Block::Placed(type, height, faceAxis);
     // Survival: it costs its worth, which the player must have. Water can't be
@@ -694,7 +716,10 @@ void Server::SendHealth(ClientState& client, bool hurt) {
     client.sentHealth = client.health;
     client.sentAir = static_cast<int>(std::ceil(client.air));
     client.sentAirCause = client.airCause;
+    client.sentFood = client.food;
     net::Health m;
+    m.food = static_cast<uint8_t>(client.food);
+    m.foodMax = static_cast<uint8_t>(Hunger::kMaxFood);
     m.health = static_cast<uint8_t>(client.health);
     m.max = static_cast<uint8_t>(kMaxHealth);
     m.hurt = static_cast<uint8_t>(hurt ? 1 : 0);
@@ -716,6 +741,9 @@ void Server::Hurt(ClientState& client, int amount, const std::string& deathMessa
     Broadcast(net::ChatMessage::Kind::Info, client.name + " " + deathMessage);
     client.health = kMaxHealth;
     client.air = Breathing::kMaxAir;
+    client.food = Hunger::kMaxFood;
+    client.exhaustion = 0.0f;
+    client.hasHungerFeet = false;
     client.invulnerableUntil = now + 3.0;
     Teleport(client, SpawnPoint());
     SendHealth(client, true);
@@ -769,6 +797,42 @@ void Server::UpdateBreath(ClientState& client, float dt) {
     if (static_cast<int>(std::ceil(client.air)) != client.sentAir || client.airCause != client.sentAirCause) SendHealth(client, false);
 }
 
+void Server::UpdateHunger(ClientState& client, float dt) {
+    const bool flying = client.noclip && (client.flags & net::kFlagFlying);
+    if (Creative(client) || flying) {
+        client.hasHungerFeet = false;
+        return;
+    }
+    // Time, and walking (not teleports or respawns: those jump far in one tick).
+    client.exhaustion += dt / Hunger::kSecondsPerPoint * options.hungerRate;
+    if (client.hasHungerFeet) {
+        const float walked = glm::length(glm::vec2(client.feet.x - client.hungerFeet.x, client.feet.z - client.hungerFeet.z));
+        if (walked < 5.0f) client.exhaustion += walked / Hunger::kBlocksPerPoint * options.hungerRate;
+    }
+    client.hungerFeet = client.feet;
+    client.hasHungerFeet = true;
+    client.food = Hunger::Drain(client.food, client.exhaustion);
+
+    // Starving: hurts now and then, down to the last heart.
+    const double now = Now();
+    if (client.food == 0 && now >= client.nextStarve) {
+        client.nextStarve = now + Hunger::kStarveInterval / std::max(1.0f, options.hungerRate);
+        if (client.health > Hunger::kStarveFloor) Hurt(client, 1, "starved");
+    }
+    if (client.food != client.sentFood) SendHealth(client, false);
+}
+
+void Server::HandleEat(ClientState& client, BlockType food) {
+    const int value = Hunger::FoodValue(food);
+    uint32_t& held = client.resources[static_cast<size_t>(food)];
+    // Food you hold, while not full (creative players have it all and aren't hungry).
+    if (value == 0 || Creative(client) || held < Block::kUnitsPerBlock || client.food >= Hunger::kMaxFood) return SendResources(client);
+    held -= Block::kUnitsPerBlock;
+    client.food = std::min(Hunger::kMaxFood, client.food + value);
+    SendResources(client);
+    SendHealth(client, false);
+}
+
 void Server::UpdateTraps() {
     const double now = Now();
     // Breath goes by real time, not ticks: on a slow, overloaded machine ticks run late,
@@ -777,10 +841,18 @@ void Server::UpdateTraps() {
     lastTrapsTime = now;
     for (auto& [peer, client] : clients) {
         if (!client.welcomed || !client.hasState) continue;
-        // Slow healing once nothing has hurt them for a while.
-        if (client.health < kMaxHealth && now >= client.nextRegen) {
-            client.health = std::min(kMaxHealth, client.health + 2);
+        UpdateHunger(client, breathStep);
+        // Slow healing once nothing has hurt them for a while, while well fed (in
+        // survival; it costs food).
+        const bool survival = !Creative(client);
+        if (client.health < kMaxHealth && now >= client.nextRegen && (!survival || client.food > Hunger::kRegenFood)) {
+            const int healed = std::min(kMaxHealth, client.health + 2) - client.health;
+            client.health += healed;
             client.nextRegen = now + kRegenInterval;
+            if (survival) {
+                client.exhaustion += healed * Hunger::kPointsPerHealing;
+                client.food = Hunger::Drain(client.food, client.exhaustion);
+            }
             SendHealth(client, false);
         }
         UpdateBreath(client, breathStep);

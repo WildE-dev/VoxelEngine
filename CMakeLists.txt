@@ -190,6 +190,10 @@ target_link_libraries(CreatureTest PRIVATE voxel_server voxel_client)
 add_executable(MiningTest tests/MiningTest.cpp)
 target_link_libraries(MiningTest PRIVATE voxel_server voxel_client)
 
+# Food: hunger, starving, eating, venison from deer and cooking it.
+add_executable(FoodTest tests/FoodTest.cpp)
+target_link_libraries(FoodTest PRIVATE voxel_server voxel_client)
+
 # Breathing: drowning, thin air up mountains, stale air deep down.
 add_executable(BreathTest tests/BreathTest.cpp)
 target_link_libraries(BreathTest PRIVATE voxel_server voxel_client)
@@ -206,7 +210,7 @@ target_link_libraries(ShapeTest PRIVATE voxel_server voxel_client)
 add_executable(BiomeTest tests/BiomeTest.cpp)
 target_link_libraries(BiomeTest PRIVATE voxel_common)
 
-foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest)
+foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W3)
     else()
@@ -228,6 +232,6 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 # `ctest` (or `ctest -j14` to run them all at once) runs every test suite.
 enable_testing()
-foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest)
+foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest)
     add_test(NAME ${test} COMMAND ${test} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 endforeach()

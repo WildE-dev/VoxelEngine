@@ -31,6 +31,7 @@
 #include "render/Renderer.h"
 #include "server/Server.h"
 #include "world/Breathing.h"
+#include "world/Hunger.h"
 #include "world/Chunk.h"
 #include "world/Crafting.h"
 #include "world/Raycast.h"
@@ -51,7 +52,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::RAW_VENISON, BlockType::COOKED_VENISON,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -129,6 +130,8 @@ const char* BlockName(BlockType type) {
     case BlockType::PEBBLES: return "Pebbles";
     case BlockType::PLANKS: return "Planks";
     case BlockType::GLASS: return "Glass";
+    case BlockType::RAW_VENISON: return "Raw venison";
+    case BlockType::COOKED_VENISON: return "Cooked venison";
     default:               return "Air";
     }
 }
@@ -706,11 +709,39 @@ void Application::DrawHealth() {
         }
     }
 
-    // Air bubbles above the hotbar's right end, right to left, while anything takes
-    // your breath or it's coming back; a bubble is two units of air.
+    // Food above the hotbar's right end, right to left: a drumstick is two points.
+    const float right = viewport->WorkPos.x + (viewport->WorkSize.x + hotbarWidth) * 0.5f - 6.0f;
+    {
+        const int sticks = (client->GetMaxFood() + 1) / 2, food = client->GetFood();
+        // Hungry: the row shivers a little, so it's noticed.
+        const float shiver = food <= Hunger::kRegenFood / 2 ? std::sin(static_cast<float>(Client::Now()) * 30.0f) * 0.8f : 0.0f;
+        auto drumstick = [&](float cx, float cy, ImU32 meat, ImU32 bone) {
+            // The meat, upper left; the bone sticking out to the lower right with a knob.
+            draw->AddLine(ImVec2(cx, cy), ImVec2(cx + kSize * 0.8f, cy + kSize * 0.8f), bone, kSize * 0.35f);
+            draw->AddCircleFilled(ImVec2(cx + kSize * 0.85f, cy + kSize * 0.6f), kSize * 0.22f, bone);
+            draw->AddCircleFilled(ImVec2(cx + kSize * 0.6f, cy + kSize * 0.85f), kSize * 0.22f, bone);
+            draw->AddCircleFilled(ImVec2(cx - kSize * 0.2f, cy - kSize * 0.2f), kSize * 0.7f, meat);
+        };
+        for (int i = 0; i < sticks; i++) {
+            const float cx = right - kSize * 1.4f - i * (2.0f * kSize + kGap), cy = y + shiver * ((i % 2) ? 1.0f : -1.0f);
+            drumstick(cx + 1.5f, cy + 1.5f, IM_COL32(0, 0, 0, 160), IM_COL32(0, 0, 0, 160)); // shadow
+            drumstick(cx, cy, IM_COL32(60, 45, 35, 220), IM_COL32(70, 65, 60, 220));          // empty
+            const int left = food - 2 * i;
+            const ImU32 meat = IM_COL32(176, 96, 44, 255), bone = IM_COL32(235, 225, 205, 255);
+            if (left >= 2) drumstick(cx, cy, meat, bone);
+            else if (left == 1) {
+                draw->PushClipRect(ImVec2(cx, cy - kSize * 1.2f), ImVec2(cx + kSize * 1.4f, cy + kSize * 1.4f), true); // the bone half
+                drumstick(cx, cy, meat, bone);
+                draw->PopClipRect();
+            }
+        }
+    }
+
+    // Air bubbles over the food, right to left, while anything takes your breath or
+    // it's coming back; a bubble is two units of air.
     if (cause != Breathing::Cause::None || air < maxAir) {
         const int bubbles = (maxAir + 1) / 2;
-        const float right = viewport->WorkPos.x + (viewport->WorkSize.x + hotbarWidth) * 0.5f - 6.0f;
+        const float y = viewport->WorkPos.y + viewport->WorkSize.y - 12.0f - 98.0f - (2.0f * kSize + 8.0f);
         for (int i = 0; i < bubbles; i++) {
             const float cx = right - kSize - i * (2.0f * kSize + kGap);
             const int left = air - 2 * i;
@@ -1326,6 +1357,18 @@ void Application::OnMouseButton(int button, int action) {
             client->AttackPlayer(static_cast<uint16_t>(target.player), client->Usable(SelectedTool()));
             return;
         }
+    }
+
+    // Right-click with an item in hand uses it (wherever you look): food is eaten;
+    // items are never placed.
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::None && IsItemType(SelectedBlock())) {
+        const BlockType item = SelectedBlock();
+        if (Hunger::IsFood(item) && !client->IsCreative() && client->GetResources(item) >= Block::kUnitsPerBlock &&
+            client->GetFood() < client->GetMaxFood()) {
+            client->Eat(item);
+            audio->PlayHere("eat", 0.8f);
+        }
+        return;
     }
 
     auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), kReach);

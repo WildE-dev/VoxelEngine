@@ -1,5 +1,7 @@
 #include "server/WorldStorage.h"
 
+#include <algorithm>
+
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -15,6 +17,8 @@ namespace {
 constexpr char kRegionMagic[4] = { 'V', 'X', 'R', 'G' };
 constexpr char kWorldMagic[4] = { 'V', 'X', 'W', 'D' };
 constexpr size_t kMaxNameLength = 256;
+// Tagged player fields (format 7 on).
+constexpr uint8_t kFieldHealth = 1, kFieldFood = 2;
 
 int FloorDiv(int a, int b) {
     return a >= 0 ? a / b : -((-a + b - 1) / b);
@@ -136,6 +140,19 @@ bool WorldStorage::ReadWorldFile() {
                 if (ok) p.resources[type] = units;
             }
             if (ok && version >= 6) ok = r.U8(p.tools);
+            // Tagged fields: tag, length, then that many bytes.
+            uint32_t fields = 0;
+            if (ok && version >= 7) ok = r.VarU32(fields) && fields < 256;
+            for (uint32_t f = 0; ok && f < fields; f++) {
+                uint8_t tag;
+                uint32_t length;
+                ok = r.U8(tag) && r.VarU32(length) && length <= r.Remaining();
+                if (!ok) break;
+                uint8_t v;
+                if (tag == kFieldHealth && length == 1) ok = r.U8(v), p.health = v;
+                else if (tag == kFieldFood && length == 1) ok = r.U8(v), p.food = v;
+                else ok = r.Skip(length);
+            }
             if (!ok) {
                 std::cerr << "[storage] " << path.string() << " is truncated" << std::endl;
                 return false;
@@ -330,6 +347,9 @@ bool WorldStorage::Flush() {
                         w.VarU32(p.resources[t]);
                     }
                 w.U8(p.tools);
+                w.VarU32(2);
+                w.U8(kFieldHealth), w.VarU32(1), w.U8(static_cast<uint8_t>(std::clamp(p.health, 0, 255)));
+                w.U8(kFieldFood), w.VarU32(1), w.U8(static_cast<uint8_t>(std::clamp(p.food, 0, 255)));
             }
             files.emplace_back(directory / "world.dat", std::move(w.data));
             writePlayers = true;

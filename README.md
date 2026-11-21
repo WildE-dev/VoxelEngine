@@ -31,8 +31,9 @@ GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
 `ShapeTest` (see [Block shapes](#block-shapes)), `BiomeTest` (see [Biomes](#biomes))
 `ModeTest` (see [Game modes](#game-modes)), `MiningTest` (see [Mining](#mining)),
 `BreathTest` (see [Breathing](#breathing)), `CreatureTest` (see
-[Creatures](#creatures)), `CraftTest` (see [Crafting](#crafting)) and `SoundTest`
-(see [Sound](#sound)).
+[Creatures](#creatures) and [PvP](#pvp)), `CraftTest` (see [Crafting](#crafting)),
+`FoodTest` (see [Food and hunger](#food-and-hunger)) and `SoundTest` (see
+[Sound](#sound)).
 
 `ctest` in the build directory runs them all, and `ctest -j15` runs them all at
 once. They're written to pass even then, on a loaded machine:
@@ -519,7 +520,8 @@ work the same for everyone:
 - **Pressure plates** open every sluice gate within 8 blocks.
 
 The screen flashes red when you're hurt. Hearts come back one every 4 seconds once
-nothing has hurt you for 5. With none left, everyone hears how you died and you
+nothing has hurt you for 5, as long as you're well fed (see
+[Food and hunger](#food-and-hunger)). With none left, everyone hears how you died and you
 respawn at the spawn point with full health (and three seconds' grace). In no-clip
 nothing can hurt you. All four blocks are in the inventory, for building traps of
 your own. `TrapTest` checks spikes, death and respawn, crumbling floors, pressure
@@ -596,6 +598,48 @@ the server side in `src/server/Creatures.cpp`.
 - burning at noon, and `/creatures clear`;
 - in a normal world, deer turning up by day and ghouls at night.
 
+## PvP
+
+Players can hit each other: left-click another player in reach. Damage, reach and
+the time between hits are the same as for creatures (a heart bare-handed, 2.5 with an
+axe). The player hit flashes red for everyone else, with a thump, and is knocked back
+away from the hitter and a little up. The server sends the push and the player's own
+game applies it, so the usual movement checks still hold. Killing someone tells
+everyone (`X was slain by Y`), and they respawn. Creative players and players flying in
+no-clip can't be hurt. PvP is on by default; operators switch it with `/pvp on|off`,
+and `/pvp` shows which. With it off, a hit just tells you so. `CreatureTest` checks
+reach, damage, the red flash, knockback, `/pvp off`, and being slain.
+
+## Food and hunger
+
+In survival you also get hungry. Ten drumsticks sit above the right end of the hotbar,
+two points of food each. Food goes down by a point every 50 seconds, another for every
+60 blocks you walk, and half a point for each half heart you heal. Hearts only come
+back while you have more than 14 points (seven drumsticks). With no food at all you
+starve: half a heart every 4 seconds, down to your last heart (starving alone won't
+kill you). The drumsticks shiver when you're getting low. You respawn full.
+
+To eat, put food in the hotbar and right-click with it, looking anywhere:
+
+| Food | Gives | From |
+| --- | --- | --- |
+| Raw venison | 3 | killing a deer (one or two each) |
+| Cooked venison | 8 | crafting: 1 raw venison + 0.25 log |
+
+Food is an item: it lives in the inventory and the hotbar like blocks do, but can't be
+placed. You can't eat when you're full. Creative players don't get hungry. Your food
+and health are saved with you. Operators can set someone's food with
+`/food <0-20> [player]`, and anyone can check theirs with `/food`. The rules are in
+`src/world/Hunger.h` and the server side in `Server::UpdateHunger` and
+`Server::HandleEat`. `FoodTest` checks:
+
+- getting hungry, and starving down to the last heart but no further;
+- eating raw and cooked venison, not eating what you don't have or when full;
+- healing only while well fed;
+- venison from deer, and cooking it;
+- that food can't be placed;
+- that creative players don't get hungry.
+
 ## Crafting
 
 In survival, the inventory (I) has a crafting list below your blocks. Each recipe
@@ -617,6 +661,7 @@ makes four.
 | Pickaxe | 1 planks + 1.5 stone |
 | Axe | 1 planks + 1 stone |
 | Shovel | 1 planks + 0.5 stone |
+| Cooked venison | 1 raw venison + 0.25 log |
 
 Amounts are in blocks, using the same resource units as building (a block is 64).
 Tools are made once and kept, and saved with the player. In survival you can only
@@ -699,6 +744,9 @@ ones you're allowed to use:
 | `/give <block> [count] [player]`, `/give <tool> [player]` | operators | give survival blocks (`count` in blocks, default 64) or a tool |
 | `/summon <deer\|ghoul> [x y z]` | operators | bring a creature (default: a few blocks ahead; `~` relative) |
 | `/creatures [clear]` | operators | count the creatures, or remove them all |
+| `/pvp`, `/food` | everyone | whether players can hurt each other; how fed you are |
+| `/pvp <on\|off>` | operators | let players hurt each other, or not |
+| `/food <0-20> [player]` | operators | set how fed someone is |
 | `/stop` | console | shut the server down |
 
 A dedicated server (`--server` or `VoxelServer`) also takes commands typed into its
@@ -844,10 +892,14 @@ These go with the existing `VOXEL_AUTO_SCREENSHOT`, `VOXEL_NO_MOUSE` and
 
 ## Performance
 
-Most loaded chunks are solid ground or empty air and have no mesh. The client keeps a
-list of the ones that do, culls it against the view frustum every frame and draws
-what's left nearest first, so a typical view draws a few hundred chunks out of
-15,000 loaded. The water pass (including its full-screen copy for refraction) is
+Most loaded chunks are solid ground or empty air and have no mesh. The client only
+draws chunks that can be seen: each frame it floods out from the camera's chunk
+through the view frustum, passing through a chunk only between faces that its open
+cells connect (worked out when the chunk is meshed), and never back toward the
+camera. So caves under solid ground aren't drawn from the surface. A typical view
+draws about 500 chunks out of 15,000 loaded (about 2,750 by frustum alone; Apple's
+OpenGL is slow per draw call, so this roughly doubled the frame rate). Chunks are drawn
+nearest first. The water pass (including its full-screen copy for refraction) is
 skipped when no water is in view.
 
 `VOXEL_BENCH=1 ./VoxelEngine` turns vsync off and prints, once a second, the frame
@@ -873,8 +925,9 @@ src/
             Textures, DebugDraw
   world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
             Features, Dungeons, Noise, Lighting, Collision, Raycast, Mining,
-            Breathing, Creatures, Crafting
+            Breathing, Creatures, Crafting, Hunger
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
-            BreathTest, CreatureTest, CraftTest, SoundTest
+            BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest
+tools/      make_sounds.py (sound effects), make_item_textures.py (item icons)
 ```

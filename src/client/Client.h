@@ -102,6 +102,9 @@ public:
     double GetLastHurt() const { return lastHurt; }
     // Breath (survival): air left (0..GetMaxAir()) and what's taking it.
     int GetAir() const { return air; }
+    // Hunger (survival): food points (0..GetMaxFood(), world/Hunger.h).
+    int GetFood() const { return food; }
+    int GetMaxFood() const { return maxFood; }
     int GetMaxAir() const { return maxAir; }
     Breathing::Cause GetAirCause() const { return airCause; }
     float GetRain() const { return rain; }
@@ -149,6 +152,8 @@ public:
     // Hit a creature (the server checks the reach).
     void Attack(uint16_t creature, Tool tool);
     void AttackPlayer(uint16_t player, Tool tool);
+    // Eat one of a food item held (survival; the server checks it).
+    void Eat(BlockType item);
 
     struct Stats {
         uint32_t roundTripMs = 0;
@@ -197,6 +202,7 @@ private:
     uint8_t abilities = 0;
     int health = 20, maxHealth = 20;
     int air = 20, maxAir = 20;
+    int food = 20, maxFood = 20;
     Breathing::Cause airCause = Breathing::Cause::None;
     net::GameMode mode = net::GameMode::Creative;
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{};

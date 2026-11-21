@@ -114,8 +114,15 @@ enum class BlockType : uint8_t {
     // you can see through (its faces don't hide what's behind it, and light passes).
     PLANKS,
     GLASS,
+    // Items: held and used, never placed in the world (see IsItemType). Food (see
+    // world/Hunger.h): venison from deer, raw or cooked.
+    RAW_VENISON,
+    COOKED_VENISON,
     COUNT
 };
+
+// Things held in the inventory that aren't blocks: they can't be placed.
+inline bool IsItemType(BlockType type) { return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON; }
 
 inline bool IsPlantType(BlockType type) {
     return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW || type == BlockType::SPIKES ||

@@ -37,7 +37,7 @@ public:
     static constexpr int kRegionSize = 8;      // chunks per region along each axis
     // 2: world type; 3: time of day; 4: game modes and resources; 5: block axes (logs);
     // 6: tools players have made
-    static constexpr uint32_t kFormatVersion = 6;
+    static constexpr uint32_t kFormatVersion = 7;
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
@@ -46,6 +46,10 @@ public:
         uint8_t mode = 0;  // net::GameMode
         std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{}; // units held (survival)
         uint8_t tools = 0; // tools made (Crafting::ToolBit each)
+        // From format 7, each saved as a tagged field (unknown tags are skipped, so
+        // more can be added without breaking older saves).
+        int health = 20; // half hearts
+        int food = 20;   // world/Hunger.h
     };
 
     // One bit per block column of a chunk (index x * CHUNK_SIZE + z).
