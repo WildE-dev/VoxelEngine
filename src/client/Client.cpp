@@ -152,6 +152,13 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         constexpr int S = Chunk::CHUNK_SIZE;
         for (const auto& cell : m.cells) {
             const glm::ivec3 p = origin + glm::ivec3(cell.index % S, (cell.index / S) % S, cell.index / (S * S));
+            // A solid thing gone, or one appeared (not water moving about).
+            Block old;
+            if (world.GetBlock(p.x, p.y, p.z, old) && blockEvents.size() < 64) {
+                const bool wasSolid = !old.IsAir() && !old.IsLiquid(), isSolid = !cell.block.IsAir() && !cell.block.IsLiquid();
+                if (wasSolid && !isSolid) blockEvents.push_back({ p, old.type, false });
+                else if (isSolid && cell.block.type != old.type) blockEvents.push_back({ p, cell.block.type, true });
+            }
             world.SetBlock(p.x, p.y, p.z, cell.block);
         }
         stats.deltasReceived += static_cast<uint32_t>(m.cells.size());
@@ -362,6 +369,12 @@ std::vector<Client::Creature> Client::GetCreatures() const {
         result.push_back(c);
     }
     return result;
+}
+
+std::vector<Client::BlockEvent> Client::TakeBlockEvents() {
+    std::vector<BlockEvent> events;
+    events.swap(blockEvents);
+    return events;
 }
 
 void Client::Attack(uint16_t creature, Tool tool) {

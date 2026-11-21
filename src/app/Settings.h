@@ -14,6 +14,7 @@ struct Settings {
     float fov = 45.0f;        // vertical field of view, degrees
     float sensitivity = 0.1f; // mouse: degrees per pixel
     bool vsync = true;
+    float volume = 0.8f;      // sound, 0..1
     std::string lastServer = "localhost";
 
     static constexpr int kMinRenderDistance = 2, kMaxRenderDistance = 12;
@@ -24,6 +25,7 @@ struct Settings {
         renderDistance = std::clamp(renderDistance, kMinRenderDistance, kMaxRenderDistance);
         fov = std::clamp(fov, kMinFov, kMaxFov);
         sensitivity = std::clamp(sensitivity, kMinSensitivity, kMaxSensitivity);
+        volume = std::clamp(volume, 0.0f, 1.0f);
         if (name.empty()) name = "Player";
     }
 
@@ -41,6 +43,7 @@ struct Settings {
             else if (key == "fov") fov = static_cast<float>(std::atof(rest.c_str()));
             else if (key == "sensitivity") sensitivity = static_cast<float>(std::atof(rest.c_str()));
             else if (key == "vsync") vsync = rest != "0";
+            else if (key == "volume") volume = static_cast<float>(std::atof(rest.c_str()));
             else if (key == "last_server") lastServer = rest;
         }
         Clamp();
@@ -54,6 +57,7 @@ struct Settings {
              << "fov " << fov << "\n"
              << "sensitivity " << sensitivity << "\n"
              << "vsync " << (vsync ? 1 : 0) << "\n"
+             << "volume " << volume << "\n"
              << "last_server " << lastServer << "\n";
     }
 };

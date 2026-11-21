@@ -135,6 +135,15 @@ public:
         float speed = 0.0f;
     };
     std::vector<Creature> GetCreatures() const;
+
+    // Blocks someone else broke or placed (as the server's changes arrive; our own,
+    // predicted edits don't show up here again), for sounds. Taken and cleared.
+    struct BlockEvent {
+        glm::ivec3 pos{0};
+        BlockType type = BlockType::AIR; // what was broken, or placed
+        bool placed = false;
+    };
+    std::vector<BlockEvent> TakeBlockEvents();
     // Hit a creature (the server checks the reach).
     void Attack(uint16_t creature, Tool tool);
 
@@ -178,6 +187,7 @@ private:
     };
     std::unordered_map<uint16_t, std::deque<CreatureSample>> creatures;
     uint32_t lastCreatureTick = 0;
+    std::vector<BlockEvent> blockEvents;
     uint32_t lastSnapshotTick = 0;
     float timeOfDay = 0.05f, rain = 0.0f;
     uint8_t abilities = 0;

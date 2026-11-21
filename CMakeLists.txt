@@ -76,6 +76,8 @@ target_link_libraries(voxel_server PUBLIC voxel_common)
 
 # The client's world copy, meshing and connection. Uses GL for chunk meshes.
 add_library(voxel_client STATIC
+    src/audio/Audio.cpp
+    src/audio/Audio.h
     src/client/ChunkMesher.cpp
     src/client/ChunkMesher.h
     src/client/Client.cpp
@@ -88,6 +90,19 @@ add_library(voxel_client STATIC
     src/render/Shader.h
 )
 target_link_libraries(voxel_client PUBLIC voxel_common glad::glad)
+# Sound through OpenAL: Apple's framework on macOS, otherwise an installed OpenAL
+# (e.g. openal-soft) if there is one. Without it the game is simply silent.
+if(APPLE)
+    target_link_libraries(voxel_client PUBLIC "-framework OpenAL")
+    target_compile_definitions(voxel_client PUBLIC VOXEL_AUDIO=1)
+    target_compile_options(voxel_client PRIVATE -Wno-deprecated-declarations)
+else()
+    find_package(OpenAL QUIET)
+    if(OpenAL_FOUND)
+        target_link_libraries(voxel_client PUBLIC OpenAL::OpenAL)
+        target_compile_definitions(voxel_client PUBLIC VOXEL_AUDIO=1)
+    endif()
+endif()
 
 # The game. Also runs a dedicated server with --server (no window, no GL).
 add_executable(${PROJECT_NAME}
@@ -159,6 +174,10 @@ target_link_libraries(DungeonTest PRIVATE voxel_common)
 add_executable(TrapTest tests/TrapTest.cpp src/app/Player.cpp)
 target_link_libraries(TrapTest PRIVATE voxel_server voxel_client)
 
+# Sound: the sound files, materials, and hearing others' edits.
+add_executable(SoundTest tests/SoundTest.cpp)
+target_link_libraries(SoundTest PRIVATE voxel_server voxel_client)
+
 # Crafting: recipes, tools made once and kept, glass.
 add_executable(CraftTest tests/CraftTest.cpp)
 target_link_libraries(CraftTest PRIVATE voxel_server voxel_client)
@@ -187,7 +206,7 @@ target_link_libraries(ShapeTest PRIVATE voxel_server voxel_client)
 add_executable(BiomeTest tests/BiomeTest.cpp)
 target_link_libraries(BiomeTest PRIVATE voxel_common)
 
-foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest)
+foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W3)
     else()
@@ -209,6 +228,6 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 # `ctest` (or `ctest -j14` to run them all at once) runs every test suite.
 enable_testing()
-foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest)
+foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest)
     add_test(NAME ${test} COMMAND ${test} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 endforeach()

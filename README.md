@@ -31,7 +31,8 @@ GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
 `ShapeTest` (see [Block shapes](#block-shapes)), `BiomeTest` (see [Biomes](#biomes))
 `ModeTest` (see [Game modes](#game-modes)), `MiningTest` (see [Mining](#mining)),
 `BreathTest` (see [Breathing](#breathing)), `CreatureTest` (see
-[Creatures](#creatures)) and `CraftTest` (see [Crafting](#crafting)).
+[Creatures](#creatures)), `CraftTest` (see [Crafting](#crafting)) and `SoundTest`
+(see [Sound](#sound)).
 
 `ctest` in the build directory runs them all, and `ctest -j15` runs them all at
 once. They're written to pass even then, on a loaded machine:
@@ -768,6 +769,38 @@ without the extension; the face-to-texture mapping for each block type lives in
 square size (others are resampled to match the first). Missing textures show up
 as a magenta checkerboard.
 
+## Sound
+
+The game has sound effects, through OpenAL. Sounds in the world come from where
+they happen and fade with distance.
+
+- **Footsteps**, yours and other players', sound like the ground: soft on grass and
+  dirt, hard on stone and bricks, gritty on sand and snow, hollow on wood.
+- **Mining** taps on the block as you work. Breaking crumbles, cracks, knocks or
+  shatters, by material. Placing thuds, and picking up pebbles pops.
+- What **other players** build and break is heard too (at most a few at once, so a
+  collapse or the laser isn't a din). The server's block changes are compared with
+  what was there.
+- **Hurt** grunts, splashes into water, a **thump** when a creature is hit, a ghoul's
+  groan now and then, a chime when crafting, and **rain** while it rains where you
+  are. Under a roof it's quiet.
+
+Every sound is made by `tools/make_sounds.py` from noise and tones, so there are no
+recordings to license. Run it to remake `Resources/Sounds/` (16-bit mono WAV, with
+variants as `name_1.wav`, `name_2.wav` and so on, picked at random at a slightly varied
+pitch).
+
+On macOS the game uses the system's OpenAL framework. Elsewhere it uses an
+installed OpenAL, such as openal-soft. Without one, or without an audio device, it
+plays silently. The volume is in the settings. `VOXEL_MUTE=1` silences it, which is
+handy for unattended screenshots. The code is in `src/audio/Audio.cpp`.
+
+`SoundTest` checks, without a speaker:
+
+- that every sound the game plays is there and loads;
+- that blocks sound like their material;
+- that a player gets events for another player's edits, and not their own.
+
 ## Menus and settings
 
 Run with no options, the game opens at a title screen:
@@ -779,7 +812,7 @@ Run with no options, the game opens at a title screen:
 - **Multiplayer**: join a server by address (`host` or `host:port`). The last one is
   remembered.
 - **Settings**: your name, render distance (2 to 12 chunks), field of view, mouse
-  sensitivity and vsync. They're kept in `settings.txt` in the working directory.
+  sensitivity, vsync and volume. They're kept in `settings.txt` in the working directory.
 
 In a game, Esc opens the pause menu: back to the game, settings, save and quit to the
 title screen (or disconnect), or quit. A singleplayer world keeps running while
@@ -825,6 +858,7 @@ src/
             generation and light worker), Water, WorldStorage (saving),
             main.cpp (VoxelServer)
   net/      Protocol (messages, RLE chunk planes), Transport (ENet wrapper)
+  audio/    Audio (OpenAL sound effects)
   render/   Renderer (frame passes, skybox, post effect), Rain, PlayerModels, Shader,
             Textures, DebugDraw
   world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
@@ -832,5 +866,5 @@ src/
             Breathing, Creatures, Crafting
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
-            BreathTest, CreatureTest, CraftTest
+            BreathTest, CreatureTest, CraftTest, SoundTest
 ```

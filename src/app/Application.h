@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "app/Camera.h"
@@ -13,6 +14,7 @@
 #include "world/Mining.h"
 
 struct GLFWwindow;
+class Audio;
 class Client;
 class ClientWorld;
 class Renderer;
@@ -72,6 +74,11 @@ private:
     Tool SelectedTool() const { return hotbarTools[selectedSlot]; }
     // Survival: holding the left button mines the block in view (world/Mining.h).
     void UpdateMining();
+    // Sound effects for this frame: footsteps, others' edits, creatures, rain...
+    void UpdateSounds();
+    // A sound at a block (its centre); a block's break sound.
+    void PlayAt(const char* name, const glm::ivec3& block, float volume = 1.0f);
+    static const char* BreakSound(BlockType type);
     // The creature the view ray meets within reach, before any block (0: none).
     uint16_t CreatureInView() const;
     void SelectSlot(int slot);
@@ -119,7 +126,19 @@ private:
     std::unique_ptr<Renderer> renderer;
     std::unique_ptr<ClientWorld> world;
     std::unique_ptr<Client> client;
+    std::unique_ptr<Audio> audio;
     bool joined = false; // Welcome received and handled
+    // Sounds: where our feet were and how far they've walked since the last step,
+    // others' steps likewise, creature states (hurt, next groan).
+    glm::vec3 lastFeet{ 0.0f };
+    float stepDistance = 0.0f;
+    bool wasSwimming = false;
+    double lastHurtHeard = 0.0, nextDig = 0.0;
+    struct Walker { glm::vec3 feet{ 0.0f }; float distance = 0.0f; bool seen = false; };
+    std::unordered_map<uint16_t, Walker> walkers;
+    struct CreatureSound { bool hurt = false; double nextGroan = 0.0; bool seen = false; };
+    std::unordered_map<uint16_t, CreatureSound> creatureSounds;
+    bool mute = false; // VOXEL_MUTE
     std::string serverLabel;
 
     // Menus. Without a game (client), the title screen shows one of these pages.

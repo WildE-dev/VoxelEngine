@@ -254,6 +254,7 @@ void Application::DrawSettingsPage(bool inGame) {
         if (ImGui::SliderFloat("Mouse sensitivity", &settings.sensitivity, Settings::kMinSensitivity, Settings::kMaxSensitivity, "%.2f"))
             ApplySettings();
         if (ImGui::Checkbox("Vsync", &settings.vsync)) ApplySettings();
+        ImGui::SliderFloat("Volume", &settings.volume, 0.0f, 1.0f, "%.0f%%", ImGuiSliderFlags_None);
         ImGui::Spacing();
         if (WideButton("Done")) {
             settings.Clamp();

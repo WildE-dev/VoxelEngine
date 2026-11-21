@@ -9,6 +9,7 @@
 #include <ctime>
 #include <iostream>
 #include <iterator>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 
+#include "audio/Audio.h"
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "net/Protocol.h"
@@ -233,6 +235,10 @@ bool Application::Init(const ClientOptions& options) {
 
     renderer = std::make_unique<Renderer>();
     if (!renderer->Init(framebufferWidth, framebufferHeight)) return false;
+    // Sound (silent if there's no audio device). VOXEL_MUTE=1 keeps it quiet.
+    mute = std::getenv("VOXEL_MUTE") != nullptr;
+    audio = std::make_unique<Audio>();
+    if (!mute) audio->Init("Resources/Sounds");
 
     // Block textures must be resolved before the world starts meshing.
     LoadBlockTextures();
@@ -320,6 +326,9 @@ void Application::StopGame() {
     localServer.reset();
     joined = false;
     mining = false;
+    walkers.clear();
+    creatureSounds.clear();
+    if (audio) audio->SetLoop("rain_loop", 0.0f);
     paused = pauseSettings = false;
     chatOpen = inventoryOpen = false;
     landedAt = 0.0;
@@ -378,6 +387,7 @@ void Application::LoadBlockTextures() {
 
 void Application::Shutdown() {
     // Order matters: everything holding GL objects goes before the context.
+    audio.reset();
     if (client) client->Disconnect();
     client.reset();
     world.reset();
@@ -438,6 +448,7 @@ void Application::Run() {
         params.underwater = world->IsUnderwater(camera.GetPosition());
         params.fogEnd = static_cast<float>(world->GetViewDistance() * Chunk::CHUNK_SIZE);
         UpdateSky(deltaTime, params);
+        UpdateSounds();
         if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), kReach)) {
             params.highlightedBlock = hit->block;
             Block target;
@@ -1224,12 +1235,18 @@ void Application::DrawInventory() {
                     else ImGui::TextDisabled("%s", needs.c_str());
                     ImGui::TableNextColumn();
                     ImGui::BeginDisabled(!client->CanCraft(r));
-                    if (ImGui::SmallButton("Make")) client->Craft(r, 1);
+                    if (ImGui::SmallButton("Make")) {
+                        client->Craft(r, 1);
+                        audio->PlayHere("craft", 0.6f);
+                    }
                     ImGui::EndDisabled();
                     if (recipe.tool == Tool::None) {
                         ImGui::SameLine();
                         ImGui::BeginDisabled(!client->CanCraft(r, 4));
-                        if (ImGui::SmallButton("x4")) client->Craft(r, 4);
+                        if (ImGui::SmallButton("x4")) {
+                            client->Craft(r, 4);
+                            audio->PlayHere("craft", 0.6f);
+                        }
                         ImGui::EndDisabled();
                     }
                     ImGui::PopID();
@@ -1280,7 +1297,11 @@ void Application::OnMouseButton(int button, int action) {
 
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         // Creative breaks at once; survival mines while the button is held (UpdateMining).
-        if (client->IsCreative()) client->BreakBlock(hit->block);
+        if (client->IsCreative()) {
+            Block broken;
+            if (world->GetBlock(hit->block.x, hit->block.y, hit->block.z, broken)) PlayAt(BreakSound(broken.type), hit->block);
+            client->BreakBlock(hit->block);
+        }
     }
     else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         if (SelectedTool() != Tool::None) return; // tools don't place anything
@@ -1299,6 +1320,7 @@ void Application::OnMouseButton(int button, int action) {
         // Logs lie along the axis of the face they're placed against.
         const int faceAxis = hit->normal.x != 0 ? 0 : hit->normal.z != 0 ? 2 : 1;
         client->PlaceBlock(place, placeBlock, height, faceAxis);
+        PlayAt("place", place, 0.8f);
     }
 }
 
@@ -1365,12 +1387,111 @@ void Application::UpdateMining() {
     }
     const double needed = Mining::Seconds(block, tool), elapsed = now - miningStart;
     mineProgress = needed > 0.0 ? static_cast<float>(std::min(1.0, elapsed / needed)) : 1.0f;
+    // A tap on the block every so often while mining it.
+    if (needed > 0.0 && now >= nextDig) {
+        const std::string material = Audio::Material(block.type);
+        PlayAt(material == "hard" || material == "glass" ? "dig_hard" : "dig_soft", miningPos, 0.6f);
+        nextDig = now + 0.27;
+    }
     if (elapsed >= needed) {
+        PlayAt(BreakSound(block.type), miningPos);
         client->BreakBlock(miningPos, tool);
         mining = false;
         mineProgress = 0.0f;
         nextMineAt = now + 0.15; // a moment before starting on the next block
     }
+}
+
+const char* Application::BreakSound(BlockType type) {
+    if (type == BlockType::PEBBLES) return "pickup";
+    const std::string material = Audio::Material(type);
+    if (material == "hard") return "break_hard";
+    if (material == "wood") return "break_wood";
+    if (material == "glass") return "break_glass";
+    return "break_soft";
+}
+
+void Application::PlayAt(const char* name, const glm::ivec3& block, float volume) {
+    audio->Play(name, glm::vec3(block) + glm::vec3(0.5f), volume);
+}
+
+void Application::UpdateSounds() {
+    audio->SetVolume(mute ? 0.0f : settings.volume);
+    audio->SetListener(camera.GetPosition(), camera.GetDirection(), glm::vec3(0.0f, 1.0f, 0.0f));
+    if (!joined) return;
+    const double now = glfwGetTime();
+    // What's underfoot decides how a step sounds.
+    auto stepAt = [&](const glm::vec3& feet, float volume) {
+        Block below;
+        const glm::ivec3 cell(glm::floor(feet - glm::vec3(0.0f, 0.1f, 0.0f)));
+        if (!world->GetBlock(cell.x, cell.y, cell.z, below) || below.IsAir() || below.IsLiquid()) return;
+        audio->Play(std::string("step_") + (std::string(Audio::Material(below.type)) == "glass" ? "hard" : Audio::Material(below.type)), feet, volume);
+    };
+
+    // Our own steps: one every 1.7 blocks walked on the ground (a jump far away, a
+    // teleport, doesn't count).
+    const glm::vec3 feet = player.GetFeetPosition();
+    const float moved = glm::length(glm::vec2(feet.x - lastFeet.x, feet.z - lastFeet.z));
+    if (player.IsOnGround() && !player.IsFlying() && !player.IsSwimming() && moved < 2.0f) {
+        stepDistance += moved;
+        if (stepDistance >= 1.7f) {
+            stepDistance = 0.0f;
+            stepAt(feet, 0.35f);
+        }
+    }
+    lastFeet = feet;
+    // Into the water.
+    if (player.IsSwimming() && !wasSwimming) audio->Play("splash", feet, 0.6f);
+    wasSwimming = player.IsSwimming();
+    // Hurt.
+    if (client->GetLastHurt() > lastHurtHeard + 0.05) {
+        lastHurtHeard = client->GetLastHurt();
+        audio->PlayHere("hurt", 0.8f);
+    }
+
+    // What others broke and built (a few at a time: a collapse or the laser makes many).
+    int played = 0;
+    for (const auto& event : client->TakeBlockEvents())
+        if (played++ < 4) PlayAt(event.placed ? "place" : BreakSound(event.type), event.pos, 0.8f);
+
+    // Other players' steps.
+    for (auto& [id, w] : walkers) w.seen = false;
+    for (const auto& other : client->GetRemotePlayers()) {
+        Walker& w = walkers[other.id];
+        const float step = glm::length(glm::vec2(other.feet.x - w.feet.x, other.feet.z - w.feet.z));
+        if (w.seen || w.distance > 0.0f || step < 2.0f) {
+            if ((other.flags & net::kFlagOnGround) && step < 2.0f) w.distance += step;
+            if (w.distance >= 1.7f) {
+                w.distance = 0.0f;
+                stepAt(other.feet, 0.4f);
+            }
+        }
+        w.feet = other.feet;
+        w.seen = true;
+    }
+    for (auto it = walkers.begin(); it != walkers.end();) it = it->second.seen ? std::next(it) : walkers.erase(it);
+
+    // Creatures: a thump when hit, and now and then a ghoul's groan.
+    std::uniform_real_distribution<double> wait(4.0, 11.0);
+    static std::mt19937 rng(99);
+    for (auto& [id, c] : creatureSounds) c.seen = false;
+    for (const auto& c : client->GetCreatures()) {
+        CreatureSound& s = creatureSounds[c.id];
+        if (c.hurt && !s.hurt) audio->Play("hit", c.feet + glm::vec3(0.0f, 0.8f, 0.0f), 0.9f);
+        s.hurt = c.hurt;
+        if (c.type == CreatureType::Ghoul) {
+            if (s.nextGroan == 0.0) s.nextGroan = now + wait(rng) * 0.5;
+            else if (now >= s.nextGroan) {
+                audio->Play("groan", c.feet + glm::vec3(0.0f, 1.6f, 0.0f), 0.8f, 0.15f);
+                s.nextGroan = now + wait(rng);
+            }
+        }
+        s.seen = true;
+    }
+    for (auto it = creatureSounds.begin(); it != creatureSounds.end();) it = it->second.seen ? std::next(it) : creatureSounds.erase(it);
+
+    // Rain, as heard here (none under a roof).
+    audio->SetLoop("rain_loop", rainHere * 0.45f);
 }
 
 void Application::OnCursorMove(double x, double y) {
