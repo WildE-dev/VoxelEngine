@@ -2348,7 +2348,12 @@ void Application::UpdateSounds() {
     }
     lastFeet = feet;
     // Into the water.
-    if (player.IsSwimming() && !wasSwimming) audio->Play("splash", feet, 0.6f);
+    if (player.IsSwimming() && !wasSwimming) {
+        audio->Play("splash", feet, 0.6f);
+        // Spray, more the harder you hit the water.
+        const float speed = std::abs(player.GetVelocity().y);
+        SpawnParticles(glm::ivec3(glm::floor(feet)), BlockType::WATER, std::clamp(static_cast<int>(speed * 2.5f), 4, 24), 2.0f + speed * 0.3f);
+    }
     wasSwimming = player.IsSwimming();
     // Hurt.
     if (client->GetLastHurt() > lastHurtHeard + 0.05) {
