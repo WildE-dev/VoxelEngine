@@ -304,6 +304,49 @@ int main() {
         both(20.0, [&] { return a.client.GetCreatures().empty(); });
         server.QueueConsoleCommand("gamemode survival Hunter");
 
+        std::cout << "Raids" << std::endl;
+        // A bed in a plank hut; the hunter (creative, so left alone) inside with it.
+        server.QueueConsoleCommand("gamemode creative Hunter");
+        server.QueueConsoleCommand("time noon");
+        server.QueueConsoleCommand("fill 30 0 30 36 3 36 planks");
+        server.QueueConsoleCommand("fill 31 0 31 35 2 35 air");
+        server.QueueConsoleCommand("fill 33 0 33 33 0 33 bed");
+        server.QueueConsoleCommand("tp Hunter 32.5 0 32.5");
+        auto planks = [&] {
+            int n = 0;
+            for (int x = 30; x <= 36; x++)
+                for (int z = 30; z <= 36; z++)
+                    for (int y = 0; y <= 1; y++) {
+                        Block blk;
+                        if (a.world.GetBlock(x, y, z, blk) && blk.type == BlockType::PLANKS) n++;
+                    }
+            return n;
+        };
+        both(20.0, [&] { return planks() > 40 && glm::distance(a.feet, glm::vec3(32.5f, 0.0f, 32.5f)) < 0.5f; });
+        const int wall = planks();
+        a.client.UseBed({ 33, 0, 33 });
+        both(5.0, [&] { return Has(a, "respawn"); });
+        server.QueueConsoleCommand("raid Hunter");
+        Check(both(20.0, [&] { return Has(a, "a dwarf raid is coming for your home"); }), "/raid sends a war band for the hunter's bed (and they're warned)");
+        auto raiders = [&] {
+            int n = 0;
+            for (const auto& c : a.client.GetCreatures()) n += c.type == CreatureType::DwarfWarrior || c.type == CreatureType::DwarfCrossbow;
+            return n;
+        };
+        Check(both(10.0, [&] { return raiders() >= 3; }), "a band of dwarves turns up");
+        Check(both(90.0, [&] { return planks() < wall; }), "they hack through the hut's plank walls");
+        Check(both(60.0, [&] {
+                  for (const auto& c : a.client.GetCreatures())
+                      if (glm::distance(glm::vec2(c.feet.x, c.feet.z), glm::vec2(33.5f, 33.5f)) < 3.5f) return true;
+                  return false;
+              }),
+              "and get in to the bed");
+        server.QueueConsoleCommand("time midnight");
+        wait(1.0);
+        server.QueueConsoleCommand("time noon");
+        Check(both(20.0, [&] { return raiders() == 0; }), "at dawn the raiders go");
+        server.QueueConsoleCommand("gamemode survival Hunter");
+
         server.QueueConsoleCommand("time midnight");
         server.QueueConsoleCommand("summon dwarf 20 0 20");
         server.QueueConsoleCommand("summon deer 22 0 20");

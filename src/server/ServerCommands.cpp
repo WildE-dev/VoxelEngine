@@ -124,7 +124,7 @@ constexpr HelpLine kHelp[] = {
 Level RequiredLevel(const std::string& command, size_t argumentCount) {
     if (command == "stop") return Level::Console;
     if (command == "tp" || command == "teleport" || command == "save" || command == "kick" || command == "op" || command == "deop" ||
-        command == "noclip" || command == "give" || command == "fill" || command == "pressurise" || command == "fluid" || command == "locate" || command == "form" || command == "summon" || command == "creatures")
+        command == "noclip" || command == "give" || command == "fill" || command == "pressurise" || command == "fluid" || command == "raid" || command == "locate" || command == "form" || command == "summon" || command == "creatures")
         return Level::Operator;
     if ((command == "time" || command == "weather" || command == "gamemode" || command == "pvp" || command == "food" || command == "horde") && argumentCount > 0)
         return Level::Operator;
@@ -421,6 +421,19 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         fluidHeld[at] = Fluids::CapacityOf(b.type);
         fluidKind[at] = kind;
         reply(Kind::Info, std::string("Filled it with ") + Fluids::Name(kind));
+    }
+    else if (command == "raid") {
+        // A raid on a player's home now (their bed): /raid [player].
+        ClientState* target = sender;
+        if (words.size() > 1) {
+            target = nullptr;
+            for (auto& [peer, c] : clients)
+                if (Lower(c.name) == Lower(words[1])) target = &c;
+        }
+        if (!target) return usage("/raid <player>");
+        if (!target->bed) return reply(Kind::Error, target->name + " has no bed");
+        if (!StartRaid(*target)) return reply(Kind::Error, "There's nowhere near their bed for raiders to come from");
+        reply(Kind::Info, "A raid is on its way to " + target->name + "'s bed");
     }
     else if (command == "horde") {
         if (words.size() == 1) return reply(Kind::Info, creatures.Horde() ? "Tonight is a horde night" : "No horde tonight");

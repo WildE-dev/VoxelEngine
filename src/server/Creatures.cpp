@@ -217,6 +217,33 @@ bool CreatureSystem::Damage(uint16_t id, int damage, const glm::vec3& from, doub
     return true;
 }
 
+int CreatureSystem::StartRaid(ServerWorld& world, const glm::vec3& bed) {
+    std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+    const CreatureType party[] = { CreatureType::DwarfWarrior, CreatureType::DwarfWarrior, CreatureType::DwarfWarrior, CreatureType::DwarfCrossbow };
+    int came = 0;
+    for (int attempt = 0; attempt < 40 && came < 4; attempt++) {
+        // Somewhere to stand 20 to 30 blocks off (all from one side, as a band).
+        const float a = (attempt < 20 ? 0.0f : unit(rng) * 6.2831853f) + static_cast<float>(nextId % 7) + unit(rng) * 0.6f;
+        const float d = 20.0f + 10.0f * unit(rng);
+        const int x = static_cast<int>(std::floor(bed.x + std::cos(a) * d)), z = static_cast<int>(std::floor(bed.z + std::sin(a) * d));
+        for (int y = static_cast<int>(bed.y) + 12; y > static_cast<int>(bed.y) - 16; y--) {
+            bool grass = false;
+            if (!CanStand(world, { x, y, z }, 2, grass)) continue;
+            const uint16_t id = Spawn(party[came], glm::vec3(x + 0.5f, static_cast<float>(y), z + 0.5f));
+            if (!id) return came;
+            for (auto& c : creatures)
+                if (c.id == id) c.raider = true, c.hasHome = true, c.home = bed, c.site = glm::ivec3(glm::floor(bed)) + glm::ivec3(0, -10000, 0);
+            came++;
+            break;
+        }
+    }
+    return came;
+}
+
+void CreatureSystem::EndRaids() {
+    creatures.erase(std::remove_if(creatures.begin(), creatures.end(), [](const Creature& c) { return c.raider; }), creatures.end());
+}
+
 void CreatureSystem::Fallen(const Creature& c) {
     if (c.type == CreatureType::DwarfKing && c.hasHome) fallenKings.insert(SiteKey(c.site));
 }
@@ -481,7 +508,7 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
         if (d < best) best = d, target = &p;
     }
     if (!target) {
-        keepHome(10.0f);
+        keepHome(c.raider ? 1.5f : 10.0f); // (raiders make right for the bed)
         return;
     }
     glm::vec2 to(target->feet.x - c.feet.x, target->feet.z - c.feet.z);
@@ -687,7 +714,29 @@ void CreatureSystem::Update(ServerWorld& world, const std::vector<Player>& playe
         glm::vec2 move(0.0f);
         float speed = 0.0f;
         Think(c, players, now, hurt, move, speed);
+        const glm::vec3 before = c.feet;
         Move(world, c, move, speed, dt);
+        if (c.raider) {
+            // Pushing against something: after a while it hacks through the soft stuff in
+            // front of it (at its feet and head).
+            const float moved = glm::length(glm::vec2(c.feet.x - before.x, c.feet.z - before.z));
+            c.stuck = speed > 0.1f && glm::length(move) > 0.1f && moved < speed * dt * 0.25f ? c.stuck + dt : 0.0f;
+            if (c.stuck > kRaidStuck) {
+                c.stuck = 0.0f;
+                const glm::vec2 d = glm::normalize(move);
+                for (int dy = 0; dy < 2; dy++) {
+                    const glm::ivec3 p(glm::floor(c.feet + glm::vec3(d.x * 0.7f, 0.3f + dy, d.y * 0.7f)));
+                    Block b;
+                    if (!world.GetBlock(p.x, p.y, p.z, b)) continue;
+                    const BlockType t = b.type;
+                    if (t == BlockType::PLANKS || t == BlockType::DOOR || t == BlockType::DOOR_OPEN || t == BlockType::GLASS || t == BlockType::LOG ||
+                        t == BlockType::LEAVES || t == BlockType::PINE_LEAVES || t == BlockType::LADDER) {
+                        world.SetBlock(p.x, p.y, p.z, Block());
+                        c.act = 1, c.actedAt = now;
+                    }
+                }
+            }
+        }
         if (c.health <= 0) {
             Fallen(c);
             it = creatures.erase(it);

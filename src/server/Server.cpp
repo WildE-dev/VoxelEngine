@@ -1898,8 +1898,26 @@ void Server::UpdateHorde() {
     if (night && creatures.NaturalSpawning()) {
         weatherSeed = weatherSeed * 1664525u + 1013904223u;
         if ((weatherSeed >> 8) % kHordeOdds == 0) SetHorde(true);
+        // Not a horde: now and then a raid on a survival player at home (by their bed).
+        else
+            for (auto& [peer, client] : clients) {
+                weatherSeed = weatherSeed * 1664525u + 1013904223u;
+                if (!client.welcomed || Creative(client) || !client.bed || (weatherSeed >> 8) % kRaidOdds != 0) continue;
+                if (glm::distance(glm::vec3(*client.bed), client.feet) > 48.0f) continue;
+                StartRaid(client);
+            }
     }
     else if (!night && creatures.Horde()) SetHorde(false);
+    if (!night) creatures.EndRaids();
+}
+
+bool Server::StartRaid(ClientState& client) {
+    if (!client.bed) return false;
+    const int came = creatures.StartRaid(*world, glm::vec3(*client.bed) + glm::vec3(0.5f, 0.0f, 0.5f));
+    if (came == 0) return false;
+    SendChat(client, net::ChatMessage::Kind::Info, "War drums in the dark... a dwarf raid is coming for your home!");
+    Log(client.name + " is raided (" + std::to_string(came) + " dwarves)");
+    return true;
 }
 
 void Server::SetHorde(bool on) {

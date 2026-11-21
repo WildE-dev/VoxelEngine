@@ -59,6 +59,8 @@ public:
         double hiredUntil = 0.0;
         uint16_t summoner = 0;   // a warrior a king called up: that king
         double nextCall = 0.0;   // a king: when he next calls up warriors
+        bool raider = false;     // come for a player's home (its home: their bed), gone at dawn
+        float stuck = 0.0f;      // how long it's been pushing against something (raiders hack through)
     };
     // How long a creature counts as attacking or working after it did, for the clients.
     static constexpr double kAttackShown = 0.6, kWorkShown = 0.9;
@@ -114,6 +116,13 @@ public:
     // A dwarf guard hired by a player, standing here (0: too many creatures).
     uint16_t Hire(const glm::vec3& feet, uint16_t player, double now, double seconds);
     int HiredBy(uint16_t player) const;
+    // A raid: a war band (three warriors and a crossbowman) on open ground some way from
+    // a player's bed, making for it. They break through planks, doors, glass, logs and
+    // leaves in their way. Returns how many came (0: nowhere to stand).
+    int StartRaid(ServerWorld& world, const glm::vec3& bed);
+    // Dawn: raiders go home.
+    void EndRaids();
+    static constexpr float kRaidStuck = 1.5f; // seconds against a wall before they hack at it
     // Strongholds whose king has fallen (by their site, for saving), and setting them.
     const std::unordered_set<int64_t>& FallenKings() const { return fallenKings; }
     void SetFallenKings(const std::unordered_set<int64_t>& fallen) { fallenKings = fallen; }

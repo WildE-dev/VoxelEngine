@@ -252,6 +252,10 @@ private:
     void HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool);
     void HandleInteract(ClientState& client, uint16_t creature);
     void HandleTrade(ClientState& client, uint16_t trader, uint8_t offer);
+    // A raid on a player's home (their bed): see CreatureSystem::StartRaid. One night in
+    // kRaidOdds that isn't a horde night, for each survival player near their bed.
+    bool StartRaid(ClientState& client);
+    static constexpr uint32_t kRaidOdds = 4;
     // Trade prices (world/Trades.h): how far each offer's price is pushed up, eased back
     // a step every Trades::kPriceRecovery; and telling a player them.
     std::vector<int> tradePressure;

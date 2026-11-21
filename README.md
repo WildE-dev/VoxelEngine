@@ -791,6 +791,18 @@ The layouts are in `src/world/Dwarves.cpp`; like dungeons, each chunk stamps jus
 part of a site inside it. `BiomeTest` checks camps have their fire, chest and
 palisade, and mines their open shaft, ladder, tunnels and chests.
 
+### Raids
+
+Dwarves don't only wait in their camps. On a night that isn't a horde night, now and
+then (one night in four, for each survival player within 48 blocks of their bed) a
+**raid** comes: "War drums in the dark... a dwarf raid is coming for your home!" Three
+warriors and a crossbowman come out of the dark 20 to 30 blocks off, all from one
+side, and make for your bed, fighting anyone they find. Walls slow them only so much:
+pushed up against planks, a door, glass, logs, leaves or a ladder for a second and a
+half, they hack through it (at their feet and head). Stone, bricks and the like hold.
+At dawn they go home. `/raid <player>` (operators) sends one now. `CreatureTest` raids
+a bed in a plank hut: the band comes, breaks in, reaches the bed, and leaves at dawn.
+
 ### Strongholds and the Dwarf King
 
 Rarely (about one region in 25), a dwarf **stronghold** lies 28 blocks under the
