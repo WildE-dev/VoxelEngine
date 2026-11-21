@@ -131,6 +131,9 @@ public:
     // broad oil fields covering a part of the world. A function of position alone.
     static bool OilAt(int x, int y, int z);
     static constexpr int kOilTop = -30, kOilBottom = -80;
+    // The Deep: a band of huge caverns far down, lit by glowing fungus, with magma
+    // and gold ore (and richer iron) in its rock.
+    static constexpr int kDeepTop = -100, kDeepBottom = -160;
     // Whether a column's top is a tar seep (one in 40 of those over oil, on dry land).
     bool TarSeepAt(int x, int z) const;
     // The nearest column within `range` with oil under it (sampled every 4 blocks).

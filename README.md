@@ -314,6 +314,16 @@ gives stone and stops it. For your own builds, a **drain** (an iron grate, craft
 half an iron ingot and a stone) takes water like a sinkhole, but sends it into fluid
 pipes instead of destroying it (see [Oil and fluids](#oil-and-fluids)). `/locate spring` and `/locate sinkhole` (operators) say where the nearest is.
 
+### The Deep
+
+Far down, from 100 to 160 blocks below sea level, lies **the Deep**: a band of huge
+caverns, dark but for **glow fungus** growing on their floors (it gives light 11, and
+can be picked and planted elsewhere) and pools of **magma** (light 12; standing on it
+burns, half a heart every 0.75 s). Its rock is richer in iron, and it's the only place
+with **gold ore**, which smelts to gold ingots: what dwarf traders deal in (see
+[Markets](#markets)). `BiomeTest` checks the Deep's caverns, fungus, magma and gold, and
+that there's no gold above it.
+
 ### Dungeons
 
 Deep underground (their floors 43 to 52 blocks down, well below any sea floor) lie

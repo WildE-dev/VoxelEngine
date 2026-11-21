@@ -301,6 +301,28 @@ int main() {
     Check(marketsRight == markets, "dwarf markets have their fire and lamps by the gate, and no loot (" + std::to_string(marketsRight) + " of " + std::to_string(markets) + ")");
     Check(mines > 0 && minesRight == mines, "dwarf mines have an open shaft with a ladder, tunnels and chests (" + std::to_string(minesRight) + " of " + std::to_string(mines) + ")");
 
+    // The Deep: open caverns with fungus, magma and gold ore far down, and no gold above.
+    {
+        TerrainGenerator deep(TerrainGenerator::Type::Normal);
+        long open = 0, fungus = 0, magma = 0, goldDeep = 0, goldHigh = 0, cells = 0;
+        for (int cx = -3; cx < 3; cx++)
+            for (int cz = -3; cz < 3; cz++) {
+                TerrainGenerator::ColumnHeights h;
+                deep.ComputeColumnHeights(cx, cz, h);
+                for (int cy = -10; cy <= -2; cy++) {
+                    TerrainGenerator::Blocks blocks;
+                    deep.GenerateChunk({ cx, cy, cz }, h, blocks);
+                    for (const Block& b : blocks) {
+                        const bool inDeep = cy <= -7;
+                        if (inDeep) cells++, open += b.IsAir(), fungus += b.type == BlockType::GLOW_FUNGUS, magma += b.type == BlockType::MAGMA;
+                        (inDeep ? goldDeep : goldHigh) += b.type == BlockType::GOLD_ORE;
+                    }
+                }
+            }
+        Check(open > cells / 10 && fungus > 50 && magma > 20 && goldDeep > 50 && goldHigh == 0,
+              "the Deep has caverns (" + std::to_string(100 * open / std::max(1L, cells)) + "% open), glow fungus, magma and gold ore, and no gold above it");
+    }
+
     std::cout << (failures ? "BIOME TEST FAILED (" : "ALL BIOME CHECKS PASSED (") << failures << " failures)" << std::endl;
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }

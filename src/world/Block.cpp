@@ -335,6 +335,10 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* CRUSHER     */ {{ "crusher_top", "machine_casing", "crusher_side", "crusher_side", "crusher_side", "crusher_side" }},
     /* CRUSHED_IRON */ {{ "crushed_iron", "crushed_iron", "crushed_iron", "crushed_iron", "crushed_iron", "crushed_iron" }},
     /* COKE        */ {{ "coke", "coke", "coke", "coke", "coke", "coke" }},
+    /* GLOW_FUNGUS */ {{ "glow_fungus", "glow_fungus", "glow_fungus", "glow_fungus", "glow_fungus", "glow_fungus" }},
+    /* MAGMA       */ {{ "magma", "magma", "magma", "magma", "magma", "magma" }},
+    /* GOLD_ORE    */ {{ "gold_ore", "gold_ore", "gold_ore", "gold_ore", "gold_ore", "gold_ore" }},
+    /* GOLD_INGOT  */ {{ "gold_ingot", "gold_ingot", "gold_ingot", "gold_ingot", "gold_ingot", "gold_ingot" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -378,7 +382,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "extractor", "filter_pipe", "crafter", "harvester", "drain", "sinkhole", "pressure_gauge",
     "oil_shale", "tar", "fluid_pipe", "fluid_tank", "oil_derrick", "refinery", "engine", "fluid_outlet", "mining_post",
     "steel_frame", "machine_casing", "fire_brick", "hammer", "multiblock", "multiblock_part",
-    "crusher", "crushed_iron", "coke",
+    "crusher", "crushed_iron", "coke", "glow_fungus", "magma", "gold_ore", "gold_ingot",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");

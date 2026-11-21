@@ -77,6 +77,8 @@ const char* DefaultMaterial(BlockType type) {
     case BlockType::MULTIBLOCK:
     case BlockType::MULTIBLOCK_PART:
     case BlockType::CRUSHER:
+    case BlockType::GOLD_ORE:
+    case BlockType::MAGMA:
     case BlockType::IRON_ORE: return "hard";
     case BlockType::SAND:
     case BlockType::SNOW: return "sand";

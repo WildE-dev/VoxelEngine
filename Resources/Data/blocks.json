@@ -114,5 +114,9 @@
   "multiblock_part": { "name": "Structure", "textures": { "all": "machine_casing" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
   "crusher": { "name": "Crusher", "textures": { "top": "crusher_top", "bottom": "machine_casing", "side": "crusher_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
   "crushed_iron": { "name": "Crushed iron", "textures": { "all": "crushed_iron" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" },
-  "coke": { "name": "Coke", "textures": { "all": "coke" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }
+  "coke": { "name": "Coke", "textures": { "all": "coke" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" },
+  "glow_fungus": { "name": "Glow fungus", "textures": { "all": "glow_fungus" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 11, "map": "#707070" },
+  "magma": { "name": "Magma", "textures": { "all": "magma" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 12, "map": "#707070" },
+  "gold_ore": { "name": "Gold ore", "textures": { "all": "gold_ore" }, "hardness": 7, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
+  "gold_ingot": { "name": "Gold ingot", "textures": { "all": "gold_ingot" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }
 }

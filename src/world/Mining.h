@@ -155,6 +155,8 @@ inline float DefaultHardness(BlockType type) {
     case BlockType::DRAIN: return 3.0f;
     case BlockType::COAL_ORE: return 4.5f;
     case BlockType::IRON_ORE: return 6.0f;
+    case BlockType::GOLD_ORE: return 7.0f;
+    case BlockType::MAGMA: return 3.0f;
     case BlockType::STONE_BRICK:
     case BlockType::MOSSY_BRICK: return 5.0f;
     default: return 1.0f;
@@ -182,6 +184,8 @@ inline Tool DefaultBestTool(BlockType type) {
     case BlockType::MULTIBLOCK_PART:
     case BlockType::COAL_ORE:
     case BlockType::IRON_ORE:
+    case BlockType::GOLD_ORE:
+    case BlockType::MAGMA:
     case BlockType::STONE_BRICK:
     case BlockType::MOSSY_BRICK:
     case BlockType::CRUMBLING_BRICK:

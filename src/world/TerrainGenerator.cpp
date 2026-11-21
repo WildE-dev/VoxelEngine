@@ -20,10 +20,24 @@ BlockType OreAt(int x, int y, int z, int depth) {
         if (coal > 0.48f) return BlockType::COAL_ORE;
     }
     if (depth >= 24) {
+        // (Richer in the Deep.)
         const float iron = Noise::Perlin3(x * 0.22f, y * 0.22f, z * 0.22f, 0x1205u);
-        if (iron > 0.56f) return BlockType::IRON_ORE;
+        if (iron > (y < TerrainGenerator::kDeepTop ? 0.48f : 0.56f)) return BlockType::IRON_ORE;
+    }
+    if (y < TerrainGenerator::kDeepTop) {
+        const float gold = Noise::Perlin3(x * 0.26f, y * 0.26f, z * 0.26f, 0x601Du);
+        if (gold > 0.6f) return BlockType::GOLD_ORE;
     }
     return BlockType::STONE;
+}
+
+// The Deep's caverns: huge open pockets of low-frequency noise within its band,
+// fading out towards its top and bottom.
+bool DeepCavern(int x, int y, int z) {
+    if (y >= TerrainGenerator::kDeepTop || y <= TerrainGenerator::kDeepBottom) return false;
+    const float edge = std::min(TerrainGenerator::kDeepTop - y, y - TerrainGenerator::kDeepBottom) / 10.0f;
+    const float n = Noise::Perlin3(x * 0.022f, y * 0.05f, z * 0.022f, 0xDEE9u) + 0.5f * Noise::Perlin3(x * 0.07f, y * 0.09f, z * 0.07f, 0xDEEAu);
+    return n > 0.18f + std::max(0.0f, 1.0f - edge) * 0.6f;
 }
 
 constexpr int S = TerrainGenerator::S;
@@ -512,6 +526,25 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
     if (type == Type::Empty) return; // just the ground
 
     Caves::Carve(coords, rows, out);
+
+    // The Deep: its caverns, glowing fungus on their floors and magma here and there.
+    if (coords.y * S <= kDeepTop && (coords.y + 1) * S > kDeepBottom)
+        for (int x = 0; x < S; x++)
+            for (int z = 0; z < S; z++) {
+                const int wx = coords.x * S + x, wz = coords.z * S + z;
+                for (int y = 0; y < S; y++) {
+                    const int wy = coords.y * S + y;
+                    Block& cell = out[Index(x, y, z)];
+                    const bool open = DeepCavern(wx, wy, wz);
+                    const bool openAbove = DeepCavern(wx, wy + 1, wz);
+                    if (open) {
+                        // The floor: fungus on some of it.
+                        const bool floor = !DeepCavern(wx, wy - 1, wz);
+                        cell = floor && Noise::Random01(wx, wy, wz, 0xF0F0u) < 0.07f ? Block::Plant(BlockType::GLOW_FUNGUS, 0) : Block();
+                    }
+                    else if (openAbove && Noise::Random01(wx, wy + 1, wz, 0xF0F0u) > 0.965f) cell = Block(BlockType::MAGMA);
+                }
+            }
 
     // Lakes and rivers: their water level per column, and their beds kept whole (a
     // cave opening under one would drain it) and sandy. (Rivers' water comes after.)

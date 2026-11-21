@@ -1867,6 +1867,83 @@ COKE = """
 """
 COKE_COLOURS = {"o": (20, 20, 22), "k": (52, 52, 56), "K": (84, 84, 90), "g": (130, 126, 112)}
 
+GLOW_FUNGUS = """
+................
+................
+.....cccc.......
+....cCCCCc......
+...cCCwCCCc.....
+...cccccccc..cc.
+......ss....cCCc
+......ss...cCwCc
+......ss...cccc.
+..cc..ss.....s..
+.cCCc.ss.....s..
+cCwCCcss.....s..
+.cccc.ss.....s..
+...s..ss.....s..
+...s..ss.....s..
+..gggggggggggg..
+"""
+GLOW_FUNGUS_COLOURS = {"c": (40, 150, 170), "C": (90, 230, 230), "w": (220, 255, 250), "s": (160, 200, 190), "g": (40, 70, 60)}
+MAGMA = """
+kkrkkkkkrrkkkkkk
+krRrkkkrRYRrkkkr
+kkrkkkkkrRrkkkrR
+kkkkkrrkkrkkkkkr
+kkkkrRYRrkkkkkkk
+rkkkkrRrkkkkrrkk
+Rrkkkkrkkkkrryrk
+rkkkkkkkkkkkrRrk
+kkkrrkkkkkkkkrkk
+kkrRYrkkkrkkkkkk
+kkkrRrkkrRrkkkkk
+kkkkrkkkkrkkkrrk
+kkkkkkkkkkkkrRYr
+krrkkkkrrkkkkrrk
+rRYrkkrRYRrkkkkk
+krrkkkkrrrkkkkkk
+"""
+MAGMA_COLOURS = {"k": (52, 30, 26), "r": (190, 60, 20), "R": (240, 120, 30), "Y": (255, 220, 80), "y": (250, 180, 60)}
+GOLD_ORE = """
+sssssssssSssssss
+ssSsssssssssssss
+sssssyyssssssSss
+ssssyYYyssssssss
+ssssyyysssssssss
+sSssssssssyysss.
+ssssssssssyYysss
+sssssssssssyysss
+ssyyssssssssssss
+syYYysssSsssssss
+ssyysssssssssyss
+ssssssssssssyYys
+ssssssSssssssyys
+sssssyysssssssss
+ssssyYyssssssSss
+sssssssssssssss.
+"""
+GOLD_ORE_COLOURS = {"s": (112, 112, 116), "S": (90, 90, 94), "y": (200, 160, 40), "Y": (250, 220, 90), ".": (100, 100, 104)}
+GOLD_INGOT = """
+................
+................
+................
+................
+................
+.......oooooo...
+.....ooYYYYYyo..
+...ooYYYYYYyyo..
+..oYYYYYYYYyyo..
+..oyyYYYYYyyo...
+..oyyyyyyyyyo...
+..ooyyyyyyyo....
+....oooooooo....
+................
+................
+................
+"""
+GOLD_INGOT_COLOURS = {"o": (110, 70, 10), "y": (210, 160, 40), "Y": (250, 220, 100)}
+
 MINING_POST_SIDE = """
 wwwwwwwwwwwwwwww
 wWWWWWWWWWWWWWWw
@@ -2101,6 +2178,10 @@ def main():
     draw("crusher_top", CRUSHER_TOP, CRUSHER_COLOURS, jitter=4, seed=132)
     draw("crushed_iron", CRUSHED_IRON, CRUSHED_IRON_COLOURS, jitter=6, seed=135)
     draw("coke", COKE, COKE_COLOURS, jitter=5, seed=136)
+    draw("glow_fungus", GLOW_FUNGUS, GLOW_FUNGUS_COLOURS, jitter=6, seed=137)
+    draw("magma", MAGMA, MAGMA_COLOURS, jitter=8, seed=138)
+    draw("gold_ore", GOLD_ORE, GOLD_ORE_COLOURS, jitter=6, seed=139)
+    draw("gold_ingot", GOLD_INGOT, GOLD_INGOT_COLOURS, jitter=4, seed=140)
     draw("fire_brick", FIRE_BRICK, FIRE_BRICK_COLOURS, jitter=6, seed=123)
     draw("hammer", HAMMER, HAMMER_COLOURS, jitter=3, seed=124)
 

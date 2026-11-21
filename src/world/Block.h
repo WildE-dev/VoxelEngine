@@ -267,6 +267,13 @@ enum class BlockType : uint8_t {
     CRUSHER,
     CRUSHED_IRON,
     COKE,
+    // The Deep (world/TerrainGenerator.h): glowing fungus on the floors of its caverns,
+    // magma (glowing, and it burns whoever stands on it), and gold ore in its rock,
+    // which smelts to gold ingots (an item: what dwarf traders pay and take).
+    GLOW_FUNGUS,
+    MAGMA,
+    GOLD_ORE,
+    GOLD_INGOT,
     COUNT
 };
 // Blocks that hold things like a chest (opened, filled, emptied, broken open).
@@ -295,7 +302,8 @@ inline bool IsItemType(BlockType type) {
     return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE || type == BlockType::COAL ||
            type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD ||
            type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH || type == BlockType::BOAT ||
-           type == BlockType::STEEL_INGOT || type == BlockType::HAMMER || type == BlockType::CRUSHED_IRON || type == BlockType::COKE;
+           type == BlockType::STEEL_INGOT || type == BlockType::HAMMER || type == BlockType::CRUSHED_IRON || type == BlockType::COKE ||
+           type == BlockType::GOLD_INGOT;
 }
 
 inline bool IsPlantType(BlockType type) {
@@ -303,7 +311,7 @@ inline bool IsPlantType(BlockType type) {
            type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES || type == BlockType::CROP || type == BlockType::RIPE_WHEAT ||
            type == BlockType::LADDER || type == BlockType::DOOR_OPEN || type == BlockType::CAMPFIRE ||
            type == BlockType::SIGN || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING || type == BlockType::LEVER ||
-           type == BlockType::LEVER_ON;
+           type == BlockType::LEVER_ON || type == BlockType::GLOW_FUNGUS;
 }
 
 // The resource a block counts as in survival (see Block::ResourceUnits): its own type,
@@ -366,7 +374,8 @@ inline ShapeStyle StyleOf(BlockType type) {
 // Block light emitted by a block type, 0..kMaxLight.
 // (The game's own; Resources/Data/blocks.json may change it: see world/BlockData.h.)
 inline uint8_t DefaultLightEmission(BlockType type) {
-    return type == BlockType::LAMP || type == BlockType::SIGNAL_LAMP_ON ? kMaxLight : type == BlockType::CAMPFIRE ? kMaxLight - 1 : type == BlockType::SMELTER_LIT ? 12 : 0;
+    return type == BlockType::LAMP || type == BlockType::SIGNAL_LAMP_ON ? kMaxLight : type == BlockType::CAMPFIRE ? kMaxLight - 1 : type == BlockType::SMELTER_LIT ? 12
+         : type == BlockType::GLOW_FUNGUS ? 11 : type == BlockType::MAGMA ? 12 : 0;
 }
 namespace BlockData { extern int8_t gLight[]; }
 inline uint8_t GetLightEmission(BlockType type) {

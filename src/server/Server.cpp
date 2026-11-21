@@ -1787,7 +1787,7 @@ void Server::UpdateTraps() {
                 underCells[n] = glm::ivec3(glm::floor(client.feet + glm::vec3(dx, -0.05f, dz)));
                 n++;
             }
-        bool spiked = false, burning = false;
+        bool spiked = false, burning = false, scorched = false;
         for (int i = 0; i < 4; i++) {
             Block b;
             const glm::ivec3& f = feetCells[i];
@@ -1802,6 +1802,11 @@ void Server::UpdateTraps() {
             }
             const glm::ivec3& u = underCells[i];
             if (world->GetBlock(u.x, u.y, u.z, b) && b.type == BlockType::CRUMBLING_BRICK && !crumbling.count(u)) crumbling[u] = now + kCrumbleDelay;
+            if (world->GetBlock(u.x, u.y, u.z, b) && b.type == BlockType::MAGMA) scorched = true;
+        }
+        if (scorched && now >= client.nextSpikeHit) {
+            client.nextSpikeHit = now + 0.75;
+            Hurt(client, 1, "was scorched by magma");
         }
         if (spiked && now >= client.nextSpikeHit) {
             client.nextSpikeHit = now + kSpikeInterval;
