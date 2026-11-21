@@ -159,6 +159,7 @@ enum class BlockType : uint8_t {
     // TNT: right-click to light it; three seconds later it explodes (the server runs it).
     TNT,
     TNT_LIT, // (flashing, about to go)
+    BOAT,    // item: right-click water to get in
     COUNT
 };
 
@@ -166,7 +167,7 @@ enum class BlockType : uint8_t {
 inline bool IsItemType(BlockType type) {
     return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE || type == BlockType::COAL ||
            type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD ||
-           type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH;
+           type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH || type == BlockType::BOAT;
 }
 
 inline bool IsPlantType(BlockType type) {

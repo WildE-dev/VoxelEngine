@@ -21,6 +21,7 @@ struct PlayerModel {
     glm::vec4 heldUV{ 0.0f };
     uint8_t armour = 0; // armour worn (Armour::Bit each): drawn over them
     bool crouching = false; // ducked: lower, leaning forward
+    bool boat = false;      // sitting in a boat
 };
 
 // A creature as drawn (world/Creatures.h): what it is, where, which way it faces,

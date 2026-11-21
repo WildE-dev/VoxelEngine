@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 32;
+constexpr uint32_t kProtocolVersion = 33;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -201,6 +201,7 @@ enum PlayerFlags : uint8_t {
     kFlagSwimming = 1 << 2,
     kFlagHurt = 1 << 3, // (from the server, in snapshots) just took damage: flashes red
     kFlagCrouching = 1 << 4, // crouching: a shorter body (Player::kCrouchHeight), drawn ducked
+    kFlagBoat = 1 << 5,      // sitting in a boat (drawn in one; no fall damage)
 };
 
 struct PlayerState {

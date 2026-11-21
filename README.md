@@ -724,6 +724,16 @@ crop just gives its seed back, and water washes crops away. Three wheat bake int
 (format 9). `FoodTest` checks planting (not in mid air), ripening, harvesting, bread
 and eating it.
 
+## Boats
+
+A **boat** (3 planks) takes you across water fast. With it in hand, right-click
+water within 4 blocks to sit in it on the surface: steer as you'd walk (6.5 blocks a
+second, 9 sprinting), gliding rather than stopping dead; the bow stops at the shore,
+since a boat stays on water. Ctrl gets you out (into the water). The boat isn't used
+up: you carry it. Others see you sitting in a little wooden boat, and nothing you do
+in one counts as a fall. `ShapeTest` checks gliding over water and stopping at the
+shore.
+
 ## Fishing
 
 A **fishing rod** (a plank and a quarter of a hide) is a tool. With it in hand,
@@ -899,6 +909,7 @@ makes four.
 | Campfire | 1 log + 0.25 stone |
 | 2 signs | 1 planks |
 | TNT | 1 sand + 0.5 coal |
+| Boat | 3 planks |
 | Bed | 3 planks + 1 hide |
 | Iron ingot | 1 iron ore + 0.25 coal |
 | Lamp (with coal) | 0.5 glass + 0.25 coal |

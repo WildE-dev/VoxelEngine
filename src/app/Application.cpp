@@ -54,7 +54,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -157,6 +157,7 @@ const char* BlockName(BlockType type) {
     case BlockType::SIGN: return "Sign";
     case BlockType::TNT: return "TNT";
     case BlockType::TNT_LIT: return "Lit TNT";
+    case BlockType::BOAT: return "Boat";
     case BlockType::RAW_FISH: return "Raw fish";
     case BlockType::COOKED_FISH: return "Cooked fish";
     default:               return "Air";
@@ -574,6 +575,7 @@ void Application::Run() {
         for (const auto& other : client->GetRemotePlayers()) {
             PlayerModel model{ other.feet, other.yaw, other.pitch, PlayerModels::ColorFor(other.id), (other.flags & net::kFlagHurt) != 0, lightAt(other.feet) };
             model.crouching = (other.flags & net::kFlagCrouching) != 0;
+            model.boat = (other.flags & net::kFlagBoat) != 0;
             // What's in their hand: a tool's or an item's icon as a card, a block as a
             // little cube.
             int tile = -1;
@@ -1226,6 +1228,11 @@ void Application::HandleContinuousInput(float deltaTime) {
     input.jump = down(GLFW_KEY_SPACE) || (player.IsFlying() && down(GLFW_KEY_E));
     input.descend = down(GLFW_KEY_Q) || down(GLFW_KEY_LEFT_CONTROL);
     input.crouch = down(GLFW_KEY_LEFT_CONTROL) && !player.IsFlying(); // (flying, Ctrl goes down)
+    // In a boat, Ctrl gets out (and doesn't crouch).
+    if (player.IsBoating() && input.crouch) {
+        player.SetBoating(false);
+        input.crouch = false;
+    }
     // Short of breath (thin or stale air, half the air gone): too winded to sprint.
     const Breathing::Cause cause = client->GetAirCause();
     const bool winded = (cause == Breathing::Cause::ThinAir || cause == Breathing::Cause::StaleAir) && client->GetAir() < Breathing::kShortOfBreath;
@@ -1243,6 +1250,7 @@ void Application::HandleContinuousInput(float deltaTime) {
         if (player.IsOnGround()) flags |= net::kFlagOnGround;
         if (player.IsSwimming()) flags |= net::kFlagSwimming;
         if (player.IsCrouching()) flags |= net::kFlagCrouching;
+        if (player.IsBoating()) flags |= net::kFlagBoat;
         // What's in hand, for others to see (a survival player's empty slot holds nothing).
         const Tool heldTool = client->HasTool(SelectedTool()) ? SelectedTool() : Tool::None;
         BlockType heldBlock = SelectedTool() == Tool::None ? SelectedBlock() : BlockType::AIR;
@@ -1890,6 +1898,25 @@ void Application::OnMouseButton(int button, int action) {
     // items are never placed.
     if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::None && IsItemType(SelectedBlock())) {
         const BlockType item = SelectedBlock();
+        // A boat: into it, on the water looked at (within 4 blocks).
+        if (item == BlockType::BOAT) {
+            const glm::vec3 eye = camera.GetPosition(), dir = camera.GetDirection();
+            for (float t = 0.5f; t < 4.0f && !player.IsBoating(); t += 0.1f) {
+                const glm::ivec3 cell(glm::floor(eye + dir * t));
+                Block b, above;
+                if (!world->GetBlock(cell.x, cell.y, cell.z, b)) break;
+                if (b.HasWater() && !(world->GetBlock(cell.x, cell.y + 1, cell.z, above) && above.HasWater())) {
+                    if (client->IsCreative() || client->GetResources(BlockType::BOAT) >= Block::kUnitsPerBlock) {
+                        player.Teleport(glm::vec3(cell) + glm::vec3(0.5f, b.WaterShownLevel() / static_cast<float>(Block::kMaxWaterVolume) - 0.15f, 0.5f));
+                        player.SetBoating(true);
+                        audio->Play("splash", glm::vec3(cell) + glm::vec3(0.5f), 0.4f, 0.2f);
+                    }
+                    break;
+                }
+                if (!b.IsPassable()) break;
+            }
+            return;
+        }
         // Seeds are planted on the dirt or grass you're looking at.
         if (item == BlockType::SEEDS) {
             Block soil;

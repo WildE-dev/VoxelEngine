@@ -148,6 +148,10 @@ void Player::Step(const BlockAccess& world, const PlayerInput& input, float dt) 
         return;
     }
     if (!spawned) return;
+    if (boating) {
+        StepBoat(world, input, dt);
+        return;
+    }
 
     // Horizontal velocity eases toward the wanted direction (relative to where the
     // camera faces, ignoring pitch).
@@ -209,6 +213,49 @@ void Player::Step(const BlockAccess& world, const PlayerInput& input, float dt) 
     // Swimming into a ledge with jump held: push up so we can climb out.
     if (inWater && input.jump && blockedHorizontally) velocity.y = std::max(velocity.y, kClimbOutSpeed);
     MoveVertical(world, velocity.y * dt, wasOnGround);
+}
+
+void Player::StepBoat(const BlockAccess& world, const PlayerInput& input, float dt) {
+    // The water surface in a column near the feet (-1000: none).
+    auto surfaceAt = [&](float x, float z) {
+        const int cx = static_cast<int>(std::floor(x)), cz = static_cast<int>(std::floor(z));
+        for (int y = static_cast<int>(std::floor(feet.y)) + 1; y >= static_cast<int>(std::floor(feet.y)) - 2; y--) {
+            Block b, above;
+            if (!world.GetBlock(cx, y, cz, b) || !b.HasWater()) continue;
+            if (world.GetBlock(cx, y + 1, cz, above) && above.HasWater()) continue;
+            return y + b.WaterShownLevel() / static_cast<float>(Block::kMaxWaterVolume);
+        }
+        return -1000.0f;
+    };
+    if (surfaceAt(feet.x, feet.z) < -999.0f) { // (beached or drained: out)
+        boating = false;
+        return;
+    }
+    const float yaw = glm::radians(input.yaw);
+    const glm::vec2 forward(std::cos(yaw), std::sin(yaw)), right(-forward.y, forward.x);
+    glm::vec2 move = input.move;
+    if (glm::length(move) > 1.0f) move = glm::normalize(move);
+    const glm::vec2 wish = (forward * move.y + right * move.x) * (input.sprint ? 9.0f : 6.5f);
+    glm::vec2 h(velocity.x, velocity.z);
+    h += (wish - h) * std::min(1.0f, dt * 2.0f); // (a boat glides)
+    velocity.x = h.x;
+    velocity.z = h.y;
+    // Only over water: the bow stops at the shore.
+    for (int axis : { 0, 2 }) {
+        glm::vec3 next = feet;
+        next[axis] += velocity[axis] * dt + (velocity[axis] > 0 ? 0.4f : velocity[axis] < 0 ? -0.4f : 0.0f);
+        if (surfaceAt(next.x, next.z) < -999.0f || Collision::BoxBlocked(world, BoundsAt(glm::vec3(next.x, feet.y + 0.1f, next.z), height))) {
+            velocity[axis] = 0.0f;
+            continue;
+        }
+        feet[axis] += velocity[axis] * dt;
+    }
+    // Riding on the surface, bobbing a little.
+    const float surface = surfaceAt(feet.x, feet.z);
+    if (surface > -999.0f) feet.y += (surface - 0.15f - feet.y) * std::min(1.0f, dt * 6.0f);
+    velocity.y = 0.0f;
+    onGround = true;
+    inWater = false;
 }
 
 void Player::StepFlying(const PlayerInput& input, float dt) {

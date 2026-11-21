@@ -47,6 +47,7 @@ inline const std::vector<Recipe>& Recipes() {
         { "pump", "Pump", { { BlockType::STONE, 2 * kBlock }, { BlockType::GLASS, kBlock } }, BlockType::PUMP, kBlock },
         { "sluice", "Sluice gate", { { BlockType::STONE_BRICK, kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::SLUICE, kBlock },
         { "pressure_plate", "Pressure plate", { { BlockType::STONE, kBlock / 4 } }, BlockType::PRESSURE_PLATE, kBlock },
+        { "boat", "Boat", { { BlockType::PLANKS, 3 * kBlock } }, BlockType::BOAT, kBlock },
         { "tnt", "TNT", { { BlockType::SAND, kBlock }, { BlockType::COAL, kBlock / 2 } }, BlockType::TNT, kBlock },
         { "sign", "2 signs", { { BlockType::PLANKS, kBlock } }, BlockType::SIGN, 2 * kBlock },
         { "campfire", "Campfire", { { BlockType::LOG, kBlock }, { BlockType::STONE, kBlock / 4 } }, BlockType::CAMPFIRE, kBlock },

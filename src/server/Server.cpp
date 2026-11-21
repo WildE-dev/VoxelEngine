@@ -543,7 +543,7 @@ void Server::UpdateFall(ClientState& client, const net::PlayerState& state, bool
     Block at;
     const glm::ivec3 cell(glm::floor(state.feet + glm::vec3(0.0f, 0.1f, 0.0f)));
     Block above;
-    const bool swimming = (state.flags & net::kFlagSwimming) != 0 || (world->GetBlock(cell.x, cell.y, cell.z, at) && (at.HasWater() || at.type == BlockType::LADDER)) ||
+    const bool swimming = (state.flags & (net::kFlagSwimming | net::kFlagBoat)) != 0 || (world->GetBlock(cell.x, cell.y, cell.z, at) && (at.HasWater() || at.type == BlockType::LADDER)) ||
                           (world->GetBlock(cell.x, cell.y + 1, cell.z, above) && above.type == BlockType::LADDER); // (a ladder ends a fall too)
     if (reset || swimming || Creative(client)) {
         client.fallPeak = state.feet.y;

@@ -94,6 +94,15 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
         // Visor on the front (+x in the head's frame).
         box(glm::scale(glm::translate(head, glm::vec3(kHead * 0.5f, 0.03f, 0)), glm::vec3(0.04f, kHead * 0.3f, kHead * 0.8f)), glm::vec3(0.1f));
 
+        // In a boat: a wooden hull round their legs.
+        if (p.boat) {
+            const glm::vec3 wood(0.55f, 0.38f, 0.2f), dark(0.4f, 0.27f, 0.14f);
+            box(glm::scale(glm::translate(base, glm::vec3(0.0f, 0.12f, 0.0f)), glm::vec3(1.6f, 0.12f, 0.9f)), wood); // bottom
+            for (float z : { -0.42f, 0.42f })
+                box(glm::scale(glm::translate(base, glm::vec3(0.0f, 0.32f, z)), glm::vec3(1.6f, 0.3f, 0.08f)), dark); // sides
+            for (float x : { -0.78f, 0.78f })
+                box(glm::scale(glm::translate(base, glm::vec3(x, 0.32f, 0.0f)), glm::vec3(0.08f, 0.3f, 0.9f)), dark); // ends
+        }
         // Armour, a little bigger than what it covers: a cap over the top of the head, a
         // tunic over the upper body, boots at the feet.
         if (p.armour & Armour::Bit(ArmourPiece::Cap)) {

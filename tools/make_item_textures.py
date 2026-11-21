@@ -656,6 +656,26 @@ rrrrrrrrrrrrrrrr
 TNT_COLOURS = {"r": (196, 48, 40), "R": (220, 70, 60), "w": (236, 232, 220), "k": (40, 36, 34), "g": (120, 120, 120)}
 TNT_LIT_COLOURS = {"r": (255, 210, 200), "R": (255, 236, 230), "w": (255, 255, 255), "k": (120, 110, 100), "g": (255, 220, 120)}
 
+BOAT_ICON = """
+................
+................
+................
+................
+................
+................
+d..............d
+dd............dd
+dwwwwwwwwwwwwwwd
+dwWwwwwWwwwwWwwd
+.dwwwwwwwwwwwwd.
+..dwwwWwwwwwwd..
+...dddddddddd...
+................
+................
+................
+"""
+BOAT_COLOURS = {"d": (90, 58, 28), "w": (160, 114, 64), "W": (184, 136, 82)}
+
 
 def main():
     draw("raw_venison", VENISON, MEAT, seed=11)
@@ -693,6 +713,7 @@ def main():
     draw("tnt_side", TNT_SIDE, TNT_COLOURS, jitter=5, seed=43)
     draw("tnt_top", TNT_TOP, TNT_COLOURS, jitter=5, seed=44)
     draw("tnt_lit", TNT_SIDE, TNT_LIT_COLOURS, jitter=5, seed=45)
+    draw("boat", BOAT_ICON, BOAT_COLOURS, jitter=5, seed=46)
 
 
 if __name__ == "__main__":
