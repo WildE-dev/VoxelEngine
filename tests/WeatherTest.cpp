@@ -23,6 +23,10 @@
 #include "server/ServerWorld.h"
 #include "server/WorldStorage.h"
 
+// Test clients ask for a short view (chunks): plenty for the checks, and light enough
+// to run every suite at once.
+constexpr int kTestViewDistance = 4;
+
 namespace {
 
 int failures = 0;
@@ -172,6 +176,7 @@ int main() {
             Server::Options options;
             options.bindHost = "127.0.0.1";
             options.port = 0;
+            options.viewDistance = kTestViewDistance;
             options.log = false;
             options.worldDirectory = dir.string();
             options.worldType = TerrainGenerator::Type::Empty;
@@ -192,7 +197,7 @@ int main() {
         ClientWorld world;
         Client client(world);
         std::string error;
-        Check(client.Connect("127.0.0.1", server->GetPort(), "Tester", error), "a client connects");
+        Check(client.Connect("127.0.0.1", server->GetPort(), "Tester", error, kTestViewDistance), "a client connects");
         auto pump = [&](double seconds, const std::function<bool()>& done) {
             return WaitFor(seconds, [&] {
                 client.Poll();

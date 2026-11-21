@@ -20,6 +20,7 @@
 #include "net/Transport.h"
 #include "server/Creatures.h"
 #include "world/Breathing.h"
+#include "world/Crafting.h"
 #include "world/Coords.h"
 #include "world/TerrainGenerator.h"
 
@@ -58,6 +59,9 @@ class WorldStorage;
 // survival, every block costs resources (units of its type, see Block::ResourceUnits)
 // that players collect by breaking blocks, and traps hurt. The server keeps everyone's
 // mode and resources (saved with the player) and refuses what they can't afford.
+//
+// Crafting (world/Crafting.h): survival players turn resources into other blocks and
+// make tools, which they need to have to use.
 //
 // Creatures (server/Creatures.h): deer and ghouls, run here and sent to the players
 // near them every tick; players hit them with Attack.
@@ -118,6 +122,9 @@ public:
         // Creatures spawn by themselves around players (normal worlds only; /summon
         // works anywhere).
         bool creatures = true;
+        // Chunks loaded and sent around each player (2..12): less is lighter on the
+        // machine. Players who ask for less get less.
+        int viewDistance = 12;
     };
 
     Server();
@@ -166,6 +173,7 @@ private:
 
         net::GameMode mode = net::GameMode::Survival;
         std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{}; // units held (survival)
+        uint8_t tools = 0; // tools made (Crafting::ToolBit each; creative has them all)
 
         int health = kMaxHealth;
         int sentHealth = -1;          // last health the client was told
@@ -202,6 +210,9 @@ private:
     void HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool);
     void HandleMineStart(ClientState& client, const glm::ivec3& pos, Tool tool);
     void HandleAttack(ClientState& client, uint16_t creature, Tool tool);
+    void HandleCraft(ClientState& client, int recipe, int count);
+    // The tool a player really works with: theirs if they have it, a bare hand if not.
+    static Tool Usable(const ClientState& client, Tool tool);
     // A tick of the creatures, and telling each player about the ones near them.
     void UpdateCreatures();
     void SendCreatures();

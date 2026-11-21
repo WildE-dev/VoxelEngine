@@ -35,8 +35,9 @@ class WorldStorage
 {
 public:
     static constexpr int kRegionSize = 8;      // chunks per region along each axis
-    // 2: world type; 3: time of day; 4: game modes and resources; 5: block axes (logs)
-    static constexpr uint32_t kFormatVersion = 5;
+    // 2: world type; 3: time of day; 4: game modes and resources; 5: block axes (logs);
+    // 6: tools players have made
+    static constexpr uint32_t kFormatVersion = 6;
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
@@ -44,6 +45,7 @@ public:
         uint8_t flags = 0; // net::kFlagFlying etc.
         uint8_t mode = 0;  // net::GameMode
         std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{}; // units held (survival)
+        uint8_t tools = 0; // tools made (Crafting::ToolBit each)
     };
 
     // One bit per block column of a chunk (index x * CHUNK_SIZE + z).

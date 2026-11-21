@@ -28,6 +28,10 @@
 
 namespace fs = std::filesystem;
 
+// Test clients ask for a short view (chunks): plenty for the checks, and light enough
+// to run every suite at once.
+constexpr int kTestViewDistance = 4;
+
 namespace {
 
 int failures = 0;
@@ -93,6 +97,7 @@ Server::Options ServerOptions(const fs::path& dir, net::GameMode mode) {
     Server::Options options;
     options.bindHost = "127.0.0.1";
     options.port = 0;
+    options.viewDistance = kTestViewDistance;
     options.log = false;
     options.worldDirectory = dir.string();
     options.worldType = TerrainGenerator::Type::Empty; // flat ground: the top of row -1 is at 0
@@ -138,8 +143,8 @@ int main() {
     server->RunInBackground();
     auto a = std::make_unique<TestClient>(), b = std::make_unique<TestClient>();
     std::string error;
-    a->client.Connect("127.0.0.1", server->GetPort(), "Alice", error);
-    b->client.Connect("127.0.0.1", server->GetPort(), "Bob", error);
+    a->client.Connect("127.0.0.1", server->GetPort(), "Alice", error, kTestViewDistance);
+    b->client.Connect("127.0.0.1", server->GetPort(), "Bob", error, kTestViewDistance);
     auto both = [&](double s, const std::function<bool()>& done) { return Pump({ a.get(), b.get() }, s, done); };
     Check(both(30.0, [&] { return a->player.IsSpawned() && b->player.IsSpawned(); }), "two players join a new world");
     // Survival breaking takes time (world/Mining.h): mine, then break.
@@ -243,8 +248,8 @@ int main() {
     server->RunInBackground();
     a = std::make_unique<TestClient>();
     auto c = std::make_unique<TestClient>();
-    a->client.Connect("127.0.0.1", server->GetPort(), "Alice", error);
-    c->client.Connect("127.0.0.1", server->GetPort(), "Carol", error);
+    a->client.Connect("127.0.0.1", server->GetPort(), "Alice", error, kTestViewDistance);
+    c->client.Connect("127.0.0.1", server->GetPort(), "Carol", error, kTestViewDistance);
     Check(Pump({ a.get(), c.get() }, 30.0, [&] { return a->player.IsSpawned() && c->player.IsSpawned() && a->client.GetResources(BlockType::STONE_BRICK) > 0; }),
           "Alice comes back after a restart");
     Check(!a->client.IsCreative() && a->client.GetResources(BlockType::STONE_BRICK) == 32 && a->client.GetResources(BlockType::SPIKES) == 64 &&

@@ -109,6 +109,14 @@ public:
     bool IsCreative() const { return mode == net::GameMode::Creative; }
     // (By what the type counts as: pebbles show the stone held.)
     uint32_t GetResources(BlockType type) const { return resources[static_cast<size_t>(ResourceTypeOf(type))]; }
+    // Tools: whether we have one (creative: all of them; survival: those we've made).
+    bool HasTool(Tool tool) const { return tool == Tool::None || IsCreative() || (tools & (1u << static_cast<unsigned>(tool))); }
+    // The tool we really work with: that one if we have it, a hand if not.
+    Tool Usable(Tool tool) const { return HasTool(tool) ? tool : Tool::None; }
+    // Survival: make `count` of recipe `index` (Crafting::Recipes()); the server checks.
+    void Craft(int index, int count);
+    // Whether this player could craft `count` of recipe `index` now (and hasn't the tool yet).
+    bool CanCraft(int index, int count = 1) const;
     // Whether we may place this (creative, or we hold enough of it).
     bool CanAfford(BlockType type, int heightEighths) const;
 
@@ -178,6 +186,7 @@ private:
     Breathing::Cause airCause = Breathing::Cause::None;
     net::GameMode mode = net::GameMode::Creative;
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{};
+    uint8_t tools = 0;
     double lastHurt = -1000.0;
     std::deque<ChatLine> chat; // the last kMaxChatLines
     static constexpr size_t kMaxChatLines = 100;

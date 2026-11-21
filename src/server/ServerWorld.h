@@ -55,7 +55,11 @@ public:
     static constexpr int DEFAULT_WATER_SIMULATION_DISTANCE = 6;
 
     // `storage` may be null (nothing is saved); otherwise it must outlive the world.
-    explicit ServerWorld(const TerrainGenerator& terrain, WorldStorage* storage = nullptr);
+    // renderDistance: chunks loaded around each player (horizontally; up to
+    // RENDER_DISTANCE). Vertically the same, but at least 4 and at most the vertical limit.
+    explicit ServerWorld(const TerrainGenerator& terrain, WorldStorage* storage = nullptr, int renderDistance = RENDER_DISTANCE);
+    int GetRenderDistance() const { return renderDistance; }
+    int GetVerticalRenderDistance() const { return verticalRenderDistance; }
     ~ServerWorld() override;
 
     ServerWorld(const ServerWorld&) = delete;
@@ -81,7 +85,7 @@ public:
     // Starts simulating flowing water on its own thread. Without it, water only moves
     // when WaterSimulation::Tick is called (tests step it deterministically).
     void StartWaterThread() { water.Start(*this); }
-    // Server thread, before the first Update. Clamped to 1..RENDER_DISTANCE - 1:
+    // Server thread, before the first Update. Clamped to 1..render distance - 1:
     // water needs loaded chunks around it to flow into.
     void SetWaterSimulationDistance(int chunks);
     int GetWaterSimulationDistance() const { return waterDistance; }
@@ -128,6 +132,7 @@ private:
     std::vector<glm::ivec3> loadOffsets;
     std::vector<glm::ivec3> lastCenters;
     int waterDistance = DEFAULT_WATER_SIMULATION_DISTANCE;
+    int renderDistance = RENDER_DISTANCE, verticalRenderDistance = VERTICAL_RENDER_DISTANCE;
 
     std::mutex queueMutex;
     std::condition_variable queueCv;

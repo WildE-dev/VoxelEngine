@@ -1,5 +1,7 @@
 #include "client/Client.h"
 
+#include "world/Crafting.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -104,6 +106,7 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         resources.fill(0);
         for (const auto& [type, units] : m.held)
             if (static_cast<size_t>(type) < resources.size()) resources[static_cast<size_t>(type)] = units;
+        tools = m.tools;
         break;
     }
     case net::MsgType::Abilities: {
@@ -238,6 +241,24 @@ void Client::BreakBlock(const glm::ivec3& pos, Tool tool) {
         if (!IsCreative()) resources[static_cast<size_t>(block.ResourceType())] += static_cast<uint32_t>(block.ResourceUnits());
     }
     net.Send(net::kChannelReliable, net::Encode(net::EditBreak{ pos, tool }));
+}
+
+bool Client::CanCraft(int index, int count) const {
+    const auto& recipes = Crafting::Recipes();
+    if (IsCreative() || index < 0 || index >= static_cast<int>(recipes.size())) return false;
+    const Recipe& recipe = recipes[index];
+    if (recipe.tool != Tool::None && HasTool(recipe.tool)) return false;
+    return Crafting::TimesAffordable(recipe, resources) >= static_cast<uint32_t>(count);
+}
+
+void Client::Craft(int index, int count) {
+    if (!welcomed || !CanCraft(index, count)) return;
+    // Predicted like edits; the server's answer (Resources) puts it right.
+    const Recipe& recipe = Crafting::Recipes()[index];
+    for (const auto& in : recipe.inputs) resources[static_cast<size_t>(in.type)] -= in.units * count;
+    if (recipe.tool != Tool::None) tools |= Crafting::ToolBit(recipe.tool);
+    else resources[static_cast<size_t>(recipe.output)] += recipe.outputUnits * count;
+    net.Send(net::kChannelReliable, net::Encode(net::Craft{ static_cast<uint8_t>(index), static_cast<uint8_t>(count) }));
 }
 
 bool Client::CanAfford(BlockType type, int heightEighths) const {

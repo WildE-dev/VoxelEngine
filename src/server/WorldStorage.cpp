@@ -135,6 +135,7 @@ bool WorldStorage::ReadWorldFile() {
                 ok = r.U8(type) && type < p.resources.size() && r.VarU32(units);
                 if (ok) p.resources[type] = units;
             }
+            if (ok && version >= 6) ok = r.U8(p.tools);
             if (!ok) {
                 std::cerr << "[storage] " << path.string() << " is truncated" << std::endl;
                 return false;
@@ -328,6 +329,7 @@ bool WorldStorage::Flush() {
                         w.U8(static_cast<uint8_t>(t));
                         w.VarU32(p.resources[t]);
                     }
+                w.U8(p.tools);
             }
             files.emplace_back(directory / "world.dat", std::move(w.data));
             writePlayers = true;

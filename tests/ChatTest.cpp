@@ -26,6 +26,10 @@
 #include "client/ClientWorld.h"
 #include "server/Server.h"
 
+// Test clients ask for a short view (chunks): plenty for the checks, and light enough
+// to run every suite at once.
+constexpr int kTestViewDistance = 4;
+
 namespace {
 
 int failures = 0;
@@ -76,6 +80,7 @@ int main() {
     options.worldDirectory = dir.string();
     options.bindHost = "127.0.0.1";
     options.port = 0;
+    options.viewDistance = kTestViewDistance;
     options.log = false;
     options.worldType = TerrainGenerator::Type::Empty;
     options.dayLengthSeconds = 100000.0f; // the clock stays where commands put it
@@ -85,10 +90,10 @@ int main() {
 
     TestClient a, b;
     std::string error;
-    Check(a.client.Connect("127.0.0.1", server.GetPort(), "Alice", error), "Alice connects");
+    Check(a.client.Connect("127.0.0.1", server.GetPort(), "Alice", error, kTestViewDistance), "Alice connects");
     Check(Pump({ &a }, 20.0, [&] { return a.client.IsWelcomed(); }), "and is welcomed");
     Check(Pump({ &a }, 20.0, [&] { return Has(a, "/help", kInfo); }), "with a hint about chat and commands");
-    Check(b.client.Connect("127.0.0.1", server.GetPort(), "Bob", error), "Bob connects");
+    Check(b.client.Connect("127.0.0.1", server.GetPort(), "Bob", error, kTestViewDistance), "Bob connects");
     Check(Pump({ &a, &b }, 20.0, [&] { return Has(a, "Bob joined the game", kInfo); }), "Alice sees Bob join");
     auto both = [&](double s, const std::function<bool()>& done) { return Pump({ &a, &b }, s, done); };
 
@@ -188,8 +193,8 @@ int main() {
         if (!again.Start(options)) return EXIT_FAILURE;
         again.RunInBackground();
         TestClient bob, carol;
-        bob.client.Connect("127.0.0.1", again.GetPort(), "Bob", error);
-        carol.client.Connect("127.0.0.1", again.GetPort(), "Carol", error);
+        bob.client.Connect("127.0.0.1", again.GetPort(), "Bob", error, kTestViewDistance);
+        carol.client.Connect("127.0.0.1", again.GetPort(), "Carol", error, kTestViewDistance);
         auto pump = [&](double s, const std::function<bool()>& done) { return Pump({ &bob, &carol }, s, done); };
         Check(pump(20.0, [&] { return bob.client.IsWelcomed() && Has(bob, "You are an operator"); }), "Bob is still an operator after a restart");
         Check(pump(20.0, [&] { return Has(carol, "You are an operator"); }), "the owner is an operator without being in ops.txt");

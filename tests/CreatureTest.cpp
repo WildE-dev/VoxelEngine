@@ -20,6 +20,10 @@
 #include "client/ClientWorld.h"
 #include "server/Server.h"
 
+// Test clients ask for a short view (chunks): plenty for the checks, and light enough
+// to run every suite at once.
+constexpr int kTestViewDistance = 4;
+
 namespace {
 
 int failures = 0;
@@ -72,6 +76,7 @@ Server::Options BaseOptions(TerrainGenerator::Type type) {
     Server::Options options;
     options.bindHost = "127.0.0.1";
     options.port = 0;
+    options.viewDistance = kTestViewDistance;
     options.log = false;
     options.worldType = type;
     options.weather = Server::Options::Weather::Clear;
@@ -89,8 +94,8 @@ int main() {
         server.RunInBackground();
         TestClient a, b;
         std::string error;
-        a.client.Connect("127.0.0.1", server.GetPort(), "Hunter", error);
-        b.client.Connect("127.0.0.1", server.GetPort(), "Watcher", error);
+        a.client.Connect("127.0.0.1", server.GetPort(), "Hunter", error, kTestViewDistance);
+        b.client.Connect("127.0.0.1", server.GetPort(), "Watcher", error, kTestViewDistance);
         auto both = [&](double s, const std::function<bool()>& done) { return Pump({ &a, &b }, s, done); };
         auto wait = [&](double s) { both(s, [] { return false; }); };
         Check(both(20.0, [&] { return a.joined && b.joined; }), "two players join an empty world");
@@ -175,7 +180,7 @@ int main() {
         server.RunInBackground();
         TestClient a;
         std::string error;
-        a.client.Connect("127.0.0.1", server.GetPort(), "Wanderer", error);
+        a.client.Connect("127.0.0.1", server.GetPort(), "Wanderer", error, kTestViewDistance);
         Check(Pump({ &a }, 30.0, [&] { return a.joined; }), "a player joins a normal world (forest at spawn)");
         server.QueueConsoleCommand("gamemode creative Wanderer");
         server.QueueConsoleCommand("time noon");

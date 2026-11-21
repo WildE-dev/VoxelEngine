@@ -136,13 +136,13 @@ bool Server::Start(const Options& opts) {
     else if (terrain.GetType() == TerrainGenerator::Type::Empty) {
         Log("world: empty, not saved");
     }
-    world = std::make_unique<ServerWorld>(terrain, storage.get());
+    world = std::make_unique<ServerWorld>(terrain, storage.get(), options.viewDistance);
     world->SetWaterSimulationDistance(options.waterSimulationDistance);
     world->StartWaterThread();
     startTime = Now();
     lastSaveTime = startTime;
     Log("water simulated within " + std::to_string(world->GetWaterSimulationDistance()) + " chunks of players (view distance " +
-        std::to_string(ServerWorld::RENDER_DISTANCE) + ")");
+        std::to_string(world->GetRenderDistance()) + ")");
     Log("listening on " + (options.bindHost.empty() ? std::string("0.0.0.0") : options.bindHost) + ":" + std::to_string(GetPort()));
     return true;
 }
@@ -199,6 +199,7 @@ void Server::StorePlayer(const ClientState& client) {
     record.flags = static_cast<uint8_t>(client.noclip ? client.flags : client.flags & ~net::kFlagFlying);
     record.mode = static_cast<uint8_t>(client.mode);
     record.resources = client.resources;
+    record.tools = client.tools;
     storage->StorePlayer(client.name, record);
 }
 
@@ -276,6 +277,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
         if ((ok = net::Decode(in, m))) HandleAttack(client, m.creature, m.tool);
         break;
     }
+    case net::MsgType::Craft: {
+        net::Craft m;
+        if ((ok = net::Decode(in, m))) HandleCraft(client, m.recipe, m.count);
+        break;
+    }
     case net::MsgType::MineStart: {
         net::MineStart m;
         if ((ok = net::Decode(in, m))) HandleMineStart(client, m.pos, m.tool);
@@ -329,9 +335,9 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
     }
     client.id = nextPlayerId++;
     client.mode = defaultMode;
-    client.viewDistance = hello.viewDistance > 0 ? std::clamp(static_cast<int>(hello.viewDistance), 2, ServerWorld::RENDER_DISTANCE)
-                                                 : ServerWorld::RENDER_DISTANCE;
-    client.verticalViewDistance = std::min(ServerWorld::VERTICAL_RENDER_DISTANCE, std::max(client.viewDistance, 4));
+    const int most = world->GetRenderDistance();
+    client.viewDistance = hello.viewDistance > 0 ? std::clamp(static_cast<int>(hello.viewDistance), 2, most) : most;
+    client.verticalViewDistance = std::min(world->GetVerticalRenderDistance(), std::max(client.viewDistance, 4));
     client.name = hello.name.empty() ? "Player " + std::to_string(client.id) : hello.name;
     client.welcomed = true;
 
@@ -358,6 +364,7 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
             client.pitch = saved->pitch;
             client.mode = static_cast<net::GameMode>(saved->mode);
             client.resources = saved->resources;
+            client.tools = saved->tools;
             client.flags = saved->flags;
             welcome.spawn = saved->feet;
             welcome.yaw = saved->yaw;
@@ -433,7 +440,27 @@ void Server::Echo(ClientState& client, const glm::ivec3& pos) {
     if (client.sent.count(chunk)) client.pendingCells[chunk].insert(LocalIndex(pos));
 }
 
+Tool Server::Usable(const ClientState& client, Tool tool) {
+    return Creative(client) || (client.tools & Crafting::ToolBit(tool)) ? tool : Tool::None;
+}
+
+void Server::HandleCraft(ClientState& client, int recipeIndex, int count) {
+    const auto& recipes = Crafting::Recipes();
+    if (Creative(client) || recipeIndex < 0 || recipeIndex >= static_cast<int>(recipes.size())) return;
+    const Recipe& recipe = recipes[recipeIndex];
+    if (recipe.tool != Tool::None) {
+        if (client.tools & Crafting::ToolBit(recipe.tool)) return SendResources(client); // made already
+        count = 1;
+    }
+    if (Crafting::TimesAffordable(recipe, client.resources) < static_cast<uint32_t>(count)) return SendResources(client); // can't afford
+    for (const auto& in : recipe.inputs) client.resources[static_cast<size_t>(in.type)] -= in.units * count;
+    if (recipe.tool != Tool::None) client.tools |= Crafting::ToolBit(recipe.tool);
+    else client.resources[static_cast<size_t>(recipe.output)] += recipe.outputUnits * count;
+    SendResources(client);
+}
+
 void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
+    tool = Usable(client, tool);
     const double now = Now();
     if (now < client.nextAttack) return;
     client.nextAttack = now + Combat::kCooldown * 0.8; // (a little slack for timing)
@@ -480,6 +507,7 @@ void Server::SendCreatures() {
 }
 
 void Server::HandleMineStart(ClientState& client, const glm::ivec3& pos, Tool tool) {
+    tool = Usable(client, tool);
     client.mining = InReach(client, pos, kReach);
     client.miningPos = pos;
     client.miningTool = tool;
@@ -487,6 +515,7 @@ void Server::HandleMineStart(ClientState& client, const glm::ivec3& pos, Tool to
 }
 
 void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) {
+    tool = Usable(client, tool);
     Block block;
     if (!InReach(client, pos, kReach) || !world->GetBlock(pos.x, pos.y, pos.z, block) || block.IsAir() || block.IsLiquid()) {
         return Echo(client, pos);
@@ -621,6 +650,7 @@ void Server::SendResources(ClientState& client) {
     net::Resources m;
     for (size_t t = 0; t < client.resources.size(); t++)
         if (client.resources[t] > 0) m.held.emplace_back(static_cast<BlockType>(t), client.resources[t]);
+    m.tools = client.tools;
     net.Send(client.peer, net::kChannelReliable, net::Encode(m));
 }
 
@@ -925,6 +955,8 @@ void Server::StreamWorld(ClientState& client) {
     if (!client.allSent && budget > 0) {
         bool missing = false;
         for (const auto& offset : loadOffsets) {
+            // (Only as far as this player sees.)
+            if (std::abs(offset.x) > r || std::abs(offset.z) > r || offset.y < -v || offset.y >= v) continue;
             const glm::ivec3 coords = center + offset;
             if (client.sent.count(coords)) continue;
             auto chunk = world->FindChunk(coords);

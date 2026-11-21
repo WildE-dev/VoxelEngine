@@ -159,6 +159,10 @@ target_link_libraries(DungeonTest PRIVATE voxel_common)
 add_executable(TrapTest tests/TrapTest.cpp src/app/Player.cpp)
 target_link_libraries(TrapTest PRIVATE voxel_server voxel_client)
 
+# Crafting: recipes, tools made once and kept, glass.
+add_executable(CraftTest tests/CraftTest.cpp)
+target_link_libraries(CraftTest PRIVATE voxel_server voxel_client)
+
 # Creatures: summoning, fights, ghouls, burning, natural spawning.
 add_executable(CreatureTest tests/CreatureTest.cpp)
 target_link_libraries(CreatureTest PRIVATE voxel_server voxel_client)
@@ -183,7 +187,7 @@ target_link_libraries(ShapeTest PRIVATE voxel_server voxel_client)
 add_executable(BiomeTest tests/BiomeTest.cpp)
 target_link_libraries(BiomeTest PRIVATE voxel_common)
 
-foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest)
+foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W3)
     else()
@@ -205,6 +209,6 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 # `ctest` (or `ctest -j14` to run them all at once) runs every test suite.
 enable_testing()
-foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest)
+foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest)
     add_test(NAME ${test} COMMAND ${test} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 endforeach()

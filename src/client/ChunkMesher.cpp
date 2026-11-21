@@ -47,7 +47,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
         for (int y = 0; y < CHUNK_SIZE; y++)
             for (int x = 0; x < CHUNK_SIZE; x++) {
                 const Block& b = local[Index(x, y, z)];
-                grid[paddedIndex(x, y, z)] = b.IsFullBlock();
+                grid[paddedIndex(x, y, z)] = b.HidesNeighbours();
                 lights[paddedIndex(x, y, z)] = light[Index(x, y, z)];
                 cells[paddedIndex(x, y, z)] = b;
             }
@@ -76,7 +76,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     for (int y = y0; y <= y1; y++)
                         for (int x = x0; x <= x1; x++) {
                             const int i = Index(x - dx * CHUNK_SIZE, y - dy * CHUNK_SIZE, z - dz * CHUNK_SIZE);
-                            grid[paddedIndex(x, y, z)] = neighbour->blocks[i].IsFullBlock();
+                            grid[paddedIndex(x, y, z)] = neighbour->blocks[i].HidesNeighbours();
                             lights[paddedIndex(x, y, z)] = neighbour->light[i];
                             cells[paddedIndex(x, y, z)] = neighbour->blocks[i];
                         }
@@ -324,6 +324,8 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                         continue;
                     }
                     if (full && isOpaque(front)) continue;
+                    // Glass against glass: no face between them (a pane, not a stack of boxes).
+                    if (full && block.type == BlockType::GLASS && cellAt(front).type == BlockType::GLASS) continue;
                     drawn.AddFaceVertices(vertices, static_cast<Face>(face), x, y, z, shadeFace(pos, face, true));
                 }
 

@@ -74,6 +74,8 @@ inline float Hardness(BlockType type) {
     case BlockType::CRUMBLING_BRICK: return 1.0f;
     case BlockType::PRESSURE_PLATE: return 1.5f;
     case BlockType::LOG: return 2.0f;
+    case BlockType::PLANKS: return 1.5f;
+    case BlockType::GLASS: return 0.5f;
     case BlockType::SPIKES: return 2.0f;
     case BlockType::PUMP:
     case BlockType::PIPE:
@@ -100,6 +102,7 @@ inline Tool BestTool(BlockType type) {
     case BlockType::SLUICE:
     case BlockType::PRESSURE_PLATE: return Tool::Pickaxe;
     case BlockType::LOG:
+    case BlockType::PLANKS:
     case BlockType::CACTUS: return Tool::Axe;
     case BlockType::DIRT:
     case BlockType::GRASS:

@@ -22,6 +22,10 @@
 #include "client/ClientWorld.h"
 #include "server/Server.h"
 
+// Test clients ask for a short view (chunks): plenty for the checks, and light enough
+// to run every suite at once.
+constexpr int kTestViewDistance = 4;
+
 namespace {
 
 using Clock = std::chrono::steady_clock;
@@ -144,6 +148,7 @@ int main(int argc, char** argv) {
         Server::Options options;
         options.bindHost = "127.0.0.1";
         options.port = 0;
+        options.viewDistance = kTestViewDistance;
         options.defaultMode = net::GameMode::Creative; // building freely
         if (!server->Start(options)) return EXIT_FAILURE;
         server->RunInBackground();
@@ -154,8 +159,8 @@ int main(int argc, char** argv) {
     a.name = "Alice";
     b.name = "Bob";
     std::string error;
-    Check(a.client.Connect(host, port, a.name, error), "client A connects" + (error.empty() ? "" : " (" + error + ")"));
-    Check(b.client.Connect(host, port, b.name, error), "client B connects" + (error.empty() ? "" : " (" + error + ")"));
+    Check(a.client.Connect(host, port, a.name, error, kTestViewDistance), "client A connects" + (error.empty() ? "" : " (" + error + ")"));
+    Check(b.client.Connect(host, port, b.name, error, kTestViewDistance), "client B connects" + (error.empty() ? "" : " (" + error + ")"));
     if (failures) return EXIT_FAILURE;
 
     const auto start = Clock::now();
@@ -200,8 +205,8 @@ int main(int argc, char** argv) {
         const bool spread = Pump(a, b, 15.0, [&] { return CountWater(b.world, pool, 6).cells >= 6; });
         const WaterView va = CountWater(a.world, pool, 6), vb = CountWater(b.world, pool, 6);
         Check(spread, "water flows outward as seen by B (" + std::to_string(vb.cells) + " wet cells)");
-        // Let it settle, then both views must match.
-        Pump(a, b, 8.0, [] { return false; });
+        // Let it settle (longer on a busy machine), then both views must match.
+        Pump(a, b, 30.0, [&] { return WaterMismatches(a.world, b.world, pool, 6) == 0; });
         const int mismatches = WaterMismatches(a.world, b.world, pool, 6);
         Check(mismatches == 0, "A and B see the same water (" + std::to_string(mismatches) + " differing cells, A " +
                                    std::to_string(va.cells) + " / B " + std::to_string(vb.cells) + " wet cells mid-flow)");

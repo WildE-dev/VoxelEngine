@@ -284,8 +284,9 @@ void CreatureSystem::Update(ServerWorld& world, const std::vector<Player>& playe
 
     for (auto it = creatures.begin(); it != creatures.end();) {
         Creature& c = *it;
-        // Gone once no player is anywhere near.
-        float nearest = 1e9f;
+        // Gone once no player is anywhere near (with nobody about, as they were: a
+        // player who's just joined hasn't said where they are yet).
+        float nearest = players.empty() ? 0.0f : 1e9f;
         for (const auto& p : players) nearest = std::min(nearest, glm::distance(p.feet, c.feet));
         if (nearest > kDespawnDistance || c.feet.y < -1000.0f) {
             it = creatures.erase(it);

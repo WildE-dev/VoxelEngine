@@ -15,7 +15,7 @@ constexpr size_t kGenerateBatchSize = 32;
 
 } // namespace
 
-ServerWorld::ServerWorld(const TerrainGenerator& terrain, WorldStorage* storage)
+ServerWorld::ServerWorld(const TerrainGenerator& terrain, WorldStorage* storage, int distance)
     : terrain(terrain),
       storage(storage),
       light([this](const glm::ivec3& coords) -> Chunk* {
@@ -23,8 +23,10 @@ ServerWorld::ServerWorld(const TerrainGenerator& terrain, WorldStorage* storage)
           auto it = chunks.find(coords);
           return it != chunks.end() && it->second->IsLoaded() && !it->second->IsRemoved() ? it->second.get() : nullptr;
       }) {
-    const int r = RENDER_DISTANCE;
-    const int v = VERTICAL_RENDER_DISTANCE;
+    renderDistance = std::clamp(distance, 2, RENDER_DISTANCE);
+    verticalRenderDistance = std::min(VERTICAL_RENDER_DISTANCE, std::max(renderDistance, 4));
+    const int r = renderDistance;
+    const int v = verticalRenderDistance;
     for (int x = -r; x <= r; x++)
         for (int y = -v; y < v; y++)
             for (int z = -r; z <= r; z++)
@@ -134,7 +136,7 @@ void ServerWorld::TakeChanges(std::vector<glm::ivec3>& blocks, std::vector<glm::
 }
 
 void ServerWorld::SetWaterSimulationDistance(int chunks) {
-    waterDistance = std::clamp(chunks, 1, std::min(RENDER_DISTANCE, VERTICAL_RENDER_DISTANCE) - 1);
+    waterDistance = std::clamp(chunks, 1, std::min(renderDistance, verticalRenderDistance) - 1);
 }
 
 void ServerWorld::Update(const std::vector<glm::ivec3>& centers) {
@@ -145,8 +147,8 @@ void ServerWorld::Update(const std::vector<glm::ivec3>& centers) {
         for (const auto& center : centers) {
             const glm::ivec3 offset = coords - center;
             const glm::ivec3 d = glm::abs(offset);
-            if (d.x <= RENDER_DISTANCE + slack && d.z <= RENDER_DISTANCE + slack && offset.y >= -VERTICAL_RENDER_DISTANCE - slack &&
-                offset.y < VERTICAL_RENDER_DISTANCE + slack)
+            if (d.x <= renderDistance + slack && d.z <= renderDistance + slack && offset.y >= -verticalRenderDistance - slack &&
+                offset.y < verticalRenderDistance + slack)
                 return true;
         }
         return false;
@@ -158,7 +160,7 @@ void ServerWorld::Update(const std::vector<glm::ivec3>& centers) {
         std::unique_ptr<Chunk::Blocks> saveBuffer;
         std::lock_guard<std::recursive_mutex> edit(editMutex);
         // Parked water further out than this sits in chunks that are being unloaded.
-        water.SetSimulationArea(centers, waterDistance, std::max(RENDER_DISTANCE, VERTICAL_RENDER_DISTANCE) + 1);
+        water.SetSimulationArea(centers, waterDistance, std::max(renderDistance, verticalRenderDistance) + 1);
         std::unique_lock<std::shared_mutex> lock(chunksMutex);
         for (auto it = chunks.begin(); it != chunks.end();) {
             // Unload chunks that have left every player's range (with one chunk of
@@ -206,7 +208,7 @@ void ServerWorld::Update(const std::vector<glm::ivec3>& centers) {
 
 const TerrainGenerator::ColumnHeights& ServerWorld::GetColumnHeights(int chunkX, int chunkZ) {
     // Enough for every column in range plus the hysteresis band, with room to move.
-    const size_t maxEntries = 4 * static_cast<size_t>(2 * RENDER_DISTANCE + 5) * (2 * RENDER_DISTANCE + 5);
+    const size_t maxEntries = 4 * static_cast<size_t>(2 * renderDistance + 5) * (2 * renderDistance + 5);
     if (columnHeights.size() > maxEntries) columnHeights.clear();
 
     auto& entry = columnHeights[glm::ivec2(chunkX, chunkZ)];

@@ -27,6 +27,10 @@
 
 namespace fs = std::filesystem;
 
+// Test clients ask for a short view (chunks): plenty for the checks, and light enough
+// to run every suite at once.
+constexpr int kTestViewDistance = 4;
+
 namespace {
 
 using Clock = std::chrono::steady_clock;
@@ -122,6 +126,7 @@ std::unique_ptr<Server> StartServer(const fs::path& dir) {
     Server::Options options;
     options.bindHost = "127.0.0.1";
     options.port = 0;
+    options.viewDistance = kTestViewDistance;
     options.log = false;
     options.worldDirectory = dir.string();
     options.autosaveSeconds = 0.0f;
@@ -240,7 +245,7 @@ int main() {
         if (!server) return EXIT_FAILURE;
         TestClient alice;
         std::string error;
-        Check(alice.client.Connect("127.0.0.1", server->GetPort(), "Alice", error), "Alice connects");
+        Check(alice.client.Connect("127.0.0.1", server->GetPort(), "Alice", error, kTestViewDistance), "Alice connects");
         Check(Pump(alice, 60.0, [&] { return alice.player.IsSpawned(); }), "Alice lands on the terrain");
         Check(!(alice.client.GetSpawnFlags() & net::kWelcomeResume), "a new player isn't resumed");
         alice.yaw = 123.0f;
@@ -255,7 +260,7 @@ int main() {
         if (!server) return EXIT_FAILURE;
         TestClient alice, bob;
         std::string error;
-        Check(alice.client.Connect("127.0.0.1", server->GetPort(), "Alice", error), "Alice reconnects");
+        Check(alice.client.Connect("127.0.0.1", server->GetPort(), "Alice", error, kTestViewDistance), "Alice reconnects");
         Check(Pump(alice, 10.0, [&] { return alice.client.IsWelcomed(); }), "Alice is welcomed");
         Check(alice.client.GetSpawnFlags() & net::kWelcomeResume, "Alice is resumed");
         Check(glm::distance(alice.client.GetSpawn(), leftAt) < 0.01f, "at the position she left from");
@@ -264,7 +269,7 @@ int main() {
         Check(Pump(alice, 60.0, [&] { return alice.player.IsSpawned(); }) && glm::distance(alice.player.GetFeetPosition(), leftAt) < 0.05f,
               "and lands exactly there");
 
-        Check(bob.client.Connect("127.0.0.1", server->GetPort(), "Bob", error), "Bob connects");
+        Check(bob.client.Connect("127.0.0.1", server->GetPort(), "Bob", error, kTestViewDistance), "Bob connects");
         Check(Pump(bob, 10.0, [&] { return bob.client.IsWelcomed(); }) && !(bob.client.GetSpawnFlags() & net::kWelcomeResume),
               "Bob, never seen before, isn't resumed");
         alice.client.Disconnect();

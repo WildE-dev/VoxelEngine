@@ -30,6 +30,7 @@
 #include "server/Server.h"
 #include "world/Breathing.h"
 #include "world/Chunk.h"
+#include "world/Crafting.h"
 #include "world/Raycast.h"
 #include "world/TerrainGenerator.h"
 
@@ -48,7 +49,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -124,6 +125,8 @@ const char* BlockName(BlockType type) {
     case BlockType::DEAD_BUSH: return "Dead bush";
     case BlockType::ICE: return "Ice";
     case BlockType::PEBBLES: return "Pebbles";
+    case BlockType::PLANKS: return "Planks";
+    case BlockType::GLASS: return "Glass";
     default:               return "Air";
     }
 }
@@ -273,6 +276,7 @@ bool Application::StartGame(const ClientOptions& options) {
         serverOptions.waterSimulationDistance = options.waterSimulationDistance;
         if (options.emptyWorld) serverOptions.worldType = TerrainGenerator::Type::Empty;
         serverOptions.dayLengthSeconds = options.dayLengthSeconds;
+        serverOptions.viewDistance = settings.renderDistance; // no further than we'll look
         serverOptions.ownerName = options.name; // it's your world: you're its operator
         serverOptions.weather = static_cast<Server::Options::Weather>(options.weather);
         serverOptions.defaultMode = options.mode >= 0 ? static_cast<net::GameMode>(options.mode)
@@ -855,7 +859,13 @@ void Application::DrawHotbar() {
         const bool survival = !client->IsCreative();
         std::string label = BlockName(selected);
         bool affordable = true;
-        if (selectedTool != Tool::None) label = std::string(Mining::ToolName(selectedTool)) + " - " + ToolHint(selectedTool);
+        if (selectedTool != Tool::None) {
+            label = std::string(Mining::ToolName(selectedTool)) + " - " + ToolHint(selectedTool);
+            if (!client->HasTool(selectedTool)) {
+                label += " (not made yet: see crafting, I)";
+                affordable = false;
+            }
+        }
         else {
         const int height = Block::CanShape(selected) ? placeHeight : 8;
         if (Block::CanShape(selected)) label += std::string(" - ") + HeightName(height) + (height < 8 ? " height" : " block") + " (V)";
@@ -866,7 +876,7 @@ void Application::DrawHotbar() {
                           FormatBlocks(client->GetResources(selected));
         }
         }
-        const bool affordableShown = selectedTool != Tool::None || affordable;
+        const bool affordableShown = affordable;
         const float nameWidth = ImGui::CalcTextSize(label.c_str()).x;
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (barWidth - nameWidth) * 0.5f));
         ImGui::PushStyleColor(ImGuiCol_Text, affordableShown ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(1.0f, 0.55f, 0.5f, 1.0f));
@@ -894,7 +904,7 @@ void Application::DrawHotbar() {
             const bool isTool = hotbarTools[i] != Tool::None;
             atlas.GetTileUV(isTool ? ToolTile(atlas, hotbarTools[i]) : IconTile(hotbar[i]), uv0, uv1);
             const uint32_t held = isTool ? 0 : client->GetResources(hotbar[i]);
-            const bool empty = survival && !isTool && held == 0;
+            const bool empty = survival && (isTool ? !client->HasTool(hotbarTools[i]) : held == 0);
             draw->AddImage(atlasTexture, ImVec2(slotMin.x + kPad, slotMin.y + kPad), ImVec2(slotMax.x - kPad, slotMax.y - kPad),
                            ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y), empty ? IM_COL32(255, 255, 255, 70) : IM_COL32_WHITE);
             // Survival: how many we have, in the bottom right.
@@ -1140,14 +1150,21 @@ void Application::DrawInventory() {
                 SaveHotbar();
             }
             if (inSlot) ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s: %s", Mining::ToolName(tool), ToolHint(tool));
+            if (ImGui::IsItemHovered()) {
+                if (client->HasTool(tool)) ImGui::SetTooltip("%s: %s", Mining::ToolName(tool), ToolHint(tool));
+                else ImGui::SetTooltip("%s: %s (not made yet: craft one below)", Mining::ToolName(tool), ToolHint(tool));
+            }
+            if (!client->HasTool(tool)) {
+                // Not made yet: shaded over.
+                ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), IM_COL32(0, 0, 0, 150), 3.0f);
+            }
             ImGui::PopID();
         }
         ImGui::Separator();
         int column = 0;
         for (BlockType type : kInventoryBlocks) {
             const uint32_t held = client->GetResources(type);
-            if (survival && held == 0) continue; // survival: only what you have
+            if (survival && (held == 0 || type == BlockType::PEBBLES)) continue; // survival: only what you have (pebbles are stone)
             if (column++ % kColumns != 0) ImGui::SameLine();
             const ImVec2 corner = ImGui::GetCursorScreenPos();
             glm::vec2 uv0, uv1;
@@ -1176,6 +1193,51 @@ void Application::DrawInventory() {
             ImGui::PopID();
         }
         if (survival && column == 0) ImGui::TextUnformatted("Nothing yet: break some blocks.");
+
+        // Crafting (survival): what each recipe takes, and buttons to make it.
+        if (survival) {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::TextUnformatted("Crafting");
+            const auto& recipes = Crafting::Recipes();
+            // In a scrolling box, so the window stays on screen.
+            ImGui::BeginChild("crafting", ImVec2(0.0f, 260.0f), true);
+            if (ImGui::BeginTable("recipes", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+                for (int r = 0; r < static_cast<int>(recipes.size()); r++) {
+                    const Recipe& recipe = recipes[r];
+                    ImGui::PushID(r);
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    glm::vec2 uv0, uv1;
+                    atlas.GetTileUV(recipe.tool != Tool::None ? ToolTile(atlas, recipe.tool) : IconTile(recipe.output), uv0, uv1);
+                    ImGui::Image(texture, ImVec2(24.0f, 24.0f), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
+                    ImGui::SameLine();
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextUnformatted(recipe.name);
+                    ImGui::TableNextColumn();
+                    std::string needs;
+                    for (const auto& in : recipe.inputs)
+                        needs += (needs.empty() ? "" : " + ") + FormatBlocks(in.units) + " " + BlockName(in.type);
+                    const bool owned = recipe.tool != Tool::None && client->HasTool(recipe.tool);
+                    if (owned) ImGui::TextDisabled("made");
+                    else if (client->CanCraft(r)) ImGui::TextUnformatted(needs.c_str());
+                    else ImGui::TextDisabled("%s", needs.c_str());
+                    ImGui::TableNextColumn();
+                    ImGui::BeginDisabled(!client->CanCraft(r));
+                    if (ImGui::SmallButton("Make")) client->Craft(r, 1);
+                    ImGui::EndDisabled();
+                    if (recipe.tool == Tool::None) {
+                        ImGui::SameLine();
+                        ImGui::BeginDisabled(!client->CanCraft(r, 4));
+                        if (ImGui::SmallButton("x4")) client->Craft(r, 4);
+                        ImGui::EndDisabled();
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::EndTable();
+            }
+            ImGui::EndChild();
+        }
     }
     ImGui::End();
     if (!open) SetInventoryOpen(false);
@@ -1208,7 +1270,7 @@ void Application::OnMouseButton(int button, int action) {
     // A creature in the way: hit it (with whatever's in hand).
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         if (const uint16_t creature = CreatureInView()) {
-            client->Attack(creature, SelectedTool());
+            client->Attack(creature, client->Usable(SelectedTool()));
             return;
         }
     }
@@ -1289,7 +1351,7 @@ void Application::UpdateMining() {
         mining = false;
         return;
     }
-    const Tool tool = SelectedTool();
+    const Tool tool = client->Usable(SelectedTool()); // a tool not made yet is a bare hand
     const double now = glfwGetTime();
     // A new target (or tool, or the block changed under us): start over on it.
     if (!mining || hit->block != miningPos || tool != miningTool || block != miningBlock) {

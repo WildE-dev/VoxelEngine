@@ -20,6 +20,10 @@
 #include "server/Server.h"
 #include "world/Breathing.h"
 
+// Test clients ask for a short view (chunks): plenty for the checks, and light enough
+// to run every suite at once.
+constexpr int kTestViewDistance = 4;
+
 namespace {
 
 int failures = 0;
@@ -99,6 +103,7 @@ int main() {
     Server::Options options;
     options.bindHost = "127.0.0.1";
     options.port = 0;
+    options.viewDistance = kTestViewDistance;
     options.log = false;
     options.worldType = TerrainGenerator::Type::Empty; // flat ground: the top of row -1 is at 0
     options.weather = Server::Options::Weather::Clear;
@@ -108,8 +113,8 @@ int main() {
 
     HoldingClient a, builder;
     std::string error;
-    a.client.Connect("127.0.0.1", server.GetPort(), "Diver", error);
-    builder.client.Connect("127.0.0.1", server.GetPort(), "Builder", error);
+    a.client.Connect("127.0.0.1", server.GetPort(), "Diver", error, kTestViewDistance);
+    builder.client.Connect("127.0.0.1", server.GetPort(), "Builder", error, kTestViewDistance);
     auto both = [&](double s, const std::function<bool()>& done) { return Pump({ &a, &builder }, s, done); };
     Check(both(20.0, [&] { return a.joined && builder.joined; }), "two players join");
     server.QueueConsoleCommand("gamemode creative Builder");

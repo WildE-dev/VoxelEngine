@@ -117,6 +117,10 @@ enum class BlockType : uint8_t {
     // A few loose stones on the ground (drawn as tiny stones, passable like a plant):
     // picked up, they're a quarter of a block of stone.
     PEBBLES,
+    // Crafted (see world/Crafting.h): planks from logs; glass from sand, a full block
+    // you can see through (its faces don't hide what's behind it, and light passes).
+    PLANKS,
+    GLASS,
     COUNT
 };
 
@@ -359,7 +363,9 @@ struct Block {
     bool IsFullBlock() const { return type != BlockType::AIR && !IsPlant() && !IsLiquid() && edgeData.IsFull(); }
     // Light passes through air, partial blocks, plants, leaves and water (water also
     // absorbs some; see LightPropagator).
-    bool BlocksLight() const { return IsFullBlock() && !IsLeavesType(type) && type != BlockType::ICE; }
+    bool BlocksLight() const { return IsFullBlock() && !IsLeavesType(type) && type != BlockType::ICE && type != BlockType::GLASS; }
+    // A full block that hides the faces of the blocks it touches (not glass).
+    bool HidesNeighbours() const { return IsFullBlock() && type != BlockType::GLASS; }
     // Air, a plant or water: nothing to stand on or bump into.
     bool IsPassable() const { return IsAir() || IsPlant() || IsLiquid(); }
     // Water may flow into this cell (washing away any plant).

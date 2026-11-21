@@ -71,6 +71,10 @@ int main(int argc, char** argv) {
             options.worldDirectory.clear();
             continue;
         }
+        if (arg == "--view-distance" && i + 1 < argc) {
+            options.viewDistance = std::clamp(std::atoi(argv[++i]), 2, 12);
+            continue;
+        }
         if (arg == "--water-distance" && i + 1 < argc) {
             options.waterSimulationDistance = std::atoi(argv[++i]);
             continue;
@@ -86,7 +90,8 @@ int main(int argc, char** argv) {
                       << "  --weather W    clear, rain or auto (default)\n"
                       << "  --day-length S seconds in a day (default 1200)\n"
                       << "  --op NAME      make a player an operator (repeatable; kept in ops.txt)\n"
-                      << "  --mode M       creative or survival: a new world's game mode (default survival)" << std::endl;
+                      << "  --mode M       creative or survival: a new world's game mode (default survival)\n"
+                      << "  --view-distance N  chunks loaded and sent around each player (2-12, default 12)" << std::endl;
             return EXIT_FAILURE;
         }
         options.port = static_cast<uint16_t>(port);

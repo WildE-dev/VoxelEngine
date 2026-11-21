@@ -99,7 +99,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Operator, "/noclip [player] - fly through blocks, on or off (operators may also use the laser, L)" },
     { Level::Everyone, "/gamemode - show your game mode" },
     { Level::Operator, "/gamemode <creative|survival> [player] - creative: anything, unhurt; survival: collect what you build with" },
-    { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64)" },
+    { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64), or /give <tool> [player]" },
     { Level::Operator, "/summon <deer|ghoul> [x y z] - bring a creature (default: a few blocks ahead of you)" },
     { Level::Operator, "/creatures [clear] - count the creatures, or remove them all" },
     { Level::Console, "/stop - shut the server down" },
@@ -298,7 +298,16 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         reply(Kind::Info, std::string(target == sender ? "You're" : target->name + " is") + " now in " + name(mode) + " mode");
     }
     else if (command == "give") {
-        if (words.size() < 2) return usage("/give <block> [count] [player]");
+        if (words.size() < 2) return usage("/give <block|tool> [count] [player]");
+        // A tool: theirs to keep.
+        if (const Tool tool = Mining::ToolFromId(Lower(words[1])); tool != Tool::None) {
+            ClientState* target = words.size() > 2 ? FindPlayer(words.back()) : sender;
+            if (!target) return usage("give <tool> <player>");
+            target->tools |= Crafting::ToolBit(tool);
+            SendResources(*target);
+            if (target != sender) SendChat(*target, Kind::Info, who + " gave you a " + Mining::ToolId(tool));
+            return reply(Kind::Info, std::string("Gave a ") + Mining::ToolId(tool) + (target != sender ? " to " + target->name : ""));
+        }
         const BlockType type = BlockFromId(Lower(words[1]));
         if (type == BlockType::COUNT || Block(type).IsLiquid())
             return reply(Kind::Error, "No block called " + words[1] + " (e.g. dirt, stone, stone_brick, sand, log)");

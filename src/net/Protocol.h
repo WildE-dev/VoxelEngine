@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 17;
+constexpr uint32_t kProtocolVersion = 18;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -46,6 +46,7 @@ enum class MsgType : uint8_t {
     EditChisel,    // lower (or raise) one quarter of a block by a quarter of a block
     MineStart,     // started mining a block (survival: breaking it takes time)
     Attack,        // hit a creature
+    Craft,         // make something from resources (survival)
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -220,6 +221,13 @@ struct GameModeIs {
 // Units held of each block type (see Block::ResourceUnits), types with none left out.
 struct Resources {
     std::vector<std::pair<BlockType, uint32_t>> held;
+    uint8_t tools = 0; // tools made (Crafting::ToolBit each)
+};
+
+// Survival: make `count` of a recipe (an index into Crafting::Recipes()).
+struct Craft {
+    uint8_t recipe = 0;
+    uint8_t count = 1;
 };
 
 struct EditChisel {
@@ -326,6 +334,7 @@ std::vector<uint8_t> Encode(const PlayerState& m);
 std::vector<uint8_t> Encode(const EditBreak& m);
 std::vector<uint8_t> Encode(const MineStart& m);
 std::vector<uint8_t> Encode(const Attack& m);
+std::vector<uint8_t> Encode(const Craft& m);
 std::vector<uint8_t> Encode(const CreatureSnapshot& m);
 std::vector<uint8_t> Encode(const EditPlace& m);
 std::vector<uint8_t> Encode(const EditCarve& m);
@@ -358,6 +367,7 @@ bool Decode(ByteReader& in, PlayerState& m);
 bool Decode(ByteReader& in, EditBreak& m);
 bool Decode(ByteReader& in, MineStart& m);
 bool Decode(ByteReader& in, Attack& m);
+bool Decode(ByteReader& in, Craft& m);
 bool Decode(ByteReader& in, CreatureSnapshot& m);
 bool Decode(ByteReader& in, EditPlace& m);
 bool Decode(ByteReader& in, EditCarve& m);

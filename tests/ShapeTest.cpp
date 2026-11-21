@@ -34,6 +34,10 @@
 #include "world/Raycast.h"
 #include "world/TerrainGenerator.h"
 
+// Test clients ask for a short view (chunks): plenty for the checks, and light enough
+// to run every suite at once.
+constexpr int kTestViewDistance = 4;
+
 namespace {
 
 int failures = 0;
@@ -343,6 +347,7 @@ int main() {
         Server::Options options;
         options.bindHost = "127.0.0.1";
         options.port = 0;
+        options.viewDistance = kTestViewDistance;
         options.log = false;
         options.worldType = TerrainGenerator::Type::Empty;
         options.defaultMode = net::GameMode::Creative; // building freely
@@ -350,8 +355,8 @@ int main() {
         server.RunInBackground();
         TestClient a, b;
         std::string error;
-        a.client.Connect("127.0.0.1", server.GetPort(), "Mason", error);
-        b.client.Connect("127.0.0.1", server.GetPort(), "Watcher", error);
+        a.client.Connect("127.0.0.1", server.GetPort(), "Mason", error, kTestViewDistance);
+        b.client.Connect("127.0.0.1", server.GetPort(), "Watcher", error, kTestViewDistance);
         Check(Pump({ &a, &b }, 20.0, [&] {
                   Block g;
                   return a.client.IsWelcomed() && b.client.IsWelcomed() && b.world.GetBlock(9, -1, 7, g) && g.type == BlockType::GRASS;

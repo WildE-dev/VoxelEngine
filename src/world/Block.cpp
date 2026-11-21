@@ -255,6 +255,8 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* DEAD_BUSH */ {{ "dead_bush", nullptr, nullptr, nullptr, nullptr, nullptr }},
     /* ICE   */ {{ "ice", "ice", "ice", "ice", "ice", "ice" }},
     /* PEBBLES */ {{ "pebbles", "stone", nullptr, nullptr, nullptr, nullptr }}, // icon; the stones' own texture
+    /* PLANKS */ {{ "planks", "planks", "planks", "planks", "planks", "planks" }},
+    /* GLASS  */ {{ "glass", "glass", "glass", "glass", "glass", "glass" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -285,7 +287,7 @@ namespace {
 constexpr const char* kBlockIds[kBlockTypeCount] = {
     "air", "grass", "dirt", "stone", "lamp", "log", "leaves", "tall_grass", "flower_red", "flower_yellow", "sand", "water", "pump", "pipe",
     "stone_brick", "mossy_brick", "spikes", "crumbling_brick", "pressure_plate", "sluice", "snow", "dry_grass", "lush_grass", "snowy_grass",
-    "pine_leaves", "cactus", "dead_bush", "ice", "pebbles",
+    "pine_leaves", "cactus", "dead_bush", "ice", "pebbles", "planks", "glass",
 };
 } // namespace
 
@@ -650,7 +652,8 @@ bool Block::CanChisel() const {
     case BlockType::PUMP:
     case BlockType::PIPE:
     case BlockType::SLUICE:
-    case BlockType::PRESSURE_PLATE: return false;
+    case BlockType::PRESSURE_PLATE:
+    case BlockType::GLASS: return false;
     default: return true;
     }
 }

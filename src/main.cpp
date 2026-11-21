@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
@@ -31,6 +32,7 @@ void PrintUsage(const char* program) {
               << "  --op NAME     make a player an operator (server; repeatable, kept in ops.txt)\n"
               << "  --weather W   clear, rain, or auto (default: rain comes and goes)\n"
               << "  --day-length S  seconds in a day (default 1200)\n"
+              << "  --view-distance N  server: chunks loaded and sent around each player (2-12)\n"
               << "  --mode M      creative or survival: a new world's game mode (default survival,\n"
               << "                creative for an empty world)\n"
               << "  --empty-world a new world that's a flat, empty plain, for testing (default\n"
@@ -79,6 +81,7 @@ int RunServer(uint16_t port, const std::string& worldDirectory, int waterDistanc
     options.operators = sky.operators;
     options.weather = sky.weather;
     options.defaultMode = sky.defaultMode;
+    options.viewDistance = sky.viewDistance;
     if (emptyWorld) options.worldType = TerrainGenerator::Type::Empty;
     options.waterSimulationDistance = waterDistance;
     options.port = port;
@@ -140,6 +143,9 @@ int main(int argc, char** argv)
                 std::cerr << "Day length must be at least a second" << std::endl;
                 return EXIT_FAILURE;
             }
+        }
+        else if (arg == "--view-distance" && i + 1 < argc) {
+            sky.viewDistance = std::clamp(std::atoi(argv[++i]), 2, 12);
         }
         else if (arg == "--mode" && i + 1 < argc) {
             if (!ParseMode(argv[++i], client.mode)) {

@@ -287,6 +287,15 @@ std::vector<uint8_t> Encode(const Resources& m) {
         w.U8(static_cast<uint8_t>(type));
         w.VarU32(units);
     }
+    w.U8(m.tools);
+    return std::move(w.data);
+}
+
+std::vector<uint8_t> Encode(const Craft& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Craft);
+    w.U8(m.recipe);
+    w.U8(m.count);
     return std::move(w.data);
 }
 
@@ -299,7 +308,11 @@ bool Decode(ByteReader& in, Resources& m) {
         if (!in.U8(t) || t >= static_cast<uint8_t>(BlockType::COUNT) || !in.VarU32(units)) return false;
         type = static_cast<BlockType>(t);
     }
-    return in.AtEnd();
+    return in.U8(m.tools) && in.AtEnd();
+}
+
+bool Decode(ByteReader& in, Craft& m) {
+    return in.U8(m.recipe) && in.U8(m.count) && m.count >= 1 && m.count <= 64 && in.AtEnd();
 }
 
 std::vector<uint8_t> Encode(const Health& m) {

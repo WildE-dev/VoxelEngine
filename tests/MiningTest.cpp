@@ -20,6 +20,10 @@
 #include "server/Server.h"
 #include "world/Mining.h"
 
+// Test clients ask for a short view (chunks): plenty for the checks, and light enough
+// to run every suite at once.
+constexpr int kTestViewDistance = 4;
+
 namespace {
 
 int failures = 0;
@@ -92,7 +96,8 @@ int main() {
     Server::Options options;
     options.bindHost = "127.0.0.1";
     options.port = 0;
-    options.log = false;
+    options.viewDistance = kTestViewDistance;
+    options.log = std::getenv("MINING_LOG") != nullptr;
     options.worldType = TerrainGenerator::Type::Empty; // grass at row -1, dirt below, then stone
     options.weather = Server::Options::Weather::Clear;
     options.defaultMode = net::GameMode::Survival;
@@ -100,8 +105,8 @@ int main() {
     server.RunInBackground();
     TestClient a, builder;
     std::string error;
-    a.client.Connect("127.0.0.1", server.GetPort(), "Miner", error);
-    builder.client.Connect("127.0.0.1", server.GetPort(), "Builder", error);
+    a.client.Connect("127.0.0.1", server.GetPort(), "Miner", error, kTestViewDistance);
+    builder.client.Connect("127.0.0.1", server.GetPort(), "Builder", error, kTestViewDistance);
     auto both = [&](double s, const std::function<bool()>& done) { return Pump({ &a, &builder }, s, done); };
     auto wait = [&](double s) { both(s, [] { return false; }); };
     Check(both(20.0, [&] { return a.joined && builder.joined && TypeAt(a, { 10, -1, 10 }) == BlockType::GRASS; }), "two players join");
@@ -127,7 +132,15 @@ int main() {
     a.client.StartMining({ 12, 0, 12 }, Tool::Pickaxe);
     wait(1.1);
     a.client.BreakBlock({ 12, 0, 12 }, Tool::Pickaxe);
-    Check(both(20.0, [&] { return TypeAt(builder, { 12, 0, 12 }) == BlockType::AIR; }), "a pickaxe breaks it in 1 s");
+    wait(1.0);
+    Check(TypeAt(builder, { 12, 0, 12 }) == BlockType::STONE, "a pickaxe not made yet is just a hand (no break in 1 s)");
+    server.QueueConsoleCommand("give pickaxe Miner");
+    server.QueueConsoleCommand("give shovel Miner");
+    Check(both(20.0, [&] { return a.client.HasTool(Tool::Pickaxe) && a.client.HasTool(Tool::Shovel); }), "/give hands over tools");
+    a.client.StartMining({ 12, 0, 12 }, Tool::Pickaxe);
+    wait(1.1);
+    a.client.BreakBlock({ 12, 0, 12 }, Tool::Pickaxe);
+    Check(both(20.0, [&] { return TypeAt(builder, { 12, 0, 12 }) == BlockType::AIR; }), "a pickaxe of one's own breaks it in 1 s");
     a.client.StartMining({ 13, 0, 12 }, Tool::Shovel);
     wait(1.1);
     a.client.BreakBlock({ 13, 0, 12 }, Tool::Pickaxe);
