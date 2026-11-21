@@ -196,6 +196,7 @@ int main() {
     Check(both(20.0, [&] { return TypeAt(b, target) == BlockType::AIR; }), "and the laser works");
     a.client.SendChat("/noclip");
     Check(both(20.0, [&] { return (a.client.GetAbilities() & net::kAbilityNoclip) && a.player.IsFlying(); }), "/noclip turns it on, and the client flies");
+    both(0.5, [] { return false; }); // (so the server has heard they're flying)
     const glm::ivec3 here(glm::floor(a.player.GetFeetPosition()));
     a.client.PlaceBlock(here, BlockType::SPIKES);
     both(2.0, [] { return false; });
