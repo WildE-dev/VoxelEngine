@@ -218,7 +218,11 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
         // With more water directly above, this cell is full and meets it exactly.
         const bool covered = hasWater(here + up);
         for (int e = 0; e < 4; e++) {
-            top32[e] = covered ? 32 : cornerHeight(here, kCornerOfEdge[e][0], kCornerOfEdge[e][1]);
+            // Water in a partial block stands flat at its own level (not sloping up to
+            // the water beside it, over the block's quarters).
+            top32[e] = covered ? 32
+                     : self.IsPartial() ? std::clamp((self.WaterShownLevel() + kUnitsPer32nd / 2) / kUnitsPer32nd, 1, 32)
+                                        : cornerHeight(here, kCornerOfEdge[e][0], kCornerOfEdge[e][1]);
             top[e] = static_cast<uint8_t>((top32[e] + 3) / 4);
             fine[e] = static_cast<uint8_t>(top[e] * 4 - top32[e]);
             // In a waterlogged block the water sits on the slope.

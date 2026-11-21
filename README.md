@@ -417,7 +417,12 @@ water above their quarters like the terrain's slopes do, and fill their lowest p
 first. The water treats a cell as four columns: a stepped block's quarters, or a
 slope's corners weighted like its two triangles. So a notch carved down to the floor
 in one quarter takes water from a pool beside it, even though the block as a whole
-stands higher than the pool's surface.
+stands higher than the pool's surface. Water only crosses a carved block through
+quarters lower than the water, though. It gets in by an open quarter on the side it
+comes from, and goes on through only along open quarters joined side by side. A solid
+face higher than the water blocks it, and two notches meeting at a corner aren't a
+channel. Water in a carved block is drawn flat at its own level, with the block's
+higher parts standing out of it.
 
 Every block is drawn inside its own cell: where a slope climbs past the top of its
 block, its corner is clipped at the block's top and the column beside it carries on

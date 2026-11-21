@@ -19,6 +19,50 @@ constexpr int kMinSpreadVolume = Block::kMaxWaterVolume / 8;
 // How far along connected water a cell levels out.
 constexpr int kReach = 6;
 
+// Water crossing between cells goes through the open part of a partial block: its four
+// quarters (a stepped block's quarters, a slope's corners), each open where it's lower
+// than the water. Full water cells and air are open everywhere.
+struct Quarters {
+    bool open[2][2]; // [x][z]
+};
+Quarters OpenQuarters(const Block& b, int level) {
+    constexpr int kEdgeAt[2][2] = { { 2, 0 }, { 1, 3 } }; // EdgeData index of quarter [x][z]
+    Quarters q;
+    for (int x = 0; x < 2; x++)
+        for (int z = 0; z < 2; z++)
+            q.open[x][z] = !b.IsPartial() || b.edgeData.GetTopY(kEdgeAt[x][z]) * (Block::kMaxWaterVolume / 8) < level;
+    return q;
+}
+// The quarters on the face toward horizontal direction d.
+bool OnFace(int x, int z, const glm::ivec3& d) {
+    return (d.x > 0 && x == 1) || (d.x < 0 && x == 0) || (d.z > 0 && z == 1) || (d.z < 0 && z == 0);
+}
+// Whether water at `level` can get through the cell's face toward d (in or out).
+bool OpenFace(const Block& b, const glm::ivec3& d, int level) {
+    const Quarters q = OpenQuarters(b, level);
+    for (int x = 0; x < 2; x++)
+        for (int z = 0; z < 2; z++)
+            if (q.open[x][z] && OnFace(x, z, d)) return true;
+    return false;
+}
+// Whether water at `level` can go right through the cell, in by the face toward
+// `from` and out by the face toward `to`: open quarters joined side by side.
+bool PassesThrough(const Block& b, const glm::ivec3& from, const glm::ivec3& to, int level) {
+    if (!b.IsPartial()) return true;
+    const Quarters q = OpenQuarters(b, level);
+    bool reached[2][2] = {};
+    for (int x = 0; x < 2; x++)
+        for (int z = 0; z < 2; z++) reached[x][z] = q.open[x][z] && OnFace(x, z, from);
+    for (int pass = 0; pass < 3; pass++) // spread to open quarters beside reached ones
+        for (int x = 0; x < 2; x++)
+            for (int z = 0; z < 2; z++)
+                if (q.open[x][z] && !reached[x][z] && (reached[1 - x][z] || reached[x][1 - z])) reached[x][z] = true;
+    for (int x = 0; x < 2; x++)
+        for (int z = 0; z < 2; z++)
+            if (reached[x][z] && OnFace(x, z, to)) return true;
+    return false;
+}
+
 // Sets the water in a cell, keeping a partial block (waterlogged) if it is one.
 void SetWater(ServerWorld& world, const glm::ivec3& p, const Block& cell, int volume) {
     // Every caller conserves volume; this catches a bug before it can wrap the byte
@@ -474,11 +518,38 @@ void WaterSimulation::UpdateCell(ServerWorld& world, const glm::ivec3& pos) {
         Block n;
         if (world.GetBlock(np.x, np.y, np.z, n) && n.WaterVolume() >= kMinSpreadVolume && n.WaterLevel() >= block.WaterLevel()) backed = true;
     }
-    for (const auto& d : kHorizontal) {
+    // Where the water in a partial block came in from: the sides with water beside
+    // them. It only reaches the open quarters joined to those (two notches meeting at a
+    // corner don't make a channel), unless it came from above (no wet sides).
+    bool wetSide[4] = {};
+    bool anyWetSide = false;
+    if (block.IsPartial())
+        for (int i = 0; i < 4; i++) {
+            const glm::ivec3 np = pos + kHorizontal[i];
+            Block n;
+            wetSide[i] = world.GetBlock(np.x, np.y, np.z, n) && n.HasWater() && OpenFace(block, kHorizontal[i], level);
+            anyWetSide |= wetSide[i];
+        }
+    for (int i = 0; i < 4; i++) {
+        const glm::ivec3& d = kHorizontal[i];
+        // Out of this cell toward d only through an open quarter on that side...
+        if (!OpenFace(block, d, level)) continue;
+        // ...that the water in it can reach.
+        if (anyWetSide && !wetSide[i]) {
+            bool reachable = false;
+            for (int j = 0; j < 4 && !reachable; j++) reachable = wetSide[j] && PassesThrough(block, kHorizontal[j], d, level);
+            if (!reachable) continue;
+        }
+        Block previous = block;
         for (int step = 1; step <= kReach; step++) {
             const glm::ivec3 np = pos + d * step;
             Block n;
             if (!world.GetBlock(np.x, np.y, np.z, n) || !n.CanHoldWater()) break; // unloaded or solid: a wall
+            // Through a partial block only where it's open below the water: in by the
+            // near side, and (going on past it) right through to the far side.
+            if (!OpenFace(n, -d, level)) break;
+            if (step > 1 && !PassesThrough(previous, -d, d, level)) break;
+            previous = n;
             const Member m = member(np, n);
             const int head = level - levelOf(m, n.WaterVolume());
             if (!n.HasWater()) {

@@ -102,7 +102,8 @@ int main() {
             world.SetBlock(1, 44, z, Block::Water(Block::kMaxWaterVolume / 2));
             world.SetBlock(2, 44, z, carved);
         };
-        const Block notched = Block(BlockType::STONE_BRICK).Chiselled(3, -8); // one quarter cut to the floor
+        // One quarter cut to the floor, on the side toward the pool ((0,0): edge 2).
+        const Block notched = Block(BlockType::STONE_BRICK).Chiselled(2, -8);
         Block slope(BlockType::DIRT);
         slope = slope.Chiselled(0, -8);                                        // one corner of a slope cut down
         Check(notched.WaterFloor() > Block::kMaxWaterVolume / 2 && slope.WaterFloor() > Block::kMaxWaterVolume / 2,
@@ -112,6 +113,15 @@ int main() {
               "a notched block fills its notch first (half a block deep: 16 units, a quarter of the cell)");
         trough(4, notched);
         trough(8, slope);
+        // A notch on the far side: the side toward the pool is solid all the way up.
+        const Block farNotch = Block(BlockType::STONE_BRICK).Chiselled(3, -8);
+        trough(12, farNotch);
+        // Two notches meeting only at a corner ((0,0) and (1,1)), with an empty cell past
+        // the block: water gets into the near one but can't cross to the far side.
+        const Block diagonal = Block(BlockType::STONE_BRICK).Chiselled(2, -8).Chiselled(3, -8);
+        trough(16, diagonal);
+        world.SetBlock(3, 44, 16, Block()); // open beyond it
+        world.SetBlock(4, 44, 16, wall);
         for (int i = 0; i < 60; i++) sim.Tick(world);
         Block a, b;
         world.GetBlock(1, 44, 4, a);
@@ -123,6 +133,13 @@ int main() {
         world.GetBlock(2, 44, 8, b);
         Check(b.WaterVolume() > 0 && std::abs(a.WaterLevel() - b.WaterLevel()) <= 3 && a.WaterVolume() + b.WaterVolume() == 64,
               "and into a slope's lowered corner (" + std::to_string(a.WaterLevel()) + " / " + std::to_string(b.WaterLevel()) + ")");
+        world.GetBlock(2, 44, 12, b);
+        Check(b.WaterVolume() == 0, "but not into a notch on the far side, behind a solid face higher than the water");
+        Block beyond;
+        world.GetBlock(2, 44, 16, b);
+        world.GetBlock(3, 44, 16, beyond);
+        Check(b.WaterVolume() > 0 && beyond.WaterVolume() == 0,
+              "two notches meeting at a corner: water gets into the near one, not past the block (" + std::to_string(beyond.WaterVolume()) + " beyond)");
     }
 
     // The player walks over to it.
