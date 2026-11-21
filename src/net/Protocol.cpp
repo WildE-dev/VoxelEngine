@@ -201,6 +201,42 @@ std::vector<uint8_t> Encode(const Lightning& m) {
     return std::move(w.data);
 }
 
+namespace {
+bool FiniteVec(const glm::vec3& v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
+} // namespace
+
+std::vector<uint8_t> Encode(const Shoot& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Shoot);
+    w.Vec3(m.direction);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Shoot& m) {
+    return in.Vec3(m.direction) && FiniteVec(m.direction) && glm::length(m.direction) > 0.1f && in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const Arrows& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Arrows);
+    const size_t n = std::min(m.arrows.size(), kMaxArrowsSent);
+    w.VarU32(static_cast<uint32_t>(n));
+    for (size_t i = 0; i < n; i++) {
+        w.Vec3(m.arrows[i].position);
+        w.Vec3(m.arrows[i].velocity);
+    }
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Arrows& m) {
+    uint32_t n;
+    if (!in.VarU32(n) || n > kMaxArrowsSent) return false;
+    m.arrows.resize(n);
+    for (auto& a : m.arrows)
+        if (!in.Vec3(a.position) || !in.Vec3(a.velocity) || !FiniteVec(a.position) || !FiniteVec(a.velocity)) return false;
+    return in.AtEnd();
+}
+
 bool Decode(ByteReader& in, Lightning& m) {
     return in.IVec3(m.pos) && in.AtEnd();
 }

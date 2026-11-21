@@ -652,6 +652,19 @@ names, held items and armour reaching other players, reach, damage, the red flas
 knockback, `/pvp off`, being slain, and the killer finding half the victim's things in
 a chest where they died.
 
+## Bows and arrows
+
+A **bow** (1 plank + 1 hide) is a tool; **arrows** come four at a time from half a
+plank and a quarter of stone. With the bow in your hand, right-click to shoot an arrow
+where you're looking (one arrow each, at most about every 0.6 s; creative players
+need none). The server flies it: fast, with gravity pulling it down, until it hits a
+block (where it sticks for six seconds), a creature or a player. A hit does 2.5 hearts
+and knocks the target back; players only when PvP is on (see [PvP](#pvp)), and armour
+helps. Everyone near sees arrows in flight and stuck in the ground. With the iron
+upgrade the bow doesn't hit harder (the arrow does the work). `CreatureTest` checks a
+hit from ten blocks off, that a bow's shots are spaced out, and arrows sticking in
+the ground.
+
 ## Ores and iron
 
 The stone underground holds veins of ore: **coal ore** from 8 blocks below the surface
@@ -812,6 +825,8 @@ makes four.
 | Shovel | 1 planks + 0.5 stone |
 | Cooked venison | 1 raw venison + 0.25 log |
 | Sword | 0.5 planks + 2 stone |
+| Bow | 1 planks + 1 hide |
+| 4 arrows | 0.5 planks + 0.25 stone |
 | Chest | 2 planks |
 | 3 ladders | 1 planks |
 | Door | 2 planks |

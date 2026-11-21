@@ -80,8 +80,16 @@ bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, bool i
     const Collision::AABB box = BoxAt(c.feet, spec);
     const glm::vec3 nearest = glm::clamp(eye, box.min, box.max);
     if (glm::distance(eye, nearest) > Combat::kReach + 0.5f) return false; // (slack for movement in flight)
+    return Damage(id, Combat::Damage(tool, iron), eye, now, killed);
+}
 
-    c.health -= Combat::Damage(tool, iron);
+bool CreatureSystem::Damage(uint16_t id, int damage, const glm::vec3& from, double now, bool& killed) {
+    killed = false;
+    auto it = std::find_if(creatures.begin(), creatures.end(), [&](const Creature& c) { return c.id == id; });
+    if (it == creatures.end()) return false;
+    Creature& c = *it;
+    const glm::vec3 eye = from;
+    c.health -= damage;
     c.hurtUntil = now + 0.3;
     // Knocked back, away from the hitter.
     glm::vec2 away(c.feet.x - eye.x, c.feet.z - eye.z);
@@ -100,6 +108,8 @@ bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, bool i
     }
     return true;
 }
+
+Collision::AABB CreatureSystem::Box(const Creature& c) { return BoxAt(c.feet, SpecOf(c.type)); }
 
 bool CreatureSystem::Burning(ServerWorld& world, const Creature& c, float daylight) const {
     if (!SpecOf(c.type).hostile || daylight < 0.5f) return false;

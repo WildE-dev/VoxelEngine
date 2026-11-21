@@ -147,13 +147,15 @@ enum class BlockType : uint8_t {
     // an open frame you walk through (passable, drawn like a ladder's shell).
     DOOR,
     DOOR_OPEN,
+    ARROW, // item: what a bow shoots
     COUNT
 };
 
 // Things held in the inventory that aren't blocks: they can't be placed.
 inline bool IsItemType(BlockType type) {
     return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE || type == BlockType::COAL ||
-           type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD;
+           type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD ||
+           type == BlockType::ARROW;
 }
 
 inline bool IsPlantType(BlockType type) {

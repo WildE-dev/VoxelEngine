@@ -53,7 +53,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::PUMP, BlockType::PIPE,
     BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -80,7 +80,7 @@ const char* HeightName(int eighths) {
 }
 
 // The tools the inventory offers, and the icon (atlas tile) for one.
-constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel, Tool::Sword };
+constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel, Tool::Sword, Tool::Bow };
 int ToolTile(const TextureAtlas& atlas, Tool tool) {
     const char* name = Mining::ToolTexture(tool);
     return name ? atlas.GetIndex(name) : 0;
@@ -91,6 +91,7 @@ const char* ToolHint(Tool tool) {
     case Tool::Axe: return "fast on wood";
     case Tool::Shovel: return "fast on dirt, grass, sand and snow";
     case Tool::Sword: return "for fighting: 3.5 hearts a hit (and quick on leaves)";
+    case Tool::Bow: return "right-click to shoot an arrow (2.5 hearts); needs arrows";
     default: return "";
     }
 }
@@ -149,6 +150,7 @@ const char* BlockName(BlockType type) {
     case BlockType::LADDER: return "Ladder";
     case BlockType::DOOR: return "Door";
     case BlockType::DOOR_OPEN: return "Open door";
+    case BlockType::ARROW: return "Arrow";
     default:               return "Air";
     }
 }
@@ -504,6 +506,17 @@ void Application::Run() {
         for (const auto& c : client->GetCreatures())
             params.creatures.push_back({ static_cast<uint8_t>(c.type), c.feet, c.yaw, c.hurt, c.speed, lightAt(c.feet) });
         for (const auto& b : bolts) params.bolts.push_back({ b.points, b.life / 0.35f });
+        for (const auto& a : client->GetArrows()) {
+            // Flying arrows point where they're going; stuck ones keep the way they came in.
+            glm::vec3 dir = a.velocity;
+            if (glm::length(dir) < 1e-3f) {
+                auto& kept = arrowFacing[std::make_pair(static_cast<int>(a.position.x * 64.0f), static_cast<int>(a.position.z * 64.0f))];
+                dir = glm::length(kept) > 0.0f ? kept : glm::vec3(0.0f, -1.0f, 0.0f);
+            }
+            else arrowFacing[std::make_pair(static_cast<int>(a.position.x * 64.0f), static_cast<int>(a.position.z * 64.0f))] = dir;
+            params.arrows.push_back({ a.position, dir, lightAt(a.position) });
+        }
+        if (arrowFacing.size() > 512) arrowFacing.clear();
         for (const auto& p : particles)
             params.particles.push_back({ p.position, p.size * std::min(1.0f, p.life / (0.4f * p.maxLife)), p.uv, lightAt(p.position - glm::vec3(0.0f, 0.1f, 0.0f)) });
         const TextureAtlas& atlas = renderer->GetAtlas();
@@ -1590,6 +1603,17 @@ void Application::OnMouseButton(int button, int action) {
             client->UseBed(at->block);
             return;
         }
+    }
+
+    // Right-click with the bow drawn: shoot (if there's an arrow, in survival).
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::Bow) {
+        if (client->HasTool(Tool::Bow) && (client->IsCreative() || client->GetResources(BlockType::ARROW) >= Block::kUnitsPerBlock) &&
+            Client::Now() >= nextShot) {
+            client->Shoot(camera.GetDirection());
+            audio->PlayHere("bow", 0.7f);
+            nextShot = Client::Now() + 0.6;
+        }
+        return;
     }
 
     // Right-click with an item in hand uses it (wherever you look): food is eaten;

@@ -219,6 +219,8 @@ private:
         Tool miningTool = Tool::None;
         double miningSince = 0.0;
         double nextAttack = 0.0; // hitting creatures: at most this often
+        double nextShot = 0.0;   // the bow: at most this often
+        bool sentArrows = false; // the last Arrows they were sent had some in it
 
         // Chunks the client has, with the version of the light it has for each.
         std::unordered_map<glm::ivec3, uint32_t, Coords::IVec3Hash> sent;
@@ -339,6 +341,17 @@ private:
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> crops;
     double nextCropUpdate = 0.0;
     void UpdateCrops();
+    // Arrows: flying (with gravity) until they hit a block (then stuck there a while), a
+    // creature or a player.
+    struct Arrow {
+        glm::vec3 position, velocity;
+        uint16_t shooter;
+        double born, stuckAt = -1.0; // stuckAt >= 0: stuck in a block since then
+    };
+    std::vector<Arrow> arrows;
+    void HandleShoot(ClientState& client, const glm::vec3& direction);
+    void UpdateArrows();
+    void SendArrows();
     double lastCreatureTime = 0.0;
     std::unique_ptr<WorldStorage> storage; // declared before `world`, which uses it
     std::unique_ptr<ServerWorld> world;

@@ -128,6 +128,37 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
     }
 }
 
+void PlayerModels::DrawArrows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ArrowModel>& arrows) {
+    if (arrows.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 0.0f);
+    shader.SetUniform("textured", 0.0f);
+    glBindVertexArray(vao);
+    for (const auto& a : arrows) {
+        shader.SetUniform("lightLevels", a.light);
+        // A frame along the arrow: x forward.
+        const glm::vec3 x = glm::length(a.direction) > 1e-4f ? glm::normalize(a.direction) : glm::vec3(1, 0, 0);
+        const glm::vec3 y = glm::normalize(std::abs(x.y) < 0.95f ? glm::cross(glm::cross(x, glm::vec3(0, 1, 0)), x) : glm::vec3(1, 0, 0));
+        const glm::vec3 z = glm::cross(x, y);
+        glm::mat4 frame(1.0f);
+        frame[0] = glm::vec4(x, 0.0f);
+        frame[1] = glm::vec4(y, 0.0f);
+        frame[2] = glm::vec4(z, 0.0f);
+        frame[3] = glm::vec4(a.position, 1.0f);
+        auto part = [&](const glm::vec3& centre, const glm::vec3& size, const glm::vec3& color) {
+            shader.SetUniform("model", glm::scale(glm::translate(frame, centre), size));
+            shader.SetUniform("color", color);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        };
+        part({ -0.3f, 0.0f, 0.0f }, { 0.7f, 0.05f, 0.05f }, glm::vec3(0.55f, 0.38f, 0.2f));  // shaft
+        part({ 0.07f, 0.0f, 0.0f }, { 0.1f, 0.09f, 0.09f }, glm::vec3(0.6f, 0.6f, 0.62f));   // head
+        part({ -0.6f, 0.0f, 0.0f }, { 0.14f, 0.14f, 0.02f }, glm::vec3(0.9f, 0.9f, 0.88f)); // fletching
+        part({ -0.6f, 0.0f, 0.0f }, { 0.14f, 0.02f, 0.14f }, glm::vec3(0.9f, 0.9f, 0.88f));
+    }
+}
+
 void PlayerModels::DrawBolts(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<BoltModel>& bolts) {
     if (bolts.empty()) return;
     shader.Use();

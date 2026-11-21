@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -153,6 +154,8 @@ private:
         glm::vec4 uv;
     };
     std::vector<Particle> particles;
+    double nextShot = 0.0; // the bow's next shot
+    std::map<std::pair<int, int>, glm::vec3> arrowFacing; // which way arrows were going before they stuck
     // Lightning: the bolts still showing, how bright the flash is (0..1), and thunder
     // on its way (when it's heard, how loud).
     struct Bolt { std::vector<glm::vec3> points; float life; };

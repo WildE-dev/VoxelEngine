@@ -198,6 +198,13 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         else openChest.reset();
         break;
     }
+    case net::MsgType::Arrows: {
+        net::Arrows m;
+        if (!(ok = net::Decode(in, m))) break;
+        arrows = std::move(m.arrows);
+        arrowsAt = Now();
+        break;
+    }
     case net::MsgType::Lightning: {
         net::Lightning m;
         if ((ok = net::Decode(in, m)) && lightning.size() < 16) lightning.push_back(m.pos);
@@ -415,6 +422,21 @@ std::vector<Client::BlockEvent> Client::TakeBlockEvents() {
     std::vector<BlockEvent> events;
     events.swap(blockEvents);
     return events;
+}
+
+void Client::Shoot(const glm::vec3& direction) {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::Shoot{ direction }));
+}
+
+std::vector<net::ArrowInfo> Client::GetArrows() const {
+    // Moved on from the last update (smooth between the server's 20 a second).
+    const float since = static_cast<float>(std::min(0.1, Now() - arrowsAt));
+    std::vector<net::ArrowInfo> out = arrows;
+    for (auto& a : out) {
+        a.position += a.velocity * since;
+        a.velocity.y -= 18.0f * since;
+    }
+    return out;
 }
 
 void Client::UseBed(const glm::ivec3& pos) {

@@ -49,6 +49,11 @@ constexpr float kChestReach = kSurvivalReach;
 constexpr double kSleepWindow = 6.0;
 // Falls up to this many blocks are safe; each block beyond costs half a heart.
 constexpr float kSafeFall = 3.0f;
+// Arrows: how fast they leave the bow, how fast they fall, what a hit does, and how
+// often a bow can shoot.
+constexpr float kArrowSpeed = 32.0f, kArrowGravity = 18.0f;
+constexpr int kArrowDamage = 5;
+constexpr double kShotInterval = 0.6;
 
 // A player's body; a crouching player's is shorter (net::kFlagCrouching).
 constexpr float kCrouchHeight = 1.45f; // as Player::kCrouchHeight
@@ -305,6 +310,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     case net::MsgType::AttackPlayer: {
         net::AttackPlayer m;
         if ((ok = net::Decode(in, m))) HandleAttackPlayer(client, m.player, m.tool);
+        break;
+    }
+    case net::MsgType::Shoot: {
+        net::Shoot m;
+        if ((ok = net::Decode(in, m))) HandleShoot(client, m.direction);
         break;
     }
     case net::MsgType::UseBed: {
@@ -1190,6 +1200,104 @@ void Server::RemoveChest(const glm::ivec3& pos, ClientState* breaker) {
         }
 }
 
+void Server::HandleShoot(ClientState& client, const glm::vec3& direction) {
+    const double now = Now();
+    // A bow of their own, an arrow to shoot (survival), and not too often.
+    if (now < client.nextShot || Usable(client, Tool::Bow) != Tool::Bow) return;
+    uint32_t& held = client.resources[static_cast<size_t>(BlockType::ARROW)];
+    if (!Creative(client)) {
+        if (held < Block::kUnitsPerBlock) return SendResources(client);
+        held -= Block::kUnitsPerBlock;
+        SendResources(client);
+    }
+    client.nextShot = now + kShotInterval * 0.8; // (a little slack for timing)
+    const glm::vec3 dir = glm::normalize(direction);
+    const glm::vec3 eye = client.feet + glm::vec3(0.0f, (client.flags & net::kFlagCrouching) ? 1.27f : kEyeHeight, 0.0f);
+    arrows.push_back({ eye + dir * 0.4f, dir * kArrowSpeed, client.id, now });
+    if (arrows.size() > 256) arrows.erase(arrows.begin()); // (the oldest go first)
+}
+
+void Server::UpdateArrows() {
+    const double now = Now();
+    constexpr float dt = 1.0f / kTickRate;
+    constexpr int kSteps = 6;
+    for (auto it = arrows.begin(); it != arrows.end();) {
+        Arrow& a = *it;
+        // Stuck arrows stay a while; flying ones don't fly forever.
+        if ((a.stuckAt >= 0.0 && now - a.stuckAt > 6.0) || (a.stuckAt < 0.0 && now - a.born > 8.0)) {
+            it = arrows.erase(it);
+            continue;
+        }
+        if (a.stuckAt >= 0.0) { ++it; continue; }
+        bool gone = false;
+        for (int step = 0; step < kSteps && !gone && a.stuckAt < 0.0; step++) {
+            a.velocity.y -= kArrowGravity * dt / kSteps;
+            const glm::vec3 next = a.position + a.velocity * (dt / kSteps);
+            // Into a block: stuck there.
+            const glm::ivec3 cell(glm::floor(next));
+            Block b;
+            if (world->GetBlock(cell.x, cell.y, cell.z, b) && !b.IsPassable() &&
+                (b.IsFullBlock() || next.y - cell.y <= b.SurfaceHeight(next.x - cell.x, next.z - cell.z))) {
+                a.stuckAt = now;
+                a.velocity = glm::vec3(0.0f);
+                break;
+            }
+            a.position = next;
+            auto inside = [&](const Collision::AABB& box) {
+                return glm::all(glm::greaterThanEqual(a.position, box.min - 0.1f)) && glm::all(glm::lessThanEqual(a.position, box.max + 0.1f));
+            };
+            // A creature.
+            for (const auto& c : creatures.All()) {
+                if (!inside(CreatureSystem::Box(c))) continue;
+                bool killed = false;
+                const uint16_t id = c.id;
+                const CreatureType type = c.type;
+                creatures.Damage(id, kArrowDamage, a.position - a.velocity * 0.05f, now, killed);
+                if (killed)
+                    for (auto& [peer, shooter] : clients)
+                        if (shooter.id == a.shooter) SendChat(shooter, net::ChatMessage::Kind::Info, std::string("You shot a ") + SpecOf(type).id);
+                gone = true;
+                break;
+            }
+            if (gone) break;
+            // A player (not the shooter as it leaves the bow; not when PvP is off).
+            for (auto& [peer, target] : clients) {
+                if (!target.welcomed || !target.hasState || (target.noclip && (target.flags & net::kFlagFlying))) continue;
+                if (target.id == a.shooter && now - a.born < 0.3) continue;
+                if (!inside(BodyAt(target.feet, 0.0f, (target.flags & net::kFlagCrouching) != 0))) continue;
+                if (options.pvp || target.id == a.shooter) {
+                    std::string by = "someone";
+                    for (const auto& [p2, s] : clients)
+                        if (s.id == a.shooter) by = s.name;
+                    const double before = target.invulnerableUntil;
+                    Hurt(target, kArrowDamage, "was shot by " + by);
+                    if (target.health > 0 && target.lastHurt >= now && target.invulnerableUntil == before) {
+                        const glm::vec2 push = glm::length(glm::vec2(a.velocity.x, a.velocity.z)) > 1e-3f ? glm::normalize(glm::vec2(a.velocity.x, a.velocity.z)) : glm::vec2(0.0f);
+                        net.Send(target.peer, net::kChannelReliable, net::Encode(net::Knockback{ glm::vec3(push.x * 5.0f, 4.0f, push.y * 5.0f) }));
+                    }
+                }
+                gone = true;
+                break;
+            }
+        }
+        if (gone) it = arrows.erase(it);
+        else ++it;
+    }
+}
+
+void Server::SendArrows() {
+    constexpr float kSendRange = 96.0f;
+    for (auto& [peer, client] : clients) {
+        if (!client.welcomed) continue;
+        net::Arrows m;
+        for (const auto& a : arrows)
+            if (glm::distance(a.position, client.feet) < kSendRange) m.arrows.push_back({ a.position, a.velocity });
+        if (m.arrows.empty() && !client.sentArrows) continue; // (nothing, and they know it)
+        client.sentArrows = !m.arrows.empty();
+        net.Send(peer, net::kChannelUnreliable, net::Encode(m));
+    }
+}
+
 void Server::UpdateCrops() {
     // Once a second, each crop (in a loaded chunk) may ripen: on average after 90 s.
     const double now = Now();
@@ -1301,6 +1409,7 @@ void Server::Tick() {
     UpdateTraps();
     UpdateCreatures();
     UpdateCrops();
+    UpdateArrows();
     if (storage && options.autosaveSeconds > 0.0f && Now() - lastSaveTime >= options.autosaveSeconds) Save(false);
 
     std::vector<glm::ivec3> centers;
@@ -1317,6 +1426,7 @@ void Server::Tick() {
         if (client.welcomed) StreamWorld(client);
     BroadcastPlayers();
     SendCreatures();
+    SendArrows();
     net.Flush();
 }
 

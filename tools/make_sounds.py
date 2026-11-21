@@ -147,6 +147,11 @@ def main():
     thunder_rng = random.Random(61)
     crack = envelope(highpass(noise(secs(0.25), thunder_rng), 1200), 0.002, 0.24, 3.0)
     rumble = envelope(lowpass(lowpass(noise(secs(3.5), thunder_rng), 140), 220), 0.08, 3.4, 1.4)
+    # The bow: a short twang, and the arrow's whoosh.
+    bow_rng = random.Random(71)
+    twang = envelope(tone(330, 250, 0.18, "saw"), 0.002, 0.17, 2.5)
+    whoosh = envelope(highpass(noise(secs(0.18), bow_rng), 2000), 0.03, 0.15, 1.5)
+    save("bow", mix([0.6 * s for s in lowpass(twang, 1800)], [0.4 * s for s in whoosh]))
     save("thunder", mix(crack + [0.0] * (len(rumble) - len(crack)), [1.6 * s for s in rumble]))
     print("sounds written to", os.path.normpath(OUT))
 

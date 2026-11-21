@@ -10,7 +10,9 @@
 //  - in a normal world, deer turn up by themselves on grass, and ghouls come out at
 //    night,
 //  - PvP: players hit each other in reach (flashing red for others, knocked back), can be slain,
-//    and /pvp off stops it.
+//    and /pvp off stops it,
+//  - archery: an arrow hits a player ten blocks off, a bow's shots are spaced out,
+//    and arrows stick in the ground.
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -264,6 +266,32 @@ int main() {
         a.client.AttackPlayer(rival, Tool::Sword);
         Check(both(20.0, [&] { return b.client.GetHealth() < 20; }) && b.client.GetHealth() == 16,
               "armour takes a sword's 3.5 hearts down to 2 (health " + std::to_string(b.client.GetHealth()) + ")");
+
+        std::cout << "Archery" << std::endl;
+        server.QueueConsoleCommand("give bow Duelist");
+        server.QueueConsoleCommand("give arrow 3 Duelist");
+        server.QueueConsoleCommand("tp Duelist 20.5 0 8.5");
+        server.QueueConsoleCommand("tp Rival 30.5 0 8.5"); // ten blocks off
+        Check(both(20.0, [&] { return a.client.HasTool(Tool::Bow) && a.client.GetResources(BlockType::ARROW) == 3 * 64 && std::abs(b.feet.x - 30.5f) < 0.1f; }),
+              "the duelist has a bow and three arrows; the rival stands ten blocks off");
+        both(3.5, [] { return false; }); // (no grace left; healed or not)
+        const int beforeArrow = b.client.GetHealth();
+        // Aim at their middle, a little high (arrows drop).
+        const glm::vec3 eye = a.feet + glm::vec3(0.0f, 1.62f, 0.0f), target = b.feet + glm::vec3(0.0f, 1.0f + 0.5f, 0.0f);
+        a.client.Shoot(target - eye);
+        Check(both(5.0, [&] { return b.client.GetHealth() < beforeArrow; }) && b.client.GetHealth() == beforeArrow - 3,
+              "an arrow across ten blocks hits (2.5 hearts, armour takes it to 1.5)");
+        Check(a.client.GetResources(BlockType::ARROW) == 2 * 64, "and uses an arrow");
+        a.client.Shoot(glm::vec3(1.0f, -1.0f, 0.0f)); // (too soon: the bow isn't ready)
+        both(1.0, [] { return false; });
+        Check(a.client.GetResources(BlockType::ARROW) == 2 * 64, "a second shot straight after doesn't go");
+        a.client.Shoot(glm::vec3(1.0f, -1.0f, 0.0f)); // at the ground ahead
+        bool stuck = false;
+        both(5.0, [&] {
+            for (const auto& arrow : a.client.GetArrows()) stuck |= glm::length(arrow.velocity) < 1e-3f;
+            return stuck;
+        });
+        Check(stuck && a.client.GetResources(BlockType::ARROW) == 64, "one shot at the ground sticks there");
         a.client.Disconnect();
         b.client.Disconnect();
         Pump({ &a, &b }, 0.3, [] { return false; });

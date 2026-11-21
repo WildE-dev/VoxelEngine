@@ -174,6 +174,10 @@ public:
     void OpenChest(const glm::ivec3& pos);
     // Right-clicked a bed: respawn there (and sleep, at night). The server says so in chat.
     void UseBed(const glm::ivec3& pos);
+    // Shoot an arrow from the bow, this way (the server checks the bow and the arrow).
+    void Shoot(const glm::vec3& direction);
+    // Arrows near us, as of the last update, moved on by their speed since.
+    std::vector<net::ArrowInfo> GetArrows() const;
     void CloseChest();
     void MoveChestItems(BlockType type, uint32_t units, bool intoChest);
     // The chest open now (none until the server says it's open, or once it's closed),
@@ -210,6 +214,8 @@ private:
     glm::vec3 pendingKnockback{ 0.0f };
     bool storm = false;
     std::vector<glm::ivec3> lightning;
+    std::vector<net::ArrowInfo> arrows;
+    double arrowsAt = 0.0;
     std::optional<glm::ivec3> openChest;
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> chestHeld{};
     std::optional<glm::vec3> pendingCorrection;

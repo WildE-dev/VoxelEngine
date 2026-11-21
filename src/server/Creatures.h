@@ -16,6 +16,7 @@
 
 #include <glm/glm.hpp>
 
+#include "world/Collision.h"
 #include "world/Creatures.h"
 
 class ServerWorld;
@@ -64,6 +65,10 @@ public:
     // A player at `eye` hits creature `id` with `tool`. Returns whether it landed
     // (exists, in reach); `killed` says if it died.
     bool Attack(uint16_t id, const glm::vec3& eye, Tool tool, bool iron, double now, bool& killed);
+    // Hurts it (from anywhere: an arrow), knocking it back away from `from`.
+    bool Damage(uint16_t id, int damage, const glm::vec3& from, double now, bool& killed);
+    // Its box, for hit tests.
+    static Collision::AABB Box(const Creature& c);
 
     const std::vector<Creature>& All() const { return creatures; }
     const Creature* Find(uint16_t id) const;

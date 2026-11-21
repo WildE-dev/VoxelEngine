@@ -42,6 +42,12 @@ struct ParticleModel {
     glm::vec2 light{ 15.0f, 0.0f };
 };
 
+// An arrow: where it is and which way it points.
+struct ArrowModel {
+    glm::vec3 position{0.0f}, direction{ 1.0f, 0.0f, 0.0f };
+    glm::vec2 light{ 15.0f, 0.0f };
+};
+
 // A lightning bolt: a jagged line of points from the sky down to where it struck,
 // drawn glowing, fading with `brightness` (0..1).
 struct BoltModel {
@@ -62,6 +68,7 @@ public:
 
     void Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<PlayerModel>& players);
     // Creatures, from boxes too: a deer, a ghoul. `time` swings their legs.
+    void DrawArrows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ArrowModel>& arrows);
     void DrawBolts(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<BoltModel>& bolts);
     // Bits of broken blocks (tiny textured cubes).
     void DrawParticles(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ParticleModel>& particles);
