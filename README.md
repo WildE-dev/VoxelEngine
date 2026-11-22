@@ -653,6 +653,10 @@ your own. `TrapTest` checks spikes, death and respawn, crumbling floors, pressur
 plates and sluice gates, falls (safe from 3 blocks, four hearts from 11), and that
 no-clip and the laser are operators' only.
 
+
+Where you last died, the minimap shows a red cross (at its edge, if it's further off,
+the way to it) until you get back there: half of what you carried is waiting in a
+chest on the spot.
 ## TNT
 
 **TNT** (a sand and half a coal) explodes. Right-click it to light it: it turns white

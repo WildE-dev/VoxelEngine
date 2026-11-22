@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <filesystem>
+#include <deque>
 #include <map>
 #include <memory>
 #include <optional>
@@ -306,6 +307,11 @@ private:
     // A boss's health bar (a Dwarf King's, near you) across the top of the screen.
     void DrawBossBar();
     void DrawDeath(); // "You died", for a few seconds after dying
+    // Where we last died (half of what we carried is left there): marked on the minimap
+    // until we get back to it. Our feet as of the frame before, for when the news comes.
+    std::optional<glm::vec3> deathSpot;
+    double deathSeen = -1.0;
+    std::deque<std::pair<double, glm::vec3>> feetHistory; // (the last few seconds: the respawn may come before the news)
     bool showPlayers = false; // P: who's online
     void DrawPlayerList();
     bool vsync = true;

@@ -1350,6 +1350,21 @@ void Application::DrawMinimap() {
                                 site.fallen ? IM_COL32(130, 130, 130, 255) : IM_COL32(170, 80, 220, 255));
         }
     }
+    // Where we last died: a red cross (at the edge, if it's off the map).
+    if (deathSpot) {
+        ImVec2 at(lo.x + (deathSpot->x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (deathSpot->z - (mapCentre.y - kMapSize / 2)) * scale);
+        const ImVec2 c((lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f);
+        const float dx = at.x - c.x, dy = at.y - c.y, half = kShown * 0.5f - 6.0f;
+        if (std::max(std::abs(dx), std::abs(dy)) > half) {
+            const float k = half / std::max(std::abs(dx), std::abs(dy));
+            at = ImVec2(c.x + dx * k, c.y + dy * k);
+        }
+        for (const float w : { 4.0f, 2.2f }) {
+            const ImU32 col = w > 3.0f ? IM_COL32(0, 0, 0, 220) : IM_COL32(255, 60, 50, 255);
+            draw->AddLine(ImVec2(at.x - 5, at.y - 5), ImVec2(at.x + 5, at.y + 5), col, w);
+            draw->AddLine(ImVec2(at.x - 5, at.y + 5), ImVec2(at.x + 5, at.y - 5), col, w);
+        }
+    }
     // Other players: dots.
     for (const auto& other : client->GetRemotePlayers()) {
         const ImVec2 at(lo.x + (other.feet.x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (other.feet.z - (mapCentre.y - kMapSize / 2)) * scale);
@@ -1386,6 +1401,20 @@ void Application::DrawPlayerList() {
 }
 
 void Application::DrawDeath() {
+    // A new death: where it was (where we were half a second before the news: the
+    // respawn may have come first).
+    if (client->GetLastDeath() > 0.0 && client->GetLastDeath() != deathSeen) {
+        deathSeen = client->GetLastDeath();
+        deathSpot.reset();
+        for (const auto& [when, feet] : feetHistory)
+            if (when <= deathSeen - 0.5) deathSpot = feet;
+        if (!deathSpot && !feetHistory.empty()) deathSpot = feetHistory.front().second;
+    }
+    if (deathSpot && glm::distance(glm::vec2(deathSpot->x, deathSpot->z), glm::vec2(player.GetFeetPosition().x, player.GetFeetPosition().z)) < 3.0f &&
+        Client::Now() - deathSeen > 5.0)
+        deathSpot.reset(); // (back there: found)
+    feetHistory.emplace_back(Client::Now(), player.GetFeetPosition());
+    while (feetHistory.size() > 2 && feetHistory.front().first < Client::Now() - 3.0) feetHistory.pop_front();
     const double since = Client::Now() - client->GetLastDeath();
     if (since > 4.0 || since < 0.0) return;
     // How it happened: the latest line in chat about us dying ("Name was ...").
