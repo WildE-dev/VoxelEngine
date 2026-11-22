@@ -1454,10 +1454,16 @@ void Server::HandleEat(ClientState& client, BlockType food) {
     SendHealth(client, false);
 }
 
-void Server::HandleOpenChest(ClientState& client, const glm::ivec3& pos, bool open) {
+void Server::HandleOpenChest(ClientState& client, const glm::ivec3& at, bool open) {
     client.openChest.reset();
     Block block;
-    if (open && InReach(client, pos, kChestReach) && world->GetBlock(pos.x, pos.y, pos.z, block) && IsStorageType(block.type)) {
+    // A structure's part: its core's inventory.
+    glm::ivec3 pos = at;
+    if (open && world->GetBlock(at.x, at.y, at.z, block) && block.type == BlockType::MULTIBLOCK_PART && InReach(client, at, kChestReach)) {
+        glm::ivec3 core;
+        if (CoreOf(at, core)) pos = core;
+    }
+    if (open && (pos != at || InReach(client, pos, kChestReach)) && world->GetBlock(pos.x, pos.y, pos.z, block) && IsStorageType(block.type)) {
         client.openChest = pos;
         const bool unopened = chests.count(pos) == 0;
         const ChestItems& chest = ChestAt(pos);
@@ -1470,7 +1476,7 @@ void Server::HandleOpenChest(ClientState& client, const glm::ivec3& pos, bool op
 void Server::HandleChestMove(ClientState& client, const glm::ivec3& pos, BlockType type, uint32_t units, bool intoChest) {
     // Only with that chest open, still there and in reach.
     Block block;
-    if (client.openChest != pos || !InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block) || !IsStorageType(block.type) ||
+    if (client.openChest != pos || !InReach(client, pos, kChestReach + 2.0f) || !world->GetBlock(pos.x, pos.y, pos.z, block) || !IsStorageType(block.type) ||
         type == BlockType::AIR || block.IsLiquid())
         return SendResources(client);
     ChestItems& chest = chests[pos];

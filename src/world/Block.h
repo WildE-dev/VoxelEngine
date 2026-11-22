@@ -296,8 +296,14 @@ enum class BlockType : uint8_t {
     COPPER_INGOT,
     COUNT
 };
+// Machines with an inventory of their own (opened like a chest, empty-handed): what
+// they work from and put what they make in, before any chest joined to them.
+inline bool IsMachineInventory(BlockType t) {
+    return t == BlockType::SMELTER || t == BlockType::SMELTER_LIT || t == BlockType::DRILL || t == BlockType::CRAFTER || t == BlockType::HARVESTER ||
+           t == BlockType::CRUSHER || t == BlockType::BOILER || t == BlockType::MULTIBLOCK;
+}
 // Blocks that hold things like a chest (opened, filled, emptied, broken open).
-inline bool IsStorageType(BlockType t) { return t == BlockType::CHEST || t == BlockType::MINING_POST; }
+inline bool IsStorageType(BlockType t) { return t == BlockType::CHEST || t == BlockType::MINING_POST || IsMachineInventory(t); }
 
 // Solid blocks drawn by a model of their own (turning wheels and shafts), and pipes
 // drawn as thin tubes: neither hides what's beside it or blocks light.

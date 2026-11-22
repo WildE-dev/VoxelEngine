@@ -499,6 +499,8 @@ bool Server::Crush(const glm::ivec3& pos, Worker& w) {
 std::vector<glm::ivec3> Server::ChestsJoined(const glm::ivec3& pos, BlockType type, const glm::ivec3* face) const {
     std::vector<glm::ivec3> chestsFound, pipes{ pos };
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> seen{ pos };
+    // A machine with an inventory of its own: that first.
+    if (Block self; !face && world->GetBlock(pos.x, pos.y, pos.z, self) && IsMachineInventory(self.type)) chestsFound.push_back(pos);
     for (size_t i = 0; i < pipes.size() && pipes.size() < static_cast<size_t>(Power::kMaxItemNetwork); i++)
         for (const auto& d : kFaces) {
             if (i == 0 && face && d != *face) continue;
@@ -583,7 +585,9 @@ bool Server::CraftAt(const glm::ivec3& pos, const Block& crafter, Worker& w) {
 }
 
 bool Server::Harvest(const glm::ivec3& pos, Worker& w) {
-    const auto joined = ChestsJoined(pos, BlockType::WHEAT);
+    // (A chest joined to it first; its own inventory if there's none.)
+    auto joined = ChestsJoined(pos, BlockType::WHEAT);
+    if (joined.size() > 1 && joined.front() == pos) std::rotate(joined.begin(), joined.begin() + 1, joined.end());
     if (joined.empty()) {
         w.state = Power::DrillState::NoChest;
         return false;
@@ -641,7 +645,10 @@ bool Server::DrillDig(const glm::ivec3& pos, Drill& drill) {
             if (!world->GetBlock(pos.x, pos.y - depth, pos.z, b)) break;
             if (!b.IsAir()) next = b.ResourceType();
         }
-        for (const auto& c : ChestsJoined(pos, next))
+        // (A chest joined to it first; its own inventory if there's none.)
+        auto found = ChestsJoined(pos, next);
+        if (found.size() > 1 && found.front() == pos) std::rotate(found.begin(), found.begin() + 1, found.end());
+        for (const auto& c : found)
             if (c != pos - glm::ivec3(0, 1, 0)) {
                 chestAt = c;
                 break;
@@ -1059,7 +1066,8 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
             const size_t chestCount = ChestsJoined(pos).size();
             text += sm.state == Power::DrillState::Working ? "Smelter: smelting. " : sm.state == Power::DrillState::NoPressure ? "Smelter: waiting for air pressure. "
                   : sm.state == Power::DrillState::NoChest ? "Smelter: needs a chest touching it or joined by item pipes. " : "Smelter: nothing to smelt in its chests. ";
-            text += std::to_string(chestCount) + (chestCount == 1 ? " chest joined. " : " chests joined. ");
+            text += chestCount > 1 ? std::to_string(chestCount - 1) + (chestCount == 2 ? " chest joined, " : " chests joined, ") + "besides its own inventory. "
+                                   : "Working from its own inventory (right-click it empty-handed). ";
         }
         else if (b.type == BlockType::CRUSHER) {
             const Worker w = workers.count(pos) ? workers[pos] : Worker{};

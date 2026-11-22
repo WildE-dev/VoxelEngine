@@ -175,7 +175,8 @@ bool Server::RunStructure(const glm::ivec3& core, const Block& block, Worker& w)
     }
     case Kind::BlastFurnace: {
         if (!PortOf(core, block, Role::ItemPort, port)) return false;
-        const auto joined = ChestsJoined(port);
+        std::vector<glm::ivec3> joined = ChestsJoined(port);
+        joined.insert(joined.begin(), core); // (its own inventory first)
         if (joined.empty()) {
             w.state = Power::DrillState::NoChest;
             return false;
@@ -196,7 +197,8 @@ bool Server::RunStructure(const glm::ivec3& core, const Block& block, Worker& w)
     }
     case Kind::CokeOven: {
         if (!PortOf(core, block, Role::ItemPort, port)) return false;
-        const auto joined = ChestsJoined(port);
+        std::vector<glm::ivec3> joined = ChestsJoined(port);
+        joined.insert(joined.begin(), core); // (its own inventory first)
         if (joined.empty()) {
             w.state = Power::DrillState::NoChest;
             return false;

@@ -2451,7 +2451,13 @@ void Application::DrawChest() {
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                                    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize;
     bool keepOpen = true;
-    if (ImGui::Begin("Chest", &keepOpen, flags)) {
+    std::string title = "Chest";
+    if (const auto at = client->GetOpenChest()) {
+        Block b;
+        if (world->GetBlock(at->x, at->y, at->z, b) && b.type != BlockType::CHEST) title = b.type == BlockType::MULTIBLOCK ? "Structure" : BlockName(b.type);
+    }
+    title += "###chest";
+    if (ImGui::Begin(title.c_str(), &keepOpen, flags)) {
         const TextureAtlas& atlas = renderer->GetAtlas();
         const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
         const bool all = ImGui::GetIO().KeyShift;
@@ -2570,19 +2576,30 @@ void Application::OnMouseButton(int button, int action) {
     // it's built against instead).
     if (button == GLFW_MOUSE_BUTTON_RIGHT && glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) != GLFW_PRESS) {
         Block target;
+        // The engineer's hammer: strike a structure's block to form it (the server
+        // checks the pattern and says what's missing).
+        if (SelectedBlock() == BlockType::HAMMER && SelectedTool() == Tool::None) {
+            if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f)) client->UseBed(at->block);
+            return;
+        }
+        // A machine with its own inventory (a structure's any block: its core's) opens like
+        // a chest with an empty hand or a tool (and says how it's doing); with a block in
+        // hand it's built against, and a crafter takes what's in hand as its recipe.
+        const bool holding = SelectedTool() == Tool::None && SelectedBlock() != BlockType::AIR;
+        const bool blockInHand = holding && !IsItemType(SelectedBlock());
+        auto opens = [&](BlockType t) {
+            if (t == BlockType::CHEST || t == BlockType::MINING_POST) return true;
+            if (t == BlockType::CRAFTER) return !holding;
+            return (IsMachineInventory(t) || t == BlockType::MULTIBLOCK_PART) && !blockInHand;
+        };
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
-            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && IsStorageType(target.type)) {
+            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && opens(target.type)) {
+            if (IsMachineInventory(target.type) || target.type == BlockType::MULTIBLOCK_PART) client->Inspect(at->block);
             client->OpenChest(at->block);
             SetInventoryOpen(true);
             chestMode = true;
             chestSeenOpen = false;
             chestAskedAt = Client::Now();
-            return;
-        }
-        // The engineer's hammer: strike a structure's block to form it (the server
-        // checks the pattern and says what's missing).
-        if (SelectedBlock() == BlockType::HAMMER && SelectedTool() == Tool::None) {
-            if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f)) client->UseBed(at->block);
             return;
         }
         // A filter pipe or a crafter: set it to what's in hand (with Shift held, it's

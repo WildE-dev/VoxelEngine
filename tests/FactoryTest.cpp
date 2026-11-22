@@ -583,6 +583,28 @@ int main() {
         }
         Check(turbineFilled, "and the turbine beside it fills its air pipes from the steam");
 
+        std::cout << "Machines' own inventories" << std::endl;
+        // A smelter with no chest at all: sand put into it is smelted there.
+        server.QueueConsoleCommand("tp Builder 111.5 0 47.5");
+        pump(10.0, [&] { return a.feet.x > 111.0f; });
+        fill({ 110, 0, 50 }, { 110, 0, 50 }, "smelter");
+        fill({ 111, 0, 50 }, { 112, 0, 50 }, "air_pipe");
+        pump(10.0, [&] { return blockAt({ 110, 0, 50 }) == BlockType::SMELTER && blockAt({ 112, 0, 50 }) == BlockType::AIR_PIPE; });
+        server.QueueConsoleCommand("give sand 2 Builder");
+        pump(5.0, [&] { return a.client.GetResources(BlockType::SAND) >= 2 * Crafting::kBlock; });
+        a.client.OpenChest({ 110, 0, 50 });
+        Check(pump(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(110, 0, 50); }), "a smelter opens like a chest: its own inventory");
+        a.client.MoveChestItems(BlockType::SAND, 2 * Crafting::kBlock, true);
+        bool ownGlass = false;
+        for (int i = 0; i < 12 && !ownGlass; i++) {
+            server.QueueConsoleCommand("pressurise 112 0 50");
+            ownGlass = pump(1.0, [&] { return a.client.GetChestUnits(BlockType::GLASS) == 2 * Crafting::kBlock; });
+        }
+        Check(ownGlass, "with no chest beside it, it smelts the sand in its own inventory into glass, there");
+        a.client.MoveChestItems(BlockType::GLASS, 2 * Crafting::kBlock, false);
+        Check(pump(5.0, [&] { return a.client.GetResources(BlockType::GLASS) >= 2 * Crafting::kBlock; }), "and the glass can be taken out of it");
+        a.client.CloseChest();
+
         a.client.Disconnect();
         Pump(a, 0.3, [] { return false; });
         server.Stop();

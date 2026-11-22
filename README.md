@@ -1297,6 +1297,18 @@ tank to an outlet, and checks the cup empties and the water comes out of the out
 `SaveTest` checks what pipes and tanks hold is saved. `PumpTest` checks a drain with no
 room in its pipes takes nothing, and with room for 40 units takes just those.
 
+
+**Machines have their own inventory.** A smelter, drill, crafter, harvester, crusher,
+boiler, and any formed structure (click any of its blocks) opens like a chest:
+right-click it with an empty hand or a tool (it also says how it's doing). Put things
+in and it works from them, putting what it makes back in; no chest needed. Chests
+touching it or joined by item pipes still work as before: a machine uses its own
+inventory first, except a drill or harvester, which fill a joined chest if there is
+one and their own if not. Extractors take from machines' inventories too, and send
+into them along item pipes. With a block in hand, right-clicking a machine still builds
+against it (and a crafter still takes what's in hand as its recipe). Breaking a machine
+gives you what's in it. `FactoryTest` checks a smelter with no chest smelting sand in
+its own inventory.
 ### Steam power
 
 Between water wheels and diesel there's **steam**. A **boiler** (4 iron ingots and 2
