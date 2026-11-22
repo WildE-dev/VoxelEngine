@@ -117,6 +117,11 @@ RegionSite SiteIn(const TerrainGenerator& terrain, int rx, int rz) {
             if (k > 0 || !((out.seed >> 26) & 1)) s.chests.push_back(glm::ivec3(c.x, out.bottom, c.y) + d * (2 + length - 1));
         }
         s.warriors = 4, s.crossbows = 2, s.chiefs = 0;
+        // A third of the mines go on down to the Deep.
+        if ((out.seed >> 28) % 3 == 0) {
+            out.deepShaft = true;
+            out.deepBottom = TerrainGenerator::kDeepTop - 12;
+        }
         // A forge at the end of the first tunnel (half the mines): its golem and chest.
         if ((out.seed >> 26) & 1) {
             out.forge = true;
@@ -308,14 +313,37 @@ void Stamp(const TerrainGenerator& terrain, const glm::ivec3& coords, Blocks& ou
             }
             else {
                 const int bottom = r.bottom;
-                if (c.y + 5 < lo.y || bottom - 2 > hi.y) continue;
+                if (c.y + 5 < lo.y || (r.deepShaft ? r.deepBottom - 2 : bottom - 2) > hi.y) continue;
+                // The deep shaft: on down from the tunnels' floor, a ladder all the way and
+                // a lamp every 12 blocks, into a chamber in the Deep.
+                if (r.deepShaft && c.x + 4 >= lo.x && c.x - 4 <= hi.x && c.z + 4 >= lo.z && c.z - 4 <= hi.z) {
+                    for (int y = r.deepBottom; y < bottom; y++)
+                        for (int dx = -2; dx <= 2; dx++)
+                            for (int dz = -2; dz <= 2; dz++) {
+                                const glm::ivec3 p(c.x + dx, y, c.z + dz);
+                                const bool inner = std::abs(dx) <= 1 && std::abs(dz) <= 1;
+                                if (inner) set(p, y < r.deepBottom + 4 ? kAir : (dx == -1 && dz == 0 ? Block(BlockType::LADDER) : kAir));
+                                else if (y >= r.deepBottom + 4) set(p, (y - r.deepBottom) % 12 == 6 && dz == 0 && dx == 2 ? kLamp : Block(BlockType::STONE_BRICK));
+                            }
+                    // The chamber at the foot: 7 across, 4 high, a lamp, its floor bricked.
+                    for (int dx = -3; dx <= 3; dx++)
+                        for (int dz = -3; dz <= 3; dz++) {
+                            set(glm::ivec3(c.x + dx, r.deepBottom - 1, c.z + dz), Block(BlockType::STONE_BRICK));
+                            for (int y = 0; y < 4; y++) set(glm::ivec3(c.x + dx, r.deepBottom + y, c.z + dz), kAir);
+                        }
+                    for (int y = r.deepBottom; y < r.deepBottom + 4; y++) set(glm::ivec3(c.x - 1, y, c.z), Block(BlockType::LADDER));
+                    set(glm::ivec3(c.x + 3, r.deepBottom + 3, c.z + 3), kLamp);
+                    // (The shaft's floor at the tunnels opens on down.)
+                    for (int dx = -1; dx <= 1; dx++)
+                        for (int dz = -1; dz <= 1; dz++) set(glm::ivec3(c.x + dx, bottom - 1, c.z + dz), dx == -1 && dz == 0 ? Block(BlockType::LADDER) : kAir);
+                }
                 // The shaft, its ladder, and the headframe over it.
                 if (c.x + 3 >= lo.x && c.x - 3 <= hi.x && c.z + 3 >= lo.z && c.z - 3 <= hi.z) {
                     for (int y = bottom; y <= c.y + 3; y++)
                         for (int dx = -1; dx <= 1; dx++)
                             for (int dz = -1; dz <= 1; dz++) set(glm::ivec3(c.x + dx, y, c.z + dz), kAir);
                     for (int y = bottom; y < c.y + 1; y++) set(glm::ivec3(c.x - 1, y, c.z), Block(BlockType::LADDER));
-                    for (int y = bottom - 1; y >= bottom - 1; y--)
+                    for (int y = bottom - 1; y >= bottom - 1 && !r.deepShaft; y--)
                         for (int dx = -1; dx <= 1; dx++)
                             for (int dz = -1; dz <= 1; dz++) {
                                 const glm::ivec3 p(c.x + dx, y, c.z + dz);

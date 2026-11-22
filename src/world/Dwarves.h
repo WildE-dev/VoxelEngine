@@ -19,6 +19,9 @@
 //  - Half the mines have a forge: a room of fire bricks at the end of the first tunnel,
 //    lit by lamps and magma, where a forge golem (a boss) guards a chest of steel,
 //    gold and coke. Like a king, a golem doesn't come back once defeated.
+//  - A third of the mines go deeper: their shaft carries on down from the tunnels'
+//    floor to a chamber in the Deep (world/TerrainGenerator.h), ladder and all, with
+//    lamps every so often.
 //  - A mine: a timber headframe over a shaft three blocks across, with a ladder down
 //    to kMineDepth below the ground, and tunnels three wide and three high running out
 //    from its foot, framed every few blocks by log posts in the walls and a beam
@@ -68,6 +71,8 @@ struct RegionSite {
     glm::ivec3 gate{ 1, 0, 0 }; // a camp's gate direction (a stronghold's stairway's)
     int stairs = 0;             // a stronghold's stairway: steps up from the hall to the open
     bool forge = false;         // a mine with a forge (at the end of its first tunnel)
+    bool deepShaft = false;     // a mine whose shaft goes on down to the Deep
+    int deepBottom = 0;         // (its chamber's floor)
     glm::ivec3 forgeChest{ 0 };
 };
 RegionSite SiteIn(const TerrainGenerator& terrain, int regionX, int regionZ);

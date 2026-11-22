@@ -798,6 +798,9 @@ and a quarter a **mine**, on dry ground that's flat enough, below the bare peaks
   lamp on a post either side of the gate and no loot, where friendly dwarves live (see
   [Markets](#markets)).
 
+- A third of the mines are **deep mines**: their shaft carries on down past the
+  tunnels, walled in stone brick with a ladder all the way and a lamp every 12 blocks,
+  to a chamber in the Deep (12 blocks into it): the easy way down.
 - Half the mines have a **forge** at the end of their first tunnel: a room of fire
   bricks, lit by lamps and two pools of magma, where a **forge golem** stands guard
   over a chest of steel, gold and coke. A golem is a boss of stone and iron with a
