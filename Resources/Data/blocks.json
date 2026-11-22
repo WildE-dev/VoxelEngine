@@ -124,5 +124,7 @@
   "machine_sensor": { "name": "Machine sensor", "textures": { "top": "machine_sensor", "bottom": "sensor_bottom", "side": "machine_sensor" }, "hardness": 1, "tool": "pickaxe", "sound": "soft", "light": 0, "map": "#707070" },
   "boiler": { "name": "Boiler", "textures": { "top": "boiler_top", "bottom": "boiler_top", "side": "boiler_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
   "turbine": { "name": "Steam turbine", "textures": { "top": "turbine_top", "bottom": "turbine_top", "side": "turbine_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
-  "air_diffuser": { "name": "Air diffuser", "textures": { "top": "air_diffuser_top", "bottom": "machine_casing", "side": "air_diffuser_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }
+  "air_diffuser": { "name": "Air diffuser", "textures": { "top": "air_diffuser_top", "bottom": "machine_casing", "side": "air_diffuser_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
+  "copper_ore": { "name": "Copper ore", "textures": { "all": "copper_ore" }, "hardness": 5, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
+  "copper_ingot": { "name": "Copper ingot", "textures": { "all": "copper_ingot" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }
 }

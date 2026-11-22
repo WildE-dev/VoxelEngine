@@ -376,7 +376,7 @@ void Stamp(const TerrainGenerator& terrain, const glm::ivec3& coords, Blocks& ou
                                 if (frame) set(wall, kLog);
                                 else if (in(wall) && at(wall).type == BlockType::STONE) {
                                     const float ore = Noise::Random01(wall.x, wall.y, wall.z, kSeed ^ 0x0AEu);
-                                    if (ore < 0.08f) set(wall, Block(ore < 0.03f ? BlockType::IRON_ORE : BlockType::COAL_ORE));
+                                    if (ore < 0.1f) set(wall, Block(ore < 0.03f ? BlockType::IRON_ORE : ore < 0.05f ? BlockType::COPPER_ORE : BlockType::COAL_ORE));
                                 }
                             }
                         if (frame)
@@ -424,7 +424,7 @@ std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terr
         loot = { { BlockType::STEEL_INGOT, roll(1, 3, 6) }, { BlockType::GOLD_INGOT, roll(2, 2, 4) }, { BlockType::COKE, roll(3, 4, 8) } };
     }
     else {
-        loot = { { BlockType::COAL, roll(1, 4, 10) }, { BlockType::IRON_ORE, roll(2, 2, 6) }, { BlockType::IRON_INGOT, roll(3, 1, 3) },
+        loot = { { BlockType::COAL, roll(1, 4, 10) }, { BlockType::IRON_ORE, roll(2, 2, 6) }, { BlockType::COPPER_INGOT, roll(8, 1, 4) }, { BlockType::IRON_INGOT, roll(3, 1, 3) },
                  { BlockType::TNT, roll(4, 1, 2) }, { BlockType::BREAD, roll(5, 1, 3) } };
         if (Noise::Random01(pos.x, pos.y + 6, pos.z, r.seed) < 0.5f) loot.push_back({ BlockType::STEEL_INGOT, roll(7, 1, 2) });
     }

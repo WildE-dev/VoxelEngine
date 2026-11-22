@@ -290,6 +290,10 @@ enum class BlockType : uint8_t {
     // An air diffuser (part of an air network): uses a little compressed air to make
     // the air round it breathable, deep down or high up (world/Breathing.h).
     AIR_DIFFUSER,
+    // Copper: ore in the rock (commoner and shallower than iron), smelted (or worked by
+    // hand) into copper ingots, the wiring every signal block needs (world/Signals.h).
+    COPPER_ORE,
+    COPPER_INGOT,
     COUNT
 };
 // Blocks that hold things like a chest (opened, filled, emptied, broken open).
@@ -319,7 +323,8 @@ inline bool IsItemType(BlockType type) {
            type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD ||
            type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH || type == BlockType::BOAT ||
            type == BlockType::STEEL_INGOT || type == BlockType::HAMMER || type == BlockType::CRUSHED_IRON || type == BlockType::COKE ||
-           type == BlockType::GOLD_INGOT || type == BlockType::CROSSBOW || type == BlockType::FORGE_CORE;
+           type == BlockType::GOLD_INGOT || type == BlockType::CROSSBOW || type == BlockType::FORGE_CORE ||
+           type == BlockType::COPPER_INGOT;
 }
 
 inline bool IsPlantType(BlockType type) {

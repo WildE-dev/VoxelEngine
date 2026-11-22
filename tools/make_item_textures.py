@@ -2167,6 +2167,45 @@ OXYGEN_TANK = """
 """
 OXYGEN_TANK_COLOURS = {"o": (40, 44, 50), "S": (200, 204, 210), "s": (150, 156, 164), "k": (70, 74, 82), "y": (220, 170, 40)}
 
+COPPER_ORE = """
+sssssssssSssssss
+ssSssssssssssccs
+ssssccssssssCcss
+sssCcccsssssccss
+ssssccssssssssss
+sSssssssssccsss.
+ssssssssscCccsss
+ssssssssssccssss
+ssccssssssssssss
+scCccsssSsssssss
+sscccssssssssccs
+ssssssssssssCccs
+ssssssSsssssscss
+sssssccsssssssss
+ssssCcccsssssSss
+sssssccssssssss.
+"""
+COPPER_ORE_COLOURS = {"s": (112, 112, 116), "S": (90, 90, 94), "c": (180, 100, 50), "C": (230, 150, 90), ".": (100, 100, 104)}
+COPPER_INGOT = """
+................
+................
+................
+................
+................
+.......oooooo...
+.....ooCCCCCco..
+...ooCCCCCCcco..
+..oCCCCCCCCcco..
+..occCCCCCcco...
+..occcccccccco..
+..ooccccccco....
+....oooooooo....
+................
+................
+................
+"""
+COPPER_INGOT_COLOURS = {"o": (90, 40, 20), "c": (190, 100, 50), "C": (240, 160, 100)}
+
 MINING_POST_SIDE = """
 wwwwwwwwwwwwwwww
 wWWWWWWWWWWWWWWw
@@ -2417,6 +2456,8 @@ def main():
     draw("air_diffuser_side", DIFFUSER_SIDE, DIFFUSER_COLOURS, jitter=4, seed=150)
     draw("air_diffuser_top", DIFFUSER_TOP, DIFFUSER_COLOURS, jitter=4, seed=151)
     draw("armour_tank", OXYGEN_TANK, OXYGEN_TANK_COLOURS, jitter=4, seed=152)
+    draw("copper_ore", COPPER_ORE, COPPER_ORE_COLOURS, jitter=6, seed=153)
+    draw("copper_ingot", COPPER_INGOT, COPPER_INGOT_COLOURS, jitter=4, seed=154)
     draw("fire_brick", FIRE_BRICK, FIRE_BRICK_COLOURS, jitter=6, seed=123)
     draw("hammer", HAMMER, HAMMER_COLOURS, jitter=3, seed=124)
 

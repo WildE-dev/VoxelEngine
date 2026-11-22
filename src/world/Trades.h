@@ -49,6 +49,7 @@ inline const std::vector<Offer>& Offers() {
         // Barter.
         { BlockType::BREAD, 4, BlockType::IRON_INGOT, 1 },
         { BlockType::IRON_INGOT, 3, BlockType::STEEL_INGOT, 1 },
+        { BlockType::GOLD_INGOT, 1, BlockType::COPPER_INGOT, 4 },
         // A guard, for ten minutes (last: tests take it by being last).
         { BlockType::GOLD_INGOT, 3, BlockType::AIR, 0, true },
     };

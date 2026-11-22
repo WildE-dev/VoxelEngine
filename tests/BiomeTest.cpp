@@ -316,6 +316,23 @@ int main() {
     Check(marketsRight == markets, "dwarf markets have their fire and lamps by the gate, and no loot (" + std::to_string(marketsRight) + " of " + std::to_string(markets) + ")");
     Check(mines > 0 && minesRight == mines, "dwarf mines have an open shaft with a ladder, tunnels and chests (" + std::to_string(minesRight) + " of " + std::to_string(mines) + ")");
 
+    // Copper in the rock, from a few blocks down.
+    {
+        TerrainGenerator rock(TerrainGenerator::Type::Normal);
+        long copper = 0;
+        for (int cx = -2; cx < 2; cx++)
+            for (int cz = -2; cz < 2; cz++) {
+                TerrainGenerator::ColumnHeights h;
+                rock.ComputeColumnHeights(cx, cz, h);
+                for (int cy = -3; cy <= 0; cy++) {
+                    TerrainGenerator::Blocks blocks;
+                    rock.GenerateChunk({ cx, cy, cz }, h, blocks);
+                    for (const Block& b : blocks) copper += b.type == BlockType::COPPER_ORE;
+                }
+            }
+        Check(copper > 100, "copper ore runs through the rock (" + std::to_string(copper) + " blocks in 64 chunks)");
+    }
+
     // The Deep: open caverns with fungus, magma and gold ore far down, and no gold above.
     {
         TerrainGenerator deep(TerrainGenerator::Type::Normal);

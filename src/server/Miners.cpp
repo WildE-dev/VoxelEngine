@@ -15,7 +15,7 @@ double Now() {
 // What miners are paid in: cooked food, the cheapest first.
 const BlockType kPay[] = { BlockType::BREAD, BlockType::COOKED_FISH, BlockType::COOKED_VENISON };
 
-bool IsOre(BlockType t) { return t == BlockType::COAL_ORE || t == BlockType::IRON_ORE; }
+bool IsOre(BlockType t) { return t == BlockType::COAL_ORE || t == BlockType::IRON_ORE || t == BlockType::COPPER_ORE; }
 
 } // namespace
 

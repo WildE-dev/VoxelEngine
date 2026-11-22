@@ -6,6 +6,7 @@
 //    kept; creative players don't craft (they have everything),
 //  - the steel upgrade needs the iron one first, and steel tools beat iron,
 //  - tools made are saved with the player.
+#include <array>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -19,6 +20,7 @@
 #include "client/ClientWorld.h"
 #include "server/Server.h"
 #include "world/Crafting.h"
+#include "world/Smelting.h"
 
 namespace fs = std::filesystem;
 
@@ -85,6 +87,27 @@ int main() {
     }
     Check(sensible && Crafting::Recipes().size() >= 10, "every recipe takes something and makes something");
     Check(Crafting::Find("planks") >= 0 && Crafting::Find("pickaxe") >= 0 && Crafting::Find("cake") < 0, "recipes are found by id");
+    {
+        // Every signal block is wired with copper.
+        bool copper = true;
+        for (const char* id : { "lever", "pressure_plate", "logic_gate", "signal_lamp", "water_sensor", "pressure_sensor", "daylight_sensor", "player_sensor",
+                                "machine_sensor" }) {
+            const int r = Crafting::Find(id);
+            bool needs = false;
+            if (r >= 0)
+                for (const auto& in : Crafting::Recipes()[r].inputs) needs |= in.type == BlockType::COPPER_INGOT;
+            if (!needs) std::cout << "        " << id << " takes no copper" << std::endl;
+            copper = copper && needs;
+        }
+        Check(copper, "every signal block takes copper");
+        std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> noCopper{};
+        noCopper[static_cast<size_t>(BlockType::STONE)] = noCopper[static_cast<size_t>(BlockType::GLASS)] = 8 * Block::kUnitsPerBlock;
+        auto withCopper = noCopper;
+        withCopper[static_cast<size_t>(BlockType::COPPER_INGOT)] = Block::kUnitsPerBlock;
+        const auto& gate = Crafting::Recipes()[Crafting::Find("logic_gate")];
+        Check(Crafting::TimesAffordable(gate, noCopper) == 0 && Crafting::TimesAffordable(gate, withCopper) == 2, "a logic gate can't be made without copper (half an ingot each)");
+        Check(Smelting::FirstAffordable(std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)>{}) == nullptr, "(nothing to smelt in an empty chest)");
+    }
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> held{};
     held[static_cast<size_t>(BlockType::LOG)] = 3 * kBlock;
     Check(Crafting::TimesAffordable(Crafting::Recipes()[Crafting::Find("planks")], held) == 3, "three logs make planks three times");

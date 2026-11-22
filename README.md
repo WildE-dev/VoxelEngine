@@ -961,6 +961,14 @@ too, so it comes after the smelter. `CraftTest` checks the steel upgrade needs t
 iron one, what it does, and that both are kept; `FactoryTest` that a smelter makes
 steel from the iron it smelts and the coal a drill digs.
 
+
+**Copper.** Copper ore runs through the rock from 6 blocks down, commoner than iron.
+Smelted, an ore gives two copper ingots (or, by hand, an ore and a quarter of a coal
+make one). Every signal block is wired with it: a lever pair or a signal lamp takes a
+quarter of an ingot, a pressure plate an eighth, each sensor a quarter, a logic gate
+half, and a machine sensor half (with half an iron ingot). Miners at a mining post dig
+it too, mine chests hold some, and traders sell four ingots for a gold.
+`CraftTest` checks every signal block needs copper; `BiomeTest` that it's in the rock.
 ## Farming
 
 Breaking tall grass now and then gives **seeds** (three times in ten). With seeds in

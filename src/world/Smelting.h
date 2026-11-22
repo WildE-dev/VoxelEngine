@@ -27,6 +27,7 @@ inline const std::vector<SmeltRecipe>& Recipes() {
         { BlockType::IRON_ORE, kBlock, BlockType::AIR, 0, BlockType::IRON_INGOT, 2 * kBlock },
         { BlockType::CRUSHED_IRON, kBlock, BlockType::AIR, 0, BlockType::IRON_INGOT, 2 * kBlock }, // (an ore crushed makes two)
         { BlockType::GOLD_ORE, kBlock, BlockType::AIR, 0, BlockType::GOLD_INGOT, kBlock },
+        { BlockType::COPPER_ORE, kBlock, BlockType::AIR, 0, BlockType::COPPER_INGOT, 2 * kBlock },
         { BlockType::RAW_VENISON, kBlock, BlockType::AIR, 0, BlockType::COOKED_VENISON, kBlock },
         { BlockType::RAW_FISH, kBlock, BlockType::AIR, 0, BlockType::COOKED_FISH, kBlock },
         { BlockType::SAND, kBlock, BlockType::AIR, 0, BlockType::GLASS, kBlock },
