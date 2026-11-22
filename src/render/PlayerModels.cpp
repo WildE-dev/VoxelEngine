@@ -146,6 +146,14 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
         if (p.armour & Armour::Bit(ArmourPiece::Plate))
             box(glm::scale(glm::translate(base, glm::vec3(0.01f, bodyHeight * 0.72f, 0)), glm::vec3(kWidth * 0.5f + 0.07f, bodyHeight * 0.42f, kWidth + 0.06f)),
                 tint(glm::vec3(0.62f, 0.65f, 0.7f)));
+        if (p.armour & Armour::Bit(ArmourPiece::OxygenTank)) {
+            // Two cylinders (boxes) on the back, with a valve between.
+            for (const float z : { -0.12f, 0.12f })
+                box(glm::scale(glm::translate(base, glm::vec3(-(kWidth * 0.25f + 0.12f), bodyHeight * 0.7f, z)), glm::vec3(0.18f, 0.5f, 0.2f)),
+                    tint(glm::vec3(0.75f, 0.78f, 0.8f)));
+            box(glm::scale(glm::translate(base, glm::vec3(-(kWidth * 0.25f + 0.12f), bodyHeight * 0.7f + 0.3f, 0)), glm::vec3(0.08f, 0.08f, 0.3f)),
+                tint(glm::vec3(0.85f, 0.65f, 0.2f)));
+        }
         if (p.armour & Armour::Bit(ArmourPiece::Shield)) {
             box(glm::scale(glm::translate(base, glm::vec3(0.05f, bodyHeight * 0.6f, -(kWidth * 0.5f + 0.14f))), glm::vec3(0.5f, 0.6f, 0.06f)), tint(glm::vec3(0.5f, 0.36f, 0.2f)));
             box(glm::scale(glm::translate(base, glm::vec3(0.05f, bodyHeight * 0.6f, -(kWidth * 0.5f + 0.18f))), glm::vec3(0.14f, 0.14f, 0.04f)), tint(glm::vec3(0.6f, 0.62f, 0.66f)));

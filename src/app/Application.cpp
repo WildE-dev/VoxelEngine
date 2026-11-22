@@ -60,7 +60,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP, BlockType::PIPE,
-    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::BOILER, BlockType::TURBINE, BlockType::DRILL, BlockType::SMELTER, BlockType::STEEL_FRAME, BlockType::MACHINE_CASING, BlockType::FIRE_BRICK, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
+    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::BOILER, BlockType::TURBINE, BlockType::AIR_DIFFUSER, BlockType::DRILL, BlockType::SMELTER, BlockType::STEEL_FRAME, BlockType::MACHINE_CASING, BlockType::FIRE_BRICK, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
     BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::MINING_POST, BlockType::CRUSHER, BlockType::GLOW_FUNGUS, BlockType::MAGMA, BlockType::GOLD_ORE, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::OIL_SHALE, BlockType::TAR, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::STEEL_INGOT, BlockType::HAMMER, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
@@ -148,6 +148,7 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::MACHINE_SENSOR: return "Machine sensor";
     case BlockType::BOILER: return "Boiler";
     case BlockType::TURBINE: return "Steam turbine";
+    case BlockType::AIR_DIFFUSER: return "Air diffuser";
     case BlockType::PRESSURE_SENSOR: return "Pressure sensor";
     case BlockType::DAYLIGHT_SENSOR: return "Daylight sensor";
     case BlockType::PLAYER_SENSOR: return "Player sensor";
@@ -1083,6 +1084,8 @@ void Application::DrawCrosshair() {
             }
             else if (target.type == BlockType::ENGINE)
                 std::snprintf(text, sizeof text, "Engine: %s - air %d%%", state == Power::DrillState::Working ? "running" : "stopped (no fuel)", pressure);
+            else if (target.type == BlockType::AIR_DIFFUSER)
+                std::snprintf(text, sizeof text, "Air diffuser: %s - air %d%%", state == Power::DrillState::Working ? "breathing out fresh air" : "stopped (needs air pressure)", pressure);
             else if (target.type == BlockType::TURBINE)
                 std::snprintf(text, sizeof text, "Steam turbine: %s - air %d%%", state == Power::DrillState::Working ? "running" : "stopped (no steam)", pressure);
             else if (target.type == BlockType::BOILER)
@@ -1645,6 +1648,21 @@ void Application::DrawHealth() {
                 draw->PopClipRect();
             }
         }
+    }
+
+    // An oxygen tank (worn): a gauge over the food while it's in use or filling.
+    if ((client->GetArmour() & Armour::Bit(ArmourPiece::OxygenTank)) && (client->OnTank() || client->GetTank() < 0.999f)) {
+        const float w = 9.0f * (2.0f * kSize + kGap) - kGap, h = 8.0f;
+        const float y = viewport->WorkPos.y + viewport->WorkSize.y - 12.0f - 98.0f - (2.0f * kSize + 8.0f) * (cause != Breathing::Cause::None || air < maxAir ? 2.0f : 1.0f);
+        const ImVec2 lo(right - w, y - h * 0.5f), hi(right, y + h * 0.5f);
+        draw->AddRectFilled(ImVec2(lo.x - 2, lo.y - 2), ImVec2(hi.x + 2, hi.y + 2), IM_COL32(0, 0, 0, 160), 3.0f);
+        const float fill = std::clamp(client->GetTank(), 0.0f, 1.0f);
+        const ImU32 colour = fill < 0.25f ? IM_COL32(240, 90, 60, 255) : IM_COL32(120, 220, 230, 255);
+        draw->AddRectFilled(lo, ImVec2(lo.x + w * fill, hi.y), colour, 2.0f);
+        char label[48];
+        std::snprintf(label, sizeof label, client->OnTank() ? "On the tank: %d%%" : "Tank filling: %d%%", static_cast<int>(fill * 100.0f + 0.5f));
+        const ImVec2 size = ImGui::CalcTextSize(label);
+        draw->AddText(ImVec2(right - size.x, lo.y - size.y - 3.0f), IM_COL32(220, 245, 250, 255), label);
     }
 
     // Air bubbles over the food, right to left, while anything takes your breath or

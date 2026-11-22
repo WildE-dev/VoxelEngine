@@ -126,6 +126,9 @@ public:
     int GetMaxFood() const { return maxFood; }
     int GetMaxAir() const { return maxAir; }
     Breathing::Cause GetAirCause() const { return airCause; }
+    // An oxygen tank's fill (0..1), and whether we're breathing from it.
+    float GetTank() const { return tank; }
+    bool OnTank() const { return onTank; }
     float GetRain() const { return rain; }
     bool IsStorm() const { return storm; }
     // Lightning strikes since the last call.
@@ -289,6 +292,8 @@ private:
     int air = 20, maxAir = 20;
     int food = 20, maxFood = 20;
     Breathing::Cause airCause = Breathing::Cause::None;
+    float tank = 1.0f;
+    bool onTank = false;
     net::GameMode mode = net::GameMode::Creative;
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{};
     uint8_t tools = 0;

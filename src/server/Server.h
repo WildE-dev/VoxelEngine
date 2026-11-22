@@ -209,6 +209,10 @@ private:
         Breathing::Cause airCause = Breathing::Cause::None;
         int sentAir = -1;
         Breathing::Cause sentAirCause = Breathing::Cause::None;
+        float tank = Breathing::kTankSeconds; // an oxygen tank's air (seconds), if they wear one
+        bool onTank = false;
+        int sentTank = -1;
+        bool sentOnTank = false;
         double nextBreathHit = 0.0;
         // Hunger (UpdateHunger): food left, drain not yet taken, where they were last
         // tick (walking drains it), when starving next hurts, what the client was told.
@@ -452,6 +456,9 @@ private:
     std::vector<FluidNet> fluidNets;
     std::unordered_map<glm::ivec3, int, Coords::IVec3Hash> fluidNetOf;
     std::unordered_map<glm::ivec3, bool, Coords::IVec3Hash> engines; // running (had fuel) at the last update
+    std::unordered_map<glm::ivec3, bool, Coords::IVec3Hash> diffusers; // air diffusers: running (had the air) at the last update
+    // Whether a working air diffuser's fresh air reaches this point (eyes).
+    bool FreshAirAt(const glm::vec3& eye) const;
     // Works out the fluid networks (from every tank and every machine's neighbours).
     void BuildFluidNets();
     // The network on that side of a position (nullptr: none).

@@ -127,6 +127,8 @@ inline const std::vector<Recipe>& Recipes() {
         { "machine_sensor", "Machine sensor", { { BlockType::IRON_INGOT, kBlock }, { BlockType::GLASS, kBlock / 2 } }, BlockType::MACHINE_SENSOR, kBlock },
         { "boiler", "Boiler", { { BlockType::IRON_INGOT, 4 * kBlock }, { BlockType::FIRE_BRICK, 2 * kBlock } }, BlockType::BOILER, kBlock },
         { "turbine", "Steam turbine", { { BlockType::STEEL_INGOT, 3 * kBlock }, { BlockType::FORGE_CORE, kBlock } }, BlockType::TURBINE, kBlock },
+        { "air_diffuser", "Air diffuser", { { BlockType::IRON_INGOT, 2 * kBlock }, { BlockType::GLASS, kBlock }, { BlockType::GLOW_FUNGUS, kBlock } }, BlockType::AIR_DIFFUSER, kBlock },
+        { "tank", "Oxygen tank", { { BlockType::IRON_INGOT, 3 * kBlock }, { BlockType::GLASS, kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::OxygenTank },
     };
     return recipes;
 }

@@ -344,6 +344,7 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* MACHINE_SENSOR */ {{ "machine_sensor", "sensor_bottom", "machine_sensor", "machine_sensor", "machine_sensor", "machine_sensor" }},
     /* BOILER      */ {{ "boiler_top", "boiler_top", "boiler_side", "boiler_side", "boiler_side", "boiler_side" }},
     /* TURBINE     */ {{ "turbine_top", "turbine_top", "turbine_side", "turbine_side", "turbine_side", "turbine_side" }},
+    /* AIR_DIFFUSER */ {{ "air_diffuser_top", "machine_casing", "air_diffuser_side", "air_diffuser_side", "air_diffuser_side", "air_diffuser_side" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -387,7 +388,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "extractor", "filter_pipe", "crafter", "harvester", "drain", "sinkhole", "pressure_gauge",
     "oil_shale", "tar", "fluid_pipe", "fluid_tank", "oil_derrick", "refinery", "engine", "fluid_outlet", "mining_post",
     "steel_frame", "machine_casing", "fire_brick", "hammer", "multiblock", "multiblock_part",
-    "crusher", "crushed_iron", "coke", "glow_fungus", "magma", "gold_ore", "gold_ingot", "crossbow", "forge_core", "machine_sensor", "boiler", "turbine",
+    "crusher", "crushed_iron", "coke", "glow_fungus", "magma", "gold_ore", "gold_ingot", "crossbow", "forge_core", "machine_sensor", "boiler", "turbine", "air_diffuser",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");
@@ -890,6 +891,7 @@ bool Block::CanChisel() const {
     case BlockType::ENGINE:
     case BlockType::BOILER:
     case BlockType::TURBINE:
+    case BlockType::AIR_DIFFUSER:
     case BlockType::FLUID_OUTLET:
     case BlockType::MULTIBLOCK:
     case BlockType::MULTIBLOCK_PART:

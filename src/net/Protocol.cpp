@@ -560,6 +560,8 @@ std::vector<uint8_t> Encode(const Health& m) {
     w.U8(m.airCause);
     w.U8(m.food);
     w.U8(m.foodMax);
+    w.U8(m.tank);
+    w.U8(m.onTank);
     return std::move(w.data);
 }
 
@@ -644,7 +646,7 @@ bool Decode(ByteReader& in, Eat& m) {
 
 bool Decode(ByteReader& in, Health& m) {
     return in.U8(m.health) && in.U8(m.max) && in.U8(m.hurt) && in.U8(m.air) && in.U8(m.airMax) && in.U8(m.airCause) && in.U8(m.food) &&
-           in.U8(m.foodMax) && m.max > 0 && m.health <= m.max && m.airMax > 0 && m.air <= m.airMax && m.airCause <= 3 && m.foodMax > 0 &&
+           in.U8(m.foodMax) && in.U8(m.tank) && in.U8(m.onTank) && m.onTank <= 1 && m.max > 0 && m.health <= m.max && m.airMax > 0 && m.air <= m.airMax && m.airCause <= 3 && m.foodMax > 0 &&
            m.food <= m.foodMax && in.AtEnd();
 }
 

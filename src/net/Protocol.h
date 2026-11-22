@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 50;
+constexpr uint32_t kProtocolVersion = 51;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -455,6 +455,8 @@ struct Health {
     uint8_t airCause = 0;
     // Hunger (survival, world/Hunger.h): food points, 0..foodMax.
     uint8_t food = 20, foodMax = 20;
+    // An oxygen tank (worn): how full, of 255, and whether it's being breathed from.
+    uint8_t tank = 255, onTank = 0;
 };
 
 // Chests: open one (in reach) to see what's in it, move things in and out, close it.

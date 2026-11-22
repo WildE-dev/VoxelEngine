@@ -118,6 +118,7 @@ std::optional<Power::DrillState> Server::MachineState(const glm::ivec3& at) cons
     if (auto p = pistonStates.find(pos); p != pistonStates.end()) return p->second;
     if (auto c = compressors.find(pos); c != compressors.end()) return c->second.turning ? Power::DrillState::Working : Power::DrillState::Idle;
     if (auto e = engines.find(pos); e != engines.end()) return e->second ? Power::DrillState::Working : Power::DrillState::Idle;
+    if (auto d = diffusers.find(pos); d != diffusers.end()) return d->second ? Power::DrillState::Working : Power::DrillState::NoPressure;
     return std::nullopt;
 }
 

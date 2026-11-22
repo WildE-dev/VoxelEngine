@@ -5,6 +5,13 @@
 // they cap it, lower the further in you are, and it settles at the cap. Empty, it
 // hurts: drowning quickly, thin or stale air slowly. The server keeps the
 // meter (see Server::UpdateBreath); the client uses the same rules to show why.
+// An air diffuser (a machine on an air network, world/Power.h) breathes out fresh
+// air: within kDiffuserRange of a working one, thin and stale air don't count (water
+// still does: it's air for the lungs, not gills).
+// An oxygen tank (worn, world/Armour.h) holds kTankSeconds of air: while anything
+// would take your breath (water too), you breathe from it instead, and it empties;
+// wherever the air's good (the surface, or a diffuser's reach) it fills back up at
+// kTankRefill seconds of air a second.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -33,6 +40,13 @@ constexpr double kDrownInterval = 1.0;
 constexpr int kSuffocateDamage = 1;
 constexpr double kSuffocateInterval = 1.5;
 
+// An air diffuser: how far its fresh air reaches (from its middle to your eyes), and
+// the compressed air it uses a second while it runs.
+constexpr float kDiffuserRange = 8.0f;
+constexpr float kDiffuserAir = 1.5f;
+constexpr float kTankSeconds = 90.0f;
+constexpr float kTankRefill = 6.0f;
+
 enum class Cause : uint8_t { None, Water, ThinAir, StaleAir };
 
 inline const char* CauseName(Cause c) {
@@ -50,11 +64,12 @@ struct Air {
     float limit = kMaxAir;          // the most air there is to breathe here (thin or stale air)
 };
 
-// What breathing is like with the eyes at height eyeY, under water or not.
-inline Air At(float eyeY, bool headInWater) {
+// What breathing is like with the eyes at height eyeY, under water or not (and with
+// fresh air from a diffuser, or not).
+inline Air At(float eyeY, bool headInWater, bool freshAir = false) {
     Air air;
     const float thin = eyeY - kThinAirFrom, stale = kStaleAirBelow - eyeY;
-    if (thin > 0.0f || stale > 0.0f) {
+    if ((thin > 0.0f || stale > 0.0f) && !freshAir) {
         air.cause = thin > 0.0f ? Cause::ThinAir : Cause::StaleAir;
         air.limit = kMaxAir * std::max(0.0f, 1.0f - std::max(thin, stale) / kAirSpan);
     }

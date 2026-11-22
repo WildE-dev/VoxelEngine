@@ -2109,6 +2109,64 @@ kkkkkkkkkkkkkkkk
 """
 TURBINE_COLOURS = {"k": (34, 36, 40), "m": (120, 124, 132), "M": (190, 194, 202), "b": (70, 74, 82), "y": (210, 170, 40)}
 
+DIFFUSER_SIDE = """
+kkkkkkkkkkkkkkkk
+kmmmmmmmmmmmmmmk
+kmkkkkkkkkkkkkmk
+kmkaaaaaaaaaakmk
+kmkAAAAAAAAAAkmk
+kmkkkkkkkkkkkkmk
+kmkaaaaaaaaaakmk
+kmkAAAAAAAAAAkmk
+kmkkkkkkkkkkkkmk
+kmkaaaaaaaaaakmk
+kmkAAAAAAAAAAkmk
+kmkkkkkkkkkkkkmk
+kmmmmmmmmmmmmmmk
+kmmggmmmmmmggmmk
+kmmmmmmmmmmmmmmk
+kkkkkkkkkkkkkkkk
+"""
+DIFFUSER_TOP = """
+kkkkkkkkkkkkkkkk
+kmmmmmmmmmmmmmmk
+kmmmmkkkkkkmmmmk
+kmmmkaAaAaAkmmmk
+kmmkAaAaAaAakmmk
+kmkaAaAggAaAakmk
+kmkAaAgwwgAaAkmk
+kmkaAgwWWwgAakmk
+kmkAagwWWwgaAkmk
+kmkaAAgwwgAAakmk
+kmkAaAaggaAaAkmk
+kmmkAaAaAaAakmmk
+kmmmkaAaAaAkmmmk
+kmmmmkkkkkkmmmmk
+kmmmmmmmmmmmmmmk
+kkkkkkkkkkkkkkkk
+"""
+DIFFUSER_COLOURS = {"k": (34, 38, 42), "m": (120, 128, 134), "a": (60, 70, 78), "A": (150, 200, 210), "g": (60, 180, 170), "w": (150, 240, 230), "W": (230, 255, 250)}
+
+OXYGEN_TANK = """
+................
+.......yy.......
+.....oyyyyo.....
+....okkkkkko....
+...oSssooSsso...
+...oSsSooSsSo...
+...oSsSooSsSo...
+...oSsSooSsSo...
+...oSsSooSsSo...
+...oSsSooSsSo...
+...oSsSooSsSo...
+...oSsSooSsSo...
+...oSssooSsso...
+....oooooooo....
+................
+................
+"""
+OXYGEN_TANK_COLOURS = {"o": (40, 44, 50), "S": (200, 204, 210), "s": (150, 156, 164), "k": (70, 74, 82), "y": (220, 170, 40)}
+
 MINING_POST_SIDE = """
 wwwwwwwwwwwwwwww
 wWWWWWWWWWWWWWWw
@@ -2356,6 +2414,9 @@ def main():
     draw("boiler_top", BOILER_TOP, BOILER_COLOURS, jitter=4, seed=147)
     draw("turbine_side", TURBINE_SIDE, TURBINE_COLOURS, jitter=4, seed=148)
     draw("turbine_top", TURBINE_TOP, TURBINE_COLOURS, jitter=4, seed=149)
+    draw("air_diffuser_side", DIFFUSER_SIDE, DIFFUSER_COLOURS, jitter=4, seed=150)
+    draw("air_diffuser_top", DIFFUSER_TOP, DIFFUSER_COLOURS, jitter=4, seed=151)
+    draw("armour_tank", OXYGEN_TANK, OXYGEN_TANK_COLOURS, jitter=4, seed=152)
     draw("fire_brick", FIRE_BRICK, FIRE_BRICK_COLOURS, jitter=6, seed=123)
     draw("hammer", HAMMER, HAMMER_COLOURS, jitter=3, seed=124)
 

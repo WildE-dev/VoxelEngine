@@ -93,6 +93,8 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         air = m.air;
         maxAir = m.airMax;
         airCause = static_cast<Breathing::Cause>(m.airCause);
+        tank = m.tank / 255.0f;
+        onTank = m.onTank != 0;
         food = m.food;
         maxFood = m.foodMax;
         if (m.hurt) lastHurt = Now();

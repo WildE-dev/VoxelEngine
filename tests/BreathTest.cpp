@@ -19,6 +19,8 @@
 #include "client/ClientWorld.h"
 #include "server/Server.h"
 #include "world/Breathing.h"
+#include "world/Crafting.h"
+#include "world/Armour.h"
 
 // Test clients ask for a short view (chunks): plenty for the checks, and light enough
 // to run every suite at once.
@@ -157,6 +159,35 @@ int main() {
     Check(a.client.GetAirCause() == Cause::None && a.client.GetAir() == a.client.GetMaxAir(), "at -95 the air is still fine");
     server.QueueConsoleCommand("tp Diver 8.5 -130 8.5");
     Check(both(20.0, [&] { return a.client.GetAirCause() == Cause::StaleAir && a.client.GetAir() == 15; }), "deep underground the air is stale (capped at 14.3 at -128.4)");
+
+    std::cout << "Air diffuser" << std::endl;
+    // A diffuser beside the diver, an air pipe on it, the pipe filled with air.
+    server.QueueConsoleCommand("fill 10 -129 8 10 -129 8 air_diffuser");
+    server.QueueConsoleCommand("fill 11 -129 8 12 -129 8 air_pipe");
+    Check(both(10.0, [&] { return a.client.GetAirCause() == Cause::StaleAir; }), "with the diffuser built but no air in its pipes, it's still stale");
+    bool fresh = false;
+    for (int i = 0; i < 10 && !fresh; i++) {
+        server.QueueConsoleCommand("pressurise 12 -129 8");
+        fresh = both(1.0, [&] { return a.client.GetAirCause() == Cause::None && a.client.GetAir() == a.client.GetMaxAir(); });
+    }
+    Check(fresh, "with air pressure it breathes out fresh air: a full breath again, deep underground");
+    server.QueueConsoleCommand("tp Diver 30.5 -130 8.5"); // twenty blocks off
+    Check(both(20.0, [&] { return a.client.GetAirCause() == Cause::StaleAir; }), "out of its reach, the air is stale again");
+    server.QueueConsoleCommand("tp Diver 8.5 -130 8.5");
+
+    std::cout << "Oxygen tank" << std::endl;
+    server.QueueConsoleCommand("give iron_ingot 3 Diver");
+    server.QueueConsoleCommand("give glass 1 Diver");
+    both(10.0, [&] { return a.client.GetResources(BlockType::GLASS) >= Block::kUnitsPerBlock && a.client.GetResources(BlockType::IRON_INGOT) >= 3 * Block::kUnitsPerBlock; });
+    a.client.Craft(Crafting::Find("tank"), 1);
+    Check(both(10.0, [&] { return (a.client.GetArmour() & Armour::Bit(ArmourPiece::OxygenTank)) != 0; }), "the diver makes an oxygen tank, and wears it");
+    server.QueueConsoleCommand("tp Diver 20.5 -2 20.5"); // under water again
+    Check(both(10.0, [&] { return a.client.OnTank(); }), "under water they breathe from the tank");
+    both(4.0, [] { return false; });
+    Check(a.client.OnTank() && a.client.GetAir() == a.client.GetMaxAir() && a.client.GetTank() < 0.98f && a.client.GetHealth() == 20,
+          "their breath stays full while the tank empties (" + std::to_string(static_cast<int>(a.client.GetTank() * 100)) + "%)");
+    server.QueueConsoleCommand("tp Diver 8.5 0 8.5");
+    Check(both(20.0, [&] { return !a.client.OnTank() && a.client.GetTank() > 0.999f; }), "back in good air, the tank fills up again");
 
     std::cout << "Creative" << std::endl;
     server.QueueConsoleCommand("gamemode creative Diver");

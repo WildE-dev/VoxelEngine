@@ -113,7 +113,7 @@ inline bool IsAirPart(BlockType t) {
     return t == BlockType::AIR_PIPE || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
            t == BlockType::VALVE_OPEN || t == BlockType::PISTON || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
            t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::ENGINE || t == BlockType::OIL_DERRICK ||
-           t == BlockType::REFINERY || t == BlockType::CRUSHER || t == BlockType::TURBINE;
+           t == BlockType::REFINERY || t == BlockType::CRUSHER || t == BlockType::TURBINE || t == BlockType::AIR_DIFFUSER;
 }
 // What item pipes join: each other, chests, and the machines that fill or empty them.
 inline bool IsItemPart(BlockType t) {
@@ -134,7 +134,7 @@ inline bool IsMachine(BlockType t) {
            t == BlockType::PISTON || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
            t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::PRESSURE_GAUGE ||
            t == BlockType::FLUID_TANK || Fluids::IsMachine(t) || t == BlockType::MINING_POST || t == BlockType::MULTIBLOCK ||
-           t == BlockType::CRUSHER;
+           t == BlockType::CRUSHER || t == BlockType::AIR_DIFFUSER;
 }
 
 // Whether a pipe (drawn as a thin tube) reaches across to this neighbour: water pipes

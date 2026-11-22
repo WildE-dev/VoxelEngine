@@ -6,6 +6,7 @@
 #include <unordered_set>
 
 #include "server/Server.h"
+#include "world/Breathing.h"
 #include "server/ServerWorld.h"
 #include "world/Crafting.h"
 #include "world/Multiblocks.h"
@@ -167,7 +168,7 @@ void Server::UpdatePower() {
             }
 
         std::vector<std::pair<glm::ivec3, Drill*>> netDrills;
-        std::vector<glm::ivec3> netPumps, netPistons, netSmelters, netWorkers, netStructures;
+        std::vector<glm::ivec3> netPumps, netPistons, netSmelters, netWorkers, netStructures, netDiffusers;
         for (const auto& m : members) {
             auto a = air.find(m);
             if (a != air.end()) net.air += a->second;
@@ -198,6 +199,7 @@ void Server::UpdatePower() {
                 net.compressors++;
                 net.supply += compressors[m].power * Power::kWheelMaxAir;
                 break;
+            case BlockType::AIR_DIFFUSER: netDiffusers.push_back(m); break;
             case BlockType::TURBINE: {
                 // A steam turbine runs while it has steam, making air like a compressor.
                 net.compressors++;
@@ -246,6 +248,14 @@ void Server::UpdatePower() {
         }
         for (const auto& m : members) net.capacity += Power::CapacityOf(blockAt(m).type);
         net.air = std::min(net.capacity, net.air + net.supply * static_cast<float>(Power::kInterval));
+
+        // Air diffusers breathe out fresh air while the network has the pressure for it.
+        for (const auto& d : netDiffusers) {
+            const float use = Breathing::kDiffuserAir * static_cast<float>(Power::kInterval);
+            const bool running = net.Pressure() >= Power::kMinPressure && net.air >= use;
+            if (running) net.air -= use;
+            diffusers[d] = running;
+        }
 
         // Pumps: the air for what they lifted since the last update.
         for (const auto& p : netPumps) {
@@ -450,6 +460,15 @@ void Server::UpdatePower() {
     }
     StoreFluids();
     SendMachines();
+}
+
+bool Server::FreshAirAt(const glm::vec3& eye) const {
+    for (const auto& [pos, running] : diffusers)
+        if (running && glm::distance(glm::vec3(pos) + 0.5f, eye) <= Breathing::kDiffuserRange) {
+            Block b;
+            if (world->GetBlock(pos.x, pos.y, pos.z, b) && b.type == BlockType::AIR_DIFFUSER) return true;
+        }
+    return false;
 }
 
 bool Server::Crush(const glm::ivec3& pos, Worker& w) {
@@ -926,6 +945,10 @@ void Server::SendMachines() {
                     info.depth = static_cast<uint8_t>(fn->kind);
                 }
             }
+            else if (auto df = diffusers.find(pos); df != diffusers.end()) {
+                info.type = static_cast<uint8_t>(BlockType::AIR_DIFFUSER);
+                info.state = static_cast<uint8_t>(df->second ? Power::DrillState::Working : Power::DrillState::NoPressure);
+            }
             else if (auto e = engines.find(pos); e != engines.end()) {
                 Block eb;
                 world->GetBlock(pos.x, pos.y, pos.z, eb);
@@ -1086,6 +1109,9 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
                 text += w.state == Power::DrillState::Working ? "Refinery: making fuel. " : w.state == Power::DrillState::NoPressure ? "Refinery: waiting for air pressure. "
                       : w.state == Power::DrillState::NoChest ? "Refinery: needs fluid pipes at its back (crude in) and in front (fuel out). "
                       : "Refinery: no crude oil behind it, or no room for fuel in front. ";
+        }
+        else if (b.type == BlockType::AIR_DIFFUSER) {
+            text += diffusers.count(pos) && diffusers[pos] ? "Air diffuser: breathing out fresh air (8 blocks round). " : "Air diffuser: stopped (it needs air pressure). ";
         }
         else if (b.type == BlockType::TURBINE) {
             text += engines.count(pos) && engines[pos] ? "Steam turbine: running. " : "Steam turbine: stopped (it needs fluid pipes beside it with steam). ";

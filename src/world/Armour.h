@@ -5,12 +5,14 @@
 // or starving. The server applies it (Server::Hurt).
 // A shield (planks and iron) and a steel plate (steel over hide, worn over the tunic)
 // are armour too. Crouching with a shield blocks: half of a hit's damage, after armour.
+// An oxygen tank (worn on the back) protects nothing: it holds air to breathe (see
+// world/Breathing.h).
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <string>
 
-enum class ArmourPiece : uint8_t { Cap, Tunic, Boots, Shield, Plate, Count };
+enum class ArmourPiece : uint8_t { Cap, Tunic, Boots, Shield, Plate, OxygenTank, Count };
 constexpr float kMaxProtection = 0.8f;
 
 namespace Armour {
@@ -25,6 +27,7 @@ inline const char* Name(ArmourPiece piece) {
     case ArmourPiece::Boots: return "Hide boots";
     case ArmourPiece::Shield: return "Shield";
     case ArmourPiece::Plate: return "Steel plate";
+    case ArmourPiece::OxygenTank: return "Oxygen tank";
     default: return "?";
     }
 }
@@ -35,6 +38,7 @@ inline const char* Id(ArmourPiece piece) {
     case ArmourPiece::Boots: return "boots";
     case ArmourPiece::Shield: return "shield";
     case ArmourPiece::Plate: return "plate";
+    case ArmourPiece::OxygenTank: return "tank";
     default: return "?";
     }
 }
@@ -46,6 +50,7 @@ inline const char* Texture(ArmourPiece piece) {
     case ArmourPiece::Boots: return "armour_boots";
     case ArmourPiece::Shield: return "armour_shield";
     case ArmourPiece::Plate: return "armour_plate";
+    case ArmourPiece::OxygenTank: return "armour_tank";
     default: return nullptr;
     }
 }

@@ -287,6 +287,9 @@ enum class BlockType : uint8_t {
     // coal from its chests) and a steam turbine (steam into compressed air).
     BOILER,
     TURBINE,
+    // An air diffuser (part of an air network): uses a little compressed air to make
+    // the air round it breathable, deep down or high up (world/Breathing.h).
+    AIR_DIFFUSER,
     COUNT
 };
 // Blocks that hold things like a chest (opened, filled, emptied, broken open).

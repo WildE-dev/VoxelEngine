@@ -1161,6 +1161,10 @@ void Server::SendHealth(ClientState& client, bool hurt) {
     m.air = static_cast<uint8_t>(client.sentAir);
     m.airMax = static_cast<uint8_t>(Breathing::kMaxAir);
     m.airCause = static_cast<uint8_t>(client.airCause);
+    client.sentTank = static_cast<int>(std::ceil(client.tank));
+    client.sentOnTank = client.onTank;
+    m.tank = static_cast<uint8_t>(std::clamp(std::lround(255.0f * client.tank / Breathing::kTankSeconds), 0L, 255L));
+    m.onTank = client.onTank ? 1 : 0;
     net.Send(client.peer, net::kChannelReliable, net::Encode(m));
 }
 
@@ -1380,7 +1384,17 @@ void Server::UpdateBreath(ClientState& client, float dt) {
         const glm::ivec3 cell(glm::floor(eye));
         Block block;
         const bool underWater = world->GetBlock(cell.x, cell.y, cell.z, block) && UnderWater(block, eye.y - cell.y);
-        air = At(eye.y, underWater);
+        air = At(eye.y, underWater, FreshAirAt(eye));
+        // An oxygen tank: breathed from while anything would take your breath, filled
+        // back up where the air's good.
+        const bool tankWorn = (client.armour & Armour::Bit(ArmourPiece::OxygenTank)) != 0;
+        client.onTank = false;
+        if (tankWorn && air.cause != Cause::None && client.tank > 0.0f) {
+            client.tank = std::max(0.0f, client.tank - dt);
+            air = At(eye.y, false, true);
+            client.onTank = true;
+        }
+        else if (tankWorn && air.cause == Cause::None) client.tank = std::min(kTankSeconds, client.tank + kTankRefill * dt);
     }
     client.airCause = air.cause;
     const float before = client.air;
@@ -1398,7 +1412,9 @@ void Server::UpdateBreath(ClientState& client, float dt) {
                  false);
         }
     }
-    if (static_cast<int>(std::ceil(client.air)) != client.sentAir || client.airCause != client.sentAirCause) SendHealth(client, false);
+    if (static_cast<int>(std::ceil(client.air)) != client.sentAir || client.airCause != client.sentAirCause || client.onTank != client.sentOnTank ||
+        std::abs(static_cast<int>(std::ceil(client.tank)) - client.sentTank) >= 3)
+        SendHealth(client, false);
 }
 
 void Server::UpdateHunger(ClientState& client, float dt) {

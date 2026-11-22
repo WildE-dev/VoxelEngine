@@ -1571,6 +1571,18 @@ to check:
 - recovery on the ground;
 - creative.
 
+
+**Breathing gear.** An **air diffuser** (2 iron ingots, a glass and a glow fungus) is a
+machine on an air network: while the network has the pressure, it uses 1.5 air a
+second to breathe out fresh air, and within 8 blocks of it thin and stale air don't
+count. Bring a compressor or turbine (or an engine and fuel) down with you and the
+Deep is somewhere you can stay. An **oxygen tank** (3 iron ingots and a glass) is worn
+on the back: it holds 90 seconds of air, and while anything would take your breath
+(stale air, thin air, or water) you breathe from it instead, keeping your breath full;
+in good air (the surface, or a diffuser's reach) it fills back up, six seconds' worth a
+second. A gauge over the food shows it while it's in use or filling. `BreathTest`
+checks a diffuser with and without air, and its reach, and the tank emptying under
+water and filling again on land.
 ## Achievements
 
 Survival players earn achievements for milestones, once each: breaking a first block,
