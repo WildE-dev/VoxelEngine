@@ -125,6 +125,8 @@ inline const std::vector<Recipe>& Recipes() {
         { "plate", "Steel plate", { { BlockType::STEEL_INGOT, 4 * kBlock }, { BlockType::HIDE, 2 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Plate },
         { "crossbow", "Crossbow", { { BlockType::STEEL_INGOT, kBlock }, { BlockType::PLANKS, 2 * kBlock }, { BlockType::HIDE, kBlock } }, BlockType::CROSSBOW, kBlock },
         { "machine_sensor", "Machine sensor", { { BlockType::IRON_INGOT, kBlock }, { BlockType::GLASS, kBlock / 2 } }, BlockType::MACHINE_SENSOR, kBlock },
+        { "boiler", "Boiler", { { BlockType::IRON_INGOT, 4 * kBlock }, { BlockType::FIRE_BRICK, 2 * kBlock } }, BlockType::BOILER, kBlock },
+        { "turbine", "Steam turbine", { { BlockType::STEEL_INGOT, 3 * kBlock }, { BlockType::FORGE_CORE, kBlock } }, BlockType::TURBINE, kBlock },
     };
     return recipes;
 }

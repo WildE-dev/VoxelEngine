@@ -198,6 +198,19 @@ void Server::UpdatePower() {
                 net.compressors++;
                 net.supply += compressors[m].power * Power::kWheelMaxAir;
                 break;
+            case BlockType::TURBINE: {
+                // A steam turbine runs while it has steam, making air like a compressor.
+                net.compressors++;
+                const int use = static_cast<int>(Fluids::kTurbineSteam * Power::kInterval);
+                FluidNet* steam = FluidNetBeside(m, Fluids::Kind::Steam, true);
+                const bool running = steam && steam->amount >= use;
+                if (running) {
+                    steam->amount -= use;
+                    net.supply += Fluids::kTurbineAir;
+                }
+                engines[m] = running;
+                break;
+            }
             case BlockType::ENGINE: {
                 // An engine runs while it has fuel to burn, making air like a compressor.
                 net.compressors++;
@@ -388,6 +401,40 @@ void Server::UpdatePower() {
             else {
                 water.TakeDrainUse(pos);
                 water.SetDrainBudget(pos, 0);
+            }
+        }
+        else if (t == BlockType::BOILER) {
+            // Water under it, steam over it, while there's fire.
+            Worker& w = workers[pos];
+            FluidNet* in = FluidNetAt(pos - glm::ivec3(0, 1, 0));
+            FluidNet* out = FluidNetAt(pos + glm::ivec3(0, 1, 0));
+            if (!in || !out || in == out) w.state = Power::DrillState::NoChest;
+            else if (in->kind != Fluids::Kind::Water || in->amount <= 0 || !out->Takes(Fluids::Kind::Steam) || out->Room() <= 0) w.state = Power::DrillState::Idle;
+            else {
+                bool fire = now < w.next;
+                if (!fire)
+                    // (Coke first: it lasts longer.)
+                    for (const BlockType fuel : { BlockType::COKE, BlockType::COAL }) {
+                        for (const auto& c : ChestsJoined(pos)) {
+                            ChestItems& chest = ChestAt(c);
+                            if (chest[static_cast<size_t>(fuel)] < Block::kUnitsPerBlock) continue;
+                            chest[static_cast<size_t>(fuel)] -= Block::kUnitsPerBlock;
+                            SendChestToViewers(c);
+                            w.next = now + (fuel == BlockType::COKE ? Fluids::kCokeBurn : Fluids::kCoalBurn);
+                            fire = true;
+                            break;
+                        }
+                        if (fire) break;
+                    }
+                if (!fire) w.state = Power::DrillState::NoPressure;
+                else {
+                    const int units = std::min({ static_cast<int>(Fluids::kBoilRate * Power::kInterval), in->amount, out->Room() });
+                    in->amount -= units;
+                    out->amount += units;
+                    out->kind = Fluids::Kind::Steam;
+                    w.state = Power::DrillState::Working;
+                    w.last = now;
+                }
             }
         }
         else if (t == BlockType::FLUID_OUTLET) {
@@ -880,7 +927,9 @@ void Server::SendMachines() {
                 }
             }
             else if (auto e = engines.find(pos); e != engines.end()) {
-                info.type = static_cast<uint8_t>(BlockType::ENGINE);
+                Block eb;
+                world->GetBlock(pos.x, pos.y, pos.z, eb);
+                info.type = static_cast<uint8_t>(eb.type == BlockType::TURBINE ? BlockType::TURBINE : BlockType::ENGINE);
                 info.state = static_cast<uint8_t>(e->second ? Power::DrillState::Working : Power::DrillState::Idle);
             }
             else if (Block t; world->GetBlock(pos.x, pos.y, pos.z, t) && t.type == BlockType::AIR_TANK) {
@@ -1037,6 +1086,16 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
                 text += w.state == Power::DrillState::Working ? "Refinery: making fuel. " : w.state == Power::DrillState::NoPressure ? "Refinery: waiting for air pressure. "
                       : w.state == Power::DrillState::NoChest ? "Refinery: needs fluid pipes at its back (crude in) and in front (fuel out). "
                       : "Refinery: no crude oil behind it, or no room for fuel in front. ";
+        }
+        else if (b.type == BlockType::TURBINE) {
+            text += engines.count(pos) && engines[pos] ? "Steam turbine: running. " : "Steam turbine: stopped (it needs fluid pipes beside it with steam). ";
+        }
+        else if (b.type == BlockType::BOILER) {
+            const Worker w = workers.count(pos) ? workers[pos] : Worker{};
+            text += w.state == Power::DrillState::Working      ? "Boiler: boiling. "
+                    : w.state == Power::DrillState::NoPressure ? "Boiler: out of fuel (coal or coke in a chest joined to it). "
+                    : w.state == Power::DrillState::NoChest    ? "Boiler: needs fluid pipes under it (water in) and over it (steam out). "
+                                                               : "Boiler: no water under it, or no room for steam over it. ";
         }
         else if (b.type == BlockType::ENGINE) {
             text += engines.count(pos) && engines[pos] ? "Engine: running (burning fuel). " : "Engine: stopped (it needs fluid pipes beside it with fuel). ";

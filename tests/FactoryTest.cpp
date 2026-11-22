@@ -547,6 +547,42 @@ int main() {
         }
         Check(filled, "with fuel it fills its air network");
 
+        std::cout << "Steam" << std::endl;
+        // A tank of water under a boiler, a tank over it for steam, a turbine beside that,
+        // air pipes from the turbine, and a chest of coal by the boiler.
+        server.QueueConsoleCommand("tp Builder 101.5 0 47.5");
+        pump(10.0, [&] { return a.feet.x > 101.0f; });
+        fill({ 100, 0, 50 }, { 100, 0, 50 }, "fluid_tank");
+        fill({ 100, 1, 50 }, { 100, 1, 50 }, "boiler");
+        fill({ 100, 2, 50 }, { 100, 2, 50 }, "fluid_tank");
+        fill({ 101, 2, 50 }, { 101, 2, 50 }, "turbine");
+        fill({ 102, 2, 50 }, { 103, 2, 50 }, "air_pipe");
+        fill({ 99, 1, 50 }, { 99, 1, 50 }, "chest");
+        pump(10.0, [&] { return blockAt({ 103, 2, 50 }) == BlockType::AIR_PIPE && blockAt({ 99, 1, 50 }) == BlockType::CHEST && blockAt({ 101, 2, 50 }) == BlockType::TURBINE; });
+        server.QueueConsoleCommand("fluid 100 0 50 water");
+        wait(1.0);
+        a.client.Inspect({ 100, 1, 50 });
+        Check(pump(5.0, [&] { return Has(a.client, "Boiler: out of fuel"); }), "with water but no coal, the boiler says it's out of fuel");
+        server.QueueConsoleCommand("give coal 2 Builder");
+        pump(5.0, [&] { return a.client.GetResources(BlockType::COAL) >= 2 * Crafting::kBlock; });
+        a.client.OpenChest({ 99, 1, 50 });
+        pump(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(99, 1, 50); });
+        a.client.MoveChestItems(BlockType::COAL, 2 * Crafting::kBlock, true);
+        a.client.CloseChest();
+        auto steamTank = [&] {
+            for (const auto& m : a.client.GetMachines())
+                if (m.pos == glm::ivec3(100, 2, 50)) return m.depth == static_cast<uint8_t>(Fluids::Kind::Steam) && m.pressure > 0;
+            return false;
+        };
+        bool turbineFilled = false;
+        Check(pump(10.0, steamTank), "with coal, it boils the water into steam in the tank over it");
+        for (int i = 0; i < 15 && !turbineFilled; i++) {
+            pump(1.0, [] { return false; });
+            a.client.Inspect({ 103, 2, 50 });
+            turbineFilled = pump(1.0, [&] { return Has(a.client, "Air pressure 100%"); });
+        }
+        Check(turbineFilled, "and the turbine beside it fills its air pipes from the steam");
+
         a.client.Disconnect();
         Pump(a, 0.3, [] { return false; });
         server.Stop();

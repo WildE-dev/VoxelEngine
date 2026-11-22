@@ -1264,6 +1264,18 @@ tank to an outlet, and checks the cup empties and the water comes out of the out
 `SaveTest` checks what pipes and tanks hold is saved. `PumpTest` checks a drain with no
 room in its pipes takes nothing, and with room for 40 units takes just those.
 
+### Steam power
+
+Between water wheels and diesel there's **steam**. A **boiler** (4 iron ingots and 2
+fire bricks) takes water from the fluid pipes or tank **under** it and puts steam into
+the pipes or tank **over** it, 32 units a second, while it has fire: it burns a coal
+from the chests joined to it every 8 seconds (a coke lasts 16). A **steam turbine** (3
+steel ingots and a **forge core**, from a mine's forge golem) is part of an air
+network, like an engine: it uses 32 steam a second from fluid pipes beside it and
+puts 40 air a second into its network. A drain or a pump feeds the boiler its water.
+`FactoryTest` checks a boiler with no coal says so, boils with it, and drives a
+turbine that fills its air pipes.
+
 ## Multiblock structures
 
 The bigger machines are **structures**: built from a pattern of blocks round a machine

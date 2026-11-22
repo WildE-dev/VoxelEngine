@@ -2034,6 +2034,81 @@ FORGE_CORE = """
 """
 FORGE_CORE_COLOURS = {"o": (60, 30, 16), "Y": (200, 90, 20), "w": (250, 170, 40), "W": (255, 240, 170)}
 
+BOILER_SIDE = """
+kkkkkkkkkkkkkkkk
+kccccccccccccccc
+kcCCCCCCCCCCCCck
+kcCrrCCCCCCrrCck
+kcCrrCCCCCCrrCck
+kcCCCCCCCCCCCCck
+kccccccccccccccc
+kkkkkkkkkkkkkkkk
+kbbbbbbbbbbbbbbk
+kbkkkkkkkkkkkkbk
+kbkoOoOoOoOoOkbk
+kbkOoOoOoOoOokbk
+kbkkkkkkkkkkkkbk
+kbbbbbbbbbbbbbbk
+kbbbbbbbbbbbbbbk
+kkkkkkkkkkkkkkkk
+"""
+BOILER_TOP = """
+kkkkkkkkkkkkkkkk
+kcccccccccccccck
+kcCCCCCCCCCCCCck
+kcCkkkkkkkkkkCck
+kcCkccccccccCkck
+kcCkcCCCCCCcCkck
+kcCkcCkkkkCcCkck
+kcCkcCkwwkCcCkck
+kcCkcCkwwkCcCkck
+kcCkcCkkkkCcCkck
+kcCkcCCCCCCcCkck
+kcCkccccccccCkck
+kcCkkkkkkkkkkCck
+kcCCCCCCCCCCCCck
+kcccccccccccccck
+kkkkkkkkkkkkkkkk
+"""
+BOILER_COLOURS = {"k": (36, 30, 28), "c": (150, 90, 50), "C": (190, 120, 70), "r": (90, 92, 98), "b": (120, 60, 40), "o": (230, 120, 30), "O": (255, 200, 80), "w": (230, 230, 230)}
+TURBINE_SIDE = """
+kkkkkkkkkkkkkkkk
+kmmmmmmmmmmmmmmk
+kmkkkkkkkkkkkkmk
+kmkMbbMbbMbbMkmk
+kmkbMbbMbbMbbkmk
+kmkbbMbbMbbMbkmk
+kmkMbbMbbMbbMkmk
+kmkbMbbMbbMbbkmk
+kmkbbMbbMbbMbkmk
+kmkMbbMbbMbbMkmk
+kmkbMbbMbbMbbkmk
+kmkbbMbbMbbMbkmk
+kmkkkkkkkkkkkkmk
+kmmmmmmmmmmmmmmk
+kmmyymmmmmmyymmk
+kkkkkkkkkkkkkkkk
+"""
+TURBINE_TOP = """
+kkkkkkkkkkkkkkkk
+kmmmmmmmmmmmmmmk
+kmmmmkkkkkkmmmmk
+kmmmkMbbbbMkmmmk
+kmmkbMbbbbMbkmmk
+kmkbbbMbbMbbbkmk
+kmkbbbbMMbbbbkmk
+kmkMMMMMMMMMMkmk
+kmkMMMMMMMMMMkmk
+kmkbbbbMMbbbbkmk
+kmkbbbMbbMbbbkmk
+kmmkbMbbbbMbkmmk
+kmmmkMbbbbMkmmmk
+kmmmmkkkkkkmmmmk
+kmmmmmmmmmmmmmmk
+kkkkkkkkkkkkkkkk
+"""
+TURBINE_COLOURS = {"k": (34, 36, 40), "m": (120, 124, 132), "M": (190, 194, 202), "b": (70, 74, 82), "y": (210, 170, 40)}
+
 MINING_POST_SIDE = """
 wwwwwwwwwwwwwwww
 wWWWWWWWWWWWWWWw
@@ -2277,6 +2352,10 @@ def main():
     draw("armour_plate", PLATE, PLATE_COLOURS, jitter=4, seed=142)
     draw("crossbow", CROSSBOW, CROSSBOW_COLOURS, jitter=4, seed=143)
     draw("forge_core", FORGE_CORE, FORGE_CORE_COLOURS, jitter=3, seed=144)
+    draw("boiler_side", BOILER_SIDE, BOILER_COLOURS, jitter=4, seed=146)
+    draw("boiler_top", BOILER_TOP, BOILER_COLOURS, jitter=4, seed=147)
+    draw("turbine_side", TURBINE_SIDE, TURBINE_COLOURS, jitter=4, seed=148)
+    draw("turbine_top", TURBINE_TOP, TURBINE_COLOURS, jitter=4, seed=149)
     draw("fire_brick", FIRE_BRICK, FIRE_BRICK_COLOURS, jitter=6, seed=123)
     draw("hammer", HAMMER, HAMMER_COLOURS, jitter=3, seed=124)
 
