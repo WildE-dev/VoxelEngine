@@ -14,7 +14,8 @@
 // that long after starting and quits; VOXEL_EDITOR_PART="0,1" picks a part (by its place
 // in the tree), VOXEL_EDITOR_CLICK="x,y" clicks the view there (window coordinates), and
 // VOXEL_EDITOR_TOOL (0 move box, 1 move frame, 2 size) picks the handles, and
-// VOXEL_EDITOR_ANIM="attack:0.15" shows an animation (held at that time).
+// VOXEL_EDITOR_ANIM="attack:0.15" shows an animation (held at that time), and
+// VOXEL_EDITOR_DO="mirror,history" does those (mirror, copy, paste, history).
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -24,6 +25,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -189,6 +191,13 @@ public:
     // (For unattended checks: a click in the view, in window coordinates, and a tool.)
     void ClickAt(float x, float y) { PickAt({ x, y }); }
     void SetTool(int t) { tool = static_cast<Tool>(std::clamp(t, 0, 2)); }
+    // (For unattended checks: "mirror", "copy", "paste", "history", comma-separated.)
+    void Do(const std::string& what) {
+        if (what == "mirror") MirrorPart();
+        if (what == "copy") CopyPart();
+        if (what == "paste") PastePart();
+        if (what == "history") showHistory = true;
+    }
     void ShowAnimation(const std::string& name, float at) {
         openAnimTab = true, anim = name;
         if (at >= 0.0f) animNow = at, playing = false;
@@ -204,7 +213,28 @@ private:
     int file = 0;
     Value root, committed;
     std::string header, savedText;
-    std::vector<Value> undo, redo;
+    // History: each step the state before a change, and what the change was.
+    struct Step {
+        Value state;
+        std::string label;
+    };
+    std::vector<Step> undo, redo;
+    std::string pendingLabel;
+    bool showHistory = false;
+    std::optional<Value> clipboard; // a part copied (Ctrl C), to paste anywhere
+    void HistoryWindow();
+    void CopyPart();
+    void PastePart();
+    void MirrorPart();
+    std::string DescribeEdit() {
+        std::string where = model;
+        if (!path_.empty()) {
+            const Value* part = SelectedPart();
+            const std::string name = part ? part->StringOr("name", "") : "";
+            where += name.empty() ? ": part " + std::to_string(path_.back() + 1) : ": " + name;
+        }
+        return "Changed " + where;
+    }
     bool unsaved = false, changed = false, pending = false, rebuild = true;
     std::string model;
     std::vector<int> path_; // the part picked, by place in each list down the tree (empty: none)
@@ -288,7 +318,14 @@ private:
         for (size_t d = 0; d + 1 < path_.size(); d++) list = &PartsOf(list->array[static_cast<size_t>(path_[d])]);
         return list;
     }
-    void Changed() { changed = true; }
+    void Changed() {
+        changed = pending = rebuild = true;
+        if (pendingLabel.empty()) pendingLabel = DescribeEdit();
+    }
+    void Changed(const std::string& what) {
+        changed = pending = rebuild = true;
+        pendingLabel = what;
+    }
 
     // The colour names a model can use: its own and those it inherits (own ones first).
     std::vector<std::pair<std::string, bool>> Palette(const std::string& name) {
@@ -346,15 +383,15 @@ private:
 
     void Undo() {
         if (undo.empty()) return;
-        redo.push_back(committed);
-        root = undo.back();
+        redo.push_back({ committed, undo.back().label });
+        root = undo.back().state;
         undo.pop_back();
         AfterHistory();
     }
     void Redo() {
         if (redo.empty()) return;
-        undo.push_back(committed);
-        root = redo.back();
+        undo.push_back({ committed, redo.back().label });
+        root = redo.back().state;
         redo.pop_back();
         AfterHistory();
     }
@@ -399,6 +436,12 @@ void Editor::Frame(int fbWidth, int fbHeight, int winWidth, int winHeight, float
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z, ImGuiInputFlags_RouteGlobal)) Undo();
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z, ImGuiInputFlags_RouteGlobal) || ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Y, ImGuiInputFlags_RouteGlobal))
         Redo();
+    if (!io.WantTextInput) {
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_C, ImGuiInputFlags_RouteGlobal)) CopyPart();
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_V, ImGuiInputFlags_RouteGlobal)) PastePart();
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_M, ImGuiInputFlags_RouteGlobal)) MirrorPart();
+    }
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_H, ImGuiInputFlags_RouteGlobal)) showHistory = !showHistory;
 
     MenuBar();
     const float top = ImGui::GetFrameHeight();
@@ -406,6 +449,7 @@ void Editor::Frame(int fbWidth, int fbHeight, int winWidth, int winHeight, float
     LeftPanel(top, height);
     RightPanel(static_cast<float>(winWidth) - kRightWidth, top, height);
     UnsavedPrompt();
+    if (showHistory) HistoryWindow();
 
     // The view between the panels.
     region = glm::vec4(kLeftWidth, top, std::max(1.0f, winWidth - kLeftWidth - kRightWidth), std::max(1.0f, height));
@@ -445,7 +489,8 @@ void Editor::Frame(int fbWidth, int fbHeight, int winWidth, int winHeight, float
         rebuild = true;
     }
     if (pending && !ImGui::IsAnyItemActive() && !dragging) {
-        undo.push_back(committed);
+        undo.push_back({ committed, pendingLabel.empty() ? std::string("Changed") : pendingLabel });
+        pendingLabel.clear();
         if (undo.size() > 200) undo.erase(undo.begin());
         redo.clear();
         committed = root;
@@ -456,6 +501,88 @@ void Editor::Frame(int fbWidth, int fbHeight, int winWidth, int winHeight, float
 
     const int left = static_cast<int>(kLeftWidth * scale), right = static_cast<int>(kRightWidth * scale);
     DrawScene(left, 0, std::max(1, fbWidth - left - right), std::max(1, fbHeight - static_cast<int>(top * scale)), time);
+}
+
+void Editor::CopyPart() {
+    if (const Value* part = SelectedPart()) {
+        clipboard = *part;
+        status = "Copied the part (Ctrl V pastes it, in any model).";
+    }
+}
+
+void Editor::PastePart() {
+    Value* m = Model();
+    if (!clipboard || !m || Blocks()) return;
+    if (Value* list = SelectedList(); list && SelectedPart()) {
+        list->array.insert(list->array.begin() + path_.back() + 1, *clipboard);
+        path_.back()++;
+    } else {
+        Value& parts = PartsOf(*m);
+        parts.array.push_back(*clipboard);
+        path_ = { static_cast<int>(parts.array.size()) - 1 };
+    }
+    Changed("Pasted a part into " + model);
+}
+
+namespace {
+// A part (and everything in it) mirrored across z = 0: its places' z, its turns about
+// x and y, and its swing (so it swings the other way), and left and right in its label.
+void Mirror(Value& p) {
+    for (const char* key : { "at", "box" })
+        if (p.Find(key)) {
+            glm::vec3 v = GetVec(p, key);
+            v.z = -v.z;
+            SetVec(p, key, v);
+        }
+    if (p.Find("rotate")) {
+        glm::vec3 v = GetVec(p, "rotate");
+        v.x = -v.x, v.y = -v.y;
+        SetVec(p, "rotate", v);
+    }
+    if (Value* sw = const_cast<Value*>(p.Find("swing")); sw && sw->IsObject()) Json::Member(*sw, "amount") = Json::Number(-sw->NumberOr("amount", 1.0));
+    if (Value* name = const_cast<Value*>(p.Find("name")); name && name->IsString()) {
+        std::string& n = name->string;
+        if (const size_t at = n.find("left"); at != std::string::npos) n.replace(at, 4, "right");
+        else if (const size_t at2 = n.find("right"); at2 != std::string::npos) n.replace(at2, 5, "left");
+    }
+    if (Value* kids = const_cast<Value*>(p.Find("parts")); kids && kids->IsArray())
+        for (auto& k : kids->array) Mirror(k);
+}
+} // namespace
+
+void Editor::MirrorPart() {
+    Value* part = SelectedPart();
+    if (!part) return;
+    Value copy = *part;
+    Mirror(copy);
+    Value* list = SelectedList();
+    list->array.insert(list->array.begin() + path_.back() + 1, copy);
+    path_.back()++;
+    Changed("Mirrored a part of " + model);
+}
+
+void Editor::HistoryWindow() {
+    ImGui::SetNextWindowSize(ImVec2(320, 360), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(kLeftWidth + 20.0f, 120.0f), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("History", &showHistory)) {
+        ImGui::End();
+        return;
+    }
+    ImGui::TextDisabled("Click a step to go back (or forward) to just after it.");
+    int goTo = -1; // how many steps to keep undone (undo.size() after)
+    if (ImGui::Selectable("(as opened)", undo.empty())) goTo = 0;
+    for (size_t i = 0; i < undo.size(); i++)
+        if (ImGui::Selectable((undo[i].label + "##u" + std::to_string(i)).c_str(), i + 1 == undo.size())) goTo = static_cast<int>(i + 1);
+    for (size_t k = redo.size(); k-- > 0;) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        if (ImGui::Selectable((redo[k].label + "##r" + std::to_string(k)).c_str(), false)) goTo = static_cast<int>(undo.size() + (redo.size() - k));
+        ImGui::PopStyleColor();
+    }
+    if (goTo >= 0) {
+        while (static_cast<int>(undo.size()) > goTo && !undo.empty()) Undo();
+        while (static_cast<int>(undo.size()) < goTo && !redo.empty()) Redo();
+    }
+    ImGui::End();
 }
 
 void Editor::DrawScene(int x, int y, int w, int h, float time) {
@@ -763,11 +890,16 @@ void Editor::MenuBar() {
     if (ImGui::BeginMenu("Edit")) {
         if (ImGui::MenuItem("Undo", "Ctrl+Z", false, !undo.empty())) Undo();
         if (ImGui::MenuItem("Redo", "Ctrl+Shift+Z", false, !redo.empty())) Redo();
+        ImGui::Separator();
+        if (ImGui::MenuItem("Copy part", "Ctrl+C", false, SelectedPart() != nullptr)) CopyPart();
+        if (ImGui::MenuItem("Paste part", "Ctrl+V", false, clipboard.has_value() && Model() != nullptr && !Blocks())) PastePart();
+        if (ImGui::MenuItem("Mirror part", "Ctrl+M", false, SelectedPart() != nullptr)) MirrorPart();
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("View")) {
         ImGui::MenuItem("Flash the picked part", nullptr, &flash);
         ImGui::MenuItem("Ground grid", nullptr, &showGrid);
+        ImGui::MenuItem("History", "Ctrl+H", &showHistory);
         if (Structures()) ImGui::MenuItem("Working", nullptr, &working);
         else ImGui::MenuItem("Walking", nullptr, &walk);
         ImGui::SetNextItemWidth(140);
@@ -1038,15 +1170,18 @@ void Editor::RightPanel(float left, float top, float height) {
         ImGui::End();
         return;
     }
-    bool animOpen = false;
-    if (ImGui::BeginTabItem("Animations", nullptr, openAnimTab ? ImGuiTabItemFlags_SetSelected : 0)) {
-        animOpen = true;
-        AnimationsTab(*m, ImGui::GetTime());
-        ImGui::EndTabItem();
-    }
-    animTab = animOpen;
-    openAnimTab = false;
+    auto animationsTab = [&] {
+        bool animOpen = false;
+        if (ImGui::BeginTabItem("Animations", nullptr, openAnimTab ? ImGuiTabItemFlags_SetSelected : 0)) {
+            animOpen = true;
+            AnimationsTab(*m, static_cast<float>(ImGui::GetTime()));
+            ImGui::EndTabItem();
+        }
+        animTab = animOpen;
+        openAnimTab = false;
+    };
     if (!ImGui::BeginTabItem("Parts")) {
+        animationsTab();
         ImGui::EndTabBar();
         ImGui::End();
         return;
@@ -1088,8 +1223,12 @@ void Editor::RightPanel(float left, float top, float height) {
         const Value copy = *picked;
         list->array.insert(list->array.begin() + path_.back() + 1, copy);
         path_.back()++;
-        Changed();
+        Changed("Copied a part of " + model);
     }
+    ImGui::SetItemTooltip("A copy of it, after it (Ctrl C copies it to paste anywhere, Ctrl V pastes)");
+    ImGui::SameLine();
+    if (ImGui::Button("Mirror")) MirrorPart();
+    ImGui::SetItemTooltip("A copy of it on the other side (z turned round): a left arm makes a right one (Ctrl M)");
     ImGui::SameLine();
     if (ImGui::ArrowButton("up", ImGuiDir_Up) && path_.back() > 0) {
         Value* list = SelectedList();
@@ -1132,6 +1271,7 @@ void Editor::RightPanel(float left, float top, float height) {
     } else
         ImGui::TextDisabled("Pick a part to change it.");
     ImGui::EndTabItem();
+    animationsTab();
     ImGui::EndTabBar();
     ImGui::End();
 }
@@ -1828,6 +1968,13 @@ int main(int argc, char** argv) {
             const float time = static_cast<float>(glfwGetTime() - start);
             editor.Frame(fbw, fbh, ww, wh, time);
             if (++frames == 3 && clickX >= 0.0f) editor.ClickAt(clickX, clickY);
+            if (frames >= 4 && frames <= 12 && std::getenv("VOXEL_EDITOR_DO")) {
+                // One action every other frame (so each is a step of its own).
+                std::stringstream in(std::getenv("VOXEL_EDITOR_DO"));
+                std::string act;
+                for (int k = 0; std::getline(in, act, ','); k++)
+                    if (frames == 4 + 2 * k) editor.Do(act);
+            }
 
             glViewport(0, 0, fbw, fbh);
             ImGui::Render();

@@ -1779,6 +1779,13 @@ cd build && ./ModelEditor            # or: ./ModelEditor structures blast_furnac
   shown, and how it swings or flaps. A label names a part in the tree (the game
   ignores it).
 
+**Copy and paste** parts (Ctrl C, Ctrl V: in any model, in either file), and
+**Mirror** one (Ctrl M, or the button): a copy on the other side, its places' z and its
+turns about x and y turned round, its swing reversed, and left and right swapped in its
+label, so a left arm makes the right one. **History** (Ctrl H, or the View menu) lists
+every step since the file was opened; click one to go back (or forward) to just after
+it.
+
 Ctrl (Cmd) S saves to both `Resources/Data` in the source tree and the copy beside the
 game, keeping the comments at the top; a running game picks the change up within a second.
 Ctrl Z and Ctrl Shift Z undo and redo, and Revert reads the file again.
