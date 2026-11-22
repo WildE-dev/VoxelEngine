@@ -659,6 +659,7 @@ void Server::HandleCraft(ClientState& client, int recipeIndex, int count) {
     if (recipe.ironUpgrade) Award(client, Achievement::IronAge);
     if (recipe.output == BlockType::COOKED_VENISON) Award(client, Achievement::Cook);
     if (recipe.output == BlockType::BREAD) Award(client, Achievement::Baker);
+    if (recipe.output == BlockType::TURBINE) Award(client, Achievement::FullSteam);
     if (client.armour == (Armour::Bit(ArmourPiece::Cap) | Armour::Bit(ArmourPiece::Tunic) | Armour::Bit(ArmourPiece::Boots))) Award(client, Achievement::Armoured);
     SendResources(client);
 }
@@ -672,6 +673,7 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
     const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
     const CreatureSystem::Creature* target = creatures.Find(creature);
     const CreatureType type = target ? target->type : CreatureType::Count;
+    const bool raider = target && target->raider;
     const bool landed = creatures.Attack(creature, eye, tool, Crafting::Tier(client.tools), now, killed);
     if (landed && !killed) creatures.Provoke(creature, client.id, now);
     if (landed && killed) {
@@ -692,6 +694,7 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
         }
         if (type == CreatureType::DwarfKing) KingSlain(client);
         if (type == CreatureType::ForgeGolem) GolemSlain(client);
+        if (raider) Award(client, Achievement::Defender);
         SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id + spoils);
         if (type == CreatureType::Deer) Award(client, Achievement::Hunter);
         else if (SpecOf(type).hostile) Award(client, Achievement::DwarfSlayer);
@@ -742,6 +745,7 @@ void Server::GolemSlain(ClientState& client) {
     client.resources[static_cast<size_t>(BlockType::STEEL_INGOT)] += 3 * Block::kUnitsPerBlock;
     SendResources(client);
     SendChat(client, net::ChatMessage::Kind::Info, "The golem's fire goes out: +1 forge core, +3 steel ingots");
+    Award(client, Achievement::GolemBreaker);
     for (auto& [peer, other] : clients)
         if (other.welcomed) SendChat(other, net::ChatMessage::Kind::Info, client.name + " has defeated a forge golem");
 }
@@ -797,6 +801,7 @@ void Server::HandleTrade(ClientState& client, uint16_t trader, uint8_t offerInde
     }
     if (!Creative(client)) have -= cost;
     SendResources(client);
+    Award(client, Achievement::Merchant);
     // The price goes up (for everyone), and they're told the new prices.
     tradePressure[offerIndex] = std::min(tradePressure[offerIndex] + 1, Trades::kMaxPressure);
     SendTradePrices(client, trader);
@@ -1858,6 +1863,7 @@ void Server::UpdateTraps() {
             client.nextSpikeHit = now + 0.75;
             Hurt(client, 1, "was scorched by magma");
         }
+        if (client.feet.y < TerrainGenerator::kDeepTop) Award(client, Achievement::DeepDelver);
         if (spiked && now >= client.nextSpikeHit) {
             client.nextSpikeHit = now + kSpikeInterval;
             Hurt(client, kSpikeDamage, "was impaled on spikes");

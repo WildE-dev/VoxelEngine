@@ -1568,7 +1568,7 @@ Survival players earn achievements for milestones, once each: breaking a first b
 making a tool, bringing down a deer, defeating a hostile dwarf, cooking venison, eating,
 harvesting wheat, baking bread, digging out iron ore, the iron upgrade, a full set of
 armour, opening a dungeon chest, sleeping through a night, and taking something down
-with an arrow, catching a fish, taming a wolf, and defeating a Dwarf King (seventeen in all). Earning one shows a banner under the compass for a
+with an arrow, catching a fish, taming a wolf, defeating a Dwarf King, going down into the Deep, trading with a dwarf trader, making a steam turbine, defeating a forge golem, and defeating a raider (twenty-two in all). Earning one shows a banner under the compass for a
 few seconds (with a chime) and tells everyone else. They're saved with you.
 `/achievements` lists what you've earned and what's still to do. `FoodTest` checks
 the ones it passes on the way, that `/achievements` answers, and that each is earned

@@ -240,6 +240,7 @@ int main() {
         a.client.Trade(trader, 0); // a gold ingot for 2 iron ingots
         Check(both(20.0, [&] { return a.client.GetResources(BlockType::IRON_INGOT) == 2 * Block::kUnitsPerBlock && a.client.GetResources(BlockType::GOLD_INGOT) == 0; }),
               "a gold ingot buys 2 iron ingots");
+        Check(both(10.0, [&] { return Has(a, "Merchant: trade with a dwarf trader"); }), "and earns Merchant");
         Check(both(20.0, [&] { return !a.client.GetTradePrices().empty() && a.client.GetTradePrices()[0] == 2; }), "and that offer's price goes up (2 gold now)");
         a.client.Trade(trader, 0);
         Check(both(20.0, [&] { return Has(a, "You need 2"); }) && a.client.GetResources(BlockType::IRON_INGOT) == 2 * Block::kUnitsPerBlock,

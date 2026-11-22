@@ -22,6 +22,11 @@ enum class Achievement : uint8_t {
     Angler,         // catch a fish
     BestFriend,     // tame a wolf
     Kingslayer,     // defeat a Dwarf King
+    DeepDelver,     // go down into the Deep
+    Merchant,       // trade with a dwarf trader
+    FullSteam,      // make a steam turbine
+    GolemBreaker,   // defeat a forge golem
+    Defender,       // defeat a dwarf come raiding
     Count
 };
 
@@ -51,6 +56,11 @@ inline const char* Name(Achievement a) {
     case Achievement::Angler: return "Angler";
     case Achievement::BestFriend: return "Best Friend";
     case Achievement::Kingslayer: return "Kingslayer";
+    case Achievement::DeepDelver: return "Deep Delver";
+    case Achievement::Merchant: return "Merchant";
+    case Achievement::FullSteam: return "Full Steam";
+    case Achievement::GolemBreaker: return "Golem Breaker";
+    case Achievement::Defender: return "Defender";
     default: return "?";
     }
 }
@@ -74,6 +84,11 @@ inline const char* Description(Achievement a) {
     case Achievement::Angler: return "catch a fish";
     case Achievement::BestFriend: return "tame a wolf with some venison";
     case Achievement::Kingslayer: return "defeat a Dwarf King in his stronghold";
+    case Achievement::DeepDelver: return "go down into the Deep";
+    case Achievement::Merchant: return "trade with a dwarf trader";
+    case Achievement::FullSteam: return "make a steam turbine";
+    case Achievement::GolemBreaker: return "defeat a forge golem";
+    case Achievement::Defender: return "defeat a dwarf come raiding your home";
     default: return "";
     }
 }
