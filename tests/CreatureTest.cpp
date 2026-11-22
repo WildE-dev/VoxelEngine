@@ -50,13 +50,14 @@ struct TestClient {
     bool joined = false;
     Tool heldTool = Tool::None; // what others see in their hand
     BlockType heldBlock = BlockType::AIR;
+    bool crouching = false;
     void Update() {
         client.Poll();
         if (!joined && client.IsWelcomed()) joined = true, feet = client.GetSpawn();
         if (auto c = client.TakeCorrection()) feet = *c;
         if (!joined) return;
         world.Update(feet + glm::vec3(0.0f, 1.62f, 0.0f));
-        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround, heldTool, heldBlock);
+        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround | (crouching ? net::kFlagCrouching : 0), heldTool, heldBlock);
     }
     const Client::Creature* Find(CreatureType type) const {
         static thread_local std::vector<Client::Creature> seen;
@@ -473,6 +474,40 @@ int main() {
             return stuck;
         });
         Check(stuck && a.client.GetResources(BlockType::ARROW) == 64, "one shot at the ground sticks there");
+
+        // A crossbow: a bolt hits harder. Then a shield (blocking, crouched) and a steel plate.
+        server.QueueConsoleCommand("give crossbow 1 Duelist");
+        server.QueueConsoleCommand("give arrow 4 Duelist");
+        a.heldTool = Tool::None;
+        a.heldBlock = BlockType::CROSSBOW;
+        both(20.0, [&] { return a.client.GetResources(BlockType::CROSSBOW) > 0 && a.client.GetResources(BlockType::ARROW) >= 4 * 64; });
+        auto bolt = [&] {
+            both(1.5, [] { return false; });
+            const int before = b.client.GetHealth();
+            const glm::vec3 from = a.feet + glm::vec3(0.0f, 1.62f, 0.0f), at = b.feet + glm::vec3(0.0f, 1.2f, 0.0f);
+            a.client.Shoot(at - from);
+            both(5.0, [&] { return b.client.GetHealth() < before; });
+            return before - b.client.GetHealth();
+        };
+        const int boltHit = bolt();
+        Check(boltHit == 5, "a crossbow bolt hits harder: 4.5 hearts, armour takes it to 2.5 (" + std::to_string(boltHit) + ")");
+        server.QueueConsoleCommand("give planks 2 Rival");
+        server.QueueConsoleCommand("give iron_ingot 1 Rival");
+        both(20.0, [&] { return b.client.GetResources(BlockType::IRON_INGOT) >= 64; });
+        b.client.Craft(Crafting::Find("shield"), 1);
+        Check(both(20.0, [&] { return (rivalAsSeen().armour & Armour::Bit(ArmourPiece::Shield)) != 0; }), "the rival makes a shield (others see it)");
+        b.crouching = true;
+        const int blocked = bolt();
+        Check(blocked == 2, "crouched behind it, a bolt does half: 1 heart (" + std::to_string(blocked) + ")");
+        b.crouching = false;
+        server.QueueConsoleCommand("give steel_ingot 4 Rival");
+        server.QueueConsoleCommand("give hide 2 Rival");
+        both(20.0, [&] { return b.client.GetResources(BlockType::STEEL_INGOT) >= 4 * 64; });
+        b.client.Craft(Crafting::Find("plate"), 1);
+        Check(both(20.0, [&] { return (rivalAsSeen().armour & Armour::Bit(ArmourPiece::Plate)) != 0; }), "and a steel plate");
+        const int plated = bolt();
+        Check(plated == 2, "with all of it on (taking off the most armour can: 80%), a bolt does 1 heart (" + std::to_string(plated) + ")");
+        a.heldBlock = BlockType::AIR;
         a.client.Disconnect();
         b.client.Disconnect();
         Pump({ &a, &b }, 0.3, [] { return false; });

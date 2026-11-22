@@ -142,6 +142,14 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
                 tint(hide));
         if (p.armour & Armour::Bit(ArmourPiece::Boots))
             box(glm::scale(glm::translate(base, glm::vec3(0.02f, 0.11f, 0)), glm::vec3(kWidth * 0.5f + 0.06f, 0.22f, kWidth + 0.04f)), tint(hideDark));
+        // A steel plate over the chest, and a shield on the left side.
+        if (p.armour & Armour::Bit(ArmourPiece::Plate))
+            box(glm::scale(glm::translate(base, glm::vec3(0.01f, bodyHeight * 0.72f, 0)), glm::vec3(kWidth * 0.5f + 0.07f, bodyHeight * 0.42f, kWidth + 0.06f)),
+                tint(glm::vec3(0.62f, 0.65f, 0.7f)));
+        if (p.armour & Armour::Bit(ArmourPiece::Shield)) {
+            box(glm::scale(glm::translate(base, glm::vec3(0.05f, bodyHeight * 0.6f, -(kWidth * 0.5f + 0.14f))), glm::vec3(0.5f, 0.6f, 0.06f)), tint(glm::vec3(0.5f, 0.36f, 0.2f)));
+            box(glm::scale(glm::translate(base, glm::vec3(0.05f, bodyHeight * 0.6f, -(kWidth * 0.5f + 0.18f))), glm::vec3(0.14f, 0.14f, 0.04f)), tint(glm::vec3(0.6f, 0.62f, 0.66f)));
+        }
 
         // The right arm, held forward a little, and what's in its hand.
         const glm::mat4 shoulder = glm::rotate(glm::translate(base, glm::vec3(0.0f, bodyHeight * 0.85f, kWidth * 0.5f + 0.08f)), glm::radians(35.0f),

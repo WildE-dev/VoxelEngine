@@ -3,12 +3,15 @@
 // and then always worn, like tools are kept. Together they cut the damage you take
 // from hits (creatures, other players) and traps; not from drowning, thin or stale air,
 // or starving. The server applies it (Server::Hurt).
+// A shield (planks and iron) and a steel plate (steel over hide, worn over the tunic)
+// are armour too. Crouching with a shield blocks: half of a hit's damage, after armour.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <string>
 
-enum class ArmourPiece : uint8_t { Cap, Tunic, Boots, Count };
+enum class ArmourPiece : uint8_t { Cap, Tunic, Boots, Shield, Plate, Count };
+constexpr float kMaxProtection = 0.8f;
 
 namespace Armour {
 
@@ -20,6 +23,8 @@ inline const char* Name(ArmourPiece piece) {
     case ArmourPiece::Cap: return "Hide cap";
     case ArmourPiece::Tunic: return "Hide tunic";
     case ArmourPiece::Boots: return "Hide boots";
+    case ArmourPiece::Shield: return "Shield";
+    case ArmourPiece::Plate: return "Steel plate";
     default: return "?";
     }
 }
@@ -28,6 +33,8 @@ inline const char* Id(ArmourPiece piece) {
     case ArmourPiece::Cap: return "cap";
     case ArmourPiece::Tunic: return "tunic";
     case ArmourPiece::Boots: return "boots";
+    case ArmourPiece::Shield: return "shield";
+    case ArmourPiece::Plate: return "plate";
     default: return "?";
     }
 }
@@ -37,6 +44,8 @@ inline const char* Texture(ArmourPiece piece) {
     case ArmourPiece::Cap: return "armour_cap";
     case ArmourPiece::Tunic: return "armour_tunic";
     case ArmourPiece::Boots: return "armour_boots";
+    case ArmourPiece::Shield: return "armour_shield";
+    case ArmourPiece::Plate: return "armour_plate";
     default: return nullptr;
     }
 }
@@ -52,6 +61,8 @@ inline float Protection(ArmourPiece piece) {
     case ArmourPiece::Cap: return 0.12f;
     case ArmourPiece::Tunic: return 0.24f;
     case ArmourPiece::Boots: return 0.12f;
+    case ArmourPiece::Shield: return 0.12f;
+    case ArmourPiece::Plate: return 0.25f;
     default: return 0.0f;
     }
 }
@@ -60,7 +71,7 @@ inline float Protection(uint8_t worn) {
     float total = 0.0f;
     for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++)
         if (worn & Bit(static_cast<ArmourPiece>(p))) total += Protection(static_cast<ArmourPiece>(p));
-    return total;
+    return std::min(total, kMaxProtection);
 }
 // Damage (half hearts) after armour: always at least one if there was any.
 inline int Reduce(int damage, uint8_t worn) {

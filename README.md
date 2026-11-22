@@ -988,6 +988,15 @@ it out with `/give cap|tunic|boots [player]`. The rules are in `src/world/Armour
 damage sums, and that they're kept after a restart; `CreatureTest` checks that armour
 takes a sword hit from 3.5 hearts down to 2.
 
+
+**Shield, steel plate and crossbow.** A **shield** (2 planks and an iron ingot) and a
+**steel plate** (4 steel ingots and 2 hides, worn over the tunic) are armour too: the
+shield takes 12% off, the plate 25%, and all the armour together at most 80%. Crouch
+with a shield to block: half of each hit's damage (after armour) is stopped. Others see
+the shield on your left side and the plate over your chest. A **crossbow** (a steel
+ingot, 2 planks and a hide) is held like an item: right-click shoots a bolt (an arrow)
+for 4.5 hearts, faster and flatter than a bow's, but it takes 1.2 seconds to wind.
+`CreatureTest` checks a bolt's damage, blocking with a shield, and the plate.
 ## Signs
 
 A **sign** (two from a plank) is a post with a board. Place one and a box opens to

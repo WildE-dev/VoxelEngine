@@ -60,6 +60,10 @@ constexpr float kSafeFall = 3.0f;
 constexpr float kArrowSpeed = 32.0f, kArrowGravity = 18.0f;
 constexpr int kArrowDamage = 5;
 constexpr double kShotInterval = 0.6;
+// A crossbow's bolt: harder and flatter, but it takes longer to wind.
+constexpr double kCrossbowInterval = 1.2;
+constexpr float kBoltSpeed = 46.0f;
+constexpr int kBoltDamage = 9;
 constexpr uint16_t kCreatureShooter = 0xFFFF; // a bolt a dwarf crossbowman shot
 // TNT: seconds from lighting to the bang, and how far the blast reaches.
 constexpr double kTntFuse = 3.0;
@@ -160,7 +164,7 @@ bool Server::Start(const Options& opts) {
     LoadOperators();
     for (const auto& name : options.operators) SetOperator(name, true);
     creatures.SetShooter([this](const glm::vec3& from, const glm::vec3& dir) {
-        arrows.push_back({ from, dir * kArrowSpeed * 0.8f, kCreatureShooter, Now() });
+        arrows.push_back({ from, dir * kArrowSpeed * 0.8f, kCreatureShooter, Now(), -1.0, kArrowDamage });
     });
     if (storage) {
         for (const auto& [pos, held] : storage->GetChests()) chests[pos] = held;
@@ -1128,7 +1132,11 @@ void Server::SendHealth(ClientState& client, bool hurt) {
 void Server::Hurt(ClientState& client, int amount, const std::string& deathMessage, bool armourHelps) {
     const double now = Now();
     if (now < client.invulnerableUntil || Creative(client)) return; // nothing hurts in creative
-    if (armourHelps) amount = Armour::Reduce(amount, client.armour);
+    if (armourHelps) {
+        amount = Armour::Reduce(amount, client.armour);
+        // Crouched behind a shield: half of it blocked.
+        if ((client.armour & Armour::Bit(ArmourPiece::Shield)) && (client.flags & net::kFlagCrouching)) amount = (amount + 1) / 2;
+    }
     client.health = std::max(0, client.health - amount);
     client.lastHurt = now;
     client.nextRegen = now + kRegenDelay;
@@ -1472,18 +1480,20 @@ void Server::RemoveChest(const glm::ivec3& pos, ClientState* breaker) {
 
 void Server::HandleShoot(ClientState& client, const glm::vec3& direction) {
     const double now = Now();
-    // A bow of their own, an arrow to shoot (survival), and not too often.
-    if (now < client.nextShot || Usable(client, Tool::Bow) != Tool::Bow) return;
+    // A crossbow in hand (theirs), or a bow of their own; an arrow to shoot (survival),
+    // and not too often.
+    const bool crossbow = client.heldBlock == BlockType::CROSSBOW && (Creative(client) || client.resources[static_cast<size_t>(BlockType::CROSSBOW)] > 0);
+    if (now < client.nextShot || (!crossbow && Usable(client, Tool::Bow) != Tool::Bow)) return;
     uint32_t& held = client.resources[static_cast<size_t>(BlockType::ARROW)];
     if (!Creative(client)) {
         if (held < Block::kUnitsPerBlock) return SendResources(client);
         held -= Block::kUnitsPerBlock;
         SendResources(client);
     }
-    client.nextShot = now + kShotInterval * 0.8; // (a little slack for timing)
+    client.nextShot = now + (crossbow ? kCrossbowInterval : kShotInterval) * 0.8; // (a little slack for timing)
     const glm::vec3 dir = glm::normalize(direction);
     const glm::vec3 eye = client.feet + glm::vec3(0.0f, (client.flags & net::kFlagCrouching) ? 1.27f : kEyeHeight, 0.0f);
-    arrows.push_back({ eye + dir * 0.4f, dir * kArrowSpeed, client.id, now });
+    arrows.push_back({ eye + dir * 0.4f, dir * (crossbow ? kBoltSpeed : kArrowSpeed), client.id, now, -1.0, crossbow ? kBoltDamage : kArrowDamage });
     if (arrows.size() > 256) arrows.erase(arrows.begin()); // (the oldest go first)
 }
 
@@ -1645,7 +1655,7 @@ void Server::UpdateArrows() {
                 bool killed = false;
                 const uint16_t id = c.id;
                 const CreatureType type = c.type;
-                creatures.Damage(id, kArrowDamage, a.position - a.velocity * 0.05f, now, killed);
+                creatures.Damage(id, a.damage, a.position - a.velocity * 0.05f, now, killed);
                 if (!killed && a.shooter != kCreatureShooter) creatures.Provoke(id, a.shooter, now);
                 if (killed)
                     for (auto& [peer, shooter] : clients)
@@ -1670,7 +1680,7 @@ void Server::UpdateArrows() {
                     for (const auto& [p2, s] : clients)
                         if (s.id == a.shooter) by = s.name;
                     const double before = target.invulnerableUntil;
-                    Hurt(target, kArrowDamage, "was shot by " + by);
+                    Hurt(target, a.damage, "was shot by " + by);
                     if (target.health > 0 && target.lastHurt >= now && target.invulnerableUntil == before) {
                         const glm::vec2 push = glm::length(glm::vec2(a.velocity.x, a.velocity.z)) > 1e-3f ? glm::normalize(glm::vec2(a.velocity.x, a.velocity.z)) : glm::vec2(0.0f);
                         net.Send(target.peer, net::kChannelReliable, net::Encode(net::Knockback{ glm::vec3(push.x * 5.0f, 4.0f, push.y * 5.0f) }));

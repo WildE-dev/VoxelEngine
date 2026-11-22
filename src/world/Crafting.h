@@ -121,6 +121,9 @@ inline const std::vector<Recipe>& Recipes() {
           ArmourPiece::Count, false, true },
         // (New recipes go at the end: a crafter keeps its recipe by its place here.)
         { "crusher", "Crusher", { { BlockType::STEEL_INGOT, kBlock }, { BlockType::STONE_BRICK, 2 * kBlock } }, BlockType::CRUSHER, kBlock },
+        { "shield", "Shield", { { BlockType::PLANKS, 2 * kBlock }, { BlockType::IRON_INGOT, kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Shield },
+        { "plate", "Steel plate", { { BlockType::STEEL_INGOT, 4 * kBlock }, { BlockType::HIDE, 2 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Plate },
+        { "crossbow", "Crossbow", { { BlockType::STEEL_INGOT, kBlock }, { BlockType::PLANKS, 2 * kBlock }, { BlockType::HIDE, kBlock } }, BlockType::CROSSBOW, kBlock },
     };
     return recipes;
 }

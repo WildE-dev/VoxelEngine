@@ -178,6 +178,7 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::MAGMA: return "Magma";
     case BlockType::GOLD_ORE: return "Gold ore";
     case BlockType::GOLD_INGOT: return "Gold ingot";
+    case BlockType::CROSSBOW: return "Crossbow";
     case BlockType::FILTER_PIPE: return "Filter pipe";
     case BlockType::CRAFTER: return "Crafter";
     case BlockType::HARVESTER: return "Harvester";
@@ -2492,6 +2493,16 @@ void Application::OnMouseButton(int button, int action) {
         return;
     }
 
+    // Right-click with a crossbow in hand: a bolt (slower to wind than a bow).
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::None && SelectedBlock() == BlockType::CROSSBOW) {
+        if ((client->IsCreative() || (client->GetResources(BlockType::CROSSBOW) > 0 && client->GetResources(BlockType::ARROW) >= Block::kUnitsPerBlock)) &&
+            Client::Now() >= nextShot) {
+            client->Shoot(camera.GetDirection());
+            audio->PlayHere("bow", 0.9f);
+            nextShot = Client::Now() + 1.2;
+        }
+        return;
+    }
     // Right-click with the bow drawn: shoot (if there's an arrow, in survival).
     if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::Bow) {
         if (client->HasTool(Tool::Bow) && (client->IsCreative() || client->GetResources(BlockType::ARROW) >= Block::kUnitsPerBlock) &&

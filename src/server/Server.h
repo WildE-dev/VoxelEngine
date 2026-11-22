@@ -377,6 +377,7 @@ private:
         glm::vec3 position, velocity;
         uint16_t shooter;
         double born, stuckAt = -1.0; // stuckAt >= 0: stuck in a block since then
+        int damage = 5;              // (a crossbow's bolt hits harder)
     };
     std::vector<Arrow> arrows;
     void HandleShoot(ClientState& client, const glm::vec3& direction);
