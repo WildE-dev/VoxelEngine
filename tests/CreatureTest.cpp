@@ -569,6 +569,9 @@ int main() {
                   }),
                   std::string("dwarves come out at the ") + (site->kind == Dwarves::SiteKind::Camp ? "camp" : "mine") + " when a player comes near");
         }
+        // Down in the Deep (a cavern floor), rock grubs come out of the dark.
+        server.QueueConsoleCommand("tp Wanderer -14.5 -150 -30.5");
+        Check(Pump({ &a }, 60.0, [&] { return a.Find(CreatureType::RockGrub) != nullptr; }), "in the Deep, rock grubs crawl out of the dark");
         a.client.Disconnect();
         Pump({ &a }, 0.3, [] { return false; });
         server.Stop();

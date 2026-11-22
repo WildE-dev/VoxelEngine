@@ -17,7 +17,7 @@
 
 #include "world/Mining.h"
 
-enum class CreatureType : uint8_t { Deer, DwarfWarrior, DwarfCrossbow, Wolf, Bat, DwarfChief, DwarfMiner, DwarfTrader, DwarfGuard, DwarfKing, ForgeGolem, Count };
+enum class CreatureType : uint8_t { Deer, DwarfWarrior, DwarfCrossbow, Wolf, Bat, DwarfChief, DwarfMiner, DwarfTrader, DwarfGuard, DwarfKing, ForgeGolem, RockGrub, Count };
 inline bool IsDwarf(CreatureType t) {
     return t == CreatureType::DwarfWarrior || t == CreatureType::DwarfCrossbow || t == CreatureType::DwarfChief || t == CreatureType::DwarfMiner ||
            t == CreatureType::DwarfTrader || t == CreatureType::DwarfGuard || t == CreatureType::DwarfKing;
@@ -51,6 +51,7 @@ inline const CreatureSpec& SpecOf(CreatureType type) {
         { "Dwarf guard", "dwarf_guard", 0.38f, 1.45f, 24, 1.1f, 3.5f, false, 4, 1.0f },      // (guards a market, or whoever hired it)
         { "Dwarf King", "dwarf_king", 0.55f, 2.0f, 120, 1.0f, 3.2f, true, 6, 1.3f },        // (rules a stronghold: its boss)
         { "Forge golem", "forge_golem", 0.6f, 2.2f, 90, 0.8f, 2.2f, true, 7, 1.3f },        // (guards a mine's forge: a boss)
+        { "Rock grub", "rock_grub", 0.38f, 0.55f, 10, 1.3f, 3.4f, true, 2, 0.6f },          // (crawls the dark of the Deep)
     };
     const int t = static_cast<int>(type);
     return specs[t >= 0 && t < static_cast<int>(CreatureType::Count) ? t : 0];

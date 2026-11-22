@@ -6,6 +6,7 @@
 
 #include "server/ServerWorld.h"
 #include "world/Dwarves.h"
+#include "world/TerrainGenerator.h"
 #include "world/Collision.h"
 #include "world/Coords.h"
 
@@ -542,7 +543,8 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
     if (glm::length(to) <= reach && std::abs(target->feet.y - c.feet.y) < 1.8f && now >= c.nextAttack) {
         c.nextAttack = now + 1.0;
         c.act = 1, c.actedAt = now;
-        hurt(target->id, spec.attackDamage, c.type == CreatureType::DwarfChief ? "was cut down by a dwarf chieftain" : "was cut down by a dwarf warrior");
+        hurt(target->id, spec.attackDamage,
+             c.type == CreatureType::DwarfChief ? "was cut down by a dwarf chieftain" : c.type == CreatureType::RockGrub ? "was gnawed by rock grubs" : "was cut down by a dwarf warrior");
     }
 }
 
@@ -683,6 +685,28 @@ void CreatureSystem::SpawnNaturally(ServerWorld& world, const std::vector<Player
                     bats++;
                 }
                 break;
+            }
+        }
+
+        // Rock grubs in the dark of the Deep: up to six about a player down there, on
+        // floors away from the glow of fungus and magma.
+        if (player.feet.y < TerrainGenerator::kDeepTop + 8) {
+            int grubs = 0;
+            for (const auto& c : creatures)
+                if (c.type == CreatureType::RockGrub && glm::distance(c.feet, player.feet) < kNearRange) grubs++;
+            for (int attempt = 0; attempt < 4 && grubs < 6; attempt++) {
+                const float a = unit(rng) * 6.2831853f, d = 14.0f + 20.0f * unit(rng);
+                const int x = static_cast<int>(std::floor(player.feet.x + std::cos(a) * d)), z = static_cast<int>(std::floor(player.feet.z + std::sin(a) * d));
+                const int start = static_cast<int>(std::floor(player.feet.y)) + 10;
+                for (int y = start; y > start - 24; y--) {
+                    bool grass = false;
+                    if (!CanStand(world, { x, y, z }, 1, grass)) continue;
+                    uint8_t block = 0, sky = 0;
+                    if (!LightAt(world, { x, y, z }, block, sky)) break;
+                    const glm::vec3 at(x + 0.5f, static_cast<float>(y), z + 0.5f);
+                    if (block <= 6 && sky == 0 && farFromPlayers(at) && Spawn(CreatureType::RockGrub, at)) grubs++;
+                    break;
+                }
             }
         }
     }
