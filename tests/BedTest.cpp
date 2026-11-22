@@ -119,6 +119,7 @@ int main() {
         a.client.UseBed(bedAt);
         Check(one(20.0, [&] { return Count(a, "respawn at this bed") == 1 && Count(a, "only sleep at night") == 1; }),
               "by day, using it sets where they respawn, but they can't sleep");
+        Check(one(10.0, [&] { return a.client.bed && *a.client.bed == bedAt; }), "and they're told where the bed is (for the minimap)");
         server.QueueConsoleCommand("time midnight");
         one(20.0, [&] { return Night(a.client); });
         a.client.UseBed(bedAt);

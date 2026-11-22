@@ -585,7 +585,9 @@ There are two, and each player is in one:
   gives you its worth in that block type, and placing one costs it. Traps hurt, and
   you have hearts. You can break and build up to 6 blocks away.
 - **Creative**: every block, as many as you like, and nothing hurts you. You can
-  break and build up to 50 blocks away.
+  break and build up to 50 blocks away. **Double-tap jump to fly** (and again to stop):
+  jump goes up, crouch or Q down, sprint flies twice as fast. Unlike no-clip it's solid
+  (blocks stop you), and coming down onto the ground lands you.
 
 The server checks the reach too (with a little slack for movement).
 
@@ -637,7 +639,11 @@ work the same for everyone:
   11-block drop is four hearts). Landing in water is safe. The server measures the
   fall from the highest point since you were last on the ground, deciding "on the
   ground" from the world rather than from what your client says. Teleports, respawns,
-  flying and creative start the count afresh. Armour doesn't help.
+  flying and creative start the count afresh. Armour doesn't help. Running or bounding
+  down a slope or a stair of steps isn't one long fall: whenever you're within 2.5
+  blocks of the ground and not yet falling fast, the count starts again. And landing on
+  a sloped surface hurts by how hard you hit it (coming down a mountainside with the
+  slope barely hurts), not by how far you dropped.
 
 The screen flashes red when you're hurt, and when you die it goes dark red for a few
 seconds with "You died!" and how it happened. Hearts come back one every 4 seconds once
@@ -654,7 +660,8 @@ plates and sluice gates, falls (safe from 3 blocks, four hearts from 11), and th
 no-clip and the laser are operators' only.
 
 
-Where you last died, the minimap shows a red cross (at its edge, if it's further off,
+Your bed shows on the minimap as a little red-roofed house (at its edge, if it's
+further off). Where you last died, the minimap shows a red cross (at its edge, if it's further off,
 the way to it) until you get back there: half of what you carried is waiting in a
 chest on the spot.
 ## TNT
@@ -855,7 +862,8 @@ across the top of the screen.
 Defeat him and his hoard is yours (6 steel and 8 iron ingots), everyone's told, and
 you earn **Kingslayer**. He doesn't come back: the strongholds whose king has fallen
 are kept in the world's `kings.txt`. `/locate stronghold` finds the nearest, and
-`/summon dwarf_king` brings one (who will come back). `BiomeTest` checks a stronghold's
+`/summon dwarf_king` brings one, who keeps to where he was brought (and isn't counted
+as a stronghold's). `BiomeTest` checks a stronghold's
 hall, throne, vault and stairway; `CreatureTest` fights a king to the end.
 
 ### Markets
@@ -1979,6 +1987,12 @@ second), and frames lose about 0.3 ms to drawing. Pressure gauges are the only
 machines with a real drawing cost (a dial is a dozen small boxes), so they're drawn in
 less detail further off: the marks only within 12 blocks, only the housing from behind,
 and none beyond 48.
+
+The minimap **remembers** every column it has drawn (its colour, by 16 x 16 tile), so
+a map centred somewhere new fills in at once from what's been seen, while the rows are
+redrawn from the world as before; it's kept with the world (`map_cache.bin` in a world's
+folder; a server's under `maps/`) and saved every 30 seconds, so a world you come back
+to shows its map straight away.
 
 The minimap used to cost 2 ms a frame (a fifth of the frame at 100 fps): it redrew six
 rows of its picture every frame, looking up every block down each column, and again

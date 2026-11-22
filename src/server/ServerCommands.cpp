@@ -515,7 +515,9 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         const uint16_t id = creatures.Spawn(type, at);
         if (!id) return reply(Kind::Error, "Too many creatures already");
         // (Market dwarves summoned at one spot make a market of their own there.)
+        // (and a summoned boss keeps near where it was brought, like one at home).
         if (IsMarketDwarf(type)) creatures.SetHome(id, at);
+        if (type == CreatureType::DwarfKing || type == CreatureType::ForgeGolem) creatures.SetHome(id, at, true);
         char where[64];
         std::snprintf(where, sizeof where, "%.1f, %.1f, %.1f", at.x, at.y, at.z);
         reply(Kind::Info, std::string("Summoned a ") + SpecOf(type).id + " at " + where);

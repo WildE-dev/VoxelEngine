@@ -57,6 +57,10 @@ constexpr float kChestReach = kSurvivalReach;
 constexpr double kSleepWindow = 6.0;
 // Falls up to this many blocks are safe; each block beyond costs half a heart.
 constexpr float kSafeFall = 3.0f;
+// Bounding down a slope: within this far of the ground and falling slower than this
+// (blocks a second), a fall starts counting afresh.
+constexpr float kHopHeight = 2.5f, kHopSpeed = 12.0f;
+constexpr float kFallGravity = 28.0f; // (as the player's: Player.cpp)
 // Arrows: how fast they leave the bow, how fast they fall, what a hit does, and how
 // often a bow can shoot.
 constexpr float kArrowSpeed = 32.0f, kArrowGravity = 18.0f;
@@ -611,11 +615,40 @@ void Server::UpdateFall(ClientState& client, const net::PlayerState& state, bool
         return;
     }
     if (!grounded) {
+        // Near the ground and not falling fast (bounding down a slope or a stair of steps,
+        // the updates mostly catching you mid-hop): the count starts again from here, so
+        // a run down a mountainside isn't one long fall. A real fall is falling fast by
+        // the time it nears the ground, and counts in full.
+        bool near = false;
+        const bool nearGround = Collision::GroundHeight(*world, BodyAt(state.feet, 0.05f, false), 0.05f, kHopHeight, near).has_value();
+        if (nearGround && state.velocity.y > -kHopSpeed) {
+            client.fallPeak = state.feet.y;
+            client.falling = true;
+            return;
+        }
         client.fallPeak = client.falling ? std::max(client.fallPeak, state.feet.y) : std::max(client.feet.y, state.feet.y);
         client.falling = true;
+        client.fallVelocity = state.velocity;
         return;
     }
-    const float fall = client.falling ? client.fallPeak - state.feet.y : 0.0f;
+    float fall = client.falling ? client.fallPeak - state.feet.y : 0.0f;
+    // Landing on a slope: what hurts is how hard you hit the surface, not how far you
+    // dropped (coming down a mountainside with the slope barely hurts; landing on the
+    // level is as before). The surface's slope from the block under the feet.
+    if (fall > kSafeFall + 0.5f) {
+        const glm::ivec3 under(glm::floor(state.feet - glm::vec3(0.0f, 0.02f, 0.0f)));
+        Block ground;
+        if (world->GetBlock(under.x, under.y, under.z, ground) && ground.IsPartial()) {
+            const float fx = std::clamp(state.feet.x - under.x, 0.25f, 0.75f), fz = std::clamp(state.feet.z - under.z, 0.25f, 0.75f);
+            const float dx = (ground.SurfaceHeight(fx + 0.2f, fz) - ground.SurfaceHeight(fx - 0.2f, fz)) / 0.4f;
+            const float dz = (ground.SurfaceHeight(fx, fz + 0.2f) - ground.SurfaceHeight(fx, fz - 0.2f)) / 0.4f;
+            if (std::abs(dx) + std::abs(dz) > 0.05f) {
+                const glm::vec3 normal = glm::normalize(glm::vec3(-dx, 1.0f, -dz));
+                const float impact = std::max(0.0f, -glm::dot(normal, client.fallVelocity));
+                fall = std::min(fall, impact * impact / (2.0f * kFallGravity)); // (the drop that would hit that hard)
+            }
+        }
+    }
     client.falling = false;
     client.fallPeak = state.feet.y;
     if (fall > kSafeFall + 0.5f) Hurt(client, static_cast<int>(std::lround(fall - kSafeFall)), "fell from a high place", false);
@@ -881,6 +914,7 @@ void Server::SendCreatures() {
             for (const auto& s : Dwarves::SitesNear(world->GetTerrain(), client.feet, 480.0f))
                 sites.sites.push_back({ static_cast<uint8_t>(s.kind), static_cast<uint8_t>(creatures.FallenKings().count(CreatureSystem::SiteKey(s.centre)) ? 1 : 0),
                                         s.centre });
+            if (client.bed) sites.hasBed = 1, sites.bed = *client.bed;
             net.Send(peer, net::kChannelReliable, net::Encode(sites));
         }
         net::CreatureSnapshot m;
@@ -1310,6 +1344,7 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     if (block.type != BlockType::BED) return;
     if (client.bed != pos) {
         client.bed = pos;
+        client.sitesRegion = glm::ivec2(INT_MIN, INT_MIN); // (tell them, for their map)
         SendChat(client, net::ChatMessage::Kind::Info, "You'll respawn at this bed");
     }
     // At night (the sun below the horizon), they sleep; once everyone here is asleep

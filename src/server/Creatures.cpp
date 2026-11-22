@@ -250,7 +250,7 @@ void CreatureSystem::EndRaids() {
 }
 
 void CreatureSystem::Fallen(const Creature& c) {
-    if ((c.type == CreatureType::DwarfKing || c.type == CreatureType::ForgeGolem) && c.hasHome) fallenKings.insert(SiteKey(c.site));
+    if ((c.type == CreatureType::DwarfKing || c.type == CreatureType::ForgeGolem) && c.hasHome && !c.summoned) fallenKings.insert(SiteKey(c.site));
 }
 
 Collision::AABB CreatureSystem::Box(const Creature& c) { return BoxAt(c.feet, SpecOf(c.type)); }

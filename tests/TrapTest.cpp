@@ -38,6 +38,7 @@ struct TestClient {
     ClientWorld world;
     Client client{ world };
     Player player{ glm::vec3(0.0f) };
+    PlayerInput input; // (walking, jumping: none unless a check sets it)
     bool joined = false;
 
     void Update(float dt) {
@@ -56,7 +57,7 @@ struct TestClient {
         const bool noclip = client.GetAbilities() & net::kAbilityNoclip;
         if (noclip != player.IsFlying()) player.SetFlying(world, noclip);
         if (!player.IsSpawned() && !player.IsFlying()) player.Spawn(world);
-        player.Update(world, PlayerInput{}, dt);
+        player.Update(world, input, dt);
         world.Update(player.GetEyePosition());
         if (player.IsSpawned() || player.IsFlying())
             client.SendPlayerState(player.GetFeetPosition(), player.GetVelocity(), 0.0f, 0.0f, player.IsFlying() ? net::kFlagFlying : 0);
@@ -194,6 +195,23 @@ int main() {
     Check(std::abs(a.client.GetHealth() - (beforeFall - 8)) <= 1, "an 11-block fall costs 4 hearts (health " + std::to_string(a.client.GetHealth()) + ")");
     server.QueueConsoleCommand("food 20 Tester"); // (healing needs food)
     both(40.0, [&] { return a.client.GetHealth() == 20; }); // (healed again before the checks below)
+    // Down a mountainside: twelve one-block steps, run down sprinting: no single drop is
+    // more than a step, so it doesn't hurt (it used to count as one twelve-block fall).
+    for (int i = 0; i < 12; i++)
+        server.QueueConsoleCommand("fill " + std::to_string(80 + i) + " 0 5 " + std::to_string(80 + i) + " " + std::to_string(11 - i) + " 10 stone");
+    server.QueueConsoleCommand("tp Tester 80.5 13 7.5");
+    both(20.0, [&] { return std::abs(a.player.GetFeetPosition().x - 80.5f) < 0.3f && a.player.IsOnGround() && a.player.GetFeetPosition().y > 11.5f; });
+    const int beforeRun = a.client.GetHealth();
+    a.input.move = glm::vec2(0.0f, 1.0f);
+    a.input.yaw = 0.0f; // (along +x)
+    a.input.lookDirection = glm::vec3(1.0f, 0.0f, 0.0f);
+    a.input.sprint = true;
+    both(20.0, [&] { return a.player.GetFeetPosition().x > 93.0f; });
+    a.input = PlayerInput{};
+    both(1.5, [] { return false; });
+    Check(a.player.GetFeetPosition().y < 1.5f && a.client.GetHealth() == beforeRun,
+          "sprinting down twelve one-block steps doesn't hurt (health " + std::to_string(a.client.GetHealth()) + ", at y " +
+              std::to_string(a.player.GetFeetPosition().y) + ")");
 
     std::cout << "TNT" << std::endl;
     server.QueueConsoleCommand("tp Tester 66.5 0 7.5");

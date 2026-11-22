@@ -41,7 +41,10 @@ public:
     bool Spawn(const BlockAccess& world);
     bool IsSpawned() const { return spawned; }
 
-    void SetFlying(const BlockAccess& world, bool fly);
+    // Flying: through everything (no-clip), or `solid`, stopped by blocks like walking
+    // (creative flight), and landing (back to walking) when it comes down onto the ground.
+    void SetFlying(const BlockAccess& world, bool fly, bool solid = false);
+    bool IsFlyingSolid() const { return flying && flySolid; }
     bool IsFlying() const { return flying; }
     bool IsOnGround() const { return onGround; }
     bool IsSwimming() const { return inWater; }
@@ -79,7 +82,7 @@ public:
 
 private:
     void Step(const BlockAccess& world, const PlayerInput& input, float dt);
-    void StepFlying(const PlayerInput& input, float dt);
+    void StepFlying(const BlockAccess& world, const PlayerInput& input, float dt);
     void MoveHorizontal(const BlockAccess& world, int axis, float distance);
     void MoveVertical(const BlockAccess& world, float distance, bool wasOnGround);
     bool InWater(const BlockAccess& world) const;
@@ -89,6 +92,7 @@ private:
     glm::vec3 velocity{0.0f};
     bool onGround = false;
     bool flying = false;
+    bool flySolid = false;
     bool spawned = false;
     bool resumeHere = false;
     bool inWater = false;

@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 51;
+constexpr uint32_t kProtocolVersion = 52;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -389,6 +389,8 @@ struct SiteInfo {
 };
 struct Sites {
     std::vector<SiteInfo> sites;
+    uint8_t hasBed = 0;       // and your bed, if you have one (for the map)
+    glm::ivec3 bed{ 0 };
 };
 constexpr size_t kMaxSitesSent = 64;
 struct TradePrices {

@@ -408,10 +408,16 @@ bool Application::StartGame(const ClientOptions& options) {
         host = "127.0.0.1";
         port = localServer->GetPort();
         serverLabel = "singleplayer";
+        mapCacheFile = options.worldDirectory + "/map_cache.bin";
     }
     else {
         serverLabel = host + ":" + std::to_string(port);
+        std::string safe = host + "_" + std::to_string(port);
+        for (char& c : safe)
+            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '.' && c != '-') c = '_';
+        mapCacheFile = "maps/" + safe + ".bin";
     }
+    LoadMapCache();
 
     std::string error;
     if (!client->Connect(host, port, options.name, error, settings.renderDistance)) {
@@ -431,6 +437,13 @@ bool Application::StartGame(const ClientOptions& options) {
 }
 
 void Application::StopGame() {
+    SaveMapCache();
+    mapCache.clear();
+    mapCacheFile.clear();
+    if (mapTexture) {
+        glDeleteTextures(1, &mapTexture);
+        mapTexture = 0; // (a fresh picture for the next game)
+    }
     if (client) client->Disconnect();
     client.reset();
     world.reset();
@@ -601,6 +614,7 @@ void Application::LoadBlockTextures() {
 }
 
 void Application::Shutdown() {
+    SaveMapCache();
     // Order matters: everything holding GL objects goes before the context.
     if (mapTexture) {
         glDeleteTextures(1, &mapTexture);
@@ -1261,6 +1275,58 @@ uint32_t DefaultMapColour(BlockType type) {
 }
 } // namespace
 
+namespace {
+int64_t MapTileKey(int x, int z) {
+    const int tx = x >= 0 ? x / 16 : -((-x + 15) / 16), tz = z >= 0 ? z / 16 : -((-z + 15) / 16);
+    return (static_cast<int64_t>(tx) << 32) ^ static_cast<uint32_t>(tz);
+}
+int MapTileIndex(int x, int z) { return ((x % 16 + 16) % 16) * 16 + ((z % 16 + 16) % 16); }
+} // namespace
+
+void Application::LoadMapCache() {
+    mapCache.clear();
+    mapCacheSavedAt = glfwGetTime();
+    std::ifstream in(mapCacheFile, std::ios::binary);
+    uint32_t count = 0;
+    if (!in.read(reinterpret_cast<char*>(&count), sizeof count) || count > (1u << 22)) return;
+    for (uint32_t i = 0; i < count; i++) {
+        int64_t key;
+        std::array<uint32_t, 256> tile;
+        if (!in.read(reinterpret_cast<char*>(&key), sizeof key) || !in.read(reinterpret_cast<char*>(tile.data()), sizeof(uint32_t) * tile.size())) break;
+        mapCache[key] = tile;
+    }
+    mapCacheChanged = false;
+}
+
+void Application::SaveMapCache() {
+    if (mapCacheFile.empty() || !mapCacheChanged) return;
+    std::error_code ec;
+    const std::filesystem::path path(mapCacheFile);
+    if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path(), ec);
+    std::ofstream out(mapCacheFile, std::ios::binary | std::ios::trunc);
+    const uint32_t count = static_cast<uint32_t>(mapCache.size());
+    out.write(reinterpret_cast<const char*>(&count), sizeof count);
+    for (const auto& [key, tile] : mapCache) {
+        out.write(reinterpret_cast<const char*>(&key), sizeof key);
+        out.write(reinterpret_cast<const char*>(tile.data()), sizeof(uint32_t) * tile.size());
+    }
+    mapCacheChanged = false;
+}
+
+// The whole picture from the cache at once (dark where nothing's been seen), before
+// it's redrawn row by row.
+void Application::FillMapFromCache() {
+    for (int row = 0; row < kMapSize; row++)
+        for (int col = 0; col < kMapSize; col++) {
+            const int x = mapCentre.x - kMapSize / 2 + col, z = mapCentre.y - kMapSize / 2 + row;
+            const auto it = mapCache.find(MapTileKey(x, z));
+            const uint32_t cached = it != mapCache.end() ? it->second[MapTileIndex(x, z)] : 0u;
+            mapPixels[row * kMapSize + col] = cached ? cached : 0xFF202020u;
+        }
+    glBindTexture(GL_TEXTURE_2D, mapTexture);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kMapSize, kMapSize, GL_RGBA, GL_UNSIGNED_BYTE, mapPixels.data());
+}
+
 void Application::DrawMinimap() {
     if (!client->IsWelcomed()) return;
     const glm::vec3 feet = player.GetFeetPosition();
@@ -1274,6 +1340,9 @@ void Application::DrawMinimap() {
         mapHeights.assign(kMapSize * kMapSize, INT_MIN);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kMapSize, kMapSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, mapPixels.data());
         mapCentre = here;
+        mapRow = 0;
+        mapFreshRows = 0;
+        FillMapFromCache();
     }
     // Moved far from the picture's centre: start again around here.
     if (std::abs(here.x - mapCentre.x) > kMapSize / 6 || std::abs(here.y - mapCentre.y) > kMapSize / 6) {
@@ -1281,6 +1350,7 @@ void Application::DrawMinimap() {
         mapRow = 0;
         mapFreshRows = 0;
         std::fill(mapHeights.begin(), mapHeights.end(), INT_MIN);
+        FillMapFromCache();
     }
     // Redrawn at a pace: the whole picture every few seconds (quicker just after it's
     // been centred somewhere new), a row at a time. Each row: the topmost block of
@@ -1314,10 +1384,25 @@ void Application::DrawMinimap() {
             }
             const float shade = std::clamp(1.0f + 0.12f * (height - northHeight), 0.65f, 1.3f);
             auto channel = [&](int shift) { return static_cast<uint32_t>(std::min(255.0f, ((colour >> shift) & 0xFF) * shade)) << shift; };
-            mapPixels[mapRow * kMapSize + col] = 0xFF000000u | channel(0) | channel(8) | channel(16);
+            const uint32_t pixel = 0xFF000000u | channel(0) | channel(8) | channel(16);
+            // (Not seen yet: the cached colour stays, and nothing's cached.)
+            if (found < bottom && colour == 0xFF202020u) {
+                const auto it = mapCache.find(MapTileKey(x, z));
+                const uint32_t cached = it != mapCache.end() ? it->second[MapTileIndex(x, z)] : 0u;
+                mapPixels[mapRow * kMapSize + col] = cached ? cached : pixel;
+                continue;
+            }
+            mapPixels[mapRow * kMapSize + col] = pixel;
+            auto& tile = mapCache[MapTileKey(x, z)];
+            if (tile[MapTileIndex(x, z)] != pixel) tile[MapTileIndex(x, z)] = pixel, mapCacheChanged = true;
         }
         glBindTexture(GL_TEXTURE_2D, mapTexture);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, mapRow, kMapSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, &mapPixels[mapRow * kMapSize]);
+    }
+    // (Saved now and then too, not only at the end of the game.)
+    if (mapCacheChanged && now - mapCacheSavedAt > 30.0) {
+        mapCacheSavedAt = now;
+        SaveMapCache();
     }
     // Shown in the top-right corner, north up, with an arrow for the player.
     ImDrawList* draw = ImGui::GetForegroundDrawList();
@@ -1362,6 +1447,20 @@ void Application::DrawMinimap() {
             draw->AddQuadFilled(ImVec2(at.x, at.y - s - 1), ImVec2(at.x + s + 1, at.y), ImVec2(at.x, at.y + s + 1), ImVec2(at.x - s - 1, at.y),
                                 site.fallen ? IM_COL32(130, 130, 130, 255) : IM_COL32(170, 80, 220, 255));
         }
+    }
+    // Our bed: a little house (at the edge, if it's off the map).
+    if (client->bed) {
+        ImVec2 at(lo.x + (client->bed->x + 0.5f - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (client->bed->z + 0.5f - (mapCentre.y - kMapSize / 2)) * scale);
+        const ImVec2 c((lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f);
+        const float dx = at.x - c.x, dy = at.y - c.y, half = kShown * 0.5f - 6.0f;
+        if (std::max(std::abs(dx), std::abs(dy)) > half) {
+            const float k = half / std::max(std::abs(dx), std::abs(dy));
+            at = ImVec2(c.x + dx * k, c.y + dy * k);
+        }
+        draw->AddRectFilled(ImVec2(at.x - 5, at.y - 1), ImVec2(at.x + 5, at.y + 6), IM_COL32(0, 0, 0, 220));
+        draw->AddTriangleFilled(ImVec2(at.x, at.y - 7), ImVec2(at.x - 7, at.y), ImVec2(at.x + 7, at.y), IM_COL32(0, 0, 0, 220));
+        draw->AddRectFilled(ImVec2(at.x - 4, at.y), ImVec2(at.x + 4, at.y + 5), IM_COL32(240, 240, 240, 255));
+        draw->AddTriangleFilled(ImVec2(at.x, at.y - 6), ImVec2(at.x - 6, at.y), ImVec2(at.x + 6, at.y), IM_COL32(220, 60, 50, 255));
     }
     // Where we last died: a red cross (at the edge, if it's off the map).
     if (deathSpot) {
@@ -1822,9 +1921,12 @@ void Application::HandleContinuousInput(float deltaTime) {
     // The player drops onto the terrain once the chunks under it have loaded.
     if (!player.IsSpawned() && !player.IsFlying()) player.Spawn(*world);
 
-    // No-clip is the server's to switch (/noclip): follow it.
+    // No-clip is the server's to switch (/noclip): follow it. Creative flight is ours
+    // (double-tapping jump), and stops outside creative.
     const bool noclip = client->GetAbilities() & net::kAbilityNoclip;
-    if (noclip != player.IsFlying()) player.SetFlying(*world, noclip);
+    if (!client->IsCreative()) creativeFlight = false;
+    const bool wantFly = noclip || creativeFlight;
+    if (wantFly != player.IsFlying() || (noclip && player.IsFlyingSolid())) player.SetFlying(*world, wantFly, !noclip);
 
     PlayerInput input;
     if (!chatOpen && !inventoryOpen && !paused) {
@@ -1856,6 +1958,7 @@ void Application::HandleContinuousInput(float deltaTime) {
     input.yaw = camera.GetYaw();
     input.lookDirection = camera.GetDirection();
     player.Update(*world, input, deltaTime);
+    if (creativeFlight && !player.IsFlying()) creativeFlight = false; // (landed)
 
     // Our position is ours to predict; the server checks it loosely and corrects us if
     // it disagrees. Nothing is sent until we've landed on the terrain.
@@ -2065,6 +2168,15 @@ void Application::OnKey(int key, int action) {
 
     // The rebindable ones (see app/Bindings.h).
     const auto is = [&](Action a) { return key == settings.Key(a); };
+    // Jump twice quickly in creative: fly (or stop flying).
+    if (is(Action::Jump) && client->IsCreative() && !(client->GetAbilities() & net::kAbilityNoclip)) {
+        const double now = glfwGetTime();
+        if (now - lastJumpPress < 0.3) {
+            creativeFlight = !creativeFlight;
+            lastJumpPress = -10.0;
+        }
+        else lastJumpPress = now;
+    }
     if (is(Action::Inventory)) return SetInventoryOpen(true);
     if (is(Action::PlaceHeight)) {
         // Placement height: full, 3/4, 1/2, 1/4 (with Shift, back up).

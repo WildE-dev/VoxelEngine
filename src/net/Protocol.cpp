@@ -402,6 +402,8 @@ std::vector<uint8_t> Encode(const Sites& m) {
         w.U8(m.sites[i].fallen);
         w.IVec3(m.sites[i].centre);
     }
+    w.U8(m.hasBed);
+    w.IVec3(m.bed);
     return std::move(w.data);
 }
 
@@ -411,7 +413,7 @@ bool Decode(ByteReader& in, Sites& m) {
     m.sites.resize(n);
     for (auto& s : m.sites)
         if (!in.U8(s.kind) || !in.U8(s.fallen) || !in.IVec3(s.centre) || s.kind > 3 || s.fallen > 1) return false;
-    return in.AtEnd();
+    return in.U8(m.hasBed) && in.IVec3(m.bed) && m.hasBed <= 1 && in.AtEnd();
 }
 
 std::vector<uint8_t> Encode(const TradePrices& m) {

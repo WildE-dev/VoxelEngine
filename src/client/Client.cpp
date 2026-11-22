@@ -123,7 +123,10 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
     }
     case net::MsgType::Sites: {
         net::Sites m;
-        if ((ok = net::Decode(in, m))) sites = m.sites;
+        if ((ok = net::Decode(in, m))) {
+            sites = m.sites;
+            bed = m.hasBed ? std::optional<glm::ivec3>(m.bed) : std::nullopt;
+        }
         break;
     }
     case net::MsgType::TradePrices: {

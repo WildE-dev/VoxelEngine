@@ -195,6 +195,7 @@ private:
         double sleptAt = -1000.0;            // when they last got into bed at night
         float fallPeak = 0.0f;               // highest point since last on the ground (UpdateFall)
         bool falling = false;
+        glm::vec3 fallVelocity{ 0.0f };      // the velocity they last said while in the air
         Tool heldTool = Tool::None;          // in their hand, for others to see
         BlockType heldBlock = BlockType::AIR;
 

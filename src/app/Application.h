@@ -298,6 +298,16 @@ private:
     int mapFreshRows = 0;         // rows drawn since it was last centred
     double mapLastTime = 0.0;
     glm::ivec2 mapCentre{ 0 };   // the column the picture is centred on
+    // Every column's colour as last drawn, by 16 x 16 tile (0: not seen), so a map
+    // centred somewhere new (or a place seen before, in an earlier game) shows at once;
+    // kept with the world (a server's: under maps/) between games.
+    std::unordered_map<int64_t, std::array<uint32_t, 256>> mapCache;
+    std::string mapCacheFile;
+    bool mapCacheChanged = false;
+    double mapCacheSavedAt = 0.0;
+    void LoadMapCache();
+    void SaveMapCache();
+    void FillMapFromCache();
     void DrawMinimap();
     // The newest achievement toast (from chat), shown for a few seconds.
     std::string toastText;
@@ -327,6 +337,9 @@ private:
     bool padTriggers[2] = { false, false };
     bool padMining = false;
     void HandleGamepad(float deltaTime);
+    // Creative flight: double-tap jump to fly (solid, not no-clip), and again to stop.
+    bool creativeFlight = false;
+    double lastJumpPress = -10.0;
     double rightClickAt = 0.0; // VOXEL_RIGHT_CLICK: one right-click at this time
     std::string startCommands; // VOXEL_RUN: chat lines sent once joined, ';' between them
     double landedAt = 0.0;     // when we first stood on the ground (glfwGetTime)

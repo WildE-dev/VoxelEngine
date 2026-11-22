@@ -148,8 +148,9 @@ bool Player::Spawn(const BlockAccess& world) {
     return false;
 }
 
-void Player::SetFlying(const BlockAccess& world, bool fly) {
+void Player::SetFlying(const BlockAccess& world, bool fly, bool solid) {
     flying = fly;
+    flySolid = fly && solid;
     crouching = false;
     height = kHeight;
     eyeHeight = kEyeHeight;
@@ -165,7 +166,7 @@ void Player::SetFlying(const BlockAccess& world, bool fly) {
 
 void Player::Step(const BlockAccess& world, const PlayerInput& input, float dt) {
     if (flying) {
-        StepFlying(input, dt);
+        StepFlying(world, input, dt);
         return;
     }
     if (!spawned) return;
@@ -279,7 +280,7 @@ void Player::StepBoat(const BlockAccess& world, const PlayerInput& input, float 
     inWater = false;
 }
 
-void Player::StepFlying(const PlayerInput& input, float dt) {
+void Player::StepFlying(const BlockAccess& world, const PlayerInput& input, float dt) {
     const glm::vec3 up(0.0f, 1.0f, 0.0f);
     const glm::vec3 forward = glm::normalize(input.lookDirection);
     const glm::vec3 right = glm::normalize(glm::cross(forward, up));
@@ -287,7 +288,25 @@ void Player::StepFlying(const PlayerInput& input, float dt) {
     if (input.jump) direction += up;
     if (input.descend) direction -= up;
     const float speed = kFlySpeed * (input.sprint ? 2.0f : 1.0f);
-    feet += direction * speed * dt;
+    if (!flySolid) {
+        feet += direction * speed * dt;
+        velocity = glm::vec3(0.0f);
+        return;
+    }
+    // Creative flight: an axis at a time, stopped by what's in the way; coming down onto
+    // the ground lands.
+    const glm::vec3 move = direction * speed * dt;
+    for (int axis = 0; axis < 3; axis++) {
+        if (move[axis] == 0.0f) continue;
+        glm::vec3 next = feet;
+        next[axis] += move[axis];
+        if (!Collision::BoxBlocked(world, BoundsAt(next, height))) feet = next;
+        else if (axis == 1 && move[axis] < 0.0f) {
+            SetFlying(world, false);
+            onGround = true;
+            return;
+        }
+    }
     velocity = glm::vec3(0.0f);
 }
 

@@ -100,6 +100,7 @@ public:
     std::vector<uint16_t> tradePrices;
     // The dwarf sites around us, as the server last said (for the map).
     std::vector<net::SiteInfo> sites;
+    std::optional<glm::ivec3> bed; // ours, if we have one
     // A line in this player's chat only (not sent anywhere).
     void Note(const std::string& text, net::ChatMessage::Kind kind = net::ChatMessage::Kind::Info) {
         chat.push_back({ kind, text, Now() });

@@ -60,6 +60,7 @@ public:
         uint16_t summoner = 0;   // a warrior a king called up: that king
         double nextCall = 0.0;   // a king: when he next calls up warriors
         bool raider = false;     // come for a player's home (its home: their bed), gone at dawn
+        bool summoned = false;   // brought by /summon (a boss so brought isn't a stronghold's)
         float stuck = 0.0f;      // how long it's been pushing against something (raiders hack through)
     };
     // How long a creature counts as attacking or working after it did, for the clients.
@@ -128,9 +129,9 @@ public:
     void SetFallenKings(const std::unordered_set<int64_t>& fallen) { fallenKings = fallen; }
     static int64_t SiteKey(const glm::ivec3& site) { return (static_cast<int64_t>(site.x) << 32) ^ static_cast<uint32_t>(site.z); }
     // Gives it a home (and a site, the block it's in) to keep to.
-    void SetHome(uint16_t id, const glm::vec3& home) {
+    void SetHome(uint16_t id, const glm::vec3& home, bool summoned = false) {
         for (auto& c : creatures)
-            if (c.id == id) c.hasHome = true, c.home = home, c.site = glm::ivec3(glm::floor(home));
+            if (c.id == id) c.hasHome = true, c.home = home, c.site = glm::ivec3(glm::floor(home)), c.summoned = summoned;
     }
     // The players whose hired guards have gone home since last asked.
     std::vector<uint16_t> TakeEndedHires() {

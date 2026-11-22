@@ -126,7 +126,36 @@ struct DeepWorld : BlockAccess {
 };
 } // namespace
 
+// Flat ground (solid to y 0) with a wall at x 5 and up.
+struct WalledWorld : BlockAccess {
+    bool GetBlock(int x, int y, int, Block& block) const override {
+        block = y < 0 || (x >= 5 && y < 6) ? Block(BlockType::STONE) : Block();
+        return true;
+    }
+};
+
 int main() {
+    std::cout << "Creative flight" << std::endl;
+    {
+        WalledWorld walled;
+        Player p(glm::vec3(0.5f, 3.0f, 0.5f));
+        p.SetFlying(walled, true, true);
+        PlayerInput in;
+        in.lookDirection = glm::vec3(1.0f, 0.0f, 0.0f);
+        in.yaw = 0.0f;
+        in.move = glm::vec2(0.0f, 1.0f);
+        for (int i = 0; i < 120; i++) p.Update(walled, in, 1.0f / 60.0f);
+        Check(p.IsFlying() && p.GetFeetPosition().x < 5.0f && p.GetFeetPosition().x > 4.0f && std::abs(p.GetFeetPosition().y - 3.0f) < 0.01f,
+              "flying (solid) toward a wall stops at it, hovering (x " + std::to_string(p.GetFeetPosition().x) + ")");
+        in.move = glm::vec2(0.0f);
+        in.jump = true;
+        for (int i = 0; i < 60; i++) p.Update(walled, in, 1.0f / 60.0f);
+        Check(p.GetFeetPosition().y > 8.0f, "jump held rises (y " + std::to_string(p.GetFeetPosition().y) + ")");
+        in.jump = false;
+        in.descend = true;
+        for (int i = 0; i < 120 && p.IsFlying(); i++) p.Update(walled, in, 1.0f / 60.0f);
+        Check(!p.IsFlying() && p.GetFeetPosition().y >= 0.0f && p.GetFeetPosition().y < 0.6f, "coming down onto the ground lands (walking again)");
+    }
     std::cout << "Respawning far down" << std::endl;
     {
         DeepWorld deep;
