@@ -11,7 +11,10 @@
 //    network's pressure is at least its setting, b percent (any air at all, with 0); a
 //    daylight sensor by day, while the sky is open above it; a player sensor while a
 //    player is within b blocks of it (kPlayerRange, with 0; at most kMaxPlayerRange),
-//    or, set to (mode Or), a hostile creature too.
+//    or, set to (mode Or), a hostile creature too; a machine sensor while what it
+//    touches is as it's set to watch for (its mode holds a Watch): a machine working,
+//    stopped, or waiting for air; a chest holding anything, or empty; a fluid tank or
+//    pipe, or an air network, at least b percent full.
 // Listeners:
 //  - a signal lamp lights while its channel is on;
 //  - a valve opens while its channel is on (a valve with no channel is opened and
@@ -46,7 +49,20 @@ constexpr double kClockSeconds = 1.0;
 constexpr int kPlayerRange = 4;
 constexpr int kMaxPlayerRange = 16;
 
-enum class Kind : uint8_t { None, Lever, Plate, Gate, Lamp, Valve, Sluice, Piston, WaterSensor, PressureSensor, DaylightSensor, PlayerSensor, Count };
+enum class Kind : uint8_t { None, Lever, Plate, Gate, Lamp, Valve, Sluice, Piston, WaterSensor, PressureSensor, DaylightSensor, PlayerSensor, MachineSensor, Count };
+// What a machine sensor watches for (kept in its config's mode).
+enum class Watch : uint8_t { Working, Stopped, NoAir, HasItems, Empty, Level, Count };
+inline const char* WatchName(Watch w) {
+    switch (w) {
+    case Watch::Working: return "working";
+    case Watch::Stopped: return "stopped";
+    case Watch::NoAir: return "waiting for air";
+    case Watch::HasItems: return "a chest with anything in it";
+    case Watch::Empty: return "an empty chest";
+    case Watch::Level: return "at least this full";
+    default: return "?";
+    }
+}
 enum class Mode : uint8_t { And, Or, Xor, Not, Relay, Clock, Latch, Count };
 
 inline Kind KindOf(BlockType t) {
@@ -65,6 +81,7 @@ inline Kind KindOf(BlockType t) {
     case BlockType::PRESSURE_SENSOR: return Kind::PressureSensor;
     case BlockType::DAYLIGHT_SENSOR: return Kind::DaylightSensor;
     case BlockType::PLAYER_SENSOR: return Kind::PlayerSensor;
+    case BlockType::MACHINE_SENSOR: return Kind::MachineSensor;
     default: return Kind::None;
     }
 }
@@ -78,13 +95,15 @@ struct Config {
     uint8_t a = 0, b = 0, out = 0;
 };
 
-inline bool IsSensor(Kind k) { return k == Kind::WaterSensor || k == Kind::PressureSensor || k == Kind::DaylightSensor || k == Kind::PlayerSensor; }
+inline bool IsSensor(Kind k) {
+    return k == Kind::WaterSensor || k == Kind::PressureSensor || k == Kind::DaylightSensor || k == Kind::PlayerSensor || k == Kind::MachineSensor;
+}
 inline bool Sends(Kind k) { return k == Kind::Lever || k == Kind::Plate || k == Kind::Gate || IsSensor(k); }
 inline bool Listens(Kind k) { return k == Kind::Lamp || k == Kind::Valve || k == Kind::Sluice || k == Kind::Gate || k == Kind::Piston; }
 // A player sensor whose mode is Or senses hostile dwarves too.
 inline bool SensesCreatures(const Config& c) { return c.kind == Kind::PlayerSensor && c.mode == Mode::Or; }
 // Whether a kind has a setting in b (besides a gate's second input).
-inline bool HasSetting(Kind k) { return k == Kind::PressureSensor || k == Kind::PlayerSensor; }
+inline bool HasSetting(Kind k) { return k == Kind::PressureSensor || k == Kind::PlayerSensor || k == Kind::MachineSensor; }
 // A player sensor's range for its setting.
 inline int PlayerRange(uint8_t b) { return b == 0 ? kPlayerRange : b > kMaxPlayerRange ? kMaxPlayerRange : b; }
 // How many inputs a gate in this mode uses.

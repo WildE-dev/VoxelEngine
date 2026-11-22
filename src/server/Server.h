@@ -467,6 +467,9 @@ private:
     Block TakeApart(const glm::ivec3& pos);
     // The core of the formed structure a block is part of (false: none).
     bool CoreOf(const glm::ivec3& pos, glm::ivec3& core) const;
+    // A machine's state as of the last power update (a structure's part: its core's),
+    // for machine sensors (none: not a machine).
+    std::optional<Power::DrillState> MachineState(const glm::ivec3& pos) const;
     // Whether a formed structure is still whole (its parts all there).
     bool StructureWhole(const glm::ivec3& core, const Block& block) const;
     // A structure's turn (it has the air): pumping, refining or smelting.

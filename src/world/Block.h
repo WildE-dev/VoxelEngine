@@ -280,6 +280,9 @@ enum class BlockType : uint8_t {
     // A forge golem's core (an item): what it leaves when it falls. A steam turbine
     // needs one (world/Fluids.h).
     FORGE_CORE,
+    // A machine sensor (world/Signals.h): sends while the machine, chest, tank or air
+    // network it touches is as it's set to watch for.
+    MACHINE_SENSOR,
     COUNT
 };
 // Blocks that hold things like a chest (opened, filled, emptied, broken open).

@@ -52,7 +52,9 @@ void Server::HandleConfigureSignal(ClientState& client, const net::SignalInfo& m
     s.config.mode = static_cast<Signals::Mode>(std::min<uint8_t>(m.mode, static_cast<uint8_t>(Signals::Mode::Count) - 1));
     s.config.a = Signals::Listens(kind) ? m.a : 0;
     s.config.b = kind == Signals::Kind::Gate || Signals::HasSetting(kind) ? m.b : 0;
-    if (kind == Signals::Kind::PressureSensor) s.config.b = std::min<uint8_t>(s.config.b, 100);
+    if (kind == Signals::Kind::PressureSensor || kind == Signals::Kind::MachineSensor) s.config.b = std::min<uint8_t>(s.config.b, 100);
+    if (kind == Signals::Kind::MachineSensor)
+        s.config.mode = static_cast<Signals::Mode>(std::min<uint8_t>(m.mode, static_cast<uint8_t>(Signals::Watch::Count) - 1));
     if (kind == Signals::Kind::PlayerSensor) s.config.b = std::min<uint8_t>(s.config.b, Signals::kMaxPlayerRange);
     s.config.out = Signals::Sends(kind) ? m.out : 0;
     if (kind == Signals::Kind::Gate) s.on = false;
@@ -105,6 +107,20 @@ bool Server::PushWaterAside(const glm::ivec3& pos) {
     return true;
 }
 
+std::optional<Power::DrillState> Server::MachineState(const glm::ivec3& at) const {
+    glm::ivec3 pos = at;
+    Block b;
+    if (world->GetBlock(pos.x, pos.y, pos.z, b) && b.type == BlockType::MULTIBLOCK_PART && !CoreOf(pos, pos)) return std::nullopt;
+    if (auto d = drills.find(pos); d != drills.end()) return d->second.state;
+    if (auto s = smelters.find(pos); s != smelters.end()) return s->second.state;
+    if (auto w = workers.find(pos); w != workers.end()) return w->second.state;
+    if (auto p = pumpStates.find(pos); p != pumpStates.end()) return p->second;
+    if (auto p = pistonStates.find(pos); p != pistonStates.end()) return p->second;
+    if (auto c = compressors.find(pos); c != compressors.end()) return c->second.turning ? Power::DrillState::Working : Power::DrillState::Idle;
+    if (auto e = engines.find(pos); e != engines.end()) return e->second ? Power::DrillState::Working : Power::DrillState::Idle;
+    return std::nullopt;
+}
+
 bool Server::Senses(const glm::ivec3& pos, const Signals::Config& c) const {
     switch (c.kind) {
     case Signals::Kind::WaterSensor:
@@ -118,6 +134,35 @@ bool Server::Senses(const glm::ivec3& pos, const Signals::Config& c) const {
         if (n == networkOf.end()) return false;
         const AirNetwork& net = networks[n->second];
         return c.b == 0 ? net.air > 0.5f : net.Pressure() * 100.0f >= static_cast<float>(c.b);
+    }
+    case Signals::Kind::MachineSensor: {
+        const auto watch = static_cast<Signals::Watch>(c.mode);
+        for (const glm::ivec3 d : { glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0), glm::ivec3(0, 1, 0), glm::ivec3(0, -1, 0), glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1) }) {
+            const glm::ivec3 p = pos + d;
+            Block n;
+            if (!world->GetBlock(p.x, p.y, p.z, n)) continue;
+            if (watch == Signals::Watch::HasItems || watch == Signals::Watch::Empty) {
+                if (!IsStorageType(n.type)) continue;
+                uint64_t units = 0;
+                if (auto ch = chests.find(p); ch != chests.end())
+                    for (uint32_t u : ch->second) units += u;
+                return (units > 0) == (watch == Signals::Watch::HasItems);
+            }
+            if (watch == Signals::Watch::Level) {
+                if (auto f = fluidNetOf.find(p); f != fluidNetOf.end() && Fluids::IsPart(n.type)) {
+                    const FluidNet& net = fluidNets[static_cast<size_t>(f->second)];
+                    return net.capacity > 0 && net.amount * 100 >= static_cast<int>(c.b) * net.capacity && net.amount > 0;
+                }
+                if (auto a = networkOf.find(p); a != networkOf.end()) return networks[a->second].Pressure() * 100.0f >= static_cast<float>(c.b);
+                continue;
+            }
+            const auto state = MachineState(p);
+            if (!state) continue;
+            if (watch == Signals::Watch::Working) return *state == Power::DrillState::Working;
+            if (watch == Signals::Watch::NoAir) return *state == Power::DrillState::NoPressure;
+            return *state != Power::DrillState::Working;
+        }
+        return false;
     }
     case Signals::Kind::DaylightSensor: {
         // Day as players see it (the sun a little up), with nothing overhead that
@@ -184,6 +229,7 @@ void Server::UpdateSignals() {
         case Signals::Kind::WaterSensor:
         case Signals::Kind::PressureSensor:
         case Signals::Kind::DaylightSensor:
+        case Signals::Kind::MachineSensor:
         case Signals::Kind::PlayerSensor: {
             // (A sensor's `on` is what it senses, shown to players whether or not it
             // has a channel to send it on.)

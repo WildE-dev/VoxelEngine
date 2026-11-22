@@ -1144,6 +1144,18 @@ bbbBBBbbbb
 bbbbbbbbbb
 bbbbbbbbbb
 """)
+MACHINE_SENSOR = sensor("""
+kkkkkkkkkk
+kkkSkkSkkk
+kkSSSSSSkk
+kSSSkkSSSk
+kkSkkkkSkk
+kkSkkkkSkk
+kSSSkkSSSk
+kkSSSSSSkk
+kkkSkkSkkk
+kkkkkkkkkk
+""")
 PRESSURE_SENSOR = sensor("""
 gggggggggg
 ggGGGGGGgg
@@ -2200,6 +2212,7 @@ def main():
     draw("piston_back", PISTON_BACK, PISTON_COLOURS, jitter=4, seed=70)
     draw("piston_rod", PISTON_ROD, PISTON_COLOURS, jitter=4, seed=71)
     draw("water_sensor", WATER_SENSOR, SENSOR_COLOURS, jitter=4, seed=72)
+    draw("machine_sensor", MACHINE_SENSOR, SENSOR_COLOURS, jitter=4, seed=145)
     draw("pressure_sensor", PRESSURE_SENSOR, SENSOR_COLOURS, jitter=4, seed=73)
     draw("daylight_sensor", DAYLIGHT_SENSOR, SENSOR_COLOURS, jitter=4, seed=74)
     draw("player_sensor", PLAYER_SENSOR, SENSOR_COLOURS, jitter=4, seed=75)

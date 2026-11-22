@@ -397,6 +397,30 @@ int main() {
         Check(pump(5.0, [&] { return Has(a.client, "The horde fades"); }), "/horde off ends it");
 
         server.QueueConsoleCommand("save");
+        // A machine sensor on a chest: on while the chest holds anything.
+        {
+            const glm::ivec3 chest{ 4, 0, 14 }, sensor{ 4, 1, 14 }, chestLamp{ 6, 0, 14 };
+            server.QueueConsoleCommand("tp Wirer 5.5 0 12.5");
+            pump(10.0, [&] { return std::abs(a.feet.x - 5.5f) < 0.1f && std::abs(a.feet.z - 12.5f) < 0.1f; });
+            fill(chest, "chest");
+            fill(sensor, "machine_sensor");
+            fill(chestLamp, "signal_lamp");
+            pump(10.0, [&] { return blockAt(sensor) == BlockType::MACHINE_SENSOR && blockAt(chestLamp) == BlockType::SIGNAL_LAMP; });
+            Check(configure(sensor, Signals::Kind::MachineSensor, 0, 0, 12, static_cast<Signals::Mode>(Signals::Watch::HasItems)) &&
+                      configure(chestLamp, Signals::Kind::Lamp, 12, 0, 0),
+                  "a machine sensor on a chest, watching for anything in it, sends on 12");
+            wait(1.0);
+            Check(!lit(chestLamp), "with the chest empty, its lamp is dark");
+            server.QueueConsoleCommand("give stone 1 Wirer");
+            pump(5.0, [&] { return a.client.GetResources(BlockType::STONE) >= Block::kUnitsPerBlock; });
+            a.client.OpenChest(chest);
+            pump(5.0, [&] { return a.client.GetOpenChest() == chest; });
+            a.client.MoveChestItems(BlockType::STONE, Block::kUnitsPerBlock, true);
+            Check(pump(5.0, [&] { return lit(chestLamp); }), "a stone in the chest lights it");
+            a.client.MoveChestItems(BlockType::STONE, Block::kUnitsPerBlock, false);
+            Check(pump(5.0, [&] { return !lit(chestLamp); }), "taken out again, it goes dark");
+            a.client.CloseChest();
+        }
         wait(1.0);
         a.client.Disconnect();
         Pump(a, 0.3, [] { return false; });

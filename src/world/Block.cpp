@@ -341,6 +341,7 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* GOLD_INGOT  */ {{ "gold_ingot", "gold_ingot", "gold_ingot", "gold_ingot", "gold_ingot", "gold_ingot" }},
     /* CROSSBOW    */ {{ "crossbow", "crossbow", "crossbow", "crossbow", "crossbow", "crossbow" }},
     /* FORGE_CORE  */ {{ "forge_core", "forge_core", "forge_core", "forge_core", "forge_core", "forge_core" }},
+    /* MACHINE_SENSOR */ {{ "machine_sensor", "sensor_bottom", "machine_sensor", "machine_sensor", "machine_sensor", "machine_sensor" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -384,7 +385,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "extractor", "filter_pipe", "crafter", "harvester", "drain", "sinkhole", "pressure_gauge",
     "oil_shale", "tar", "fluid_pipe", "fluid_tank", "oil_derrick", "refinery", "engine", "fluid_outlet", "mining_post",
     "steel_frame", "machine_casing", "fire_brick", "hammer", "multiblock", "multiblock_part",
-    "crusher", "crushed_iron", "coke", "glow_fungus", "magma", "gold_ore", "gold_ingot", "crossbow", "forge_core",
+    "crusher", "crushed_iron", "coke", "glow_fungus", "magma", "gold_ore", "gold_ingot", "crossbow", "forge_core", "machine_sensor",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");
@@ -868,6 +869,7 @@ bool Block::CanChisel() const {
     case BlockType::PISTON:
     case BlockType::PISTON_HEAD:
     case BlockType::WATER_SENSOR:
+    case BlockType::MACHINE_SENSOR:
     case BlockType::PRESSURE_SENSOR:
     case BlockType::DAYLIGHT_SENSOR:
     case BlockType::PLAYER_SENSOR:

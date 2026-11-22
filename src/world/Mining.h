@@ -126,6 +126,7 @@ inline float DefaultHardness(BlockType type) {
     case BlockType::CRUSHER:
     case BlockType::SLUICE: return 3.0f;
     case BlockType::WATER_SENSOR:
+    case BlockType::MACHINE_SENSOR:
     case BlockType::DAYLIGHT_SENSOR:
     case BlockType::PLAYER_SENSOR: return 1.0f;
     case BlockType::SIGNAL_LAMP:
@@ -204,6 +205,7 @@ inline Tool DefaultBestTool(BlockType type) {
     case BlockType::PISTON:
     case BlockType::PISTON_HEAD:
     case BlockType::WATER_SENSOR:
+    case BlockType::MACHINE_SENSOR:
     case BlockType::PRESSURE_SENSOR:
     case BlockType::DAYLIGHT_SENSOR:
     case BlockType::PLAYER_SENSOR:

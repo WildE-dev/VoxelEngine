@@ -1379,6 +1379,15 @@ about each block's channels and state as they change (`SignalInfo`, protocol 46)
   on);
 - a broken block's channels go, and channels are still there after a restart.
 
+
+**Machine sensor** (an iron ingot and half a glass): place it touching a machine, a
+chest, a fluid tank or pipe, or air pipes, and set what it watches for: a machine
+**working**, **stopped**, or **waiting for air**; a chest with **anything in it**, or
+**empty**; or a tank or air network **at least this full** (a percentage). It sends on
+its channel while that's so. With it, factories can run themselves: stop the
+extractor when the chest is full, light a lamp when the furnace runs dry, open a valve
+when the tank's low. `SignalTest` checks a sensor on a chest lighting a lamp while
+there's something in it.
 ## Beds
 
 A **bed** (3 planks and a hide) is half a block high. Right-click one within 6 blocks

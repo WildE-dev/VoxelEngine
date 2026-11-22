@@ -144,6 +144,7 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::PISTON: return "Piston";
     case BlockType::PISTON_HEAD: return "Piston head";
     case BlockType::WATER_SENSOR: return "Water sensor";
+    case BlockType::MACHINE_SENSOR: return "Machine sensor";
     case BlockType::PRESSURE_SENSOR: return "Pressure sensor";
     case BlockType::DAYLIGHT_SENSOR: return "Daylight sensor";
     case BlockType::PLAYER_SENSOR: return "Player sensor";
@@ -1008,12 +1009,16 @@ void Application::DrawCrosshair() {
         case Signals::Kind::WaterSensor:
         case Signals::Kind::PressureSensor:
         case Signals::Kind::DaylightSensor:
+        case Signals::Kind::MachineSensor:
         case Signals::Kind::PlayerSensor: {
             const auto k = Signals::KindOf(target.type);
             const char* what = k == Signals::Kind::WaterSensor ? "Water sensor" : k == Signals::Kind::PressureSensor ? "Pressure sensor"
-                             : k == Signals::Kind::DaylightSensor ? "Daylight sensor" : "Player sensor";
+                             : k == Signals::Kind::DaylightSensor ? "Daylight sensor" : k == Signals::Kind::MachineSensor ? "Machine sensor" : "Player sensor";
             std::string setting;
             if (k == Signals::Kind::PressureSensor) setting = info.b ? " at " + std::to_string(info.b) + "%" : " (any air)";
+            if (k == Signals::Kind::MachineSensor)
+                setting = std::string(" (") + Signals::WatchName(static_cast<Signals::Watch>(std::min<uint8_t>(info.mode, 5))) +
+                          (info.mode == static_cast<uint8_t>(Signals::Watch::Level) ? ": " + std::to_string(info.b) + "%" : "") + ")";
             if (k == Signals::Kind::PlayerSensor)
                 setting = (info.mode == static_cast<uint8_t>(Signals::Mode::Or) ? " (and creatures) within " : " within ") + std::to_string(Signals::PlayerRange(info.b)) + " blocks";
             std::snprintf(text, sizeof text, "%s%s: %s - sends on %s", what, setting.c_str(), info.on ? "on" : "off", ch(info.out).c_str());
@@ -2643,7 +2648,7 @@ void Application::DrawSignalEditor() {
                             ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowBgAlpha(0.9f);
     const char* titles[] = { "Signal", "Lever", "Pressure plate", "Logic gate", "Signal lamp", "Valve", "Sluice gate", "Piston",
-                             "Water sensor", "Pressure sensor", "Daylight sensor", "Player sensor" };
+                             "Water sensor", "Pressure sensor", "Daylight sensor", "Player sensor", "Machine sensor" };
     static_assert(IM_ARRAYSIZE(titles) == static_cast<int>(Signals::Kind::Count), "a signal kind has no title");
     bool open = true;
     if (ImGui::Begin(titles[std::clamp(signalKind, 0, static_cast<int>(Signals::Kind::Count) - 1)], &open,
@@ -2675,6 +2680,20 @@ void Application::DrawSignalEditor() {
                 if (ImGui::InputInt("Pressure (%)", &signalB)) signalB = std::clamp(signalB, 0, 100);
                 ImGui::TextDisabled("Join it to air pipes. Sends while their pressure is at least this (0: any air at all).");
                 break;
+            case Signals::Kind::MachineSensor: {
+                const char* watches[] = { "a machine working", "a machine stopped", "a machine waiting for air", "a chest with anything in it", "an empty chest",
+                                          "a tank or air network at least this full" };
+                static_assert(IM_ARRAYSIZE(watches) == static_cast<int>(Signals::Watch::Count), "a watch has no name");
+                signalModeIndex = std::clamp(signalModeIndex, 0, static_cast<int>(Signals::Watch::Count) - 1);
+                ImGui::SetNextItemWidth(320.0f);
+                ImGui::Combo("Watches for", &signalModeIndex, watches, IM_ARRAYSIZE(watches));
+                if (signalModeIndex == static_cast<int>(Signals::Watch::Level)) {
+                    ImGui::SetNextItemWidth(160.0f);
+                    if (ImGui::InputInt("Full (%)", &signalB)) signalB = std::clamp(signalB, 0, 100);
+                }
+                ImGui::TextDisabled("Place it touching a machine, a chest, a fluid tank or pipe, or air pipes.");
+                break;
+            }
             case Signals::Kind::PlayerSensor:
                 ImGui::SetNextItemWidth(160.0f);
                 if (ImGui::InputInt("Range (blocks)", &signalB)) signalB = std::clamp(signalB, 0, Signals::kMaxPlayerRange);
