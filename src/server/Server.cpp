@@ -867,6 +867,18 @@ void Server::SendCreatures() {
     constexpr float kSendRange = 72.0f;
     for (auto& [peer, client] : clients) {
         if (!client.welcomed) continue;
+        // The dwarf sites round them, for their map: told again when they cross into
+        // another region (or a king falls).
+        const glm::ivec2 region(static_cast<int>(std::floor(client.feet.x / 64.0f)), static_cast<int>(std::floor(client.feet.z / 64.0f)));
+        if (client.hasState && (region != client.sitesRegion || client.sitesFallen != creatures.FallenKings().size())) {
+            client.sitesRegion = region;
+            client.sitesFallen = creatures.FallenKings().size();
+            net::Sites sites;
+            for (const auto& s : Dwarves::SitesNear(world->GetTerrain(), client.feet, 480.0f))
+                sites.sites.push_back({ static_cast<uint8_t>(s.kind), static_cast<uint8_t>(creatures.FallenKings().count(CreatureSystem::SiteKey(s.centre)) ? 1 : 0),
+                                        s.centre });
+            net.Send(peer, net::kChannelReliable, net::Encode(sites));
+        }
         net::CreatureSnapshot m;
         m.tick = tickCount;
         for (const auto& c : creatures.All()) {

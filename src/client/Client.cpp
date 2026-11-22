@@ -119,6 +119,11 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         if ((ok = net::Decode(in, m))) abilities = m.flags;
         break;
     }
+    case net::MsgType::Sites: {
+        net::Sites m;
+        if ((ok = net::Decode(in, m))) sites = m.sites;
+        break;
+    }
     case net::MsgType::TradePrices: {
         net::TradePrices m;
         if ((ok = net::Decode(in, m))) tradePrices = m.give;

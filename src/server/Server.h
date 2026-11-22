@@ -2,6 +2,7 @@
 
 #include <array>
 #include <atomic>
+#include <climits>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -225,6 +226,8 @@ private:
         double nextAttack = 0.0; // hitting creatures: at most this often
         double nextShot = 0.0;   // the bow: at most this often
         uint32_t achievements = 0; // earned (Achievements::Bit each)
+        glm::ivec2 sitesRegion{ INT_MIN, INT_MIN }; // where they were when last told the sites round them
+        size_t sitesFallen = 0;                     // (and how many kings had fallen then)
         bool sentArrows = false; // the last Arrows they were sent had some in it
         bool sentMachines = false; // the last Machines they were sent had some in it
         // Fishing: where their bobber floats (if it's out), where they cast from, and

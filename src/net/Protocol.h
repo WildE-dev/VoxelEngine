@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 49;
+constexpr uint32_t kProtocolVersion = 50;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -86,6 +86,7 @@ enum class MsgType : uint8_t {
     Machines,      // the water wheels and machines near you and how they're doing
     SignalInfo,    // a signal block's channels and whether it's sending (or that it's gone)
     TradePrices,   // a dwarf trader's prices just now (world/Trades.h): what each offer costs
+    Sites,         // the dwarf sites around you (camps, mines, markets, strongholds), for the map
 };
 
 // ---------------------------------------------------------------------------------
@@ -381,6 +382,15 @@ struct Trade {
     uint16_t creature = 0; // the trader
     uint8_t offer = 0;     // which of Trades::Offers()
 };
+struct SiteInfo {
+    uint8_t kind = 0;         // Dwarves::SiteKind
+    uint8_t fallen = 0;       // a stronghold whose king (or a mine whose golem) has fallen
+    glm::ivec3 centre{ 0 };
+};
+struct Sites {
+    std::vector<SiteInfo> sites;
+};
+constexpr size_t kMaxSitesSent = 64;
 struct TradePrices {
     uint16_t creature = 0;
     std::vector<uint16_t> give; // what each offer costs, in order
@@ -509,6 +519,7 @@ std::vector<uint8_t> Encode(const Attack& m);
 std::vector<uint8_t> Encode(const Interact& m);
 std::vector<uint8_t> Encode(const Trade& m);
 std::vector<uint8_t> Encode(const TradePrices& m);
+std::vector<uint8_t> Encode(const Sites& m);
 std::vector<uint8_t> Encode(const Inspect& m);
 // `configure`: as a ConfigureSignal (client to server), else a SignalInfo.
 std::vector<uint8_t> Encode(const SignalInfo& m, bool configure);
@@ -564,6 +575,7 @@ bool Decode(ByteReader& in, Attack& m);
 bool Decode(ByteReader& in, Interact& m);
 bool Decode(ByteReader& in, Trade& m);
 bool Decode(ByteReader& in, TradePrices& m);
+bool Decode(ByteReader& in, Sites& m);
 bool Decode(ByteReader& in, Inspect& m);
 bool Decode(ByteReader& in, SignalInfo& m);
 bool Decode(ByteReader& in, Machines& m);

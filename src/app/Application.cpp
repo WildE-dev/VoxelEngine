@@ -1,5 +1,6 @@
 #include "app/Application.h"
 #include "world/Trades.h"
+#include "world/Dwarves.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -1314,6 +1315,41 @@ void Application::DrawMinimap() {
     draw->AddImage(static_cast<ImTextureID>(static_cast<uintptr_t>(mapTexture)), lo, hi);
     const float scale = kShown / kMapSize;
     const ImVec2 me(lo.x + (feet.x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (feet.z - (mapCentre.y - kMapSize / 2)) * scale);
+    // Dwarf sites: a camp a red triangle, a mine a brown square, a market a green dot, a
+    // stronghold a purple diamond (grey once its king has fallen). Those off the map
+    // sit at its edge, smaller, the way to them.
+    for (const auto& site : client->sites) {
+        ImVec2 at(lo.x + (site.centre.x + 0.5f - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (site.centre.z + 0.5f - (mapCentre.y - kMapSize / 2)) * scale);
+        const bool inside = at.x > lo.x + 5 && at.x < hi.x - 5 && at.y > lo.y + 5 && at.y < hi.y - 5;
+        if (!inside) {
+            // (Along the line from the middle to it, stopped at the edge.)
+            const ImVec2 c((lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f);
+            const float dx = at.x - c.x, dy = at.y - c.y, half = kShown * 0.5f - 6.0f;
+            const float k = half / std::max(std::abs(dx), std::abs(dy));
+            at = ImVec2(c.x + dx * k, c.y + dy * k);
+        }
+        const float s = inside ? 5.0f : 3.0f;
+        const auto kind = static_cast<Dwarves::SiteKind>(site.kind);
+        const ImU32 dark = IM_COL32(0, 0, 0, 200);
+        switch (kind) {
+        case Dwarves::SiteKind::Camp:
+            draw->AddTriangleFilled(ImVec2(at.x, at.y - s - 1), ImVec2(at.x - s - 1, at.y + s), ImVec2(at.x + s + 1, at.y + s), dark);
+            draw->AddTriangleFilled(ImVec2(at.x, at.y - s), ImVec2(at.x - s, at.y + s - 1), ImVec2(at.x + s, at.y + s - 1), IM_COL32(230, 70, 50, 255));
+            break;
+        case Dwarves::SiteKind::Mine:
+            draw->AddRectFilled(ImVec2(at.x - s - 1, at.y - s - 1), ImVec2(at.x + s + 1, at.y + s + 1), dark);
+            draw->AddRectFilled(ImVec2(at.x - s, at.y - s), ImVec2(at.x + s, at.y + s), site.fallen ? IM_COL32(120, 110, 100, 255) : IM_COL32(170, 110, 60, 255));
+            break;
+        case Dwarves::SiteKind::Market:
+            draw->AddCircleFilled(at, s + 1, dark);
+            draw->AddCircleFilled(at, s, IM_COL32(80, 210, 90, 255));
+            break;
+        default:
+            draw->AddQuadFilled(ImVec2(at.x, at.y - s - 2), ImVec2(at.x + s + 2, at.y), ImVec2(at.x, at.y + s + 2), ImVec2(at.x - s - 2, at.y), dark);
+            draw->AddQuadFilled(ImVec2(at.x, at.y - s - 1), ImVec2(at.x + s + 1, at.y), ImVec2(at.x, at.y + s + 1), ImVec2(at.x - s - 1, at.y),
+                                site.fallen ? IM_COL32(130, 130, 130, 255) : IM_COL32(170, 80, 220, 255));
+        }
+    }
     // Other players: dots.
     for (const auto& other : client->GetRemotePlayers()) {
         const ImVec2 at(lo.x + (other.feet.x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (other.feet.z - (mapCentre.y - kMapSize / 2)) * scale);

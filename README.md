@@ -810,6 +810,11 @@ and a quarter a **mine**, on dry ground that's flat enough, below the bare peaks
   **forge core** (what a steam turbine needs) and 3 steel ingots. Like a king, it
   doesn't come back (`kings.txt`). `/summon forge_golem` brings one.
 
+The **minimap** marks the sites within 480 blocks: a camp as a red triangle, a mine
+as a brown square (grey once its golem's fallen), a market as a green dot and a
+stronghold as a purple diamond (grey once its king's fallen); those beyond the map's
+edge sit on it, smaller, showing the way.
+
 The layouts are in `src/world/Dwarves.cpp`; like dungeons, each chunk stamps just the
 part of a site inside it. `BiomeTest` checks camps have their fire, chest and
 palisade, and mines their open shaft, ladder, tunnels and chests.

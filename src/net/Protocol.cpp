@@ -392,6 +392,28 @@ bool Decode(ByteReader& in, Trade& m) {
     return in.U16(m.creature) && in.U8(m.offer) && in.AtEnd();
 }
 
+std::vector<uint8_t> Encode(const Sites& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Sites);
+    const size_t n = std::min(m.sites.size(), kMaxSitesSent);
+    w.VarU32(static_cast<uint32_t>(n));
+    for (size_t i = 0; i < n; i++) {
+        w.U8(m.sites[i].kind);
+        w.U8(m.sites[i].fallen);
+        w.IVec3(m.sites[i].centre);
+    }
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Sites& m) {
+    uint32_t n;
+    if (!in.VarU32(n) || n > kMaxSitesSent) return false;
+    m.sites.resize(n);
+    for (auto& s : m.sites)
+        if (!in.U8(s.kind) || !in.U8(s.fallen) || !in.IVec3(s.centre) || s.kind > 3 || s.fallen > 1) return false;
+    return in.AtEnd();
+}
+
 std::vector<uint8_t> Encode(const TradePrices& m) {
     ByteWriter w;
     Begin(w, MsgType::TradePrices);

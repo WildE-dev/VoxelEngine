@@ -560,6 +560,7 @@ int main() {
                     if (r.exists) site = r.site;
                 }
         Check(site.has_value(), "there's a dwarf camp or mine within a few regions of spawn");
+        Check(Pump({ &a }, 20.0, [&] { return !a.client.sites.empty(); }), "the server tells the player the dwarf sites around them (for the map)");
         if (site) {
             const glm::ivec3 c = site->centre;
             server.QueueConsoleCommand("tp Wanderer " + std::to_string(c.x + 20) + " " + std::to_string(c.y + 4) + " " + std::to_string(c.z));

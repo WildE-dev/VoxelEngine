@@ -98,6 +98,8 @@ public:
     void SendChat(const std::string& text);
     const std::deque<ChatLine>& GetChat() const { return chat; }
     std::vector<uint16_t> tradePrices;
+    // The dwarf sites around us, as the server last said (for the map).
+    std::vector<net::SiteInfo> sites;
     // A line in this player's chat only (not sent anywhere).
     void Note(const std::string& text, net::ChatMessage::Kind kind = net::ChatMessage::Kind::Info) {
         chat.push_back({ kind, text, Now() });
