@@ -971,8 +971,10 @@ void Application::UpdateNetwork() {
     if (glm::length(knockback) > 0.0f && !player.IsFlying()) player.Push(knockback);
     if (auto correction = client->TakeCorrection()) {
         player.Teleport(*correction);
-        // Corrected into terrain (e.g. back to the spawn point): climb out onto it.
-        if (!player.IsFlying() && Collision::BoxBlocked(*world, player.GetBounds())) player.ResetSpawn();
+        // Corrected into terrain, or somewhere not loaded yet (back to the spawn point,
+        // or a bed far off): wait for it to load, then stay there if there's room
+        // (climbing out if not).
+        if (!player.IsFlying() && Collision::BoxBlocked(*world, player.GetBounds())) player.ResumeAt(*correction);
     }
 }
 

@@ -82,8 +82,10 @@ void Player::Update(const BlockAccess& world, const PlayerInput& input, float de
 }
 
 bool Player::Spawn(const BlockAccess& world) {
-    // Terrain heights stay well within this range (see TerrainGenerator).
-    constexpr int kTop = 200, kBottom = -64; // mountains reach about 110
+    // Terrain heights stay well within 200 to -64 (mountains reach about 110), but the
+    // search reaches wherever we are too: a bed far down (the Deep) is below that.
+    const int kTop = std::max(200, static_cast<int>(std::floor(feet.y)) + 40);
+    const int kBottom = std::min(-64, static_cast<int>(std::floor(feet.y)) - 64);
     if (resumeHere) {
         // Wait until every cell the body touches has loaded, then stay put if it fits.
         const auto box = BoundsAt(feet);
@@ -93,12 +95,31 @@ bool Player::Spawn(const BlockAccess& world) {
                     Block block;
                     if (!world.GetBlock(x, y, z, block)) return false;
                 }
-        resumeHere = false;
         if (!Collision::BoxBlocked(world, box)) {
+            resumeHere = false;
             velocity = glm::vec3(0.0f);
             spawned = true;
             return true;
         }
+        // In something: climb out, a block at a time, up to 32 (what's up there loaded).
+        for (int up = 1; up <= 32; up++) {
+            const glm::vec3 at(feet.x, std::floor(feet.y) + up + kSkin, feet.z);
+            const auto above = BoundsAt(at);
+            bool loaded = true;
+            for (int y = static_cast<int>(std::floor(above.min.y)); y <= static_cast<int>(std::floor(above.max.y)) && loaded; y++) {
+                Block block;
+                loaded = world.GetBlock(static_cast<int>(std::floor(feet.x)), y, static_cast<int>(std::floor(feet.z)), block);
+            }
+            if (!loaded) return false; // (not here yet: try again later)
+            if (!Collision::BoxBlocked(world, above)) {
+                resumeHere = false;
+                feet = at;
+                velocity = glm::vec3(0.0f);
+                spawned = true;
+                return true;
+            }
+        }
+        resumeHere = false; // (no room near: look down the column instead)
     }
     const int bx = static_cast<int>(std::floor(feet.x));
     const int bz = static_cast<int>(std::floor(feet.z));

@@ -12,6 +12,7 @@
 //  - modes and resources are saved with the player, and a world keeps the default
 //    mode it was made with.
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
@@ -21,6 +22,7 @@
 #include <thread>
 
 #include "app/Player.h"
+#include "world/BlockAccess.h"
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "server/Server.h"
@@ -111,7 +113,36 @@ Server::Options ServerOptions(const fs::path& dir, net::GameMode mode) {
 
 } // namespace
 
+namespace {
+// Deep ground for respawning: solid up to -151, air above to 0, nothing loaded beyond
+// (or, with `loading`, nothing loaded at all yet).
+struct DeepWorld : BlockAccess {
+    bool loading = false;
+    bool GetBlock(int, int y, int, Block& block) const override {
+        if (loading || y < -220 || y > 0) return false;
+        block = y <= -151 ? Block(BlockType::STONE) : Block();
+        return true;
+    }
+};
+} // namespace
+
 int main() {
+    std::cout << "Respawning far down" << std::endl;
+    {
+        DeepWorld deep;
+        Player p(glm::vec3(0.5f, -150.0f, 0.5f));
+        deep.loading = true;
+        p.ResumeAt(glm::vec3(0.5f, -150.0f, 0.5f));
+        Check(!p.Spawn(deep) && !p.IsSpawned(), "respawning at a bed far down (-150) waits while it isn't loaded");
+        deep.loading = false;
+        Check(p.Spawn(deep) && p.IsSpawned() && std::abs(p.GetFeetPosition().y + 150.0f) < 0.05f, "and once it is, stands there");
+        Player q(glm::vec3(0.5f, -153.0f, 0.5f));
+        q.ResumeAt(glm::vec3(0.5f, -153.0f, 0.5f)); // (in the rock)
+        Check(q.Spawn(deep) && std::abs(q.GetFeetPosition().y + 150.0f) < 0.05f, "put in the rock there, it climbs out onto the floor above");
+        Player r(glm::vec3(0.5f, -150.0f, 0.5f));
+        r.ResetSpawn();
+        Check(r.Spawn(deep) && std::abs(r.GetFeetPosition().y + 150.0f) < 0.05f, "and looking for the ground down its column finds it that far down too");
+    }
     std::cout << "What blocks are worth" << std::endl;
     Check(Block(BlockType::STONE).ResourceUnits() == 64 && Block(BlockType::STONE_BRICK).ResourceUnits() == 64, "a full block is worth 64");
     Check(Block::Placed(BlockType::STONE_BRICK, 4).ResourceUnits() == 32 && Block::Placed(BlockType::DIRT, 4).ResourceUnits() == 32,
