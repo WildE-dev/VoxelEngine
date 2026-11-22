@@ -176,6 +176,17 @@ that damaged files are refused, and that a rejoining player is put back in place
 
 ## Controls
 
+These are the default keys. **Settings > Controls** rebinds them: click an action, then
+press its new key (Esc keeps the old one); a key bound to two actions shows in red, and
+"Reset to the defaults" puts them back. They're kept in `settings.txt` (`key_jump 32`
+and so on). The number keys, Tab, Esc, F1-F4, F12 and the mouse buttons stay fixed.
+
+**Gamepads** (any GLFW knows) work too: the left stick walks and the right stick looks
+(its speed is in the settings), A jumps, B crouches, pressing the left stick sprints,
+the right trigger mines and hits (hold it to keep mining), the left trigger places and
+uses, the bumpers change hotbar slot, Y opens the inventory, Back the map, and Start
+pauses. The menus can be driven with the pad as well.
+
 | Key | Action |
 | --- | --- |
 | WASD | Walk (or fly) |

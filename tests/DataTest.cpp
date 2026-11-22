@@ -11,6 +11,7 @@
 #include <iostream>
 #include <string>
 
+#include "app/Settings.h"
 #include "world/BlockData.h"
 #include "world/Json.h"
 #include "world/Mining.h"
@@ -96,6 +97,19 @@ int main() {
         Json::Parser p(Json::Write(v));
         Check(p.Parse(back, error) && back.StringOr("name", "") == "say \"hi\"\\" && Json::Write(v).find("0.3") != std::string::npos,
               "quotes are escaped and numbers written short");
+    }
+
+    std::cout << "Key bindings" << std::endl;
+    {
+        Settings saved;
+        saved.keys[static_cast<size_t>(Action::Jump)] = GLFW_KEY_J;
+        saved.padLook = 220.0f;
+        const fs::path file = fs::temp_directory_path() / "voxel_settings_test.txt";
+        saved.Save(file.string());
+        Settings loaded;
+        Check(loaded.Load(file.string()) && loaded.Key(Action::Jump) == GLFW_KEY_J && loaded.Key(Action::Forward) == GLFW_KEY_W && loaded.padLook == 220.0f,
+              "a rebound key and the gamepad's look speed are saved and read back (the rest kept)");
+        fs::remove(file);
     }
 
     std::cout << (failures ? "DATA TEST FAILED (" : "ALL DATA CHECKS PASSED (") << failures << " failures)" << std::endl;

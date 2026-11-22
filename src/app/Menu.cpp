@@ -257,6 +257,43 @@ void Application::DrawSettingsPage(bool inGame) {
         ImGui::Checkbox("View bobbing", &settings.viewBobbing);
         int volume = static_cast<int>(settings.volume * 100.0f + 0.5f);
         if (ImGui::SliderInt("Volume", &volume, 0, 100, "%d%%")) settings.volume = volume / 100.0f;
+        // (VOXEL_MENU_PAGE=controls opens the settings with this open, for screenshots.)
+        static const bool openControls = [] {
+            const char* p = std::getenv("VOXEL_MENU_PAGE");
+            return p && std::string(p) == "controls";
+        }();
+        if (openControls) ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+        if (ImGui::CollapsingHeader("Controls")) {
+            ImGui::TextDisabled("Click one, then press its new key (Esc keeps the old one).");
+            if (ImGui::BeginTable("keys", 2, ImGuiTableFlags_SizingStretchProp)) {
+                for (int i = 0; i < kActionCount; i++) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextUnformatted(Bindings::Name(static_cast<Action>(i)));
+                    ImGui::TableNextColumn();
+                    ImGui::PushID(i);
+                    // (A key bound twice is shown in red.)
+                    bool twice = false;
+                    for (int j = 0; j < kActionCount; j++) twice |= j != i && settings.keys[static_cast<size_t>(j)] == settings.keys[static_cast<size_t>(i)];
+                    if (twice) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.4f, 1.0f));
+                    const std::string label = rebinding == i ? "press a key..." : Bindings::KeyName(settings.keys[static_cast<size_t>(i)]);
+                    if (ImGui::Button(label.c_str(), ImVec2(140.0f, 0.0f))) rebinding = i;
+                    if (twice) ImGui::PopStyleColor();
+                    ImGui::PopID();
+                }
+                ImGui::EndTable();
+            }
+            if (ImGui::Button("Reset to the defaults")) settings.keys = Bindings::Defaults();
+            ImGui::TextDisabled("Fixed: 1-0 hotbar, Tab frees the mouse, Esc pauses, F1-F4 and F12, mouse buttons.");
+            ImGui::Spacing();
+            if (glfwJoystickIsGamepad(GLFW_JOYSTICK_1)) ImGui::Text("Gamepad: %s", glfwGetGamepadName(GLFW_JOYSTICK_1));
+            else ImGui::TextDisabled("No gamepad connected.");
+            ImGui::SliderFloat("Gamepad look speed", &settings.padLook, Settings::kMinPadLook, Settings::kMaxPadLook, "%.0f deg/s");
+            ImGui::TextDisabled("Left stick walks, right stick looks; A jumps, B crouches, left stick (pressed) sprints;\n"
+                                "right trigger mines and hits, left trigger places and uses; bumpers change slot;\n"
+                                "Y inventory, Back map, Start pause.");
+        }
         ImGui::Spacing();
         if (WideButton("Done")) {
             settings.Clamp();

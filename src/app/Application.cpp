@@ -329,6 +329,7 @@ bool Application::Init(const ClientOptions& options) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad; // (menus work with a gamepad too)
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(kGlslVersion);
     imguiInitialized = true;
@@ -360,7 +361,7 @@ bool Application::Init(const ClientOptions& options) {
         if (const char* p = std::getenv("VOXEL_MENU_PAGE")) {
             const std::string name = p;
             page = name == "worlds" ? Page::Worlds : name == "new" ? Page::NewWorld : name == "multiplayer" ? Page::Multiplayer
-                 : name == "settings" ? Page::Settings : Page::Title;
+                 : name == "settings" || name == "controls" ? Page::Settings : Page::Title;
         }
         return true;
     }
@@ -647,6 +648,7 @@ void Application::Run() {
             OnMouseButton(GLFW_MOUSE_BUTTON_RIGHT, GLFW_PRESS);
         }
         HandleContinuousInput(deltaTime);
+        HandleGamepad(deltaTime);
         {
             // A gentle bob while walking on the ground (eased in and out), and the view
             // widening a few degrees while sprinting.
@@ -1733,11 +1735,21 @@ void Application::HandleContinuousInput(float deltaTime) {
 
     PlayerInput input;
     if (!chatOpen && !inventoryOpen && !paused) {
-    input.move = glm::vec2((down(GLFW_KEY_D) ? 1.0f : 0.0f) - (down(GLFW_KEY_A) ? 1.0f : 0.0f),
-                           (down(GLFW_KEY_W) ? 1.0f : 0.0f) - (down(GLFW_KEY_S) ? 1.0f : 0.0f));
-    input.jump = down(GLFW_KEY_SPACE) || (player.IsFlying() && down(GLFW_KEY_E));
-    input.descend = down(GLFW_KEY_Q) || down(GLFW_KEY_LEFT_CONTROL);
-    input.crouch = down(GLFW_KEY_LEFT_CONTROL) && !player.IsFlying(); // (flying, Ctrl goes down)
+    auto key = [&](Action a) { return down(settings.Key(a)); };
+    input.move = glm::vec2((key(Action::Right) ? 1.0f : 0.0f) - (key(Action::Left) ? 1.0f : 0.0f),
+                           (key(Action::Forward) ? 1.0f : 0.0f) - (key(Action::Back) ? 1.0f : 0.0f));
+    input.jump = key(Action::Jump) || (player.IsFlying() && key(Action::FlyUp));
+    input.descend = key(Action::FlyDown) || key(Action::Crouch);
+    input.crouch = key(Action::Crouch) && !player.IsFlying(); // (flying, crouch goes down)
+    // A gamepad: the left stick walks, A jumps, B crouches.
+    GLFWgamepadstate pad{};
+    if (glfwJoystickIsGamepad(GLFW_JOYSTICK_1) && glfwGetGamepadState(GLFW_JOYSTICK_1, &pad)) {
+        glm::vec2 stick(pad.axes[GLFW_GAMEPAD_AXIS_LEFT_X], -pad.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
+        if (glm::length(stick) > 0.2f) input.move = glm::clamp(input.move + stick, glm::vec2(-1.0f), glm::vec2(1.0f));
+        input.jump |= pad.buttons[GLFW_GAMEPAD_BUTTON_A] == GLFW_PRESS;
+        input.crouch |= pad.buttons[GLFW_GAMEPAD_BUTTON_B] == GLFW_PRESS && !player.IsFlying();
+        input.descend |= pad.buttons[GLFW_GAMEPAD_BUTTON_B] == GLFW_PRESS;
+    }
     // In a boat, Ctrl gets out (and doesn't crouch).
     if (player.IsBoating() && input.crouch) {
         player.SetBoating(false);
@@ -1746,7 +1758,7 @@ void Application::HandleContinuousInput(float deltaTime) {
     // Short of breath (thin or stale air, half the air gone): too winded to sprint.
     const Breathing::Cause cause = client->GetAirCause();
     const bool winded = (cause == Breathing::Cause::ThinAir || cause == Breathing::Cause::StaleAir) && client->GetAir() < Breathing::kShortOfBreath;
-    input.sprint = down(GLFW_KEY_LEFT_SHIFT) && !winded;
+    input.sprint = (key(Action::Sprint) || pad.buttons[GLFW_GAMEPAD_BUTTON_LEFT_THUMB] == GLFW_PRESS) && !winded;
     }
     input.yaw = camera.GetYaw();
     input.lookDirection = camera.GetDirection();
@@ -1918,6 +1930,15 @@ void Application::DrawDebugWindow(float deltaTime) {
 
 void Application::OnKey(int key, int action) {
     if (action != GLFW_PRESS) return;
+    // Waiting for a key to bind (in the settings): this is it (Esc keeps the old one).
+    if (rebinding >= 0) {
+        if (key != GLFW_KEY_ESCAPE) {
+            settings.keys[static_cast<size_t>(rebinding)] = key;
+            settings.Save(kSettingsFile);
+        }
+        rebinding = -1;
+        return;
+    }
 
     // The title screen: Esc goes back a page.
     if (!client) {
@@ -1943,31 +1964,45 @@ void Application::OnKey(int key, int action) {
     }
     // The inventory takes I and Esc (to close) and the number keys (to pick a slot).
     if (inventoryOpen) {
-        if ((key == GLFW_KEY_I && !signMode && !signalMode) || key == GLFW_KEY_ESCAPE) SetInventoryOpen(false); // (writing a sign, I is a letter)
+        if ((key == settings.Key(Action::Inventory) && !signMode && !signalMode) || key == GLFW_KEY_ESCAPE) SetInventoryOpen(false); // (writing a sign, it's a letter)
         else if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9) SelectSlot(key - GLFW_KEY_1);
         else if (key == GLFW_KEY_0) SelectSlot(9);
         return;
     }
 
-    switch (key) {
-    case GLFW_KEY_I:
-        SetInventoryOpen(true);
-        break;
-    case GLFW_KEY_V: {
-        // Placement height: full, 3/4, 1/2, 1/4 (Shift+V goes back up).
+    // The rebindable ones (see app/Bindings.h).
+    const auto is = [&](Action a) { return key == settings.Key(a); };
+    if (is(Action::Inventory)) return SetInventoryOpen(true);
+    if (is(Action::PlaceHeight)) {
+        // Placement height: full, 3/4, 1/2, 1/4 (with Shift, back up).
         const bool shift = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
         placeHeight = shift ? (placeHeight >= 8 ? 2 : placeHeight + 2) : (placeHeight <= 2 ? 8 : placeHeight - 2);
-        break;
+        return;
     }
-    case GLFW_KEY_C:
+    if (is(Action::Chisel)) {
         if (captureCursor) ChiselTarget(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
-        break;
-    case GLFW_KEY_T:
-        OpenChat('t');
-        break;
-    case GLFW_KEY_SLASH:
-        OpenChat('/');
-        break;
+        return;
+    }
+    if (is(Action::Chat)) return OpenChat('t');
+    if (is(Action::Command)) return OpenChat('/');
+    if (is(Action::Map)) {
+        showMap = !showMap;
+        return;
+    }
+    if (is(Action::Players)) {
+        showPlayers = !showPlayers;
+        return;
+    }
+    if (is(Action::SkipTime)) return client->SkipTime();
+    if (is(Action::Reload)) {
+        renderer->ReloadShaders();
+        renderer->ReloadTextures();
+        LoadData();
+        LoadBlockTextures();
+        world->RebuildAllChunks();
+        return;
+    }
+    switch (key) {
     case GLFW_KEY_ENTER:
     case GLFW_KEY_KP_ENTER:
         OpenChat(0);
@@ -1975,13 +2010,6 @@ void Application::OnKey(int key, int action) {
     case GLFW_KEY_ESCAPE:
         paused = true; // the pause menu: resume, settings, back to the title screen
         SetCursorCaptured(false);
-        break;
-    case GLFW_KEY_R:
-        renderer->ReloadShaders();
-        renderer->ReloadTextures();
-        LoadData();
-        LoadBlockTextures();
-        world->RebuildAllChunks();
         break;
     case GLFW_KEY_TAB:
         captureCursor = !captureCursor;
@@ -2000,23 +2028,52 @@ void Application::OnKey(int key, int action) {
     case GLFW_KEY_F4:
         showCompass = !showCompass;
         break;
-    case GLFW_KEY_M:
-        showMap = !showMap;
-        break;
-    case GLFW_KEY_P:
-        showPlayers = !showPlayers;
-        break;
     case GLFW_KEY_F12:
         screenshotRequested = true;
-        break;
-    case GLFW_KEY_N:
-        client->SkipTime();
         break;
     default:
         if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9) SelectSlot(key - GLFW_KEY_1);
         else if (key == GLFW_KEY_0) SelectSlot(9);
         break;
     }
+}
+
+void Application::HandleGamepad(float deltaTime) {
+    GLFWgamepadstate pad{};
+    if (!glfwJoystickIsGamepad(GLFW_JOYSTICK_1) || !glfwGetGamepadState(GLFW_JOYSTICK_1, &pad)) {
+        padMining = false;
+        return;
+    }
+    auto pressed = [&](int b) { return pad.buttons[b] == GLFW_PRESS && padWas[b] != GLFW_PRESS; };
+    // Start pauses (and resumes); Y opens and closes the inventory.
+    if (pressed(GLFW_GAMEPAD_BUTTON_START)) {
+        if (paused) {
+            if (client->IsConnected()) paused = pauseSettings = false, SetCursorCaptured(true);
+        } else paused = true, SetCursorCaptured(false);
+    }
+    const bool playing = !paused && !chatOpen;
+    if (playing && pressed(GLFW_GAMEPAD_BUTTON_Y)) SetInventoryOpen(!inventoryOpen);
+    if (playing && !inventoryOpen) {
+        // The right stick looks round.
+        glm::vec2 look(pad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], pad.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
+        if (glm::length(look) > 0.15f) {
+            const glm::vec2 angles = camera.GetDirectionAngles();
+            camera.SetLook(angles.y + look.x * settings.padLook * deltaTime, std::clamp(angles.x - look.y * settings.padLook * deltaTime, -89.0f, 89.0f));
+        }
+        // Bumpers: the hotbar slot before or after; Back: the map.
+        if (pressed(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER)) SelectSlot((selectedSlot + 9) % 10);
+        if (pressed(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER)) SelectSlot((selectedSlot + 1) % 10);
+        if (pressed(GLFW_GAMEPAD_BUTTON_BACK)) showMap = !showMap;
+        // Triggers: the right one mines and hits (held: keeps mining), the left one
+        // places and uses, like the mouse buttons.
+        const bool right = pad.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] > 0.4f, left = pad.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] > 0.4f;
+        if (right && !padTriggers[1]) OnMouseButton(GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS);
+        if (left && !padTriggers[0]) OnMouseButton(GLFW_MOUSE_BUTTON_RIGHT, GLFW_PRESS);
+        padMining = right;
+        padTriggers[0] = left, padTriggers[1] = right;
+    }
+    else padMining = false;
+    std::copy(std::begin(pad.buttons), std::end(pad.buttons), std::begin(padWas));
 }
 
 BlockType Application::SelectedBlock() const {
@@ -2830,7 +2887,8 @@ Application::FightTarget Application::TargetInView() const {
 
 void Application::UpdateMining() {
     mineProgress = 0.0f;
-    const bool held = (captureCursor && !chatOpen && !inventoryOpen && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) || holdMine;
+    const bool held = (captureCursor && !chatOpen && !inventoryOpen && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) || holdMine ||
+                      (padMining && !chatOpen && !inventoryOpen && !paused);
     // Not while aiming at a creature (that's a fight, not mining).
     auto hit = held && client->IsWelcomed() && !client->IsCreative() && !TargetInView().Any()
                    ? Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())
