@@ -1,0 +1,2 @@
+// sand: a block (the format is in README.md, here)
+{ "name": "Sand", "textures": { "all": "sand" }, "hardness": 0.6, "tool": "shovel", "sound": "sand", "light": 0, "map": "#e0cd8c" }

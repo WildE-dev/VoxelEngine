@@ -9,6 +9,8 @@
 #include "app/Application.h"
 #include "net/Protocol.h"
 #include "server/Server.h"
+#include "world/Crafting.h"
+#include "world/Smelting.h"
 
 namespace {
 
@@ -126,6 +128,11 @@ int main(int argc, char** argv)
         else if (arg == "--dump-block-data" && i + 1 < argc) {
             // (For making Resources/Data/blocks.json from the game's own details.)
             return DumpBlockData(argv[++i]) ? EXIT_SUCCESS : EXIT_FAILURE;
+        }
+        else if (arg == "--dump-recipes" && i + 1 < argc) {
+            // (Writes the game's own recipes.json and smelting.json into a folder.)
+            const std::string dir = argv[++i];
+            return Crafting::WriteDefaults(dir + "/recipes.json") && Smelting::WriteDefaults(dir + "/smelting.json") ? EXIT_SUCCESS : EXIT_FAILURE;
         }
         else if (arg == "--no-save") {
             noSave = true;

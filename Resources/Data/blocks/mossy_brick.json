@@ -1,0 +1,2 @@
+// mossy_brick: a block (the format is in README.md, here)
+{ "name": "Mossy bricks", "textures": { "all": "mossy_brick" }, "hardness": 5, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#6a6a6a" }

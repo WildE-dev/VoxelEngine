@@ -1,0 +1,2 @@
+// crafter: a block (the format is in README.md, here)
+{ "name": "Crafter", "textures": { "top": "crafter_top", "bottom": "crafter_bottom", "side": "crafter_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

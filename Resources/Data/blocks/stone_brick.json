@@ -1,0 +1,2 @@
+// stone_brick: a block (the format is in README.md, here)
+{ "name": "Stone bricks", "textures": { "all": "stone_brick" }, "hardness": 5, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#6a6a6a" }

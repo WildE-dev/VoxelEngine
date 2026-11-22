@@ -1,0 +1,2 @@
+// fluid_tank: a block (the format is in README.md, here)
+{ "name": "Fluid tank", "textures": { "top": "fluid_tank_top", "bottom": "fluid_tank_top", "side": "fluid_tank_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

@@ -1,0 +1,2 @@
+// air: a block (the format is in README.md, here)
+{ "name": "Air", "hardness": 0, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

@@ -1,0 +1,2 @@
+// gold_ore: a block (the format is in README.md, here)
+{ "name": "Gold ore", "textures": { "all": "gold_ore" }, "hardness": 7, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

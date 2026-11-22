@@ -1,0 +1,2 @@
+// dead_bush: a block (the format is in README.md, here)
+{ "name": "Dead bush", "textures": { "all": "dead_bush" }, "hardness": 0, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

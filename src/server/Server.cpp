@@ -2,6 +2,8 @@
 #include <unordered_set>
 #include <fstream>
 #include "world/Trades.h"
+#include "world/Crafting.h"
+#include "world/Smelting.h"
 #include <filesystem>
 #include "world/BlockData.h"
 #include "world/Dwarves.h"
@@ -130,6 +132,8 @@ bool Server::Start(const Options& opts) {
     {
         std::string error;
         if (std::filesystem::exists(BlockData::kPath) && !BlockData::Load(BlockData::kPath, error)) Log("[data] " + error);
+        if (std::filesystem::exists(Crafting::kRecipesPath) && !Crafting::Load(Crafting::kRecipesPath, error)) Log("[data] " + error);
+        if (std::filesystem::exists(Smelting::kPath) && !Smelting::Load(Smelting::kPath, error)) Log("[data] " + error);
     }
     options = opts;
     if (!net.Listen(options.bindHost, options.port, kMaxClients)) {

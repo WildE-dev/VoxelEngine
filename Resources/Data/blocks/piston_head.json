@@ -1,0 +1,2 @@
+// piston_head: a block (the format is in README.md, here)
+{ "name": "Piston head", "textures": { "top": "piston_face", "bottom": "piston_face", "side": "piston_rod" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

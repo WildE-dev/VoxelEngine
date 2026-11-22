@@ -1,0 +1,2 @@
+// air_pipe: a block (the format is in README.md, here)
+{ "name": "Air pipe", "textures": { "top": "air_pipe_end", "bottom": "air_pipe_end", "side": "air_pipe" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

@@ -1,0 +1,2 @@
+// fluid_pipe: a block (the format is in README.md, here)
+{ "name": "Fluid pipe", "textures": { "top": "fluid_pipe_end", "bottom": "fluid_pipe_end", "side": "fluid_pipe" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

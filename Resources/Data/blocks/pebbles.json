@@ -1,0 +1,2 @@
+// pebbles: a block (the format is in README.md, here)
+{ "name": "Pebbles", "textures": { "top": "pebbles", "bottom": "stone", "side": "" }, "hardness": 0, "tool": "none", "sound": "hard", "light": 0, "map": "#808080" }

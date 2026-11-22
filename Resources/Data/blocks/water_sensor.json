@@ -1,0 +1,2 @@
+// water_sensor: a block (the format is in README.md, here)
+{ "name": "Water sensor", "textures": { "top": "water_sensor", "bottom": "sensor_bottom", "side": "water_sensor" }, "hardness": 1, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

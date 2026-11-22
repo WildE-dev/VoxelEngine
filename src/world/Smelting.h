@@ -3,8 +3,11 @@
 // one or two types from a chest and puts what it makes back in the same chest. A
 // smelter does the first recipe in this list that a chest joined to it can afford.
 // Smelting iron ore gives twice what crafting it by hand does, and needs no coal; steel
-// (iron and coal) can only be smelted.
+// (iron and coal) can only be smelted. They're data, like crafting's (world/Crafting.h):
+// Resources/Data/smelting.json, in order (the first a chest affords is done).
+#include <atomic>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "world/Block.h"
@@ -22,7 +25,10 @@ namespace Smelting {
 
 constexpr uint32_t kBlock = Block::kUnitsPerBlock;
 
-inline const std::vector<SmeltRecipe>& Recipes() {
+constexpr const char* kPath = "Resources/Data/smelting.json";
+
+// The game's own.
+inline std::vector<SmeltRecipe> Defaults() {
     static const std::vector<SmeltRecipe> recipes = {
         { BlockType::IRON_ORE, kBlock, BlockType::AIR, 0, BlockType::IRON_INGOT, 2 * kBlock },
         { BlockType::CRUSHED_IRON, kBlock, BlockType::AIR, 0, BlockType::IRON_INGOT, 2 * kBlock }, // (an ore crushed makes two)
@@ -40,6 +46,15 @@ inline const std::vector<SmeltRecipe>& Recipes() {
     };
     return recipes;
 }
+
+// In use (a reload leaves the old list be: see Crafting::Current).
+inline std::atomic<const std::vector<SmeltRecipe>*>& Current() {
+    static std::atomic<const std::vector<SmeltRecipe>*> current{ new std::vector<SmeltRecipe>(Defaults()) };
+    return current;
+}
+inline const std::vector<SmeltRecipe>& Recipes() { return *Current().load(std::memory_order_acquire); }
+bool Load(const std::string& path, std::string& error);
+bool WriteDefaults(const std::string& path);
 
 // The first recipe these held units afford (nullptr: none).
 template <typename Held>

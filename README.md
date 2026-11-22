@@ -1764,7 +1764,26 @@ loads them again, with the textures and shaders. A file that can't be read is
 reported, with the line, and the game carries on with its own built-in details (blocks)
 or plain boxes (creatures).
 
-**`blocks.json`** has every block, by id. Any of these can be changed, and anything
+**One file per entry.** Blocks, creatures and structures are each a folder in
+`Resources/Data` (`blocks`, `creatures`, `structures`), with a file for each block or
+model named by its id (`creatures/deer.json`, `blocks/stone.json`) holding just that
+entry, and a `README.md` there saying what goes in them. Add a model by adding a file;
+a model may still inherit from one in another file. (A single `blocks.json`, or
+`creatures.json`, of them all is still read if there's no folder.)
+
+**Recipes are data too**: `recipes.json` (crafting) and `smelting.json`, each a list in
+order. A crafting recipe is `{ "id": "planks", "name": "4 planks", "takes": { "log": 1 },
+"makes": { "planks": 4 } }`, amounts in blocks (or items: 0.25 is a quarter); instead of
+`makes` it can make a `tool` (pickaxe, axe, shovel, sword, bow, rod), a piece of
+`armour` (cap, tunic, boots, shield, plate, tank) or an `upgrade` (iron, steel). Keep
+the order and add new ones at the end: a crafter remembers its recipe by its place in
+the list. A smelting recipe takes one or two things and makes one, the first a chest
+can afford being smelted. A file with a mistake (a block that doesn't exist, nothing
+made) is refused, saying where, and the recipes stay as they were.
+`VoxelEngine --dump-recipes FOLDER` writes the game's own out afresh. The server reads
+them too, so it and its players should share them.
+
+**Blocks** (`blocks/<id>.json`): one per block. Any of these can be changed, and anything
 left out (a field, or a whole block) keeps the game's own value:
 
 | Field | What it is |
@@ -1782,7 +1801,7 @@ server and its players should share the same file. How blocks behave (solid, pla
 liquid, machine) stays in the code. `VoxelEngine --dump-block-data FILE` writes the
 game's own details out as a fresh file.
 
-**`creatures.json`** has a model for each creature, by id (`deer`, `wolf`, `bat`,
+**Creature models** (`creatures/<id>.json`): one for each creature, by id (`deer`, `wolf`, `bat`,
 `dwarf`, `crossbow_dwarf`, `dwarf_chief`, `dwarf_miner`): a list of boxes, drawn facing
 +x with its feet at 0. A part is a box (`box`: its centre, `size`, `color`: `#rrggbb`
 or a name from the model's `colors`, `glow`) and/or a frame for the parts inside it
@@ -1797,7 +1816,7 @@ miner digs, and `idle` (with `"loop": true`) all the time; the dwarves' are in
 another's colours and parts, adding its own: the dwarves all start from `dwarf_base`
 and change their colours and what they hold. The file explains itself at the top.
 
-**`structures.json`** has the multiblock structures' models (see
+**Structure models** (`structures/<id>.json`): the multiblock structures' models (see
 [Multiblock structures](#multiblock-structures)), in the same format. Models of blocks
 drawn specially (the water wheel, shafts, gauges, pipes) are still in the code.
 

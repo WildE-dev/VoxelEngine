@@ -1,0 +1,2 @@
+// leaves: a block (the format is in README.md, here)
+{ "name": "Leaves", "textures": { "all": "leaves" }, "hardness": 0.3, "tool": "sword", "sound": "soft", "light": 0, "map": "#2a6e2a" }

@@ -1,0 +1,2 @@
+// lush_grass: a block (the format is in README.md, here)
+{ "name": "Lush grass", "textures": { "top": "lush_grass_top", "bottom": "dirt", "side": "lush_grass_side" }, "hardness": 0.6, "tool": "shovel", "sound": "soft", "light": 0, "map": "#368e2f" }

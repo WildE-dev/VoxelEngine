@@ -1,0 +1,2 @@
+// cactus: a block (the format is in README.md, here)
+{ "name": "Cactus", "textures": { "top": "cactus_top", "bottom": "cactus_top", "side": "cactus_side" }, "hardness": 0.6, "tool": "axe", "sound": "wood", "light": 0, "map": "#3c8c2c" }

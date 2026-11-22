@@ -1,0 +1,2 @@
+// fire_brick: a block (the format is in README.md, here)
+{ "name": "Fire bricks", "textures": { "all": "fire_brick" }, "hardness": 5, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

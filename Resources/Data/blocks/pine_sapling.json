@@ -1,0 +1,2 @@
+// pine_sapling: a block (the format is in README.md, here)
+{ "name": "Pine sapling", "textures": { "all": "pine_sapling" }, "hardness": 0, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

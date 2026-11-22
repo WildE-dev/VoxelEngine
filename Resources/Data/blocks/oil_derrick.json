@@ -1,0 +1,2 @@
+// oil_derrick: a block (the format is in README.md, here)
+{ "name": "Oil derrick", "textures": { "top": "derrick_top", "bottom": "derrick_bottom", "side": "derrick_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

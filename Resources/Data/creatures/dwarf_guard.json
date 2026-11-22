@@ -1,0 +1,28 @@
+// dwarf_guard: a creature's model (the format is in README.md, here)
+{
+  "inherits": "dwarf_base",
+  "scale": 1.05,
+  "colors": { "tunic": "#2f4f8f", "beard": "#3a2a1c", "helmet": "#b8bec8", "shield": "#8a6a3a" },
+  "parts": [
+    { "name": "crest", "box": [0.02, 1.47, 0], "size": [0.3, 0.06, 0.06], "color": "#c43a2a" },
+    { "name": "shield", "box": [0.05, 0.75, -0.46], "size": [0.46, 0.5, 0.06], "color": "shield" },
+    { "name": "boss", "box": [0.05, 0.75, -0.5], "size": [0.12, 0.12, 0.04], "color": "iron" },
+    {
+      "name": "weapon",
+      "at": [0.14, 0.62, 0.36],
+      "rotate": [0, 0, -70],
+      "swing": { "axis": "z", "amount": -0.4 },
+      "parts": [
+        { "box": [0.3, 0, 0], "size": [0.9, 0.05, 0.05], "color": "wood" },
+        { "box": [0.8, 0, 0], "size": [0.16, 0.08, 0.03], "color": "iron" }
+      ]
+    },
+    {
+      "name": "hired band",
+      "box": [0, 1, 0.36],
+      "size": [0.18, 0.07, 0.18],
+      "color": "#e8c33a",
+      "when": "tame"
+    }
+  ]
+}

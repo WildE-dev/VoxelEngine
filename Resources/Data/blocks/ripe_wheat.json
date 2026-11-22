@@ -1,0 +1,2 @@
+// ripe_wheat: a block (the format is in README.md, here)
+{ "name": "Ripe wheat", "textures": { "all": "ripe_wheat" }, "hardness": 0, "tool": "none", "sound": "soft", "light": 0, "map": "#c8b446" }

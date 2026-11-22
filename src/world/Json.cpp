@@ -1,5 +1,7 @@
 #include "world/Json.h"
 
+#include <filesystem>
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -99,6 +101,46 @@ std::string Write(const Value& v, int width) {
     std::string out;
     Spread(v, 0, width, out);
     return out + "\n";
+}
+
+std::vector<std::pair<std::string, std::string>> DataFiles(const std::string& folder) {
+    std::vector<std::pair<std::string, std::string>> files;
+    std::error_code ec;
+    if (!std::filesystem::is_directory(folder, ec)) return files;
+    for (const auto& e : std::filesystem::directory_iterator(folder, ec))
+        if (e.is_regular_file() && e.path().extension() == ".json") files.emplace_back(e.path().stem().string(), e.path().string());
+    std::sort(files.begin(), files.end());
+    return files;
+}
+
+bool ParseDataPath(const std::string& path, Value& out, std::string& error) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(path, ec))
+        return ParseFile(path.size() > 5 && path.compare(path.size() - 5, 5, ".json") == 0 ? path : path + ".json", out, error);
+    out = Object();
+    for (const auto& [id, file] : DataFiles(path)) {
+        Value entry;
+        if (!ParseFile(file, entry, error)) return false;
+        out.object.emplace_back(id, std::move(entry));
+    }
+    return true;
+}
+
+std::string DataStamp(const std::string& path) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(path, ec)) {
+        const bool json = path.size() > 5 && path.compare(path.size() - 5, 5, ".json") == 0;
+        const auto t = std::filesystem::last_write_time(json ? path : path + ".json", ec);
+        return ec ? "none" : std::to_string(static_cast<long long>(t.time_since_epoch().count()));
+    }
+    long long newest = 0;
+    size_t count = 0;
+    for (const auto& [id, file] : DataFiles(path)) {
+        const auto t = std::filesystem::last_write_time(file, ec);
+        if (!ec) newest = std::max<long long>(newest, t.time_since_epoch().count());
+        count++;
+    }
+    return std::to_string(count) + ":" + std::to_string(newest);
 }
 
 std::string LeadingComments(const std::string& path) {

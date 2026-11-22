@@ -1,0 +1,2 @@
+// raw_venison: a block (the format is in README.md, here)
+{ "name": "Raw venison", "textures": { "all": "raw_venison" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

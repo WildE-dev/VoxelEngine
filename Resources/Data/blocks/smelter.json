@@ -1,0 +1,2 @@
+// smelter: a block (the format is in README.md, here)
+{ "name": "Smelter", "textures": { "top": "smelter_top", "bottom": "smelter_top", "front": "smelter_front", "back": "smelter_side", "left": "smelter_side", "right": "smelter_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

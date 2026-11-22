@@ -1,0 +1,94 @@
+// forge_golem: a creature's model (the format is in README.md, here)
+{
+  "colors": { "iron": "#5a5e66", "core": "#ffaa30", "eye": "#ffd060", "soot": "#2a2624" },
+  "parts": [
+    {
+      "name": "left_leg",
+      "at": [0, 0.8, -0.25],
+      "swing": { "axis": "z", "amount": 0.8 },
+      "box": [0, -0.4, 0],
+      "size": [0.4, 0.8, 0.4],
+      "color": "#b8b0a8",
+      "texture": "stone_brick",
+      "tile": true
+    },
+    {
+      "name": "right_leg",
+      "at": [0, 0.8, 0.25],
+      "swing": { "axis": "z", "amount": -0.8 },
+      "box": [0, -0.4, 0],
+      "size": [0.4, 0.8, 0.4],
+      "color": "#b8b0a8",
+      "texture": "stone_brick",
+      "tile": true
+    },
+    {
+      "box": [0, 1.35, 0],
+      "size": [0.8, 1.1, 1.1],
+      "color": "#b8b0a8",
+      "texture": "stone_brick",
+      "tile": true
+    },
+    { "box": [0.425, 1.4, 0], "size": [0.02, 0.36, 0.36], "color": "core", "glow": true },
+    { "box": [0.405, 1.4, 0], "size": [0.01, 0.5, 0.5], "color": "iron" },
+    {
+      "box": [0.02, 2.15, 0],
+      "size": [0.6, 0.5, 0.6],
+      "color": "#b8b0a8",
+      "texture": "stone_brick",
+      "tile": true
+    },
+    { "box": [0.33, 2.2, -0.13], "size": [0.02, 0.08, 0.12], "color": "eye", "glow": true },
+    { "box": [0.33, 2.2, 0.13], "size": [0.02, 0.08, 0.12], "color": "eye", "glow": true },
+    { "box": [0, 1.92, 0], "size": [0.84, 0.08, 1.14], "color": "iron" },
+    {
+      "name": "left_arm",
+      "at": [0, 1.8, -0.72],
+      "swing": { "axis": "z", "amount": -0.6 },
+      "parts": [
+        {
+          "box": [0, -0.5, 0],
+          "size": [0.34, 1, 0.34],
+          "color": "#b8b0a8",
+          "texture": "stone_brick",
+          "tile": true
+        },
+        { "box": [0, -1.05, 0], "size": [0.42, 0.3, 0.42], "color": "iron" }
+      ]
+    },
+    {
+      "name": "right_arm",
+      "at": [0, 1.8, 0.72],
+      "swing": { "axis": "z", "amount": 0.6 },
+      "parts": [
+        {
+          "box": [0, -0.5, 0],
+          "size": [0.34, 1, 0.34],
+          "color": "#b8b0a8",
+          "texture": "stone_brick",
+          "tile": true
+        },
+        { "box": [0, -1.05, 0], "size": [0.42, 0.3, 0.42], "color": "iron" }
+      ]
+    }
+  ],
+  "animations": {
+    "attack": {
+      "length": 0.7,
+      "parts": {
+        "right_arm": [
+          { "t": 0, "rotate": [0, 0, 0] },
+          { "t": 0.25, "rotate": [0, 0, 150] },
+          { "t": 0.42, "rotate": [0, 0, 20] },
+          { "t": 0.7, "rotate": [0, 0, 0] }
+        ],
+        "left_arm": [
+          { "t": 0, "rotate": [0, 0, 0] },
+          { "t": 0.25, "rotate": [0, 0, 150] },
+          { "t": 0.42, "rotate": [0, 0, 20] },
+          { "t": 0.7, "rotate": [0, 0, 0] }
+        ]
+      }
+    }
+  }
+}

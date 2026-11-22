@@ -1,0 +1,2 @@
+// pipe: a block (the format is in README.md, here)
+{ "name": "Pipe", "textures": { "all": "pipe_end" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

@@ -5,7 +5,12 @@
 // once and kept; a survival player can only use the tools they've made (creative
 // players have them all). The server checks and applies crafts (Server::HandleCraft);
 // the inventory screen shows the recipes.
+// They're data: Resources/Data/recipes.json (kRecipesPath), read at start and again when
+// it changes (Load); without it, the game's own (Defaults). The order matters: a
+// crafter keeps its recipe by its place in the list. The server and its players
+// should share the file.
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -20,8 +25,8 @@ struct Ingredient {
 };
 
 struct Recipe {
-    const char* id;   // "planks", for commands and tests
-    const char* name; // "Planks"
+    std::string id;   // "planks", for commands and tests
+    std::string name; // "Planks"
     std::vector<Ingredient> inputs;
     BlockType output = BlockType::AIR; // AIR when it makes a tool
     uint32_t outputUnits = 0;
@@ -37,7 +42,10 @@ namespace Crafting {
 
 constexpr uint32_t kBlock = Block::kUnitsPerBlock;
 
-inline const std::vector<Recipe>& Recipes() {
+constexpr const char* kRecipesPath = "Resources/Data/recipes.json";
+
+// The game's own recipes.
+inline std::vector<Recipe> Defaults() {
     static const std::vector<Recipe> recipes = {
         { "planks", "4 planks", { { BlockType::LOG, kBlock } }, BlockType::PLANKS, 4 * kBlock },
         { "stone_brick", "Stone bricks", { { BlockType::STONE, kBlock } }, BlockType::STONE_BRICK, kBlock },
@@ -133,6 +141,19 @@ inline const std::vector<Recipe>& Recipes() {
     };
     return recipes;
 }
+
+// The recipes in use. (A reload puts in a new list and leaves the old one be, so the
+// server, reading them on its own thread, never finds them gone from under it.)
+inline std::atomic<const std::vector<Recipe>*>& Current() {
+    static std::atomic<const std::vector<Recipe>*> current{ new std::vector<Recipe>(Defaults()) };
+    return current;
+}
+inline const std::vector<Recipe>& Recipes() { return *Current().load(std::memory_order_acquire); }
+// Reads recipes.json (or another file of them): false (with why) and the recipes left as
+// they were if it can't be read or has a mistake.
+bool Load(const std::string& path, std::string& error);
+// Writes the game's own recipes out as a fresh file.
+bool WriteDefaults(const std::string& path);
 
 inline int Find(const char* id) {
     const auto& recipes = Recipes();

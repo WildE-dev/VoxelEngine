@@ -1,0 +1,80 @@
+// diesel_compressor: a structure's model (the format is in README.md, here)
+{
+  "colors": {
+    "tank": "#7d8a6a",
+    "pipe": "#3a3e44",
+    "flywheel": "#2c2f34",
+    "exhaust": "#55504a",
+    "smoke": "#8a8a8a",
+    "glow": "#ffb040"
+  },
+  "parts": [
+    { "box": [2, 0.5, 2], "size": [2, 1, 2], "color": "#ffffff", "texture": "machine_casing", "tile": true },
+    {
+      "box": [0.5, 0.5, 2.5],
+      "size": [1, 1, 1],
+      "color": "#ffffff",
+      "texture": "machine_casing",
+      "tile": true
+    },
+    {
+      "box": [2.5, 0.5, 0.5],
+      "size": [1, 1, 1],
+      "color": "#ffffff",
+      "texture": "machine_casing",
+      "tile": true
+    },
+    {
+      "box": [0.5, 0.5, 0.5],
+      "size": [1, 1, 1],
+      "color": "#ffffff",
+      "texture": "machine_casing",
+      "tile": true
+    },
+    {
+      "box": [1.5, 1.4, 1.5],
+      "size": [2.2, 0.8, 2.2],
+      "color": "#ffffff",
+      "texture": "machine_casing",
+      "tile": true
+    },
+    { "box": [0.45, 1.5, 0.45], "size": [0.8, 1, 0.8], "color": "tank" },
+    { "box": [2.55, 1.5, 0.45], "size": [0.8, 1, 0.8], "color": "tank" },
+    { "box": [0.45, 1.5, 2.55], "size": [0.8, 1, 0.8], "color": "tank" },
+    { "box": [2.55, 1.5, 2.55], "size": [0.8, 1, 0.8], "color": "tank" },
+    { "box": [2.3, 2.3, 2.3], "size": [0.25, 1.2, 0.25], "color": "exhaust" },
+    {
+      "name": "smoke",
+      "at": [2.3, 3, 2.3],
+      "flap": { "axis": "y", "speed": 3, "amount": 3.14 },
+      "box": [0, 0, 0],
+      "size": [0.35, 0.3, 0.35],
+      "color": "smoke",
+      "when": "working"
+    },
+    {
+      "name": "flywheel",
+      "at": [3.05, 0.55, 1.5],
+      "flap": { "axis": "x", "speed": 12, "amount": 3.14 },
+      "box": [0, 0, 0],
+      "size": [0.1, 0.8, 0.8],
+      "color": "flywheel",
+      "parts": [{ "box": [0.06, 0, 0], "size": [0.04, 0.7, 0.12], "color": "#b8bec8" }]
+    },
+    {
+      "name": "lamp",
+      "box": [1.5, 1.86, 1.5],
+      "size": [0.2, 0.08, 0.2],
+      "color": "glow",
+      "glow": true,
+      "when": "working"
+    },
+    {
+      "name": "lamp off",
+      "box": [1.5, 1.86, 1.5],
+      "size": [0.2, 0.08, 0.2],
+      "color": "#4a3a20",
+      "when": "idle"
+    }
+  ]
+}

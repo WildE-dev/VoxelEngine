@@ -1,0 +1,2 @@
+// coke: a block (the format is in README.md, here)
+{ "name": "Coke", "textures": { "all": "coke" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

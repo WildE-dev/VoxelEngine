@@ -1,0 +1,2 @@
+// bed: a block (the format is in README.md, here)
+{ "name": "Bed", "textures": { "top": "bed_top", "bottom": "planks", "side": "bed_side" }, "hardness": 0.8, "tool": "axe", "sound": "wood", "light": 0, "map": "#c03030" }

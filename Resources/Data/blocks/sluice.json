@@ -1,0 +1,2 @@
+// sluice: a block (the format is in README.md, here)
+{ "name": "Sluice gate", "textures": { "all": "sluice" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

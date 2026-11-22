@@ -1,0 +1,2 @@
+// flower_red: a block (the format is in README.md, here)
+{ "name": "Red flower", "textures": { "all": "flower_red" }, "hardness": 0, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

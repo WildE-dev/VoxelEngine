@@ -1,0 +1,2 @@
+// pine_leaves: a block (the format is in README.md, here)
+{ "name": "Pine needles", "textures": { "all": "pine_leaves" }, "hardness": 0.3, "tool": "sword", "sound": "soft", "light": 0, "map": "#2e5a2e" }

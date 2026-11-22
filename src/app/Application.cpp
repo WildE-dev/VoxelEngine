@@ -42,6 +42,8 @@
 #include "world/Signals.h"
 #include "world/Chunk.h"
 #include "world/Crafting.h"
+#include "world/Json.h"
+#include "world/Smelting.h"
 #include "world/Raycast.h"
 #include "world/TerrainGenerator.h"
 
@@ -546,20 +548,20 @@ void Application::LoadData() {
     if (!BlockData::Load(BlockData::kPath, error)) std::cerr << "[data] " << error << " (using the game's own block details)" << std::endl;
     if (!renderer->LoadCreatureModels(error)) std::cerr << "[data] " << error << " (creatures drawn as plain boxes)" << std::endl;
     if (!renderer->LoadStructureModels(error)) std::cerr << "[data] " << error << " (structures not drawn)" << std::endl;
+    if (std::filesystem::exists(Crafting::kRecipesPath) && !Crafting::Load(Crafting::kRecipesPath, error)) std::cerr << "[data] " << error << " (the game's own recipes)" << std::endl;
+    if (std::filesystem::exists(Smelting::kPath) && !Smelting::Load(Smelting::kPath, error)) std::cerr << "[data] " << error << " (the game's own smelting)" << std::endl;
 }
 
 void Application::WatchData(double now) {
     if (now - dataCheckedAt < 1.0) return;
     dataCheckedAt = now;
     std::vector<std::string> changed;
-    for (const char* path : { BlockData::kPath, PlayerModels::kCreatureModelsPath, PlayerModels::kStructureModelsPath }) {
-        std::error_code ec;
-        const auto time = std::filesystem::last_write_time(path, ec);
-        if (ec) continue;
+    for (const char* path : { BlockData::kPath, PlayerModels::kCreatureModelsPath, PlayerModels::kStructureModelsPath, Crafting::kRecipesPath, Smelting::kPath }) {
+        const std::string stamp = Json::DataStamp(path);
         auto it = dataTimes.find(path);
-        if (it == dataTimes.end()) dataTimes[path] = time; // (the first look: as loaded)
-        else if (it->second != time) {
-            it->second = time;
+        if (it == dataTimes.end()) dataTimes[path] = stamp; // (the first look: as loaded)
+        else if (it->second != stamp) {
+            it->second = stamp;
             changed.push_back(path);
         }
     }
@@ -572,7 +574,11 @@ void Application::WatchData(double now) {
             ok = BlockData::Load(BlockData::kPath, error);
             LoadBlockTextures();
             world->RebuildAllChunks();
-        } else if (path == PlayerModels::kCreatureModelsPath)
+        } else if (path == Crafting::kRecipesPath)
+            ok = Crafting::Load(Crafting::kRecipesPath, error);
+        else if (path == Smelting::kPath)
+            ok = Smelting::Load(Smelting::kPath, error);
+        else if (path == PlayerModels::kCreatureModelsPath)
             ok = renderer->LoadCreatureModels(error);
         else
             ok = renderer->LoadStructureModels(error);
@@ -2396,7 +2402,7 @@ void Application::DrawInventory() {
                     ImGui::Image(texture, ImVec2(24.0f, 24.0f), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
                     ImGui::SameLine();
                     ImGui::AlignTextToFramePadding();
-                    ImGui::TextUnformatted(recipe.name);
+                    ImGui::TextUnformatted(recipe.name.c_str());
                     ImGui::TableNextColumn();
                     std::string needs;
                     for (const auto& in : recipe.inputs)

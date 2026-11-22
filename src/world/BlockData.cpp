@@ -43,7 +43,7 @@ std::optional<Tool> ToolFrom(const std::string& s) {
 
 bool Load(const std::string& path, std::string& error) {
     Json::Value root;
-    if (!Json::ParseFile(path, root, error)) return false;
+    if (!Json::ParseDataPath(path, root, error)) return false;
     if (!root.IsObject()) {
         error = path + ": the file should be one { ... } of blocks";
         return false;

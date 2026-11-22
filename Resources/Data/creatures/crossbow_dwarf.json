@@ -1,0 +1,28 @@
+// crossbow_dwarf: a creature's model (the format is in README.md, here)
+{
+  "inherits": "dwarf_base",
+  "colors": { "tunic": "#385c33", "beard": "#59331a" },
+  "parts": [
+    { "box": [0.38, 0.92, 0], "size": [0.5, 0.07, 0.08], "color": "wood" },
+    { "box": [0.55, 0.94, 0], "size": [0.05, 0.05, 0.5], "color": "wood" }
+  ],
+  "animations": {
+    "attack": {
+      "length": 0.6,
+      "parts": {
+        "right_arm": [
+          { "t": 0, "rotate": [0, 0, 0] },
+          { "t": 0.08, "rotate": [0, 0, 80] },
+          { "t": 0.45, "rotate": [0, 0, 80] },
+          { "t": 0.6, "rotate": [0, 0, 0] }
+        ],
+        "left_arm": [
+          { "t": 0, "rotate": [0, 0, 0] },
+          { "t": 0.08, "rotate": [0, 0, 80] },
+          { "t": 0.45, "rotate": [0, 0, 80] },
+          { "t": 0.6, "rotate": [0, 0, 0] }
+        ]
+      }
+    }
+  }
+}

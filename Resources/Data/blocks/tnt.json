@@ -1,0 +1,2 @@
+// tnt: a block (the format is in README.md, here)
+{ "name": "TNT", "textures": { "top": "tnt_top", "bottom": "tnt_top", "side": "tnt_side" }, "hardness": 0.3, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

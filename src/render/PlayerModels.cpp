@@ -569,7 +569,7 @@ bool ReadPart(const Json::Value& v, const Palette& palette, const Resolver& text
 bool PlayerModels::LoadShapes(const std::string& path, const std::vector<std::string>& names, std::map<std::string, CreatureShape>& out, std::string& error) {
     Json::Value root;
     out.clear();
-    if (!Json::ParseFile(path, root, error)) return false;
+    if (!Json::ParseDataPath(path, root, error)) return false;
     if (!BuildShapes(root, names, out, error)) {
         error = path + ": " + error;
         return false;

@@ -1,0 +1,2 @@
+// flower_yellow: a block (the format is in README.md, here)
+{ "name": "Yellow flower", "textures": { "all": "flower_yellow" }, "hardness": 0, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

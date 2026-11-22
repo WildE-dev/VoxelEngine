@@ -131,11 +131,11 @@ public:
     // format; parts "when": "working" are drawn only while it works, and its motions
     // only move then).
     bool LoadStructureModels(const std::string& path, std::string& error);
-    static constexpr const char* kStructureModelsPath = "Resources/Data/structures.json";
+    static constexpr const char* kStructureModelsPath = "Resources/Data/structures"; // (a file per model)
     // Creatures' models from Resources/Data/creatures.json (see CreatureShape); false
     // (with why) if it couldn't be read, when they're drawn as plain boxes.
     bool LoadCreatureModels(const std::string& path, std::string& error);
-    static constexpr const char* kCreatureModelsPath = "Resources/Data/creatures.json";
+    static constexpr const char* kCreatureModelsPath = "Resources/Data/creatures"; // (a file per model)
 
     // A creature's model: boxes, each in a frame that may be placed, turned, swung as it
     // walks or flapped, with frames inside frames.

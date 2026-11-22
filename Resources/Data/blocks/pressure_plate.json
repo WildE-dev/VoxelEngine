@@ -1,0 +1,2 @@
+// pressure_plate: a block (the format is in README.md, here)
+{ "name": "Pressure plate", "textures": { "all": "pressure_plate" }, "hardness": 1.5, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

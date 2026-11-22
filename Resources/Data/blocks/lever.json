@@ -1,0 +1,2 @@
+// lever: a block (the format is in README.md, here)
+{ "name": "Lever", "textures": { "all": "lever" }, "hardness": 0.4, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

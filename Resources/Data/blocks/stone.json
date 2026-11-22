@@ -1,0 +1,2 @@
+// stone: a block (the format is in README.md, here)
+{ "name": "Stone", "textures": { "all": "stone" }, "hardness": 4, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#808080" }

@@ -173,6 +173,16 @@ private:
 // Reads and parses a file; false (with why, the file named) if it can't.
 bool ParseFile(const std::string& path, Value& out, std::string& error);
 
+// A data set (blocks, creatures, structures) as one object of entries by id, from
+// either a folder with a file per entry (its name the id: "deer.json" holds the deer)
+// or, if there's no folder, one file of them all (`path` + ".json"). False (with why)
+// if neither can be read, or a file in the folder can't be.
+bool ParseDataPath(const std::string& path, Value& out, std::string& error);
+// Something that changes whenever a data set does (its files' times and number).
+std::string DataStamp(const std::string& path);
+// A data set's entry files, by id, in a folder (sorted).
+std::vector<std::pair<std::string, std::string>> DataFiles(const std::string& folder);
+
 // Writes a value as JSON for a person to read: anything that fits on a line of
 // `width` goes on one, the rest is spread over lines, indented. Numbers are written as
 // short as they'll go.

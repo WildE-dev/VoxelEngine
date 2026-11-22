@@ -1,0 +1,2 @@
+// glass: a block (the format is in README.md, here)
+{ "name": "Glass", "textures": { "all": "glass" }, "hardness": 0.5, "tool": "none", "sound": "glass", "light": 0, "map": "#d0e0e0" }

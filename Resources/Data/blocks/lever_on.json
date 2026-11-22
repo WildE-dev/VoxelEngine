@@ -1,0 +1,2 @@
+// lever_on: a block (the format is in README.md, here)
+{ "name": "Lever (on)", "textures": { "all": "lever_on" }, "hardness": 0.4, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

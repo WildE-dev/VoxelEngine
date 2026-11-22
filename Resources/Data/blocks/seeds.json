@@ -1,0 +1,2 @@
+// seeds: a block (the format is in README.md, here)
+{ "name": "Seeds", "textures": { "all": "seeds" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

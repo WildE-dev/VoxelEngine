@@ -1,0 +1,17 @@
+// dwarf: a creature's model (the format is in README.md, here)
+{
+  "inherits": "dwarf_base",
+  "colors": { "tunic": "#8c291f", "beard": "#9e4c1a" },
+  "parts": [
+    {
+      "name": "weapon",
+      "at": [0.14, 0.62, 0.36],
+      "rotate": [0, 0, -70],
+      "swing": { "axis": "z", "amount": -0.4 },
+      "parts": [
+        { "box": [0.25, 0, 0], "size": [0.55, 0.06, 0.06], "color": "wood" },
+        { "box": [0.48, 0.1, 0], "size": [0.14, 0.24, 0.04], "color": "iron" }
+      ]
+    }
+  ]
+}

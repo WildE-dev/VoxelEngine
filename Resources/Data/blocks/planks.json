@@ -1,0 +1,2 @@
+// planks: a block (the format is in README.md, here)
+{ "name": "Planks", "textures": { "all": "planks" }, "hardness": 1.5, "tool": "axe", "sound": "wood", "light": 0, "map": "#8a5c2e" }

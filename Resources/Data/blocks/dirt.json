@@ -1,0 +1,2 @@
+// dirt: a block (the format is in README.md, here)
+{ "name": "Dirt", "textures": { "all": "dirt" }, "hardness": 0.6, "tool": "shovel", "sound": "soft", "light": 0, "map": "#865a3c" }

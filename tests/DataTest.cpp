@@ -3,7 +3,9 @@
 //    is on,
 //  - a blocks file overrides just the details it gives (hardness, tool, light, name,
 //    textures), leaving the rest as the game's own, and loading another puts them back,
-//  - the shipped blocks.json and creatures.json read cleanly, and blocks.json matches
+//  - the shipped data folders (a file per block or model) read cleanly, each file writes
+//    back the same, recipes.json and smelting.json match the game's own recipes, a
+//    recipes file of one's own is used and a bad one refused; and blocks match
 //    the game's own details.
 #include <cstdlib>
 #include <filesystem>
@@ -13,6 +15,8 @@
 
 #include "app/Settings.h"
 #include "world/BlockData.h"
+#include "world/Smelting.h"
+#include "world/Crafting.h"
 #include "world/Json.h"
 #include "world/Mining.h"
 
@@ -63,7 +67,7 @@ int main() {
     std::cout << "The shipped files" << std::endl;
     {
         std::string error;
-        Check(BlockData::Load(BlockData::kPath, error), "Resources/Data/blocks.json reads cleanly" + (error.empty() ? "" : " (" + error + ")"));
+        Check(BlockData::Load(BlockData::kPath, error), "Resources/Data/blocks (a file per block) reads cleanly" + (error.empty() ? "" : " (" + error + ")"));
         bool same = true;
         for (int i = 0; i < static_cast<int>(BlockType::COUNT); i++) {
             const BlockType t = static_cast<BlockType>(i);
@@ -74,19 +78,63 @@ int main() {
         }
         Check(same, "and matches the game's own hardness, tools and light for every block");
         Json::Value v;
-        Check(Json::ParseFile("Resources/Data/creatures.json", v, error) && v.Find("dwarf") && v.Find("deer"),
-              "Resources/Data/creatures.json reads cleanly" + (error.empty() ? "" : " (" + error + ")"));
+        Check(Json::ParseDataPath("Resources/Data/creatures", v, error) && v.Find("dwarf") && v.Find("deer"),
+              "Resources/Data/creatures (a file per model, named by its id) reads cleanly" + (error.empty() ? "" : " (" + error + ")"));
     }
 
     std::cout << "Writing models back (the model editor)" << std::endl;
-    for (const char* path : { "Resources/Data/creatures.json", "Resources/Data/structures.json", "Resources/Data/blocks.json" }) {
+    for (const char* path : { "Resources/Data/creatures", "Resources/Data/structures", "Resources/Data/blocks" }) {
         std::string error;
-        Json::Value v, again;
-        Json::ParseFile(path, v, error);
-        const std::string text = Json::LeadingComments(path) + Json::Write(v);
-        Json::Parser p(text);
-        Check(p.Parse(again, error) && Json::Write(again) == Json::Write(v), std::string(path) + " written and read back is the same");
-        Check(text.rfind("//", 0) == 0, "with its comments kept at the top");
+        bool same = true, commented = true;
+        size_t files = 0;
+        for (const auto& [id, file] : Json::DataFiles(path)) {
+            Json::Value v, again;
+            same = same && Json::ParseFile(file, v, error);
+            const std::string text = Json::LeadingComments(file) + Json::Write(v);
+            Json::Parser p(text);
+            same = same && p.Parse(again, error) && Json::Write(again) == Json::Write(v);
+            commented = commented && text.rfind("//", 0) == 0;
+            files++;
+        }
+        Check(files > 0 && same, std::string(path) + ": each of its " + std::to_string(files) + " files written and read back is the same");
+        Check(commented, "each with its comment kept at the top");
+    }
+
+    std::cout << "Recipes" << std::endl;
+    {
+        std::string error;
+        const auto defaults = Crafting::Defaults();
+        Check(Crafting::Load(Crafting::kRecipesPath, error), "Resources/Data/recipes.json reads cleanly" + (error.empty() ? "" : " (" + error + ")"));
+        const auto& loaded = Crafting::Recipes();
+        bool same = loaded.size() == defaults.size();
+        for (size_t i = 0; same && i < loaded.size(); i++) {
+            const Recipe &a = loaded[i], &b = defaults[i];
+            same = a.id == b.id && a.name == b.name && a.output == b.output && a.outputUnits == b.outputUnits && a.tool == b.tool && a.armour == b.armour &&
+                   a.ironUpgrade == b.ironUpgrade && a.steelUpgrade == b.steelUpgrade && a.inputs.size() == b.inputs.size();
+            for (size_t k = 0; same && k < a.inputs.size(); k++) same = a.inputs[k].type == b.inputs[k].type && a.inputs[k].units == b.inputs[k].units;
+            if (!same) std::cout << "        recipe " << i << " (" << b.id << ") differs" << std::endl;
+        }
+        Check(same, "and matches the game's own, recipe for recipe, in order (" + std::to_string(loaded.size()) + ")");
+        Check(Smelting::Load(Smelting::kPath, error) && Smelting::Recipes().size() == Smelting::Defaults().size(),
+              "Resources/Data/smelting.json reads cleanly, every recipe there" + (error.empty() ? "" : " (" + error + ")"));
+        // A file of our own: a new recipe works, a mistake is refused (the old ones kept).
+        const fs::path file = fs::temp_directory_path() / "voxel_recipes_test.json";
+        {
+            std::ofstream out(file);
+            out << "// a test\n[ { \"id\": \"gravel_glass\", \"name\": \"Glass from sand\", \"takes\": { \"sand\": 0.5 }, \"makes\": { \"glass\": 2 } },\n"
+                   "  { \"id\": \"pick\", \"takes\": { \"planks\": 1 }, \"tool\": \"pickaxe\" } ]\n";
+        }
+        Check(Crafting::Load(file.string(), error) && Crafting::Recipes().size() == 2 && Crafting::Find("gravel_glass") == 0 &&
+                  Crafting::Recipes()[0].inputs[0].units == 32 && Crafting::Recipes()[0].outputUnits == 128 && Crafting::Recipes()[1].tool == Tool::Pickaxe,
+              "a recipes file of its own is used: amounts in blocks (half a sand is 32 units), tools by name");
+        {
+            std::ofstream out(file);
+            out << "[ { \"id\": \"bad\", \"takes\": { \"unobtainium\": 1 }, \"makes\": { \"glass\": 1 } } ]\n";
+        }
+        Check(!Crafting::Load(file.string(), error) && error.find("unobtainium") != std::string::npos && Crafting::Recipes().size() == 2,
+              "one naming a block that isn't is refused, saying which (and the recipes stay as they were)");
+        fs::remove(file);
+        Crafting::Load(Crafting::kRecipesPath, error);
     }
     {
         Json::Value v = Json::Object();

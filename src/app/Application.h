@@ -90,7 +90,7 @@ private:
         double since = 0.0, seen = 0.0;
     };
     std::map<uint16_t, CreatureAction> creatureActions;
-    std::map<std::string, std::filesystem::file_time_type> dataTimes;
+    std::map<std::string, std::string> dataTimes;
     void DrawHotbar();
     BlockType SelectedBlock() const;
     Tool SelectedTool() const { return hotbarTools[selectedSlot]; }

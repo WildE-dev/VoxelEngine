@@ -1,0 +1,15 @@
+// What smelters (and blast furnaces) make, in order: each does the first a chest can
+// afford. Each takes one or two things and makes one; amounts in blocks (or items).
+// The game reads it again when it changes.
+[
+  { "takes": { "iron_ore": 1 }, "makes": { "iron_ingot": 2 } },
+  { "takes": { "crushed_iron": 1 }, "makes": { "iron_ingot": 2 } },
+  { "takes": { "gold_ore": 1 }, "makes": { "gold_ingot": 1 } },
+  { "takes": { "copper_ore": 1 }, "makes": { "copper_ingot": 2 } },
+  { "takes": { "raw_venison": 1 }, "makes": { "cooked_venison": 1 } },
+  { "takes": { "raw_fish": 1 }, "makes": { "cooked_fish": 1 } },
+  { "takes": { "sand": 1 }, "makes": { "glass": 1 } },
+  { "takes": { "log": 1 }, "makes": { "coal": 0.5 } },
+  { "takes": { "iron_ingot": 1, "coke": 0.25 }, "makes": { "steel_ingot": 1 } },
+  { "takes": { "iron_ingot": 1, "coal": 0.5 }, "makes": { "steel_ingot": 1 } }
+]

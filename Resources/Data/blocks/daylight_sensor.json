@@ -1,0 +1,2 @@
+// daylight_sensor: a block (the format is in README.md, here)
+{ "name": "Daylight sensor", "textures": { "top": "daylight_sensor", "bottom": "sensor_bottom", "side": "sensor_side" }, "hardness": 1, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

@@ -1,0 +1,2 @@
+// logic_gate: a block (the format is in README.md, here)
+{ "name": "Logic gate", "textures": { "top": "logic_gate_top", "bottom": "logic_gate_side", "side": "logic_gate_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

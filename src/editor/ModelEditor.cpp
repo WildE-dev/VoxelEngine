@@ -54,7 +54,9 @@ using Part = PlayerModels::ShapePart;
 
 namespace {
 
-constexpr const char* kFiles[] = { "creatures.json", "structures.json", "blocks.json" };
+// (Each a folder with a file per model or block, in Resources/Data.)
+constexpr const char* kFiles[] = { "creatures", "structures", "blocks" };
+constexpr const char* kWhat[] = { "a creature's model", "a structure's model", "a block" };
 constexpr const char* kFileTitles[] = { "Creatures", "Structures", "Blocks" };
 constexpr int kFileCount = 3;
 // Blocks' lines are long: one block a line.
@@ -139,11 +141,10 @@ public:
         const std::string path = !source.empty() && fs::exists(source) ? source : local;
         std::string error;
         Value read;
-        if (!Json::ParseFile(path, read, error)) {
+        if (!Json::ParseDataPath(path, read, error)) {
             status = error;
             read = Json::Object();
         }
-        header = Json::LeadingComments(path);
         root = read;
         committed = root;
         savedText = Json::Write(root);
@@ -160,13 +161,27 @@ public:
     void Save() {
         Value tidy = root;
         Tidy(tidy);
-        const std::string text = header + Json::Write(tidy, WidthFor(file));
         std::vector<std::string> wrote;
-        auto put = [&](const std::string& path) {
-            std::ofstream out(path, std::ios::binary);
-            out << text;
-            if (out) wrote.push_back(path);
-            else status = "Could not write " + path;
+        // Into a folder: a file per entry (only those that changed are rewritten), and
+        // the files of entries gone (deleted or renamed) removed.
+        auto put = [&](const std::string& folder) {
+            std::error_code ec;
+            fs::create_directories(folder, ec);
+            bool ok = true;
+            for (const auto& [id, value] : tidy.object) {
+                const std::string text = "// " + id + ": " + kWhat[file] + " (the format is in README.md, here)\n" + Json::Write(value, WidthFor(file));
+                const std::string path = folder + "/" + id + ".json";
+                std::ifstream old(path, std::ios::binary);
+                const std::string before((std::istreambuf_iterator<char>(old)), std::istreambuf_iterator<char>());
+                if (before == text) continue;
+                std::ofstream out(path, std::ios::binary);
+                out << text;
+                ok = ok && static_cast<bool>(out);
+            }
+            for (const auto& [id, path] : Json::DataFiles(folder))
+                if (!tidy.Find(id)) fs::remove(path, ec);
+            if (ok) wrote.push_back(folder);
+            else status = "Could not write all of " + folder;
         };
         put(LocalPath());
         const std::string source = SourcePath();
@@ -197,6 +212,7 @@ public:
         if (what == "copy") CopyPart();
         if (what == "paste") PastePart();
         if (what == "history") showHistory = true;
+        if (what == "save") Save();
     }
     void ShowAnimation(const std::string& name, float at) {
         openAnimTab = true, anim = name;
@@ -204,7 +220,7 @@ public:
     }
     void OpenNamed(const std::string& name) {
         for (int i = 0; i < kFileCount; i++)
-            if (name == kFiles[i] || name + ".json" == kFiles[i]) Open(i);
+            if (name == kFiles[i] || name == std::string(kFiles[i]) + ".json") Open(i);
     }
 
 private:
@@ -212,7 +228,7 @@ private:
     PlayerModels& models;
     int file = 0;
     Value root, committed;
-    std::string header, savedText;
+    std::string savedText;
     // History: each step the state before a change, and what the change was.
     struct Step {
         Value state;

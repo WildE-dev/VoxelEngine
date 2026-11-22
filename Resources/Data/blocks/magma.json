@@ -1,0 +1,2 @@
+// magma: a block (the format is in README.md, here)
+{ "name": "Magma", "textures": { "all": "magma" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 12, "map": "#707070" }

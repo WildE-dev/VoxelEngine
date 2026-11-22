@@ -1,0 +1,2 @@
+// machine_sensor: a block (the format is in README.md, here)
+{ "name": "Machine sensor", "textures": { "top": "machine_sensor", "bottom": "sensor_bottom", "side": "machine_sensor" }, "hardness": 1, "tool": "pickaxe", "sound": "soft", "light": 0, "map": "#707070" }

@@ -32,7 +32,7 @@ namespace BlockData {
 // Reads the file; false (with why) if it couldn't. Blocks it names are set from it,
 // the rest go back to the game's own values.
 bool Load(const std::string& path, std::string& error);
-constexpr const char* kPath = "Resources/Data/blocks.json";
+constexpr const char* kPath = "Resources/Data/blocks"; // (a file per block; or blocks.json, all in one)
 
 // What the file set (nothing: use the game's own).
 std::optional<std::string> Name(BlockType t);

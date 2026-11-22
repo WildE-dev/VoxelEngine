@@ -1,0 +1,2 @@
+// pressure_sensor: a block (the format is in README.md, here)
+{ "name": "Pressure sensor", "textures": { "top": "pressure_sensor", "bottom": "sensor_bottom", "side": "pressure_sensor" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }
