@@ -277,6 +277,9 @@ enum class BlockType : uint8_t {
     // A crossbow (an item, held): right-click shoots a bolt (an arrow) harder, faster
     // and flatter than a bow, but more slowly (Server::HandleShoot).
     CROSSBOW,
+    // A forge golem's core (an item): what it leaves when it falls. A steam turbine
+    // needs one (world/Fluids.h).
+    FORGE_CORE,
     COUNT
 };
 // Blocks that hold things like a chest (opened, filled, emptied, broken open).
@@ -306,7 +309,7 @@ inline bool IsItemType(BlockType type) {
            type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD ||
            type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH || type == BlockType::BOAT ||
            type == BlockType::STEEL_INGOT || type == BlockType::HAMMER || type == BlockType::CRUSHED_IRON || type == BlockType::COKE ||
-           type == BlockType::GOLD_INGOT || type == BlockType::CROSSBOW;
+           type == BlockType::GOLD_INGOT || type == BlockType::CROSSBOW || type == BlockType::FORGE_CORE;
 }
 
 inline bool IsPlantType(BlockType type) {

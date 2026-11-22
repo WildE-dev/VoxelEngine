@@ -305,6 +305,28 @@ int main() {
         both(20.0, [&] { return a.client.GetCreatures().empty(); });
         server.QueueConsoleCommand("gamemode survival Hunter");
 
+        std::cout << "The forge golem" << std::endl;
+        server.QueueConsoleCommand("gamemode creative Hunter");
+        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+        server.QueueConsoleCommand("summon forge_golem 10.5 0 8.5");
+        Check(both(20.0, [&] { return a.Find(CreatureType::ForgeGolem) != nullptr; }), "a forge golem is summoned");
+        const uint16_t golem = a.Find(CreatureType::ForgeGolem)->id;
+        const bool golemDown = both(90.0, [&] {
+            const auto* k = a.Find(CreatureType::ForgeGolem);
+            if (!k) return true;
+            if (glm::distance(a.feet, k->feet) > 2.5f) {
+                char tp[96];
+                std::snprintf(tp, sizeof tp, "tp Hunter %.2f %.2f %.2f", k->feet.x - 1.6f, k->feet.y, k->feet.z);
+                server.QueueConsoleCommand(tp);
+            }
+            a.client.Attack(golem, Tool::Sword);
+            return false;
+        });
+        Check(golemDown && both(10.0, [&] { return Has(a, "forge core") && a.client.GetResources(BlockType::FORGE_CORE) == Block::kUnitsPerBlock; }),
+              "it falls, leaving its forge core");
+        server.QueueConsoleCommand("creatures clear");
+        both(20.0, [&] { return a.client.GetCreatures().empty(); });
+
         std::cout << "Raids" << std::endl;
         // A bed in a plank hut; the hunter (creative, so left alone) inside with it.
         server.QueueConsoleCommand("gamemode creative Hunter");

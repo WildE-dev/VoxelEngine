@@ -103,10 +103,11 @@ void CreatureSystem::SpawnDwarves(ServerWorld& world, const std::vector<Player>&
             const int64_t key = (static_cast<int64_t>(site.centre.x) << 32) ^ static_cast<uint32_t>(site.centre.z);
             if (done[key]) continue;
             done[key] = true;
-            int warriors = 0, crossbows = 0, chiefs = 0, traders = 0, guards = 0, kings = 0;
+            int warriors = 0, crossbows = 0, chiefs = 0, traders = 0, guards = 0, kings = 0, golems = 0;
             for (const auto& c : creatures)
                 if (c.hasHome && c.site == site.centre && c.owner == 0 && c.summoner == 0) {
                     kings += c.type == CreatureType::DwarfKing;
+                    golems += c.type == CreatureType::ForgeGolem;
                     warriors += c.type == CreatureType::DwarfWarrior;
                     crossbows += c.type == CreatureType::DwarfCrossbow;
                     chiefs += c.type == CreatureType::DwarfChief;
@@ -119,7 +120,9 @@ void CreatureSystem::SpawnDwarves(ServerWorld& world, const std::vector<Player>&
             for (const glm::ivec3& spot : site.spawns) {
                 CreatureType type = CreatureType::Count;
                 const int kingsWanted = fallenKings.count(key) ? 0 : site.kings;
+                const int golemsWanted = fallenKings.count(key) ? 0 : site.golems;
                 if (kings < kingsWanted) type = CreatureType::DwarfKing;
+                else if (golems < golemsWanted) type = CreatureType::ForgeGolem;
                 else if (traders < site.traders) type = CreatureType::DwarfTrader;
                 else if (guards < site.guards) type = CreatureType::DwarfGuard;
                 else if (chiefs < site.chiefs) type = CreatureType::DwarfChief;
@@ -138,6 +141,7 @@ void CreatureSystem::SpawnDwarves(ServerWorld& world, const std::vector<Player>&
                 for (auto& c : creatures)
                     if (c.id == id) c.hasHome = true, c.home = glm::vec3(site.centre) + glm::vec3(0.5f, 0.0f, 0.5f), c.site = site.centre;
                 (type == CreatureType::DwarfKing ? kings
+                 : type == CreatureType::ForgeGolem ? golems
                  : type == CreatureType::DwarfTrader  ? traders
                  : type == CreatureType::DwarfGuard ? guards
                  : type == CreatureType::DwarfChief ? chiefs
@@ -198,7 +202,7 @@ bool CreatureSystem::Damage(uint16_t id, int damage, const glm::vec3& from, doub
     c.health -= damage;
     c.hurtUntil = now + 0.3;
     // Knocked back, away from the hitter (a king hardly).
-    const float push = c.type == CreatureType::DwarfKing ? 0.2f : 1.0f;
+    const float push = c.type == CreatureType::DwarfKing || c.type == CreatureType::ForgeGolem ? 0.2f : 1.0f;
     glm::vec2 away(c.feet.x - eye.x, c.feet.z - eye.z);
     away = glm::length(away) > 1e-3f ? glm::normalize(away) : glm::vec2(1.0f, 0.0f);
     c.velocity.x = away.x * 6.0f * push;
@@ -245,7 +249,7 @@ void CreatureSystem::EndRaids() {
 }
 
 void CreatureSystem::Fallen(const Creature& c) {
-    if (c.type == CreatureType::DwarfKing && c.hasHome) fallenKings.insert(SiteKey(c.site));
+    if ((c.type == CreatureType::DwarfKing || c.type == CreatureType::ForgeGolem) && c.hasHome) fallenKings.insert(SiteKey(c.site));
 }
 
 Collision::AABB CreatureSystem::Box(const Creature& c) { return BoxAt(c.feet, SpecOf(c.type)); }
@@ -457,7 +461,7 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
         return;
     }
 
-    if (c.type == CreatureType::DwarfKing) {
+    if (c.type == CreatureType::DwarfKing || c.type == CreatureType::ForgeGolem) {
         // A stronghold's king: after the nearest survival player in his hall (not far from
         // his throne), striking hard, harder and faster once he's down to half; every so
         // often he calls up two more warriors (at most six about at once).
@@ -480,10 +484,10 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
         if (glm::length(to) <= reach && std::abs(target->feet.y - c.feet.y) < 2.2f && now >= c.nextAttack) {
             c.nextAttack = now + (enraged ? 0.75 : 1.2);
             c.act = 1, c.actedAt = now;
-            hurt(target->id, spec.attackDamage + (enraged ? 2 : 0), "was crushed by the Dwarf King");
+            hurt(target->id, spec.attackDamage + (enraged ? 2 : 0), c.type == CreatureType::DwarfKing ? "was crushed by the Dwarf King" : "was smashed by a forge golem");
         }
         if (c.nextCall == 0.0) c.nextCall = now + 5.0;
-        if (now >= c.nextCall) {
+        if (c.type == CreatureType::DwarfKing && now >= c.nextCall) {
             c.nextCall = now + (enraged ? 8.0 : 12.0);
             int called = 0;
             for (const auto& other : creatures) called += other.summoner == c.id;

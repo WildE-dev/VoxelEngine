@@ -263,6 +263,7 @@ private:
     void SendTradePrices(ClientState& client, uint16_t trader);
     // A Dwarf King fell to this player: his hoard, an achievement, and everyone told.
     void KingSlain(ClientState& client);
+    void GolemSlain(ClientState& client);
     // The strongholds whose king has fallen, kept in the world's kings.txt.
     void LoadFallenKings();
     void SaveFallenKings();

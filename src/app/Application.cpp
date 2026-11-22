@@ -179,6 +179,7 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::GOLD_ORE: return "Gold ore";
     case BlockType::GOLD_INGOT: return "Gold ingot";
     case BlockType::CROSSBOW: return "Crossbow";
+    case BlockType::FORGE_CORE: return "Forge core";
     case BlockType::FILTER_PIPE: return "Filter pipe";
     case BlockType::CRAFTER: return "Crafter";
     case BlockType::HARVESTER: return "Harvester";
@@ -1365,17 +1366,17 @@ void Application::DrawDeath() {
 
 void Application::DrawBossBar() {
     float health = -1.0f, best = 32.0f;
+    const char* title = "The Dwarf King";
     for (const auto& c : client->GetCreatures())
-        if (c.type == CreatureType::DwarfKing) {
+        if (c.type == CreatureType::DwarfKing || c.type == CreatureType::ForgeGolem) {
             const float d = glm::distance(c.feet, camera.GetPosition());
-            if (d < best) best = d, health = std::clamp(c.health, 0.0f, 1.0f);
+            if (d < best) best = d, health = std::clamp(c.health, 0.0f, 1.0f), title = c.type == CreatureType::DwarfKing ? "The Dwarf King" : "Forge golem";
         }
     if (health < 0.0f) return;
     ImDrawList* draw = ImGui::GetForegroundDrawList();
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     const float width = std::min(520.0f, viewport->WorkSize.x * 0.5f), height = 14.0f;
     const ImVec2 corner(viewport->WorkPos.x + (viewport->WorkSize.x - width) * 0.5f, viewport->WorkPos.y + 118.0f);
-    const char* title = "The Dwarf King";
     const ImVec2 titleSize = ImGui::CalcTextSize(title);
     draw->AddText(ImVec2(corner.x + (width - titleSize.x) * 0.5f, corner.y - titleSize.y - 4.0f), IM_COL32(255, 220, 140, 255), title);
     draw->AddRectFilled(ImVec2(corner.x - 2, corner.y - 2), ImVec2(corner.x + width + 2, corner.y + height + 2), IM_COL32(20, 12, 8, 210), 3.0f);

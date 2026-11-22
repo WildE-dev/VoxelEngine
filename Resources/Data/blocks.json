@@ -119,5 +119,6 @@
   "magma": { "name": "Magma", "textures": { "all": "magma" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 12, "map": "#707070" },
   "gold_ore": { "name": "Gold ore", "textures": { "all": "gold_ore" }, "hardness": 7, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" },
   "gold_ingot": { "name": "Gold ingot", "textures": { "all": "gold_ingot" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" },
-  "crossbow": { "name": "Crossbow", "textures": { "all": "crossbow" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }
+  "crossbow": { "name": "Crossbow", "textures": { "all": "crossbow" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" },
+  "forge_core": { "name": "Forge core", "textures": { "all": "forge_core" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }
 }

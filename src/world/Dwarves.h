@@ -16,6 +16,9 @@
 //    at the far end and a vault behind it, reached by a stairway down from a
 //    gatehouse on the surface. Its Dwarf King (a boss) and his guards live there; the
 //    king doesn't come back once he's been defeated.
+//  - Half the mines have a forge: a room of fire bricks at the end of the first tunnel,
+//    lit by lamps and magma, where a forge golem (a boss) guards a chest of steel,
+//    gold and coke. Like a king, a golem doesn't come back once defeated.
 //  - A mine: a timber headframe over a shaft three blocks across, with a ladder down
 //    to kMineDepth below the ground, and tunnels three wide and three high running out
 //    from its foot, framed every few blocks by log posts in the walls and a beam
@@ -51,6 +54,7 @@ struct Site {
     int warriors = 0, crossbows = 0, chiefs = 0; // how many live there
     int traders = 0, guards = 0;                 // (a market's)
     int kings = 0;                               // (a stronghold's)
+    int golems = 0;                              // (a mine's forge's)
 };
 
 // The site in a region, if any (exists = false: none).
@@ -63,6 +67,8 @@ struct RegionSite {
     int bottom = 0; // a mine's tunnel floor
     glm::ivec3 gate{ 1, 0, 0 }; // a camp's gate direction (a stronghold's stairway's)
     int stairs = 0;             // a stronghold's stairway: steps up from the hall to the open
+    bool forge = false;         // a mine with a forge (at the end of its first tunnel)
+    glm::ivec3 forgeChest{ 0 };
 };
 RegionSite SiteIn(const TerrainGenerator& terrain, int regionX, int regionZ);
 

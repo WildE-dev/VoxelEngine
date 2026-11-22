@@ -114,9 +114,19 @@ RegionSite SiteIn(const TerrainGenerator& terrain, int rx, int rz) {
             const int length = 14 + static_cast<int>(Noise::Random01(rx, 20 + k, rz, kSeed) * 14.0f);
             out.tunnels.emplace_back(d, length);
             for (int i = 4; i < length; i += 6) s.spawns.push_back(glm::ivec3(c.x, out.bottom, c.y) + d * (2 + i));
-            s.chests.push_back(glm::ivec3(c.x, out.bottom, c.y) + d * (2 + length - 1));
+            if (k > 0 || !((out.seed >> 26) & 1)) s.chests.push_back(glm::ivec3(c.x, out.bottom, c.y) + d * (2 + length - 1));
         }
         s.warriors = 4, s.crossbows = 2, s.chiefs = 0;
+        // A forge at the end of the first tunnel (half the mines): its golem and chest.
+        if ((out.seed >> 26) & 1) {
+            out.forge = true;
+            const glm::ivec3 d = out.tunnels[0].first;
+            const glm::ivec3 room = glm::ivec3(c.x, out.bottom, c.y) + d * (2 + out.tunnels[0].second + 4);
+            s.spawns.insert(s.spawns.begin(), room); // (the golem's, first)
+            out.forgeChest = room + d * 3;
+            s.chests.push_back(out.forgeChest);
+            s.golems = 1;
+        }
     }
     return out;
 }
@@ -175,6 +185,13 @@ void StampStronghold(const TerrainGenerator& terrain, const RegionSite& r, const
     // A plank walk from the stairway to the throne.
     for (int a = -H + 3; a < H; a++)
         for (int b = -1; b <= 1; b++) set(cell(a, -1, b), kPlanks);
+    // A trap at the foot of the stairway: crumbling bricks over a pit of spikes.
+    for (int a = H - 4; a <= H - 2; a++)
+        for (int b = -1; b <= 1; b++) {
+            set(cell(a, -1, b), Block(BlockType::CRUMBLING_BRICK));
+            set(cell(a, -2, b), Block::Plant(BlockType::SPIKES, 0));
+            set(cell(a, -3, b), kBrick);
+        }
     // The dais and throne at the far end, lamps either side.
     for (int a = -H + 1; a <= -H + 3; a++)
         for (int b = -3; b <= 3; b++) set(cell(a, 0, b), kBrick);
@@ -338,6 +355,21 @@ void Stamp(const TerrainGenerator& terrain, const glm::ivec3& coords, Blocks& ou
                             for (int w = -2; w <= 2; w++) set(base + side * w + glm::ivec3(0, 3, 0), (w == 0 && i % 10 == 2) ? kLamp : kPlanks);
                     }
                 }
+                // The forge: a room of fire bricks beyond the first tunnel, lamps and magma.
+                if (r.forge) {
+                    const glm::ivec3 d = r.tunnels[0].first, side(d.z, 0, -d.x);
+                    const glm::ivec3 door = glm::ivec3(c.x, bottom, c.z) + d * (2 + r.tunnels[0].second);
+                    for (int a = 0; a <= 8; a++)
+                        for (int w = -4; w <= 4; w++)
+                            for (int y = -1; y <= 5; y++) {
+                                const glm::ivec3 p = door + d * a + side * w + glm::ivec3(0, y, 0);
+                                const bool inside = a >= 1 && a <= 7 && std::abs(w) <= 3 && y >= 0 && y <= 4;
+                                const bool doorway = a == 0 && std::abs(w) <= 1 && y >= 0 && y <= 2;
+                                set(p, inside || doorway ? kAir : Block(BlockType::FIRE_BRICK));
+                            }
+                    for (int w : { -3, 3 }) set(door + d * 4 + side * w + glm::ivec3(0, 3, 0), kLamp);
+                    for (int w : { -3, 3 }) set(door + d * 7 + side * w + glm::ivec3(0, -1, 0), Block(BlockType::MAGMA));
+                }
                 for (const auto& chest : s.chests) set(chest, kChest);
             }
         }
@@ -359,6 +391,9 @@ std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terr
         loot = { { BlockType::BREAD, roll(1, 2, 5) }, { BlockType::COOKED_VENISON, roll(2, 1, 3) }, { BlockType::ARROW, roll(3, 4, 12) },
                  { BlockType::IRON_INGOT, roll(4, 1, 3) }, { BlockType::HIDE, roll(5, 1, 3) } };
         if (Noise::Random01(pos.x, pos.y + 6, pos.z, r.seed) < 0.4f) loot.push_back({ BlockType::STEEL_INGOT, kBlock });
+    }
+    else if (r.forge && pos == r.forgeChest) {
+        loot = { { BlockType::STEEL_INGOT, roll(1, 3, 6) }, { BlockType::GOLD_INGOT, roll(2, 2, 4) }, { BlockType::COKE, roll(3, 4, 8) } };
     }
     else {
         loot = { { BlockType::COAL, roll(1, 4, 10) }, { BlockType::IRON_ORE, roll(2, 2, 6) }, { BlockType::IRON_INGOT, roll(3, 1, 3) },

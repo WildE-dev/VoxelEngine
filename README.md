@@ -787,6 +787,13 @@ and a quarter a **mine**, on dry ground that's flat enough, below the bare peaks
   lamp on a post either side of the gate and no loot, where friendly dwarves live (see
   [Markets](#markets)).
 
+- Half the mines have a **forge** at the end of their first tunnel: a room of fire
+  bricks, lit by lamps and two pools of magma, where a **forge golem** stands guard
+  over a chest of steel, gold and coke. A golem is a boss of stone and iron with a
+  glowing core (45 hearts, hits for 3.5, hardly budges): beat it and it leaves its
+  **forge core** (what a steam turbine needs) and 3 steel ingots. Like a king, it
+  doesn't come back (`kings.txt`). `/summon forge_golem` brings one.
+
 The layouts are in `src/world/Dwarves.cpp`; like dungeons, each chunk stamps just the
 part of a site inside it. `BiomeTest` checks camps have their fire, chest and
 palisade, and mines their open shaft, ladder, tunnels and chests.
@@ -810,7 +817,8 @@ ground. A gatehouse of stone bricks with a lamp on each pillar stands over a sta
 three wide and a step a block, that leads down to a great hall: 21 blocks square and 8
 high, mossy brick, four great pillars with lamps, a plank walk to a throne on a dais at
 the far end, and walls thick with iron and coal ore. Behind the throne a doorway opens
-on the vault: two chests of steel and iron ingots, TNT, arrows and bread.
+on the vault: two chests of steel and iron ingots, TNT, arrows and bread. Watch the
+foot of the stairway: its floor is crumbling bricks over a pit of spikes.
 
 The **Dwarf King** sits there, with six warriors and three crossbowmen. Half again as
 tall as a dwarf, in purple and gold with a crown and a great hammer, he has 60 hearts,

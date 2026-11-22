@@ -691,6 +691,7 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
             spoils = " (+2 arrows)";
         }
         if (type == CreatureType::DwarfKing) KingSlain(client);
+        if (type == CreatureType::ForgeGolem) GolemSlain(client);
         SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id + spoils);
         if (type == CreatureType::Deer) Award(client, Achievement::Hunter);
         else if (SpecOf(type).hostile) Award(client, Achievement::DwarfSlayer);
@@ -734,6 +735,15 @@ void Server::KingSlain(ClientState& client) {
     Award(client, Achievement::Kingslayer);
     for (auto& [peer, other] : clients)
         if (other.welcomed) SendChat(other, net::ChatMessage::Kind::Info, client.name + " has defeated a Dwarf King");
+}
+
+void Server::GolemSlain(ClientState& client) {
+    client.resources[static_cast<size_t>(BlockType::FORGE_CORE)] += Block::kUnitsPerBlock;
+    client.resources[static_cast<size_t>(BlockType::STEEL_INGOT)] += 3 * Block::kUnitsPerBlock;
+    SendResources(client);
+    SendChat(client, net::ChatMessage::Kind::Info, "The golem's fire goes out: +1 forge core, +3 steel ingots");
+    for (auto& [peer, other] : clients)
+        if (other.welcomed) SendChat(other, net::ChatMessage::Kind::Info, client.name + " has defeated a forge golem");
 }
 
 void Server::LoadFallenKings() {
@@ -1661,6 +1671,7 @@ void Server::UpdateArrows() {
                     for (auto& [peer, shooter] : clients)
                         if (shooter.id == a.shooter) {
                             if (type == CreatureType::DwarfKing) KingSlain(shooter);
+                            if (type == CreatureType::ForgeGolem) GolemSlain(shooter);
                             SendChat(shooter, net::ChatMessage::Kind::Info, std::string("You shot a ") + SpecOf(type).id);
                             Award(shooter, Achievement::Marksman);
                             if (type == CreatureType::Deer) Award(shooter, Achievement::Hunter);

@@ -251,7 +251,7 @@ int main() {
 
     // Dwarf camps and mines: a camp's fire, chest and palisade; a mine's open shaft with
     // its ladder, its tunnels, and a chest at each tunnel's end.
-    int camps = 0, mines = 0, campsRight = 0, minesRight = 0, markets = 0, marketsRight = 0, strongholds = 0, strongholdsRight = 0;
+    int camps = 0, mines = 0, campsRight = 0, minesRight = 0, markets = 0, marketsRight = 0, strongholds = 0, strongholdsRight = 0, forges = 0, forgesRight = 0;
     for (int rx = -6; rx <= 6; rx++)
         for (int rz = -6; rz <= 6; rz++) {
             const auto r = Dwarves::SiteIn(t, rx, rz);
@@ -276,6 +276,8 @@ int main() {
                 const glm::ivec3 g = r.gate, top = c + g * (Dwarves::kHallHalf + 1 + r.stairs) + glm::ivec3(0, r.stairs, 0);
                 right = right && world.Get(c + glm::ivec3(0, 3, 0)).IsAir() && world.Get(c - g * Dwarves::kHallHalf + glm::ivec3(0, 2, 0)).type == BlockType::LOG &&
                         r.site.chests.size() == 2 && world.Get(top + glm::ivec3(0, 1, 0)).IsAir() && world.Get(top - g * 5 + glm::ivec3(0, -4, 0)).IsAir();
+                right = right && world.Get(c + g * (Dwarves::kHallHalf - 2) + glm::ivec3(0, -1, 0)).type == BlockType::CRUMBLING_BRICK &&
+                        world.Get(c + g * (Dwarves::kHallHalf - 2) + glm::ivec3(0, -2, 0)).type == BlockType::SPIKES;
                 strongholdsRight += right;
             }
             else if (r.site.kind == Dwarves::SiteKind::Market) {
@@ -293,11 +295,18 @@ int main() {
                 right = right && world.Get({ c.x, r.bottom, c.z }).IsAir() && world.Get({ c.x - 1, r.bottom, c.z }).type == BlockType::LADDER;
                 for (const auto& [d, length] : r.tunnels) right = right && world.Get(glm::ivec3(c.x, r.bottom + 1, c.z) + d * (2 + length / 2)).IsAir();
                 minesRight += right;
+                if (r.forge) {
+                    forges++;
+                    const glm::ivec3 room = r.site.spawns.front();
+                    forgesRight += world.Get(room + glm::ivec3(0, 1, 0)).IsAir() && world.Get(r.forgeChest).type == BlockType::CHEST && r.site.golems == 1 &&
+                                   world.Get(room + glm::ivec3(0, -1, 0)).type == BlockType::FIRE_BRICK;
+                }
             }
         }
     Check(camps > 0 && campsRight == camps, "dwarf camps have their fire, chest and palisade (" + std::to_string(campsRight) + " of " + std::to_string(camps) + ")");
-    Check(strongholdsRight == strongholds, "dwarf strongholds have an open hall, a throne, a vault and a stairway up (" + std::to_string(strongholdsRight) + " of " +
+    Check(strongholdsRight == strongholds, "dwarf strongholds have an open hall, a throne, a vault, a trap and a stairway up (" + std::to_string(strongholdsRight) + " of " +
                                                std::to_string(strongholds) + ")");
+    Check(forgesRight == forges, "mines' forges have their fire-brick room, golem and chest (" + std::to_string(forgesRight) + " of " + std::to_string(forges) + ")");
     Check(marketsRight == markets, "dwarf markets have their fire and lamps by the gate, and no loot (" + std::to_string(marketsRight) + " of " + std::to_string(markets) + ")");
     Check(mines > 0 && minesRight == mines, "dwarf mines have an open shaft with a ladder, tunnels and chests (" + std::to_string(minesRight) + " of " + std::to_string(mines) + ")");
 
