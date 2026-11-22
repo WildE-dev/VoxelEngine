@@ -230,7 +230,19 @@ int main() {
         Check(standing(30.0, [&] { return !strikes.empty(); }), "lightning strikes near the player (" + std::to_string(strikes.size()) + ")");
         Check(!strikes.empty() && glm::distance(glm::vec2(strikes[0].x, strikes[0].z), glm::vec2(client.GetSpawn().x, client.GetSpawn().z)) < 42.0f,
               "within 40 blocks of them");
+        auto said = [&](const std::string& text) {
+            for (const auto& line : client.GetChat())
+                if (line.text.find(text) != std::string::npos) return true;
+            return false;
+        };
+        client.SendChat("/weather");
+        Check(standing(10.0, [&] { return said("springs flowing at 250%"); }), "in a storm the springs flow two and a half times as hard");
+        server->QueueConsoleCommand("weather drought");
+        Check(standing(10.0, [&] { return said("a drought. The springs run low"); }), "/weather drought: no rain for days, and everyone's told it's a drought");
+        client.SendChat("/weather");
+        Check(standing(10.0, [&] { return said("springs flowing at 35%"); }), "and the springs slow to a third");
         server->QueueConsoleCommand("weather rain");
+        Check(standing(10.0, [&] { return said("The drought breaks"); }), "rain breaks the drought");
         standing(20.0, [&] { return !client.IsStorm(); });
 
         client.SkipTime();

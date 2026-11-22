@@ -149,7 +149,7 @@ void WaterSimulation::RunSpring(ServerWorld& world, const glm::ivec3& spring) {
         if (room > 0) cells.push_back({ p, b, room });
     }
     // Shared out evenly, what one can't take going to the others.
-    int left = kSpringRate;
+    int left = SpringRate();
     std::vector<int> given(cells.size(), 0);
     for (int round = 0; round < 5 && left > 0; round++) {
         int open = 0;

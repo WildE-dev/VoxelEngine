@@ -622,17 +622,27 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         auto name = [](Options::Weather w) {
             return w == Options::Weather::Clear ? "clear" : w == Options::Weather::Rain ? "rain" : w == Options::Weather::Storm ? "storm" : "auto";
         };
-        if (words.size() < 2)
-            return reply(Kind::Info, std::string(storm && raining ? "There's a thunderstorm" : raining ? "It's raining" : "It's clear") + " (weather: " + name(weatherMode) + ")");
+        if (words.size() < 2) {
+            char flow[48];
+            std::snprintf(flow, sizeof flow, "; springs flowing at %d%%", static_cast<int>(std::lround(SpringFlow() * 100.0f)));
+            return reply(Kind::Info, std::string(storm && raining ? "There's a thunderstorm" : raining ? "It's raining" : drought ? "It's dry: a drought" : "It's clear") +
+                                         " (weather: " + name(weatherMode) + flow + ")");
+        }
         const std::string arg = Lower(words[1]);
         if (arg == "clear" || arg == "sun") weatherMode = Options::Weather::Clear;
         else if (arg == "rain") weatherMode = Options::Weather::Rain;
         else if (arg == "storm" || arg == "thunder") weatherMode = Options::Weather::Storm;
+        else if (arg == "drought") {
+            // Clear, and dry long enough for a drought now.
+            weatherMode = Options::Weather::Clear;
+            raining = storm = false;
+            dryFor = kDroughtDays * std::max(1.0f, options.dayLengthSeconds);
+        }
         else if (arg == "auto") {
             weatherMode = Options::Weather::Auto;
             weatherTimer = raining ? 3.0 * 60.0 : 15.0 * 60.0; // carry on with the current weather for a while
         }
-        else return usage("/weather [clear|rain|storm|auto]");
+        else return usage("/weather [clear|rain|storm|drought|auto]");
         Broadcast(Kind::Info, who + " set the weather to " + name(weatherMode));
     }
     else if (command == "tp" || command == "teleport") {

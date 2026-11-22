@@ -586,6 +586,13 @@ private:
     double nextLightning = 0.0;
     void UpdateStorm();          // lightning strikes near players while a storm rages
     float rainLevel = 0.0f;      // 0..1, fades toward `raining`
+    // Springs follow the weather: faster in rain, faster still in storms, and slow to
+    // a trickle in a drought (kDroughtDays without rain). How long it's been dry.
+    double dryFor = 0.0;
+    bool drought = false;
+    static constexpr double kDroughtDays = 2.0;
+    static constexpr float kRainFlow = 1.6f, kStormFlow = 2.5f, kDroughtFlow = 0.35f;
+    float SpringFlow() const { return raining ? (storm ? kStormFlow : kRainFlow) : drought ? kDroughtFlow : 1.0f; }
     double weatherTimer = 0.0;   // seconds until the weather changes (Auto)
     uint32_t weatherSeed = 0x9E3779B9u;
     std::unordered_map<net::PeerId, ClientState> clients;

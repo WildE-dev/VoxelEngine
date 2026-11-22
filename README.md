@@ -1657,6 +1657,12 @@ rain fills a drained pool to the brim and no further while leaving full, covered
 dry-ground water alone, that the clock runs, saves, resumes and can be skipped, and
 that a storm reaches the client and strikes near the player.
 
+
+**Weather and water.** Springs follow the weather: they pour 1.6 times as hard in the
+rain and 2.5 times in a thunderstorm, so rivers swell and pools fill; and after two
+whole days without rain it's a **drought** (everyone's told), and they slow to a third
+until it rains again. `/weather` says how hard they're flowing; `/weather drought`
+(operators) starts one. `WeatherTest` checks the storm's flow, a drought and its end.
 ## Fog
 
 Toward the edge of the render distance, everything fades into the sky behind it.

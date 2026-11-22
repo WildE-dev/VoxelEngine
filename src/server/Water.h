@@ -158,6 +158,10 @@ public:
         return b;
     }
     void SetRaining(bool on) { raining.store(on, std::memory_order_relaxed); }
+    // How hard springs flow, for the weather: kSpringRate times this (rivers rise in
+    // storms and run low in droughts).
+    void SetSpringFlow(float factor) { springRate.store(std::max(1, static_cast<int>(kSpringRate * factor)), std::memory_order_relaxed); }
+    int SpringRate() const { return springRate.load(std::memory_order_relaxed); }
     bool IsRaining() const { return raining.load(std::memory_order_relaxed); }
     // Units rain has added so far (for tests and stats).
     size_t GetRainedUnits() const { return rainedUnits.load(std::memory_order_relaxed); }
@@ -231,6 +235,7 @@ private:
     std::mutex benchMutex;
     Bench bench;
     std::atomic<bool> raining{false};
+    std::atomic<int> springRate{kSpringRate};
     std::atomic<size_t> rainedUnits{0};
     std::atomic<size_t> evaporatedCount{0};
     std::atomic<bool> ticking{false};

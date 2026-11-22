@@ -1065,6 +1065,14 @@ void Server::UpdateSky() {
     const float step = static_cast<float>(dt / 10.0); // fades over ten seconds
     rainLevel = rainLevel < target ? std::min(target, rainLevel + step) : std::max(target, rainLevel - step);
     world->GetWater().SetRaining(rainLevel > 0.5f);
+    // Dry spells: long enough, and it's a drought (until it rains).
+    dryFor = raining ? 0.0 : dryFor + dt;
+    const bool dryNow = dryFor >= kDroughtDays * std::max(1.0f, options.dayLengthSeconds);
+    if (dryNow != drought) {
+        drought = dryNow;
+        Broadcast(net::ChatMessage::Kind::Info, drought ? "No rain for days: a drought. The springs run low." : "The drought breaks.");
+    }
+    world->GetWater().SetSpringFlow(SpringFlow());
     UpdateStorm();
 }
 
