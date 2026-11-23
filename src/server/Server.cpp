@@ -1350,6 +1350,13 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     // At night (the sun below the horizon), they sleep; once everyone here is asleep
     // (in bed within the last few seconds), it's morning.
     if (std::sin(timeOfDay * 6.283185307179586) >= 0.0) return SendChat(client, net::ChatMessage::Kind::Info, "You can only sleep at night");
+    // A horde night can't be slept through. Getting into bed before the horde would be
+    // announced at dusk decides the night first, so it can't be dodged that way either.
+    if (!wasNight) {
+        wasNight = true;
+        BeginNight();
+    }
+    if (creatures.Horde()) return SendChat(client, net::ChatMessage::Kind::Info, "You can't sleep with a horde coming: survive the night");
     const double now = Now();
     client.sleptAt = now;
     int sleeping = 0, everyone = 0;
@@ -2000,10 +2007,19 @@ void Server::PressPlate(const glm::ivec3& f, double now) {
 void Server::UpdateHorde() {
     // Night as players see it: the sun well down.
     const float sun = static_cast<float>(std::sin(timeOfDay * 6.283185307179586));
-    const bool night = sun < -0.12f;
+    bool night = sun < -0.12f;
+    // Someone got into bed at dusk, before that: the night has already
+    // begun, and lasts on through the rest of the evening (see HandleUseBed).
+    if (!night && wasNight && sun < 0.0f && std::cos(timeOfDay * 6.283185307179586) < 0.0) night = true;
     if (night == wasNight) return;
     wasNight = night;
-    if (night && creatures.NaturalSpawning()) {
+    if (night) BeginNight();
+    else if (creatures.Horde()) SetHorde(false);
+    if (!night) creatures.EndRaids();
+}
+
+void Server::BeginNight() {
+    if (creatures.NaturalSpawning()) {
         weatherSeed = weatherSeed * 1664525u + 1013904223u;
         if ((weatherSeed >> 8) % kHordeOdds == 0) SetHorde(true);
         // Not a horde: now and then a raid on a survival player at home (by their bed).
@@ -2015,8 +2031,6 @@ void Server::UpdateHorde() {
                 StartRaid(client);
             }
     }
-    else if (!night && creatures.Horde()) SetHorde(false);
-    if (!night) creatures.EndRaids();
 }
 
 bool Server::StartRaid(ClientState& client) {

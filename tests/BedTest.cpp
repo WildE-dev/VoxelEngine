@@ -137,6 +137,20 @@ int main() {
         b.client.UseBed(bedAt);
         Check(both(20.0, [&] { return Count(a, "Everyone slept: it's morning") == 1 && !Night(a.client); }), "once both are in bed, it's morning");
 
+        // A horde night can't be slept through.
+        server.QueueConsoleCommand("time midnight");
+        both(20.0, [&] { return Night(a.client) && Night(b.client); });
+        server.QueueConsoleCommand("horde on");
+        both(20.0, [&] { return Count(a, "a horde is coming tonight") == 1; });
+        a.client.UseBed(bedAt);
+        b.client.UseBed(bedAt);
+        Check(both(20.0, [&] { return Count(a, "can't sleep with a horde coming") == 1 && Count(b, "can't sleep with a horde coming") == 1; }),
+              "on a horde night, neither can get to sleep");
+        both(1.0, [] { return false; });
+        Check(Night(a.client) && Count(a, "Everyone slept: it's morning") == 1, "and it's still night");
+        server.QueueConsoleCommand("horde off");
+        both(20.0, [&] { return Count(a, "The horde fades") == 1; });
+
         std::cout << "Doors" << std::endl;
         const glm::ivec3 doorAt{ 17, 0, 22 };
         auto typeAt = [&](const glm::ivec3& p) { Block t; return a.world.GetBlock(p.x, p.y, p.z, t) ? t.type : BlockType::COUNT; };
@@ -157,6 +171,11 @@ int main() {
         both(20.0, [&] { return std::abs(b.feet.x - 21.5f) < 0.1f; });
         a.client.UseBed(upper);
         Check(both(20.0, [&] { return typeAt(doorAt) == BlockType::DOOR && typeAt(upper) == BlockType::DOOR; }), "once they're out, it closes (from either half)");
+        a.client.UseBed(upper);
+        Check(both(20.0, [&] { return typeAt(doorAt) == BlockType::DOOR_OPEN && typeAt(upper) == BlockType::DOOR_OPEN; }),
+              "opened from its upper half, both halves open (the top doesn't break off)");
+        a.client.UseBed(doorAt);
+        Check(both(20.0, [&] { return typeAt(doorAt) == BlockType::DOOR && typeAt(upper) == BlockType::DOOR; }), "and closed from the lower half, both close");
         server.QueueConsoleCommand("gamemode creative Sleeper");
         both(20.0, [&] { return a.client.IsCreative(); });
         a.client.BreakBlock(upper);

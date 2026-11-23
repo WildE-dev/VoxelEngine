@@ -124,9 +124,12 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
         changedBlocks.emplace_back(x, y, z);
     }
 
-    // Plants need the block under them: any change there uproots them.
+    // Plants need the block under them: any change there uproots them. An open door
+    // counts as one, but its upper half stays on as long as there's a door half under
+    // it (opening or closing a door changes the halves one at a time).
     Block above;
-    if (GetBlock(x, y + 1, z, above) && above.IsPlant()) SetBlock(x, y + 1, z, Block());
+    const bool doorBelow = block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN;
+    if (GetBlock(x, y + 1, z, above) && above.IsPlant() && !(above.type == BlockType::DOOR_OPEN && doorBelow)) SetBlock(x, y + 1, z, Block());
 
     // Light depends on the new block, so let the worker update it.
     if (!waterVolumeOnly) {

@@ -569,6 +569,9 @@ private:
     static constexpr int kHordeOdds = 4;
     bool wasNight = false;
     void UpdateHorde();
+    // Night falls: roll for a horde (or raids). Once a night, at dusk or when someone
+    // gets into bed before that, so sleeping early can't dodge the roll.
+    void BeginNight();
     void SetHorde(bool on);
     // Whether a sensor senses what it's for (world/Signals.h).
     bool Senses(const glm::ivec3& pos, const Signals::Config& c) const;
