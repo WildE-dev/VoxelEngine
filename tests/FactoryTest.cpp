@@ -418,6 +418,14 @@ int main() {
               "striking an unfinished blast furnace with the hammer says what's missing");
         fill({ 61, 1, 61 }, { 61, 1, 61 }, "smelter");
         pump(5.0, [&] { return blockAt({ 61, 1, 61 }) == BlockType::SMELTER; });
+        // The fill also put a brick in its hollow top, over the smelter, which must be
+        // left empty: it won't form with a stray block built into it.
+        a.client.UseBed({ 62, 2, 62 });
+        Check(pump(5.0, [&] { return Has(a.client, "Not quite a Blast furnace: 1 block in the way inside it (at 61 2 61), which must be left empty"); }),
+              "with a block in its hollow top it won't form, and says where the block in the way is");
+        Check(blockAt({ 61, 1, 61 }) == BlockType::SMELTER, "and nothing was formed");
+        fill({ 61, 2, 61 }, { 61, 2, 61 }, "air");
+        pump(5.0, [&] { return blockAt({ 61, 2, 61 }) == BlockType::AIR; });
         a.client.UseBed({ 62, 2, 62 });
         Check(pump(5.0, [&] { return Has(a.client, "Formed a Blast furnace"); }), "finished, striking any of its blocks forms it");
         Check(pump(5.0, [&] { return blockAt({ 61, 1, 61 }) == BlockType::MULTIBLOCK && blockAt({ 60, 0, 60 }) == BlockType::MULTIBLOCK_PART &&

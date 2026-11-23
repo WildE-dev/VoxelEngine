@@ -21,11 +21,12 @@ void Server::TryForm(ClientState* client, const glm::ivec3& pos) {
     if (hit.type == BlockType::MULTIBLOCK || hit.type == BlockType::MULTIBLOCK_PART)
         return say("That's already a formed structure");
     // Every way it could be part of a pattern: each kind, each turn, each cell of that
-    // block type. The best near miss is what's reported.
+    // block type. The best near miss is what's reported. Blocks in the cells inside it
+    // that must be left empty count against it too (`extra`).
     struct Try {
         const Pattern* pattern = nullptr;
-        int turn = 0, wrong = INT_MAX;
-        glm::ivec3 origin{ 0 }, firstWrong{ 0 };
+        int turn = 0, wrong = INT_MAX, extra = 0;
+        glm::ivec3 origin{ 0 }, firstWrong{ 0 }, firstExtra{ 0 };
         BlockType wanted = BlockType::AIR;
     } best;
     for (int k = 0; k < static_cast<int>(Kind::Count); k++) {
@@ -34,14 +35,20 @@ void Server::TryForm(ClientState* client, const glm::ivec3& pos) {
             for (const auto& anchor : p.cells) {
                 if (anchor.type != hit.type) continue;
                 const glm::ivec3 origin = pos - Place(glm::ivec3(0), turn, anchor.at);
-                Try t{ &p, turn, 0, origin, {}, BlockType::AIR };
+                Try t{ &p, turn, 0, 0, origin, {}, {}, BlockType::AIR };
                 for (const auto& c : p.cells) {
                     const glm::ivec3 at = Place(origin, turn, c.at);
                     Block b;
                     if (world->GetBlock(at.x, at.y, at.z, b) && b.type == c.type) continue;
                     if (t.wrong++ == 0) t.firstWrong = at, t.wanted = c.type;
                 }
-                if (t.wrong < best.wrong) best = t;
+                for (const auto& o : p.open) {
+                    const glm::ivec3 at = Place(origin, turn, o);
+                    Block b;
+                    if (!world->GetBlock(at.x, at.y, at.z, b) || b.IsAir() || b.IsLiquid()) continue;
+                    if (t.extra++ == 0) t.firstExtra = at;
+                }
+                if (t.wrong + t.extra < best.wrong + best.extra) best = t;
             }
     }
     if (!best.pattern) return say("That isn't part of any structure (strike a block of one with the hammer)");
@@ -49,6 +56,12 @@ void Server::TryForm(ClientState* client, const glm::ivec3& pos) {
         char line[200];
         std::snprintf(line, sizeof line, "Not quite %s: %d block%s missing or wrong (at %d %d %d it needs %s)", article(best.pattern->name).c_str(), best.wrong, best.wrong == 1 ? "" : "s",
                       best.firstWrong.x, best.firstWrong.y, best.firstWrong.z, BlockId(best.wanted));
+        return say(line);
+    }
+    if (best.extra > 0) {
+        char line[200];
+        std::snprintf(line, sizeof line, "Not quite %s: %d block%s in the way inside it (at %d %d %d), which must be left empty", article(best.pattern->name).c_str(), best.extra,
+                      best.extra == 1 ? "" : "s", best.firstExtra.x, best.firstExtra.y, best.firstExtra.z);
         return say(line);
     }
     // Complete: the core and parts become the structure (ports stay as they are).

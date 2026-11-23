@@ -118,7 +118,8 @@ int main() {
         fill({ 21, 1, 20 }, { 21, 1, 20 }, "item_pipe");
         fill({ 21, 1, 19 }, { 21, 1, 19 }, "chest");
         fill({ 21, 1, 21 }, { 21, 1, 21 }, "smelter");
-        both(10.0, [&] { return a.BlockAt({ 21, 1, 21 }) == BlockType::SMELTER && b.BlockAt({ 21, 1, 19 }) == BlockType::CHEST; });
+        fill({ 21, 2, 21 }, { 21, 2, 21 }, "air"); // its hollow top, left empty
+        both(10.0, [&] { return a.BlockAt({ 21, 1, 21 }) == BlockType::SMELTER && a.BlockAt({ 21, 2, 21 }) == BlockType::AIR && b.BlockAt({ 21, 1, 19 }) == BlockType::CHEST; });
         a.held = BlockType::HAMMER;
         wait(0.3);
         a.client.UseBed({ 22, 2, 22 });

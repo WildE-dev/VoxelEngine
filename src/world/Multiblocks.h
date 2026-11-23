@@ -55,6 +55,9 @@ struct Pattern {
     const char* id;   // "oil_derrick" (its model's name in structures.json)
     const char* name; // "Oil derrick"
     std::vector<Cell> cells;
+    // The rest of its 3 x 3 footprint, layer by layer ('.' in the layers): left empty.
+    // It only forms with nothing but air or water there, so no stray blocks get built in.
+    std::vector<glm::ivec3> open;
 };
 
 const Pattern& PatternOf(Kind k);

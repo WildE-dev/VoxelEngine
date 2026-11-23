@@ -6,7 +6,7 @@ namespace Multiblocks {
 namespace {
 
 // A pattern from layers of rows (y up; each layer's rows are z 0..2, each row x 0..2),
-// with a legend for the characters ('.' is anything: not part of it).
+// with a legend for the characters ('.' is not part of it, and must be left empty).
 struct Legend {
     char c;
     BlockType type;
@@ -14,12 +14,15 @@ struct Legend {
 };
 
 Pattern Build(Kind kind, const char* id, const char* name, const std::vector<std::array<const char*, 3>>& layers, const std::vector<Legend>& legend) {
-    Pattern p{ kind, id, name, {} };
+    Pattern p{ kind, id, name, {}, {} };
     for (int y = 0; y < static_cast<int>(layers.size()); y++)
         for (int z = 0; z < 3; z++)
             for (int x = 0; x < 3; x++) {
                 const char c = layers[y][z][x];
-                if (c == '.') continue;
+                if (c == '.') {
+                    p.open.push_back(glm::ivec3(x, y, z));
+                    continue;
+                }
                 for (const auto& l : legend)
                     if (l.c == c) p.cells.push_back({ glm::ivec3(x, y, z), l.type, l.role });
             }
