@@ -106,16 +106,23 @@ add_library(voxel_client STATIC
 )
 target_link_libraries(voxel_client PUBLIC voxel_common glad::glad)
 # Sound through OpenAL: Apple's framework on macOS, otherwise an installed OpenAL
-# (e.g. openal-soft) if there is one. Without it the game is simply silent.
+# (openal-soft, which vcpkg installs on Windows). Without one the game is simply silent.
 if(APPLE)
     target_link_libraries(voxel_client PUBLIC "-framework OpenAL")
     target_compile_definitions(voxel_client PUBLIC VOXEL_AUDIO=1)
     target_compile_options(voxel_client PRIVATE -Wno-deprecated-declarations)
 else()
-    find_package(OpenAL QUIET)
+    # openal-soft's own package (from vcpkg on Windows) first, then CMake's FindOpenAL.
+    find_package(OpenAL CONFIG QUIET)
+    if(NOT OpenAL_FOUND)
+        find_package(OpenAL QUIET)
+    endif()
     if(OpenAL_FOUND)
         target_link_libraries(voxel_client PUBLIC OpenAL::OpenAL)
         target_compile_definitions(voxel_client PUBLIC VOXEL_AUDIO=1)
+        message(STATUS "Sound: on (OpenAL)")
+    else()
+        message(STATUS "Sound: off (no OpenAL found; the game will be silent)")
     endif()
 endif()
 
