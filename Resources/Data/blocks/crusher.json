@@ -1,0 +1,2 @@
+// crusher: a block (the format is in README.md, here)
+{ "name": "Crusher", "textures": { "top": "crusher_top", "bottom": "machine_casing", "side": "crusher_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

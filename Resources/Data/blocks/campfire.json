@@ -1,0 +1,2 @@
+// campfire: a block (the format is in README.md, here)
+{ "name": "Campfire", "textures": { "all": "campfire" }, "hardness": 0.6, "tool": "none", "sound": "wood", "light": 14, "map": "#707070" }

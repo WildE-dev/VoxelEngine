@@ -1,0 +1,2 @@
+// boiler: a block (the format is in README.md, here)
+{ "name": "Boiler", "textures": { "top": "boiler_top", "bottom": "boiler_top", "side": "boiler_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

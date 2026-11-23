@@ -1,0 +1,2 @@
+// player_sensor: a block (the format is in README.md, here)
+{ "name": "Player sensor", "textures": { "top": "player_sensor", "bottom": "sensor_bottom", "side": "player_sensor" }, "hardness": 1, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

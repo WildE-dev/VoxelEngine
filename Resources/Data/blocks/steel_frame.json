@@ -1,0 +1,2 @@
+// steel_frame: a block (the format is in README.md, here)
+{ "name": "Steel frame", "textures": { "all": "steel_frame" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

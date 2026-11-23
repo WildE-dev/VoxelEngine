@@ -1,0 +1,2 @@
+// water_wheel: a block (the format is in README.md, here)
+{ "name": "Water wheel", "textures": { "all": "water_wheel" }, "hardness": 2, "tool": "axe", "sound": "wood", "light": 0, "map": "#707070" }

@@ -1,0 +1,2 @@
+// lamp: a block (the format is in README.md, here)
+{ "name": "Lamp", "textures": { "all": "lamp" }, "hardness": 1, "tool": "pickaxe", "sound": "hard", "light": 15, "map": "#f8e07a" }

@@ -1,0 +1,2 @@
+// pressure_gauge: a block (the format is in README.md, here)
+{ "name": "Pressure gauge", "textures": { "all": "pressure_gauge" }, "hardness": 0.5, "tool": "none", "sound": "hard", "light": 0, "map": "#707070" }

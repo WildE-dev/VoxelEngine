@@ -1,0 +1,2 @@
+// spring: a block (the format is in README.md, here)
+{ "name": "Spring", "textures": { "all": "spring" }, "hardness": 4, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

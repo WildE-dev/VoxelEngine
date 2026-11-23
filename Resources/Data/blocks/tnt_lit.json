@@ -1,0 +1,2 @@
+// tnt_lit: a block (the format is in README.md, here)
+{ "name": "Lit TNT", "textures": { "all": "tnt_lit" }, "hardness": 0.3, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

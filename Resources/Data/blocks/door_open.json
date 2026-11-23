@@ -1,0 +1,2 @@
+// door_open: a block (the format is in README.md, here)
+{ "name": "Open door", "textures": { "all": "door_open" }, "hardness": 1, "tool": "axe", "sound": "wood", "light": 0, "map": "#707070" }

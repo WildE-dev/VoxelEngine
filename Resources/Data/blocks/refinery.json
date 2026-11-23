@@ -1,0 +1,2 @@
+// refinery: a block (the format is in README.md, here)
+{ "name": "Refinery", "textures": { "top": "refinery_out", "bottom": "refinery_in", "side": "refinery_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

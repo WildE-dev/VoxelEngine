@@ -1,0 +1,2 @@
+// valve_open: a block (the format is in README.md, here)
+{ "name": "Valve (open)", "textures": { "all": "valve_open" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

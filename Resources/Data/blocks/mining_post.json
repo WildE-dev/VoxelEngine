@@ -1,0 +1,2 @@
+// mining_post: a block (the format is in README.md, here)
+{ "name": "Mining post", "textures": { "top": "mining_post_top", "bottom": "planks", "side": "mining_post_side" }, "hardness": 1.5, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

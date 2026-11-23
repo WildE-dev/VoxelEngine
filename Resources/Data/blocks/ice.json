@@ -1,0 +1,2 @@
+// ice: a block (the format is in README.md, here)
+{ "name": "Ice", "textures": { "all": "ice" }, "hardness": 1, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#b0d8f0" }

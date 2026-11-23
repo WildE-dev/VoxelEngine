@@ -1,0 +1,2 @@
+// snowy_grass: a block (the format is in README.md, here)
+{ "name": "Snowy grass", "textures": { "top": "snowy_grass_top", "bottom": "dirt", "side": "snowy_grass_side" }, "hardness": 0.6, "tool": "shovel", "sound": "soft", "light": 0, "map": "#f0f0f0" }

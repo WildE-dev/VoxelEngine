@@ -1,0 +1,2 @@
+// air_diffuser: a block (the format is in README.md, here)
+{ "name": "Air diffuser", "textures": { "top": "air_diffuser_top", "bottom": "machine_casing", "side": "air_diffuser_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

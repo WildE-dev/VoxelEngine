@@ -1,0 +1,23 @@
+// bat: a creature's model (the format is in README.md, here)
+{
+  "colors": { "fur": "#2e2624", "wing": "#1f1a1a" },
+  "parts": [
+    { "box": [0, 0.2, 0], "size": [0.18, 0.16, 0.14], "color": "fur" },
+    { "box": [0.06, 0.31, -0.04], "size": [0.03, 0.06, 0.03], "color": "fur" },
+    { "box": [0.06, 0.31, 0.04], "size": [0.03, 0.06, 0.03], "color": "fur" },
+    {
+      "at": [0, 0.22, -0.07],
+      "flap": { "axis": "x", "speed": 28, "amount": -0.7 },
+      "box": [0, 0, -0.16],
+      "size": [0.16, 0.02, 0.32],
+      "color": "wing"
+    },
+    {
+      "at": [0, 0.22, 0.07],
+      "flap": { "axis": "x", "speed": 28, "amount": 0.7 },
+      "box": [0, 0, 0.16],
+      "size": [0.16, 0.02, 0.32],
+      "color": "wing"
+    }
+  ]
+}

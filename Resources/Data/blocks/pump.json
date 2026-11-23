@@ -1,0 +1,2 @@
+// pump: a block (the format is in README.md, here)
+{ "name": "Pump", "textures": { "top": "pump_top", "bottom": "pump_top", "side": "pump_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

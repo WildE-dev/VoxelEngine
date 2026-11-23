@@ -1,0 +1,2 @@
+// fluid_outlet: a block (the format is in README.md, here)
+{ "name": "Fluid outlet", "textures": { "top": "outlet_face", "bottom": "outlet_back", "side": "outlet_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

@@ -1,0 +1,2 @@
+// signal_lamp: a block (the format is in README.md, here)
+{ "name": "Signal lamp", "textures": { "all": "signal_lamp" }, "hardness": 0.5, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

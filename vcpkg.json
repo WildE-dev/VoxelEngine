@@ -5,6 +5,7 @@
     "glfw3",
     "glad",
     "glm",
+    "enet",
     "stb",
     {
       "name": "imgui",

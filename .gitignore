@@ -364,4 +364,9 @@ MigrationBackup/
 FodyWeavers.xsd
 
 .vscode
-/.idea
+# macOS
+.DS_Store
+
+# Saved worlds (when run from the repository root)
+/world/
+/saves/

@@ -1,0 +1,21 @@
+// dwarf_chief: a creature's model (the format is in README.md, here)
+{
+  "inherits": "dwarf_base",
+  "scale": 1.15,
+  "colors": { "tunic": "#4c1f59", "beard": "#d9d9d1", "belt": "#d9ad33" },
+  "parts": [
+    { "box": [0.02, 1.48, -0.22], "size": [0.07, 0.2, 0.07], "color": "#e6e0cc" },
+    { "box": [0.02, 1.48, 0.22], "size": [0.07, 0.2, 0.07], "color": "#e6e0cc" },
+    { "box": [0.02, 1.33, 0], "size": [0.4, 0.04, 0.4], "color": "gold" },
+    {
+      "name": "weapon",
+      "at": [0.14, 0.62, 0.36],
+      "rotate": [0, 0, -70],
+      "swing": { "axis": "z", "amount": -0.4 },
+      "parts": [
+        { "box": [0.25, 0, 0], "size": [0.55, 0.06, 0.06], "color": "wood" },
+        { "box": [0.48, 0.1, 0], "size": [0.14, 0.24, 0.04], "color": "gold" }
+      ]
+    }
+  ]
+}

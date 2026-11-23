@@ -1,0 +1,2 @@
+// tar: a block (the format is in README.md, here)
+{ "name": "Tar", "textures": { "top": "tar", "bottom": "dirt", "side": "tar_side" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

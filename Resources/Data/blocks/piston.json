@@ -1,0 +1,2 @@
+// piston: a block (the format is in README.md, here)
+{ "name": "Piston", "textures": { "top": "piston_face", "bottom": "piston_back", "side": "piston_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

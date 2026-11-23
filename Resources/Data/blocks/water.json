@@ -1,0 +1,2 @@
+// water: a block (the format is in README.md, here)
+{ "name": "Water", "textures": { "all": "water" }, "hardness": 0, "tool": "none", "sound": "soft", "light": 0, "map": "#3c7ac0" }

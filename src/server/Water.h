@@ -1,0 +1,254 @@
+#pragma once
+
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#include <random>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+#include <glm/glm.hpp>
+
+#include "world/Block.h"
+#include "world/Coords.h"
+
+class ServerWorld;
+
+// Finite, volume-conserving water. Each cell holds 0..Block::kMaxWaterVolume units:
+// water blocks, and partial (sloped) blocks whose open space above the slope can be
+// waterlogged. Water is only ever moved, never created or destroyed.
+//
+// Each update of a cell:
+//  1. Fall: move as much as fits into the cell below (all of it into empty space).
+//     A cell with room below it counts as that much lower when levelling (step 2),
+//     so water pours over edges in big shares and falls as a stream, not slices.
+//  2. Level out by water level (a partial block counts as a cell with a raised floor
+//     at its slope's average height): share with water up to 6 cells away along each
+//     horizontal direction (through connected water) whose level is at least 2 units
+//     lower, so the group ends up level. Water flows into dry cells directly beside
+//     it if it stands at least 1/8 of a block above them, is that deep itself, or is
+//     fed by deep water right behind it.
+//
+// With 128 units per cell and levelling over 6-cell spans, resting water slopes by at
+// most 1/768 of a block per cell, so lakes stay flat when tapped. The threshold and the
+// minimum depth are what make water settle: spilled water ends as a shallow puddle.
+// Every step either moves water down or evens out a group of cells, so the system
+// always comes to rest.
+//
+// Event driven: only cells next to something that changed are simulated, so streamed
+// in seas and lakes cost nothing until disturbed. Unloaded space acts as a wall.
+//
+// Evaporation, the one exception to water only ever moving, runs on random ticks:
+// every tick, kRandomTicksPerChunk random cells of each chunk in the simulation area
+// are looked at, and a shallow puddle at rest among them dries up. A puddle is a cell
+// with at most kPuddleVolume units that isn't full, has no water above or below it
+// (a lake's thin top layer isn't a puddle) and isn't waiting for an update (so it's
+// not flowing). Each cell is picked about every
+// 4096 / kRandomTicksPerChunk ticks, so a spill fades away cell by cell over a few
+// minutes. Lakes are deep, so only thin water left by spills and drained pools goes.
+//
+// Rain (while SetRaining is on) also runs on the random ticks: when one lands in a body
+// of water, the column's top water cell gets kRainUnits more, if it's open to the sky,
+// isn't full and has water under it. Rain never puts water in a dry cell or above a
+// full one, so it tops drained lakes and pools back up to the level they had, and
+// deep water (hit more often) fills fastest. Puddles don't evaporate while it rains.
+//
+// Springs: each tick, a spring adds up to kSpringRate units of new water to the open
+// cells above and beside it that have room (shared between them), so a stream runs
+// from it for as long as there's somewhere for the water to go. Drains are the other
+// end: each tick a drain takes up to kDrainRate units (twice a spring's) out of the
+// cells above and beside it, and that water is gone, so a river runs from its spring
+// to its drain without flooding what's beyond. (A player's drain only takes what the
+// fluid pipes beside it have room for, and sends it into them; a fluid outlet lets
+// water from its pipes out into the cell in front of it: SetDrainBudget, both.) They're kept with the
+// pumps (AddPump), and like them only run in the simulation area. Where water ends up
+// in the sea it goes: in a world with a sea, random ticks take any water lying above
+// the sea's surface on top of the open sea (as rain never adds any there), so streams
+// running into the sea don't slowly raise it.
+//
+// Pumps: each tick, a pump takes up to kPumpRate units from the water in the cells
+// around it and sends them through the pipes connected to it (pipes join face to
+// face), out of the network's open ends: the open cells beside a pipe that joins only
+// one other pipe or pump. Ends get equal shares. A pump only takes what the ends have
+// room for, so water is still only ever moved; it can lift water any height. Pumps
+// run within the simulation area like flowing water. They run on compressed air
+// (world/Power.h): each has an allowance the server sets (SetPumpBudget), in units of
+// water raised a block (the lift: from the pump up to its highest open end, at least
+// one), and moves no more than that allows; the server takes what was used
+// (TakePumpUse) out of the pump's air network. Without an allowance a pump stands.
+//
+// The server limits simulation to an area around the players (SetSimulationArea),
+// smaller than the area it loads: active cells outside it are parked, untouched, and
+// carry on from where they were once a player comes close enough again.
+// In the game it runs on its own thread (Start); tests step it with Tick.
+class WaterSimulation
+{
+public:
+    ~WaterSimulation() { Stop(); }
+
+    // Marks a changed cell and its neighbours for the next tick. Called by
+    // ServerWorld::SetBlock with the world's edit mutex held.
+    void Activate(const glm::ivec3& pos);
+
+    // Runs ticks on a dedicated thread (every kTickInterval while there's work, idle
+    // otherwise) until Stop. Without it, call Tick directly.
+    void Start(ServerWorld& world);
+    void Stop();
+
+    // Runs exactly one tick now: every currently active cell (up to kCellsPerTick
+    // holding water) gets one update. Any thread; takes the world's edit mutex in
+    // slices so other edits can interleave.
+    void Tick(ServerWorld& world);
+
+    // Only cells within `distance` chunks (per axis) of one of these chunk coordinates
+    // are simulated from now on; the rest are parked until they're in range again.
+    // Parked cells further than `keepDistance` from every centre are forgotten (their
+    // chunks are about to unload; saved water is woken again when it loads). Until
+    // this is first called, everything is simulated. Caller holds the world's edit
+    // mutex (ServerWorld::Update).
+    void SetSimulationArea(const std::vector<glm::ivec3>& centers, int distance, int keepDistance);
+
+    // A pump was placed / removed at this position. Called by ServerWorld::SetBlock
+    // (and when a saved chunk with pumps loads) with the world's edit mutex held.
+    void AddPump(const glm::ivec3& pos);
+    void RemovePump(const glm::ivec3& pos);
+    size_t GetPumpCount() const { return pumpCount.load(std::memory_order_relaxed); }
+    // Air power: how much a pump may lift from now on (units of water times blocks
+    // raised; replaces what was left), and what it has lifted since the last call and
+    // whether it had anything to pump (water beside it and room at its ends). Caller
+    // holds the world's edit mutex.
+    void SetPumpBudget(const glm::ivec3& pos, float liftUnits) { pumpBudget[pos] = liftUnits; }
+    // Player drains and fluid outlets trade water with fluid pipes (world/Fluids.h):
+    // how much a drain may take, or an outlet let out, from now on (units; the server
+    // sets it from its pipes' room or water), and what it did since last asked.
+    // Caller holds the edit mutex.
+    void SetDrainBudget(const glm::ivec3& pos, int units) { drainBudget[pos] = units; }
+    int TakeDrainUse(const glm::ivec3& pos) {
+        auto it = drainUse.find(pos);
+        if (it == drainUse.end()) return 0;
+        const int u = it->second;
+        drainUse.erase(it);
+        return u;
+    }
+    struct PumpUse {
+        float lifted = 0.0f; // units times blocks
+        bool wanted = false;
+    };
+    PumpUse TakePumpUse(const glm::ivec3& pos) {
+        auto it = pumpUse.find(pos);
+        if (it == pumpUse.end()) return {};
+        const PumpUse u = it->second;
+        pumpUse.erase(it);
+        return u;
+    }
+
+    size_t GetActiveCount() const { return activeCount.load(std::memory_order_relaxed); }
+    // Rain on or off (the server's weather). Any thread.
+    // Time spent ticking since the last call (for VOXEL_BENCH): ticks, seconds, worst.
+    struct Bench {
+        int ticks = 0;
+        double seconds = 0.0, worst = 0.0;
+    };
+    Bench TakeBench() {
+        std::lock_guard<std::mutex> lock(benchMutex);
+        const Bench b = bench;
+        bench = {};
+        return b;
+    }
+    void SetRaining(bool on) { raining.store(on, std::memory_order_relaxed); }
+    // How hard springs flow, for the weather: kSpringRate times this (rivers rise in
+    // storms and run low in droughts).
+    void SetSpringFlow(float factor) { springRate.store(std::max(1, static_cast<int>(kSpringRate * factor)), std::memory_order_relaxed); }
+    int SpringRate() const { return springRate.load(std::memory_order_relaxed); }
+    bool IsRaining() const { return raining.load(std::memory_order_relaxed); }
+    // Units rain has added so far (for tests and stats).
+    size_t GetRainedUnits() const { return rainedUnits.load(std::memory_order_relaxed); }
+
+    // Puddles dried up so far (for tests and stats).
+    size_t GetEvaporatedCount() const { return evaporatedCount.load(std::memory_order_relaxed); }
+    size_t GetParkedCount() const { return parkedCount.load(std::memory_order_relaxed); }
+    // Nothing queued and no tick in progress.
+    bool IsIdle() const { return GetActiveCount() == 0 && !ticking.load(std::memory_order_acquire); }
+
+    // Four ticks a second: water spreads a cell per tick, which looks calmer than ten,
+    // and each tick has more time, so it can update twice as many cells (bigger floods
+    // keep up at the slower pace).
+    static constexpr float kTickInterval = 0.25f;
+    static constexpr size_t kCellsPerTick = 65536;
+    // Cells updated per hold of the edit mutex; bounds how long a player edit waits.
+    static constexpr size_t kCellsPerSlice = 128;
+    // Units a pump moves per tick: 5/8 of a block, 2.5 blocks a second.
+    static constexpr int kPumpRate = Block::kMaxWaterVolume * 5 / 8;
+    // Units a spring adds per tick: 3/8 of a block, a block and a half a second.
+    static constexpr int kSpringRate = Block::kMaxWaterVolume * 3 / 8;
+    static constexpr int kDrainRate = 2 * kSpringRate;
+    // Puddles: up to a quarter of a block deep. With 8 random cells per chunk per tick
+    // a puddle cell lasts about 512 ticks (2.1 minutes) on average.
+    static constexpr int kPuddleVolume = Block::kMaxWaterVolume / 4;
+    static constexpr int kRandomTicksPerChunk = 8;
+    // Water a raindrop hit adds to a surface cell: a 16th of a block.
+    static constexpr int kRainUnits = Block::kMaxWaterVolume / 16;
+    // Pipes searched per pump per tick; larger networks only reach this many.
+    static constexpr size_t kMaxPipes = 4096;
+
+private:
+    void UpdateCell(ServerWorld& world, const glm::ivec3& pos);
+    // Runs every pump in the simulation area once. Edit mutex held.
+    void RunPumps(ServerWorld& world);
+    // Random ticks over the simulation area: dries up the resting puddles they find.
+    // Takes the edit mutex itself.
+    void RandomTicks(ServerWorld& world);
+    static bool IsPuddle(const ServerWorld& world, const glm::ivec3& pos, const Block& block);
+    // Rain landing in the body of water at `pos`. Edit mutex held.
+    void RainOn(ServerWorld& world, const glm::ivec3& pos);
+    void RunPump(ServerWorld& world, const glm::ivec3& pump);
+    void RunSpring(ServerWorld& world, const glm::ivec3& spring);
+    void RunDrain(ServerWorld& world, const glm::ivec3& drain, bool natural);
+    void RunOutlet(ServerWorld& world, const glm::ivec3& outlet);
+    // Water lying above the sea on top of the open sea (taken by random ticks).
+    static bool IsAboveSea(const ServerWorld& world, const glm::ivec3& pos);
+    // Whether a cell is within `range` chunks of a simulation centre. Edit mutex held.
+    bool NearCenter(const glm::ivec3& pos, int range) const;
+    void Wake();
+    void ThreadLoop(ServerWorld& world);
+
+    // Guarded by the world's edit mutex.
+    std::unordered_set<glm::ivec3, Coords::IVec3Hash> active;
+    std::atomic<size_t> activeCount{0};
+    // Simulation area, guarded by the world's edit mutex like `active`.
+    bool limited = false;
+    std::atomic<bool> hasArea{false}; // limited, with at least one centre
+    std::vector<glm::ivec3> centers;
+    int distance = 0;
+    std::unordered_set<glm::ivec3, Coords::IVec3Hash> parked;
+    std::atomic<size_t> parkedCount{0};
+    std::unordered_set<glm::ivec3, Coords::IVec3Hash> pumps; // guarded by the edit mutex
+    std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> pumpBudget; // (edit mutex)
+    std::unordered_map<glm::ivec3, PumpUse, Coords::IVec3Hash> pumpUse;  // (edit mutex)
+    std::unordered_map<glm::ivec3, int, Coords::IVec3Hash> drainBudget, drainUse; // drains' and outlets' (edit mutex)
+    std::atomic<size_t> pumpCount{0};
+
+    std::mt19937 random{0x5EED}; // ticking thread only (fixed seed: tests repeat)
+    std::vector<glm::ivec3> randomChunks, puddles, wet, aboveSea; // tick scratch
+    std::mutex benchMutex;
+    Bench bench;
+    std::atomic<bool> raining{false};
+    std::atomic<int> springRate{kSpringRate};
+    std::atomic<size_t> rainedUnits{0};
+    std::atomic<size_t> evaporatedCount{0};
+    std::atomic<bool> ticking{false};
+    struct Pending {
+        glm::ivec3 pos;
+        bool falling;
+        int level;
+    };
+    std::vector<Pending> batch; // tick-local (one ticking thread at a time)
+
+    std::thread thread;
+    std::mutex wakeMutex;
+    std::condition_variable wake;
+    bool stopping = false;
+    std::atomic<bool> pending{false}; // set by Activate, so the thread wakes from idle
+};

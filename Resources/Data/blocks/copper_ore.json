@@ -1,0 +1,2 @@
+// copper_ore: a block (the format is in README.md, here)
+{ "name": "Copper ore", "textures": { "all": "copper_ore" }, "hardness": 5, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

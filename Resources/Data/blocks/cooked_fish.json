@@ -1,0 +1,2 @@
+// cooked_fish: a block (the format is in README.md, here)
+{ "name": "Cooked fish", "textures": { "all": "cooked_fish" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

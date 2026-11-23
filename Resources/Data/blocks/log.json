@@ -1,0 +1,2 @@
+// log: a block (the format is in README.md, here)
+{ "name": "Log", "textures": { "top": "log_top", "bottom": "log_top", "side": "log_side" }, "hardness": 2, "tool": "axe", "sound": "wood", "light": 0, "map": "#8a5c2e" }

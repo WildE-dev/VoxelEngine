@@ -1,0 +1,2 @@
+// sign: a block (the format is in README.md, here)
+{ "name": "Sign", "textures": { "all": "sign" }, "hardness": 0.5, "tool": "none", "sound": "wood", "light": 0, "map": "#707070" }

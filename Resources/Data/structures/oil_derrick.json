@@ -1,0 +1,35 @@
+// oil_derrick: a structure's model (the format is in README.md, here)
+{
+  "colors": { "steel": "#9aa0aa", "steel_dark": "#4a4e56", "yellow": "#d8b030", "red": "#a83a2a" },
+  "parts": [
+    { "box": [1.5, 0.15, 0.5], "size": [3, 0.3, 1], "color": "steel_dark" },
+    { "box": [1.5, 0.15, 2.5], "size": [3, 0.3, 1], "color": "steel_dark" },
+    { "box": [1.5, 0.45, 1.5], "size": [0.7, 0.9, 0.7], "color": "red" },
+    { "box": [1.5, 0.95, 1.5], "size": [0.9, 0.12, 0.9], "color": "steel" },
+    { "box": [0.5, 1.65, 0.5], "size": [0.22, 3, 0.22], "color": "steel" },
+    { "box": [0.5, 1.65, 2.5], "size": [0.22, 3, 0.22], "color": "steel" },
+    { "box": [2.5, 1.65, 0.5], "size": [0.22, 3, 0.22], "color": "steel" },
+    { "box": [2.5, 1.65, 2.5], "size": [0.22, 3, 0.22], "color": "steel" },
+    { "box": [1.5, 1.5, 0.5], "size": [2, 0.1, 0.1], "color": "steel" },
+    { "box": [1.5, 1.5, 2.5], "size": [2, 0.1, 0.1], "color": "steel" },
+    { "box": [0.5, 1.5, 1.5], "size": [0.1, 0.1, 2], "color": "steel" },
+    { "box": [2.5, 1.5, 1.5], "size": [0.1, 0.1, 2], "color": "steel" },
+    { "box": [1.5, 2.5, 0.5], "size": [2, 0.1, 0.1], "color": "steel" },
+    { "box": [1.5, 2.5, 2.5], "size": [2, 0.1, 0.1], "color": "steel" },
+    { "box": [0.5, 2.5, 1.5], "size": [0.1, 0.1, 2], "color": "steel" },
+    { "box": [2.5, 2.5, 1.5], "size": [0.1, 0.1, 2], "color": "steel" },
+    { "box": [1.5, 3.2, 1.5], "size": [2.4, 0.18, 2.4], "color": "steel_dark" },
+    { "box": [1.5, 4.3, 1.5], "size": [0.28, 2, 0.28], "color": "steel" },
+    { "box": [1.5, 2.1, 1.5], "size": [0.07, 2.2, 0.07], "color": "steel" },
+    {
+      "at": [1.5, 3.75, 1.5],
+      "flap": { "axis": "z", "speed": 2.2, "amount": 0.28 },
+      "parts": [
+        { "box": [0, 0, 0], "size": [2.6, 0.18, 0.2], "color": "yellow" },
+        { "box": [1.25, -0.22, 0], "size": [0.28, 0.55, 0.3], "color": "yellow" },
+        { "box": [-1.2, -0.12, 0], "size": [0.4, 0.4, 0.4], "color": "steel_dark" }
+      ]
+    },
+    { "box": [1.5, 3.55, 1.5], "size": [0.3, 0.35, 0.3], "color": "steel_dark" }
+  ]
+}

@@ -1,0 +1,2 @@
+// spikes: a block (the format is in README.md, here)
+{ "name": "Spikes", "textures": { "all": "spikes" }, "hardness": 2, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

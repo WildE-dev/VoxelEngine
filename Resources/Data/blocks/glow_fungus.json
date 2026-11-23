@@ -1,0 +1,2 @@
+// glow_fungus: a block (the format is in README.md, here)
+{ "name": "Glow fungus", "textures": { "all": "glow_fungus" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 11, "map": "#707070" }

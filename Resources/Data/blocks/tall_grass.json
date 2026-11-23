@@ -1,0 +1,2 @@
+// tall_grass: a block (the format is in README.md, here)
+{ "name": "Tall grass", "textures": { "all": "tall_grass" }, "hardness": 0, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

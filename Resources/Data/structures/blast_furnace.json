@@ -1,0 +1,16 @@
+// blast_furnace: a structure's model (the format is in README.md, here)
+{
+  "colors": { "brick": "#8a3a28", "brick_dark": "#4e2418", "band": "#3a3c40", "fire": "#ffb040", "soot": "#1e1612" },
+  "parts": [
+    { "box": [1.5, 1.5, 2], "size": [3, 3, 2], "color": "brick" },
+    { "box": [0.5, 1.5, 0.5], "size": [1, 3, 1], "color": "brick" },
+    { "box": [2.5, 1.5, 0.5], "size": [1, 3, 1], "color": "brick" },
+    { "box": [1.5, 2.5, 0.5], "size": [1, 1, 1], "color": "brick" },
+    { "box": [1.5, 0.98, 2], "size": [3.04, 0.12, 2.04], "color": "band" },
+    { "box": [1.5, 1.98, 2], "size": [3.04, 0.12, 2.04], "color": "band" },
+    { "box": [1.5, 3.6, 1.5], "size": [1, 1.2, 1], "color": "brick_dark" },
+    { "box": [1.5, 4.22, 1.5], "size": [1.1, 0.12, 1.1], "color": "band" },
+    { "box": [1.5, 2.5, -0.02], "size": [0.55, 0.3, 0.04], "color": "fire", "glow": true, "when": "working" },
+    { "box": [1.5, 2.5, -0.02], "size": [0.55, 0.3, 0.04], "color": "soot", "when": "idle" }
+  ]
+}

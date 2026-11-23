@@ -1,0 +1,2 @@
+// iron_ore: a block (the format is in README.md, here)
+{ "name": "Iron ore", "textures": { "all": "iron_ore" }, "hardness": 6, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#808080" }

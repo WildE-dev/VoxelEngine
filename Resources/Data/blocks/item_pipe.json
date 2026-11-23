@@ -1,0 +1,2 @@
+// item_pipe: a block (the format is in README.md, here)
+{ "name": "Item pipe", "textures": { "top": "item_pipe_end", "bottom": "item_pipe_end", "side": "item_pipe" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

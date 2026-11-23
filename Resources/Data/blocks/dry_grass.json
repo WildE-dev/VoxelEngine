@@ -1,0 +1,2 @@
+// dry_grass: a block (the format is in README.md, here)
+{ "name": "Dry grass", "textures": { "top": "dry_grass_top", "bottom": "dirt", "side": "dry_grass_side" }, "hardness": 0.6, "tool": "shovel", "sound": "soft", "light": 0, "map": "#a6a74f" }

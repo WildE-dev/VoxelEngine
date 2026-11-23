@@ -1,0 +1,2 @@
+// machine_casing: a block (the format is in README.md, here)
+{ "name": "Machine casing", "textures": { "all": "machine_casing" }, "hardness": 4, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

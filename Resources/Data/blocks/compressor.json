@@ -1,0 +1,2 @@
+// compressor: a block (the format is in README.md, here)
+{ "name": "Compressor", "textures": { "top": "compressor_top", "bottom": "compressor_top", "side": "compressor_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

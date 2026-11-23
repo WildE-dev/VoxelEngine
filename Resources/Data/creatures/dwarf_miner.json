@@ -1,0 +1,18 @@
+// dwarf_miner: a creature's model (the format is in README.md, here)
+{
+  "inherits": "dwarf_base",
+  "colors": { "tunic": "#5c4c38", "beard": "#332e29", "helmet": "#bf9e33" },
+  "parts": [
+    { "box": [0.2, 1.4, 0], "size": [0.04, 0.07, 0.08], "color": "#ffe680", "glow": true },
+    {
+      "name": "weapon",
+      "at": [0.14, 0.62, 0.36],
+      "rotate": [0, 0, -70],
+      "swing": { "axis": "z", "amount": -0.4 },
+      "parts": [
+        { "box": [0.25, 0, 0], "size": [0.55, 0.05, 0.05], "color": "wood" },
+        { "box": [0.5, 0, 0], "size": [0.06, 0.06, 0.4], "color": "iron" }
+      ]
+    }
+  ]
+}

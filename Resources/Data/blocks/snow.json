@@ -1,0 +1,2 @@
+// snow: a block (the format is in README.md, here)
+{ "name": "Snow", "textures": { "top": "snow", "bottom": "stone", "side": "snow_side" }, "hardness": 0.6, "tool": "shovel", "sound": "sand", "light": 0, "map": "#f0f0f0" }

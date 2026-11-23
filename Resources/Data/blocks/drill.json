@@ -1,0 +1,2 @@
+// drill: a block (the format is in README.md, here)
+{ "name": "Drill", "textures": { "top": "drill_top", "bottom": "drill_bottom", "side": "drill_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

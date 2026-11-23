@@ -1,0 +1,2 @@
+// turbine: a block (the format is in README.md, here)
+{ "name": "Steam turbine", "textures": { "top": "turbine_top", "bottom": "turbine_top", "side": "turbine_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

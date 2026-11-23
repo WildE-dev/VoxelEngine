@@ -1,0 +1,66 @@
+// rock_grub: a creature's model (the format is in README.md, here)
+{
+  "colors": { "shell": "#5e5650", "shell_dark": "#3c3632", "glow": "#7affd0", "leg": "#2c2826", "jaw": "#c8b89a" },
+  "parts": [
+    { "box": [-0.32, 0.2, 0], "size": [0.26, 0.24, 0.34], "color": "shell_dark" },
+    { "box": [-0.08, 0.24, 0], "size": [0.28, 0.3, 0.42], "color": "shell" },
+    { "box": [0.18, 0.22, 0], "size": [0.26, 0.26, 0.38], "color": "shell_dark" },
+    { "box": [0.38, 0.2, 0], "size": [0.18, 0.2, 0.3], "color": "shell" },
+    { "box": [-0.08, 0.4, -0.1], "size": [0.06, 0.03, 0.06], "color": "glow", "glow": true },
+    { "box": [-0.08, 0.4, 0.1], "size": [0.06, 0.03, 0.06], "color": "glow", "glow": true },
+    { "box": [0.18, 0.36, 0], "size": [0.06, 0.03, 0.06], "color": "glow", "glow": true },
+    { "box": [0.47, 0.24, -0.07], "size": [0.02, 0.04, 0.04], "color": "glow", "glow": true },
+    { "box": [0.47, 0.24, 0.07], "size": [0.02, 0.04, 0.04], "color": "glow", "glow": true },
+    {
+      "name": "jaws",
+      "at": [0.47, 0.14, 0],
+      "flap": { "axis": "y", "speed": 9, "amount": 0.25 },
+      "parts": [
+        { "box": [0.06, 0, -0.06], "size": [0.12, 0.04, 0.03], "color": "jaw" },
+        { "box": [0.06, 0, 0.06], "size": [0.12, 0.04, 0.03], "color": "jaw" }
+      ]
+    },
+    {
+      "at": [-0.25, 0.18, -0.2],
+      "swing": { "axis": "z", "amount": 1 },
+      "box": [0, -0.09, 0],
+      "size": [0.06, 0.2, 0.06],
+      "color": "leg"
+    },
+    {
+      "at": [-0.25, 0.18, 0.2],
+      "swing": { "axis": "z", "amount": -1 },
+      "box": [0, -0.09, 0],
+      "size": [0.06, 0.2, 0.06],
+      "color": "leg"
+    },
+    {
+      "at": [0, 0.18, -0.24],
+      "swing": { "axis": "z", "amount": -1 },
+      "box": [0, -0.09, 0],
+      "size": [0.06, 0.2, 0.06],
+      "color": "leg"
+    },
+    {
+      "at": [0, 0.18, 0.24],
+      "swing": { "axis": "z", "amount": 1 },
+      "box": [0, -0.09, 0],
+      "size": [0.06, 0.2, 0.06],
+      "color": "leg"
+    },
+    {
+      "at": [0.22, 0.18, -0.22],
+      "swing": { "axis": "z", "amount": 1 },
+      "box": [0, -0.09, 0],
+      "size": [0.06, 0.2, 0.06],
+      "color": "leg"
+    },
+    {
+      "at": [0.22, 0.18, 0.22],
+      "swing": { "axis": "z", "amount": -1 },
+      "box": [0, -0.09, 0],
+      "size": [0.06, 0.2, 0.06],
+      "color": "leg"
+    }
+  ]
+}
