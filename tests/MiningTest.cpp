@@ -283,6 +283,10 @@ int main() {
         server.QueueConsoleCommand("fill 46 3 28 50 5 32 leaves");
         server.QueueConsoleCommand("fill 48 0 30 48 4 30 log");
         Check(both(20.0, [&] { return TypeAt(builder, { 48, 4, 30 }) == BlockType::LOG && TypeAt(builder, { 30, 5, 30 }) == BlockType::LEAVES; }), "three trees stand");
+        // A leaf the builder put down by the tree, and a flower on the grass nearby.
+        builder.client.PlaceBlock({ 32, 1, 30 }, BlockType::LEAVES);
+        server.QueueConsoleCommand("fill 34 0 34 34 0 34 flower_red");
+        both(10.0, [&] { return TypeAt(a, { 32, 1, 30 }) == BlockType::LEAVES && TypeAt(a, { 34, 0, 34 }) == BlockType::FLOWER_RED; });
         builder.client.BreakBlock({ 30, 0, 30 }, Tool::Axe);
         bool felled = both(20.0, [&] {
             for (int y = 0; y <= 4; y++)
@@ -304,6 +308,14 @@ int main() {
         Check(leavesLeft(30) > 20, "the felled tree's leaves don't all go at once");
         Check(both(15.0, [&] { return leavesLeft(30) == 0; }), "but they all fall away within a few seconds");
         Check(leavesLeft(38) == 73 && leavesLeft(48) == 73, "leaves a log still holds up stay");
+        Check(TypeAt(a, { 32, 1, 30 }) == BlockType::LEAVES, "and so do leaves a player put down, with no log near");
+        builder.client.BreakBlock({ 34, -1, 34 });
+        Check(both(10.0, [&] {
+                  for (const auto& i : a.client.GetItems())
+                      if (i.item == Items::OfBlock(BlockType::FLOWER_RED)) return TypeAt(a, { 34, 0, 34 }) == BlockType::AIR;
+                  return false;
+              }),
+              "a flower whose ground goes drops as an item");
     }
 
     std::cout << "Throwing items away" << std::endl;

@@ -275,6 +275,17 @@ bool WorldStorage::ReadWorldFile() {
         if (Items::Valid(s.item) && std::isfinite(s.position.x) && std::isfinite(s.position.y) && std::isfinite(s.position.z) && std::isfinite(s.age))
             items.push_back(s);
     }
+    // Leaves players put down (format 16 on).
+    uint32_t leafCount = 0;
+    if (version >= 16 && !r.VarU32(leafCount)) leafCount = 0;
+    for (uint32_t i = 0; i < leafCount; i++) {
+        glm::ivec3 pos;
+        if (!r.IVec3(pos)) {
+            std::cerr << "[storage] " << path.string() << " is truncated (placed leaves)" << std::endl;
+            return false;
+        }
+        placedLeaves.push_back(pos);
+    }
     return true;
 }
 
@@ -493,6 +504,17 @@ void WorldStorage::SetCrops(std::vector<glm::ivec3> c) {
     playersDirty = true;
 }
 
+std::vector<glm::ivec3> WorldStorage::GetPlacedLeaves() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return placedLeaves;
+}
+
+void WorldStorage::SetPlacedLeaves(std::vector<glm::ivec3> l) {
+    std::lock_guard<std::mutex> lock(mutex);
+    placedLeaves = std::move(l);
+    playersDirty = true;
+}
+
 size_t WorldStorage::GetStoredChunkCount() const {
     std::lock_guard<std::mutex> lock(mutex);
     return chunks.size();
@@ -587,6 +609,8 @@ bool WorldStorage::Flush() {
                 w.Vec3(i.position);
                 w.F32(i.age);
             }
+            w.VarU32(static_cast<uint32_t>(placedLeaves.size()));
+            for (const auto& pos : placedLeaves) w.IVec3(pos);
             files.emplace_back(directory / "world.dat", std::move(w.data));
             writePlayers = true;
             playersDirty = false;

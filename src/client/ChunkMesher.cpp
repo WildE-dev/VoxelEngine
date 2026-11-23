@@ -480,10 +480,19 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     if (valve) {
                         // The handle: a stem up from the tube and a bar across its top, along the
                         // pipe when open, across it when shut.
-                        const bool alongX = (joined & 0x3u) != 0 || (joined & 0x30u) == 0; // (the pipe's way, level)
-                        const bool barAlongX = IsOpenValve(block.type) ? alongX : !alongX;
-                        block.AddBoxVertices(vertices, x, y, z, glm::ivec3(3, 6, 3), glm::ivec3(5, 7, 5), 1u << static_cast<int>(Face::Bottom), bl, sl);
-                        block.AddBoxVertices(vertices, x, y, z, barAlongX ? glm::ivec3(1, 7, 3) : glm::ivec3(3, 7, 1), barAlongX ? glm::ivec3(7, 8, 5) : glm::ivec3(5, 8, 7), 0, bl, sl);
+                        const bool open = IsOpenValve(block.type);
+                        if ((joined & 0xCu) != 0 && (joined & 0x33u) == 0) {
+                            // A pipe running up and down: the handle on its +x side instead, the
+                            // bar up and down when open, level when shut.
+                            block.AddBoxVertices(vertices, x, y, z, glm::ivec3(6, 3, 3), glm::ivec3(7, 5, 5), 1u << static_cast<int>(Face::Left), bl, sl);
+                            block.AddBoxVertices(vertices, x, y, z, open ? glm::ivec3(7, 1, 3) : glm::ivec3(7, 3, 1), open ? glm::ivec3(8, 7, 5) : glm::ivec3(8, 5, 7), 0, bl, sl);
+                        }
+                        else {
+                            const bool alongX = (joined & 0x3u) != 0 || (joined & 0x30u) == 0; // (the pipe's way, level)
+                            const bool barAlongX = open ? alongX : !alongX;
+                            block.AddBoxVertices(vertices, x, y, z, glm::ivec3(3, 6, 3), glm::ivec3(5, 7, 5), 1u << static_cast<int>(Face::Bottom), bl, sl);
+                            block.AddBoxVertices(vertices, x, y, z, barAlongX ? glm::ivec3(1, 7, 3) : glm::ivec3(3, 7, 1), barAlongX ? glm::ivec3(7, 8, 5) : glm::ivec3(5, 8, 7), 0, bl, sl);
+                        }
                     }
                     continue;
                 }

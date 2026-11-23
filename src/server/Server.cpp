@@ -187,6 +187,7 @@ bool Server::Start(const Options& opts) {
     if (storage) {
         for (const auto& [pos, held] : storage->GetChests()) chests[pos] = held;
         for (const auto& pos : storage->GetCrops()) crops.insert(pos);
+        for (const auto& pos : storage->GetPlacedLeaves()) placedLeaves.insert(pos);
         for (const auto& [pos, text] : storage->GetSigns()) signs[pos] = text;
         for (const auto& sig : storage->GetSignals()) {
             SignalBlock& b = signalBlocks[sig.pos];
@@ -301,6 +302,13 @@ void Server::Save(bool shuttingDown) {
     storage->SetTimeOfDay(static_cast<float>(timeOfDay));
     storage->SetChests({ chests.begin(), chests.end() });
     storage->SetCrops({ crops.begin(), crops.end() });
+    // (Placed leaves that are gone now are forgotten; those in unloaded chunks kept.)
+    for (auto it = placedLeaves.begin(); it != placedLeaves.end();) {
+        Block b;
+        if (world->GetBlock(it->x, it->y, it->z, b) && !IsLeavesType(b.type)) it = placedLeaves.erase(it);
+        else ++it;
+    }
+    storage->SetPlacedLeaves({ placedLeaves.begin(), placedLeaves.end() });
     storage->SetSigns({ signs.begin(), signs.end() });
     std::vector<WorldStorage::SavedSignal> savedSignals;
     for (const auto& [pos, b] : signalBlocks)
@@ -1193,6 +1201,7 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
     world->SetBlock(pos.x, pos.y, pos.z, placed);
     if (IsStorageType(type)) chests[pos] = Inventory(Inventory::kChestSlots); // a new chest is empty
     if (type == BlockType::CROP || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING) crops.insert(pos);
+    if (IsLeavesType(type)) placedLeaves.insert(pos); // (it stays when a tree's logs go)
     if (type == BlockType::DOOR) world->SetBlock(pos.x, pos.y + 1, pos.z, placed); // its upper half (part of the one door, facing the same way)
     if (!Creative(client)) {
         client.inventory.TakeUnits(ResourceTypeOf(type), cost);
@@ -2013,10 +2022,10 @@ void Server::HandleDropItem(ClientState& client, const net::DropItem& m) {
 
 void Server::UpdateDroppedItems() {
     constexpr float dt = 1.0f / kTickRate;
-    // Levers that fell off what held them drop where they were.
+    // Plants and levers knocked off what held them drop where they were.
     {
         std::vector<std::pair<glm::ivec3, Block>> fallen;
-        world->TakeFallenLevers(fallen);
+        world->TakeKnockedOff(fallen);
         for (const auto& [pos, lever] : fallen) dropped.DropUnits(lever.ResourceType(), static_cast<uint32_t>(lever.ResourceUnits()), pos);
     }
     // Who could take what: in the world, alive, and (flying through blocks) not in no-clip flight.
@@ -2116,7 +2125,7 @@ void Server::SendDroppedItems() {
 
 void Server::LoosenLeaves(const std::vector<glm::ivec3>& logsGone) {
     const double now = Now();
-    for (const auto& leaf : Trees::LooseLeaves(*world, logsGone)) {
+    for (const auto& leaf : Trees::LooseLeaves(*world, logsGone, &placedLeaves)) {
         if (leafFalls.count(leaf)) continue;
         const float r = Noise::Random01(leaf.x, leaf.y, leaf.z, static_cast<uint32_t>(tickCount));
         leafFalls[leaf] = now + Trees::kLeafFallMin + (Trees::kLeafFallMax - Trees::kLeafFallMin) * r;
@@ -2133,7 +2142,7 @@ void Server::UpdateLeaves() {
         leafFalls.erase(pos);
         Block b;
         // (Still leaves, and still nothing holding them up: a log may have been put back.)
-        if (!world->GetBlock(pos.x, pos.y, pos.z, b) || !IsLeavesType(b.type) || Trees::LogNear(*world, pos)) continue;
+        if (!world->GetBlock(pos.x, pos.y, pos.z, b) || !IsLeavesType(b.type) || Trees::LogNear(*world, pos) || placedLeaves.count(pos)) continue;
         world->SetBlock(pos.x, pos.y, pos.z, b.HasWater() ? Block::Water(b.WaterVolume()) : Block());
         if (Noise::Random01(pos.x, pos.y, pos.z, 0x5A7u) < Trees::kSaplingChance)
             dropped.DropUnits(b.type == BlockType::PINE_LEAVES ? BlockType::PINE_SAPLING : BlockType::SAPLING, Block::kUnitsPerBlock, pos);

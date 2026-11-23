@@ -39,7 +39,7 @@ public:
     // 2: world type; 3: time of day; 4: game modes and resources; 5: block axes (logs);
     // 6: tools players have made; ...; 14: inventories of item stacks (world/Inventory.h)
     // in place of units by type, tool and upgrade masks (older ones are converted)
-    static constexpr uint32_t kFormatVersion = 15;
+    static constexpr uint32_t kFormatVersion = 16;
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
@@ -102,6 +102,9 @@ public:
     };
     std::vector<SavedItem> GetItems() const;
     void SetItems(std::vector<SavedItem> i);
+    // Leaves players put down (they don't fall when a tree's logs go), format 16 on.
+    std::vector<glm::ivec3> GetPlacedLeaves() const;
+    void SetPlacedLeaves(std::vector<glm::ivec3> leaves);
 
     // One bit per block column of a chunk (index x * CHUNK_SIZE + z).
     using ColumnMask = std::array<uint64_t, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE / 64>;
@@ -195,4 +198,5 @@ private:
     std::vector<SavedFluid> fluids;
     std::vector<SavedAir> air;
     std::vector<SavedItem> items;
+    std::vector<glm::ivec3> placedLeaves;
 };

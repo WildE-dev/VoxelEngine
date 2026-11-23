@@ -193,6 +193,7 @@ private:
     // (a sudden lot more is a burst: it hisses).
     uint32_t steamSeen = 0;
     long long steamNear = 0;
+    float steamFog = 0.0f; // the white-out in steam, eased
     std::vector<glm::ivec3> campfires; // near the player, for smoke
     // Shallow water running downhill near the player, for spray (found by the same
     // look round as the campfires): the cell, where its surface is, which way it runs

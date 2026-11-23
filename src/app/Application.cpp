@@ -915,6 +915,16 @@ void Application::Run() {
                 params.steamCells.emplace_back(glm::vec3(s.cell), static_cast<float>(s.density));
             }
             params.steamVersion = client->GetSteamVersion();
+            // With our head in it, the steam whites the view out (thicker steam, more).
+            {
+                const glm::ivec3 head(glm::floor(eye));
+                int here = 0;
+                for (const auto& s : steam)
+                    if (s.cell == head) here = s.density;
+                const float target = std::clamp(here / 160.0f, 0.0f, 1.0f);
+                steamFog += (target - steamFog) * std::min(1.0f, deltaTime * 5.0f);
+                params.steamFog = steamFog;
+            }
             // A burst near us hisses.
             if (client->GetSteamVersion() != steamSeen) {
                 if (near > steamNear + 400 && most >= 0) PlayAt("hiss", thickest, 0.8f);

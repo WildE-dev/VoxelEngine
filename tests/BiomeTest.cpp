@@ -336,7 +336,7 @@ int main() {
     // The Deep: open caverns with fungus, magma and gold ore far down, and no gold above.
     {
         TerrainGenerator deep(TerrainGenerator::Type::Normal);
-        long open = 0, fungus = 0, magma = 0, goldDeep = 0, goldHigh = 0, cells = 0;
+        long open = 0, fungus = 0, magma = 0, goldDeep = 0, goldHigh = 0, cells = 0, lavaDeep = 0, lavaHigh = 0;
         for (int cx = -3; cx < 3; cx++)
             for (int cz = -3; cz < 3; cz++) {
                 TerrainGenerator::ColumnHeights h;
@@ -348,11 +348,13 @@ int main() {
                         const bool inDeep = cy <= -7;
                         if (inDeep) cells++, open += b.IsAir(), fungus += b.type == BlockType::GLOW_FUNGUS, magma += b.type == BlockType::MAGMA;
                         (inDeep ? goldDeep : goldHigh) += b.type == BlockType::GOLD_ORE;
+                        (inDeep ? lavaDeep : lavaHigh) += b.type == BlockType::LAVA;
                     }
                 }
             }
         Check(open > cells / 10 && fungus > 50 && magma > 20 && goldDeep > 50 && goldHigh == 0,
               "the Deep has caverns (" + std::to_string(100 * open / std::max(1L, cells)) + "% open), glow fungus, magma and gold ore, and no gold above it");
+        Check(lavaDeep > 20 && lavaHigh == 0, "and pools of lava on its floors (" + std::to_string(lavaDeep) + " cells), none above it");
     }
 
     std::cout << (failures ? "BIOME TEST FAILED (" : "ALL BIOME CHECKS PASSED (") << failures << " failures)" << std::endl;

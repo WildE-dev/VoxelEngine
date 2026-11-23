@@ -141,30 +141,52 @@ int main() {
 
     std::cout << "Lava" << std::endl;
     {
+        auto total = [](const Cells& c) {
+            int n = 0;
+            for (const auto& [k, b] : c.blocks) n += Lava::Volume(b);
+            return n;
+        };
+        auto deepest = [](const Cells& c) {
+            int n = 0;
+            for (const auto& [k, b] : c.blocks) n = std::max(n, Lava::Volume(b));
+            return n;
+        };
+        // A block of lava on the level spreads out like water, slowly, into a small pool: never
+        // made or lost, and no thinner than a quarter of a block (or so) at its edge.
         Cells world;
-        world.blocks[{ 0, 0, 0 }] = Lava::Make(0, false);
-        world.RunLava();
-        Check(world.At(3, 0, 0).IsLava() && Lava::Level(world.At(3, 0, 0)) == 3 && !world.At(4, 0, 0).IsLava() && world.At(-2, 0, 1).IsLava(),
-              "a source runs three blocks out over the level, thinner each block");
-        world.blocks[{ 0, 0, 0 }] = Block();
-        world.RunLava();
-        bool gone = true;
-        for (const auto& [k, b] : world.blocks) gone &= !b.IsLava();
-        Check(gone, "and once its source is gone, it drains away");
-
-        // Over an edge: a ledge at y 3 with open air beside it.
+        world.blocks[{ 0, 0, 0 }] = Lava::WithVolume(Lava::kFull);
+        world.RunLava(nullptr, 200);
+        int cells = 0, thinnest = Lava::kFull;
+        for (const auto& [k, b] : world.blocks)
+            if (b.IsLava()) cells++, thinnest = std::min(thinnest, Lava::Volume(b));
+        Check(total(world) == Lava::kFull && cells >= 3 && cells <= 9 && deepest(world) < Lava::kFull,
+              "a block of lava spreads into a small pool, all of it kept (" + std::to_string(cells) + " cells)");
+        // Into a pit: it falls in and fills it from the bottom.
+        Cells pit;
+        for (int x = -1; x <= 1; x++)
+            for (int z = -1; z <= 1; z++)
+                if (x || z) pit.blocks[{ x, -1, z }] = Block(BlockType::STONE), pit.blocks[{ x, -2, z }] = Block(BlockType::STONE);
+        pit.blocks[{ 0, -1, 0 }] = Block();
+        pit.blocks[{ 0, -2, 0 }] = Block();
+        pit.blocks[{ 0, 2, 0 }] = Lava::WithVolume(Lava::kFull);
+        pit.RunLava(nullptr, 40);
+        Check(Lava::Volume(pit.At(0, -2, 0)) == Lava::kFull && !pit.At(0, 2, 0).IsLava() && total(pit) == Lava::kFull,
+              "it falls, as water does, and fills a pit from the bottom");
+        // Over an edge: off a ledge it pours down to the ground below.
         Cells ledge;
         for (int x = -3; x <= 0; x++)
             for (int y = 0; y <= 2; y++) ledge.blocks[{ x, y, 0 }] = Block(BlockType::STONE);
-        ledge.blocks[{ 0, 3, 0 }] = Lava::Make(0, false);
-        ledge.RunLava();
-        Check(ledge.At(1, 3, 0).IsLava() && ledge.At(1, 2, 0).IsLava() && Lava::Falling(ledge.At(1, 1, 0)) && ledge.At(1, 0, 0).IsLava() &&
-                  ledge.At(3, 0, 0).IsLava(),
-              "it pours down over an edge and runs on from where it lands");
+        ledge.blocks[{ 0, 3, 0 }] = Lava::WithVolume(Lava::kFull);
+        ledge.blocks[{ -1, 3, 0 }] = Lava::WithVolume(Lava::kFull);
+        ledge.RunLava(nullptr, 200);
+        int low = 0;
+        for (const auto& [k, b] : ledge.blocks)
+            if (std::get<1>(k) == 0) low += Lava::Volume(b);
+        Check(low > 0 && total(ledge) == 2 * Lava::kFull, "it pours over an edge to the ground below");
 
         // Water beside it boils away into steam; the lava stays.
         Cells pool;
-        pool.blocks[{ 0, 0, 0 }] = Lava::Make(0, false);
+        pool.blocks[{ 0, 0, 0 }] = Lava::WithVolume(Lava::kFull);
         pool.blocks[{ 0, 0, 1 }] = Block(BlockType::STONE);
         pool.blocks[{ 1, 0, 0 }] = Block::Water(Block::kMaxWaterVolume);
         std::vector<Lava::Boil> boils;

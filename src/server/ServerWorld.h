@@ -111,12 +111,12 @@ public:
     // the edit mutex.
     void TakeLavaWake(std::vector<glm::ivec3>& out);
 
-    // Levers that fell off the blocks holding them since the last call (where, and what
-    // they were), for the server to drop as items. Any thread.
-    void TakeFallenLevers(std::vector<std::pair<glm::ivec3, Block>>& out) {
+    // Plants and levers knocked off since the last call (the block holding them went):
+    // where, and what they were, for the server to drop as items. Any thread.
+    void TakeKnockedOff(std::vector<std::pair<glm::ivec3, Block>>& out) {
         std::lock_guard<std::mutex> lock(logMutex);
-        out.swap(fallenLevers);
-        fallenLevers.clear();
+        out.swap(knockedOff);
+        knockedOff.clear();
     }
 
     // Server thread: hands every loaded chunk edited since it was last saved to the
@@ -185,6 +185,6 @@ private:
     void NoteWaterMoved(const glm::ivec3& pos, int units);                 // edit mutex held
     // Lava, guarded by the edit mutex: every loaded lava cell, and those woken.
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> lavaCells, lavaWake;
-    std::vector<std::pair<glm::ivec3, Block>> fallenLevers; // (guarded by logMutex)
+    std::vector<std::pair<glm::ivec3, Block>> knockedOff; // (guarded by logMutex)
     std::thread worker;
 };

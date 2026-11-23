@@ -544,9 +544,12 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                     const bool open = DeepCavern(wx, wy, wz);
                     const bool openAbove = DeepCavern(wx, wy + 1, wz);
                     if (open) {
-                        // The floor: fungus on some of it.
+                        // The floor: fungus on some of it, and here and there a pool of lava
+                        // (patches of it, where a slow noise runs high; world/Lava.h).
                         const bool floor = !DeepCavern(wx, wy - 1, wz);
-                        cell = floor && Noise::Random01(wx, wy, wz, 0xF0F0u) < 0.07f ? Block::Plant(BlockType::GLOW_FUNGUS, 0) : Block();
+                        const bool lava = floor && Noise::Perlin3(wx * 0.07f, wy * 0.07f, wz * 0.07f, 0x1A7Au) > 0.42f;
+                        cell = lava ? Block(BlockType::LAVA)
+                             : floor && Noise::Random01(wx, wy, wz, 0xF0F0u) < 0.07f ? Block::Plant(BlockType::GLOW_FUNGUS, 0) : Block();
                     }
                     else if (openAbove && Noise::Random01(wx, wy + 1, wz, 0xF0F0u) > 0.965f) cell = Block(BlockType::MAGMA);
                 }

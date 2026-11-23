@@ -941,7 +941,12 @@ int Block::ModelBoxes(unsigned joined, glm::vec3 lo[kMaxModelBoxes], glm::vec3 h
             const bool positive = kFaceOffsets[face][a] > 0;
             rod(a, positive ? 0.5f + kHalf : 0.0f, positive ? 1.0f : 0.5f - kHalf, kHalf);
         }
-        if (IsValveType(type)) box({ 0.125f, 0.75f, 0.125f }, { 0.875f, 1.0f, 0.875f }); // (round the handle, either way it's turned)
+        if (IsValveType(type)) {
+            // Round the handle, either way it's turned: on top, or on the +x side of a pipe
+            // running up and down (as the mesher draws it).
+            if ((joined & 0xCu) != 0 && (joined & 0x33u) == 0) box({ 0.75f, 0.125f, 0.125f }, { 1.0f, 0.875f, 0.875f });
+            else box({ 0.125f, 0.75f, 0.125f }, { 0.875f, 1.0f, 0.875f });
+        }
         return n;
     }
     switch (type) {

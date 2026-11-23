@@ -32,6 +32,7 @@ struct FrameParams {
     float overcast = 0.0f;      // 0..1: how grey the sky is
     glm::vec3 cameraPosition{0.0f};
     bool underwater = false;    // camera is inside water: tint the screen
+    float steamFog = 0.0f;      // 0..1: the camera is in steam this thick: white the screen out
     float fogEnd = 0.0f;        // horizontal distance where the world fades fully into the sky (0: no fog)
     std::optional<glm::ivec3> highlightedBlock;
     // Mining (survival): cracks over the box around the block being broken, 0..1 of the way.

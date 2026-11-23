@@ -413,6 +413,15 @@ void Server::UpdatePower() {
     for (const auto& pos : machineList) {
         const BlockType t = blockAt(pos).type;
         if (t == BlockType::PUMP) {
+            // Pipes holding another fluid (oil, fuel, steam) aren't for its water: it stands.
+            bool otherFluid = false;
+            for (const auto& d : kFaces)
+                if (const FluidNet* n = FluidNetAt(pos + d); n && n->amount > 0 && n->kind != Fluids::Kind::Water) otherFluid = true;
+            if (otherFluid) {
+                water.TakeDrainUse(pos);
+                water.SetDrainBudget(pos, -1); // (server/Water.h: a pump told -1 stands)
+                continue;
+            }
             // A pump whose pipes reach a tank or machine fills them (server/Water.h); one
             // whose pipes just end lets its water out there, and puts none in.
             if (FluidNet* in = FluidNetBeside(pos, Fluids::Kind::Water, false)) {

@@ -419,6 +419,7 @@ private:
     void UpdateLava();
     // Leaves no log holds up any more (world/Trees.h), and when each falls away.
     std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> leafFalls;
+    std::unordered_set<glm::ivec3, Coords::IVec3Hash> placedLeaves; // put down by players: they stay (saved)
     void LoosenLeaves(const std::vector<glm::ivec3>& logsGone);
     void UpdateLeaves();
     void UpdateSteam();

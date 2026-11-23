@@ -7,12 +7,15 @@
 //    in survival).
 //  - Leaves need a log near them. When a log goes (broken, felled), leaves within
 //    kLeafScan of it with no log within kLeafReach fall away one by one over the next few
-//    seconds (Server::UpdateLeaves), now and then dropping a sapling.
+//    seconds (Server::UpdateLeaves), now and then dropping a sapling. Leaves a player put
+//    down never do (the server remembers them, with the world).
+#include <unordered_set>
 #include <vector>
 
 #include <glm/glm.hpp>
 
 #include "world/BlockAccess.h"
+#include "world/Coords.h"
 
 namespace Trees {
 
@@ -46,8 +49,10 @@ inline bool LogNear(const BlockAccess& world, const glm::ivec3& cell) {
     return false;
 }
 
-// Leaves around where logs went (within kLeafScan) that no log holds up any more.
-inline std::vector<glm::ivec3> LooseLeaves(const BlockAccess& world, const std::vector<glm::ivec3>& gone) {
+// Leaves around where logs went (within kLeafScan) that no log holds up any more (not
+// those in `placed`: put down by players, they stay).
+using Cells = std::unordered_set<glm::ivec3, Coords::IVec3Hash>;
+inline std::vector<glm::ivec3> LooseLeaves(const BlockAccess& world, const std::vector<glm::ivec3>& gone, const Cells* placed = nullptr) {
     std::vector<glm::ivec3> out;
     for (const auto& g : gone)
         for (int dx = -kLeafScan; dx <= kLeafScan; dx++)
@@ -55,7 +60,7 @@ inline std::vector<glm::ivec3> LooseLeaves(const BlockAccess& world, const std::
                 for (int dz = -kLeafScan; dz <= kLeafScan; dz++) {
                     const glm::ivec3 c = g + glm::ivec3(dx, dy, dz);
                     Block b;
-                    if (!world.GetBlock(c.x, c.y, c.z, b) || !IsLeavesType(b.type)) continue;
+                    if (!world.GetBlock(c.x, c.y, c.z, b) || !IsLeavesType(b.type) || (placed && placed->count(c))) continue;
                     bool seen = false;
                     for (const auto& o : out) seen |= o == c;
                     if (!seen && !LogNear(world, c)) out.push_back(c);

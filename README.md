@@ -464,7 +464,8 @@ An end against a block is closed. The ends share the water equally, and the pump
 have room for, so water is still never created or lost. If the pipes also reach a fluid
 tank or a fluid machine (an outlet, a boiler, a refinery...), that fluid network takes
 an equal share, as far as it has room. Open ends still spill, whatever the other ends
-are joined to. A pump draws only from the
+are joined to. A pump whose pipes hold another fluid (oil, fuel, steam) stands: they
+aren't for its water. A pump draws only from the
 cells it touches, so put it at the bottom of a pool to empty it. Pumps run within
 the water simulation distance, like flowing water, and keep running after a save
 and reload. Fluid pipes are the one pipe for liquids: the same pipe carries a pump's
@@ -529,11 +530,13 @@ pauses out of range, keeps its volume, and resumes.
 
 ## Lava and steam
 
-**Lava** (creative only, in the inventory next to water) is a glowing liquid that
-creeps along far more slowly than water: a step every half second. A source stays put.
-On the level, lava runs three blocks out from it, thinner each block. Over an edge, it
-pours down as a falling column and runs on from where it lands. Flowing lava with
-nothing feeding it drains away. It lights its surroundings as brightly as a lamp. You
+**Lava** (creative only, in the inventory next to water; it also lies in pools on the
+Deep's cavern floors) is a glowing liquid that flows like water, only slower and
+thicker. A cell holds up to a block's worth, 128 units, and it's only ever moved, never
+made or lost. Every half second (a tenth of water's pace) it falls, as much as fits,
+into open space or thinner lava below. With nowhere to fall, it levels out with the
+cells beside it. It doesn't spread thinner than about a quarter of a block, so a block
+of lava ends as a small pool of a few cells. It lights its surroundings as brightly as a lamp. You
 can wade in it slowly (like swimming, at half the speed), and it burns for a heart
 and a half every half second. It can't be aimed at or broken, but a block put where
 it is replaces it.
@@ -558,7 +561,8 @@ more of them: a thick cloud is near white and its thin edges barely there. Each 
 takes its mist from its corners, each the mean of the eight cells round it, so it
 fades smoothly across the cells and to nothing at the cloud's edge, blending them into
 one cloud rather than a stack of boxes. Drifting noise in the shader breaks it up, so
-it reads as cloud, not glass.
+it reads as cloud, not glass. With your head in steam, the view whites out, more the
+thicker it is.
 
 **Thick steam scalds.** A player with 200 units or more of steam in a cell their body is
 in loses half a heart every 0.75 seconds (armour doesn't help), so stand back from
@@ -566,7 +570,7 @@ lava when you pour water on it. Thin steam at a cloud's edge is harmless.
 
 `SteamTest` covers both rules on their own:
 - steam rises and spreads, stays under a roof, keeps out of water and fades away;
-- lava runs three blocks out, pours over an edge, and drains once its source is gone;
+- lava spreads into a small pool keeping every unit, fills a pit from the bottom, and pours over an edge;
 - water beside lava boils into steam.
 
 It also runs the whole path over a real connection: a creative player pours water
@@ -844,9 +848,13 @@ nothing on a right click. In creative everything breaks at once, as before.
 as far as the trunk goes, comes down too, each giving its worth. Leaves need a log
 near them, within 4 blocks. When a log goes, leaves around it that no log holds up
 any more fall away one by one over the next few seconds, now and then dropping a
-sapling. That includes leaves you placed, if they're near a log you break and no
-other log is close. `MiningTest` checks that an axe fells a trunk, any other tool
-takes one log, a felled tree's leaves fall away, and leaves still held up stay.
+sapling. Leaves you put down never fall: the server remembers them, with the world.
+
+**Things knocked off drop.** A flower, crop, sapling, sign, ladder or other plant
+whose ground goes, and a lever whose block goes, drop as an item where they were.
+`MiningTest` checks that an axe fells a trunk, any other tool takes one log, a felled
+tree's leaves fall away, leaves still held up and leaves a player put down stay, and
+a flower whose ground goes drops.
 
 The server times every break, so a modified client can't mine faster. The client
 says when it starts on a block and with which tool. The server lets the break through

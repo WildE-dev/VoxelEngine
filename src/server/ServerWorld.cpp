@@ -138,7 +138,14 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
     // it (opening or closing a door changes the halves one at a time).
     Block above;
     const bool doorBelow = block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN;
-    if (GetBlock(x, y + 1, z, above) && above.IsPlant() && !IsLeverType(above.type) && !(above.type == BlockType::DOOR_OPEN && doorBelow)) SetBlock(x, y + 1, z, Block());
+    if (GetBlock(x, y + 1, z, above) && above.IsPlant() && !IsLeverType(above.type) && !(above.type == BlockType::DOOR_OPEN && doorBelow)) {
+        SetBlock(x, y + 1, z, Block());
+        // (Dropped as an item, by the server; not a door's upper half: its worth is the door's.)
+        if (above.type != BlockType::DOOR_OPEN) {
+            std::lock_guard<std::mutex> lock(logMutex);
+            knockedOff.emplace_back(glm::ivec3(x, y + 1, z), above);
+        }
+    }
     // Levers fixed to this block fall off if it no longer holds them.
     if (Block::HoldsLever(previous) && !Block::HoldsLever(block))
         for (int f = 0; f < kFaceCount; f++) {
@@ -147,7 +154,7 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
             if (!GetBlock(n.x, n.y, n.z, lever) || !IsLeverType(lever.type) || n - lever.LeverFacing() != glm::ivec3(x, y, z)) continue;
             SetBlock(n.x, n.y, n.z, Block());
             std::lock_guard<std::mutex> lock(logMutex);
-            fallenLevers.emplace_back(n, lever); // (dropped as an item: Server)
+            knockedOff.emplace_back(n, lever); // (dropped as an item: Server)
         }
 
     // Light depends on the new block, so let the worker update it.

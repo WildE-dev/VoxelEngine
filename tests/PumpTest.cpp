@@ -314,6 +314,10 @@ int main() {
         Set(world, kSource, Block::Water(Block::kMaxWaterVolume));
         pumpInto(1, 0);
         Check(WaterAt(world, kDest) > 0 && WaterAt(world, kPipeEnd + glm::ivec3(0, 0, 1)) == 0, "water comes out of the end face only, not the sides");
+        // Told its pipes hold another fluid (the server says -1), it stands.
+        const int beforeOil = WaterAt(world, kSource);
+        pumpInto(2, -1);
+        Check(WaterAt(world, kSource) == beforeOil, "a pump whose pipes hold another fluid (oil, fuel) stands");
     }
 
     std::cout << (failures ? "PUMP TEST FAILED (" : "ALL PUMP CHECKS PASSED (") << failures << " failures)" << std::endl;

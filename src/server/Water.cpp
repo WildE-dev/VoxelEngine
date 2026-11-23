@@ -233,6 +233,7 @@ void WaterSimulation::RunPump(ServerWorld& world, const glm::ivec3& pump) {
         else if (t != BlockType::COUNT && b.HasWater()) intake.push_back({ pump + d, b });
     }
     if (intake.empty() || frontier.empty()) return;
+    if (drainBudget.count(pump) && drainBudget[pump] < 0) return; // (its pipes hold another fluid: the server stood it)
 
     // The pipe network. Where it leads: each end that isn't joined to anything (a pipe
     // joined to just one thing, pipe, pump, tank or machine) lets water out of its end
