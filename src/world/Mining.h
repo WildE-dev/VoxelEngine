@@ -172,6 +172,8 @@ inline float DefaultHardness(BlockType type) {
     case BlockType::MAGMA: return 3.0f;
     case BlockType::STONE_BRICK:
     case BlockType::MOSSY_BRICK: return 5.0f;
+    case BlockType::OBSIDIAN: return 30.0f; // (a pickaxe: 7.5 s, iron or steel faster)
+    case BlockType::OBSIDIAN_PIPE: return 6.0f;
     default: return 1.0f;
     }
 }
@@ -206,6 +208,8 @@ inline Tool DefaultBestTool(BlockType type) {
     case BlockType::STONE_BRICK:
     case BlockType::MOSSY_BRICK:
     case BlockType::CRUMBLING_BRICK:
+    case BlockType::OBSIDIAN:
+    case BlockType::OBSIDIAN_PIPE:
     case BlockType::ICE:
     case BlockType::LAMP:
     case BlockType::SPIKES:

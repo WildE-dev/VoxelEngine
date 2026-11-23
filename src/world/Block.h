@@ -307,6 +307,12 @@ enum class BlockType : uint8_t {
     // the air valve with air pipes); shut, the two sides are separate networks.
     FLUID_VALVE,
     FLUID_VALVE_OPEN,
+    // Obsidian: what lava cools into when water pours onto it (world/Lava.h). Very hard
+    // to mine, and nothing breaks it: TNT doesn't, and raiders can't hack through it.
+    OBSIDIAN,
+    // An obsidian pipe: a fluid pipe that can hold lava (world/Fluids.h), drawing it in
+    // where it touches lava, to fire a boiler.
+    OBSIDIAN_PIPE,
     COUNT
 };
 // Machines with an inventory of their own (opened like a chest, empty-handed): what
@@ -349,7 +355,8 @@ inline bool IsModelType(BlockType type) {
 // thin panel at the back of its cell (a door's hinge at its left, seen from the front).
 inline bool IsWallFacingType(BlockType type) { return type == BlockType::LADDER || type == BlockType::DOOR || type == BlockType::DOOR_OPEN; }
 inline bool IsPipeType(BlockType type) {
-    return type == BlockType::PIPE || type == BlockType::AIR_PIPE || type == BlockType::ITEM_PIPE || type == BlockType::FILTER_PIPE || type == BlockType::FLUID_PIPE;
+    return type == BlockType::PIPE || type == BlockType::AIR_PIPE || type == BlockType::ITEM_PIPE || type == BlockType::FILTER_PIPE || type == BlockType::FLUID_PIPE ||
+           type == BlockType::OBSIDIAN_PIPE;
 }
 // Blocks that face one of six ways (their `axis` holds the Face they point to): a
 // piston and its head.

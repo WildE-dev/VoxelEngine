@@ -22,6 +22,7 @@
 #include "client/ClientWorld.h"
 #include "server/Server.h"
 #include "server/Steam.h"
+#include "world/Fluids.h"
 #include "world/Lava.h"
 #include "world/Signals.h"
 #include "world/TerrainGenerator.h"
@@ -193,8 +194,14 @@ int main() {
         pool.RunLava(&boils, 1);
         int made = 0;
         for (const auto& b : boils) made += b.steam;
-        Check(!pool.At(1, 0, 0).HasWater() && pool.At(0, 0, 0).IsLava() && made == Block::kMaxWaterVolume * Lava::kSteamPerUnit,
-              "water touching it boils away into " + std::to_string(made) + " units of steam, and the lava stays");
+        Check(!pool.At(1, 0, 0).HasWater() && pool.At(0, 0, 0).type == BlockType::OBSIDIAN && made == Block::kMaxWaterVolume * Lava::kSteamPerUnit,
+              "a block of water touching it boils away into " + std::to_string(made) + " units of steam, and cools it to obsidian");
+        Cells trickle;
+        trickle.blocks[{ 0, 0, 0 }] = Lava::WithVolume(Lava::kFull);
+        trickle.blocks[{ 0, 0, 1 }] = Block(BlockType::STONE);
+        trickle.blocks[{ 1, 0, 0 }] = Block::Water(16);
+        trickle.RunLava(nullptr, 1);
+        Check(!trickle.At(1, 0, 0).HasWater() && trickle.At(0, 0, 0).IsLava(), "a trickle just boils away, leaving the lava as it is");
     }
 
     std::cout << "Over the network" << std::endl;
@@ -230,7 +237,8 @@ int main() {
     Check(Pump(a, 10.0, [&] { return at({ 12, -1, 11 }).IsLava(); }), "and it runs along the trench");
     server.QueueConsoleCommand("fill 13 -1 11 13 -1 11 water");
     Check(Pump(a, 10.0, [&] { return !a.client.GetSteam().empty(); }), "water poured beside the lava boils away, and the steam reaches the client");
-    Check(Pump(a, 5.0, [&] { return !at({ 13, -1, 11 }).HasWater() && at({ 12, -1, 11 }).IsLava(); }), "the water's gone, and the lava's still there");
+    Check(Pump(a, 5.0, [&] { return !at({ 13, -1, 11 }).HasWater() && at({ 12, -1, 11 }).type == BlockType::OBSIDIAN; }),
+          "the water's gone, and the lava it touched has cooled to obsidian");
     size_t biggest = 0;
     const auto boiled = std::chrono::steady_clock::now();
     const bool faded = Pump(a, 90.0, [&] {
@@ -286,11 +294,42 @@ int main() {
     server.QueueConsoleCommand("fluid 16 0 20 steam");
     Check(Pump(a, 10.0, [&] { return steamAt({ 21, 0, 20 }); }), "and open, the steam gets through to the far end");
 
+    // Obsidian takes a blast: TNT between it and stone, lit.
+    server.QueueConsoleCommand("tp Smith 26.5 0 26.5");
+    Pump(a, 5.0, [&] { return std::abs(a.feet.x - 26.5f) < 0.1f; });
+    server.QueueConsoleCommand("fill 30 0 30 30 0 30 tnt");
+    server.QueueConsoleCommand("fill 31 0 30 31 0 30 obsidian");
+    server.QueueConsoleCommand("fill 29 0 30 29 0 30 stone");
+    Pump(a, 5.0, [&] { return at({ 31, 0, 30 }).type == BlockType::OBSIDIAN && at({ 30, 0, 30 }).type == BlockType::TNT; });
+    a.client.UseBed({ 30, 0, 30 });
+    Check(Pump(a, 8.0, [&] { return at({ 29, 0, 30 }).IsAir() && at({ 30, 0, 30 }).IsAir(); }) && at({ 31, 0, 30 }).type == BlockType::OBSIDIAN,
+          "TNT blows the stone away, but the obsidian stands");
+
+    // A boiler fired by lava: obsidian pipes from a pool of lava to its side, water under
+    // it and a tank for steam over it, and no coal.
+    server.QueueConsoleCommand("fill 40 -1 40 46 -1 44 stone");
+    server.QueueConsoleCommand("fill 40 -1 42 40 -1 42 air");
+    server.QueueConsoleCommand("fill 40 -1 42 40 -1 42 lava");
+    server.QueueConsoleCommand("fill 41 -1 42 42 -1 42 obsidian_pipe");
+    server.QueueConsoleCommand("fill 43 -1 42 43 -1 42 boiler");
+    server.QueueConsoleCommand("fill 43 -2 42 43 -2 42 fluid_tank");
+    server.QueueConsoleCommand("fill 43 0 42 43 0 42 fluid_tank");
+    Pump(a, 10.0, [&] { return at({ 43, 0, 42 }).type == BlockType::FLUID_TANK && at({ 41, -1, 42 }).type == BlockType::OBSIDIAN_PIPE; });
+    server.QueueConsoleCommand("fluid 43 -2 42 water");
+    auto steamTank = [&] {
+        for (const auto& m : a.client.GetMachines())
+            if (m.pos == glm::ivec3(43, 0, 42)) return m.depth == static_cast<uint8_t>(Fluids::Kind::Steam) && m.pressure > 0;
+        return false;
+    };
+    Check(Pump(a, 15.0, steamTank), "obsidian pipes dipped in lava fire a boiler (no coal): it boils water into steam");
+
     server.QueueConsoleCommand("gamemode survival Smith");
     Pump(a, 10.0, [&] { return !a.client.IsCreative(); });
     Check(!a.client.PlaceBlock({ 10, 0, 10 }, BlockType::LAVA) && !a.client.PlaceBlock({ 10, 0, 10 }, BlockType::AIR),
           "a survival player can't put lava down (and an empty hand places nothing)");
     // Standing in the trench beside the lava when water comes in: the steam scalds.
+    server.QueueConsoleCommand("fill 12 -1 11 12 -1 11 lava");
+    Pump(a, 5.0, [&] { return at({ 12, -1, 11 }).IsLava(); });
     server.QueueConsoleCommand("tp Smith 13.5 -1 11.5");
     Pump(a, 5.0, [&] { return std::abs(a.feet.y + 1.0f) < 0.1f; });
     Pump(a, 1.5, [] { return false; }); // (past being just teleported)

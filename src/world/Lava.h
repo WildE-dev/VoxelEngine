@@ -9,7 +9,8 @@
 //
 // Water touching lava boils away at once into a big cloud of steam (kSteamPerUnit for
 // every unit of water; server/Steam.h), whether the water flows up to the lava or the
-// lava to the water. The lava stays.
+// lava to the water. A trickle leaves the lava as it is; half a block of water or more
+// (kCoolingWater) at once cools it into obsidian.
 //
 // The server runs it (Server::UpdateLava): the lava cells woken by a change beside them
 // take a Step, and what it says changes is set in the world, which wakes the cells
@@ -29,6 +30,7 @@ constexpr double kInterval = 0.5; // seconds between steps (a tenth of water's p
 constexpr int kFull = 128;        // units in a full block of it (as water)
 constexpr int kMinDepth = 32;     // it doesn't spread thinner than a quarter of a block
 constexpr int kSteamPerUnit = 40; // steam made by each unit of water it boils away
+constexpr int kCoolingWater = 64; // this much water (half a block) touching it at once cools it to obsidian
 
 // How much a lava cell holds (0 for anything else).
 inline int Volume(const Block& b) { return !b.IsLava() ? 0 : b.axis == 0 || b.axis > kFull ? kFull : b.axis; }
@@ -70,15 +72,21 @@ inline void Step(const BlockAccess& world, const std::vector<glm::ivec3>& cells,
     for (const glm::ivec3& p : cells) {
         Block b;
         if (!at(p, b) || !b.IsLava()) continue;
-        // Water touching it boils away.
+        // Water touching it boils away; enough of it cools it to obsidian.
+        int cooling = 0;
         for (int f = 0; f < kFaceCount; f++) {
             const glm::ivec3 n = p + glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]);
             Block w;
             if (!at(n, w) || !w.HasWater()) continue;
             boils.push_back({ n, w.WaterVolume() * kSteamPerUnit });
+            cooling += w.WaterVolume();
             Block dry = w.IsLiquid() ? Block() : w;
             dry.water = dry.shown = 0;
             now[n] = dry;
+        }
+        if (cooling >= kCoolingWater) {
+            now[p] = Block(BlockType::OBSIDIAN);
+            continue;
         }
         int v = Volume(b);
         // Fall: as much as fits into open space or thinner lava below.

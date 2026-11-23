@@ -86,6 +86,8 @@ const char* DefaultMaterial(BlockType type) {
     case BlockType::GOLD_ORE:
     case BlockType::COPPER_ORE:
     case BlockType::MAGMA:
+    case BlockType::OBSIDIAN:
+    case BlockType::OBSIDIAN_PIPE:
     case BlockType::IRON_ORE: return "hard";
     case BlockType::SAND:
     case BlockType::SNOW: return "sand";

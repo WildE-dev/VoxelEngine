@@ -489,6 +489,7 @@ private:
         Fluids::Kind kind = Fluids::Kind::None;
         int amount = 0, capacity = 0;
         std::vector<glm::ivec3> members;
+        bool lavaProof = false; // all obsidian pipes: may hold lava
         int Room() const { return capacity - amount; }
         bool Takes(Fluids::Kind k) const { return kind == Fluids::Kind::None || kind == k || amount == 0; }
     };

@@ -1810,7 +1810,7 @@ void Server::Explode(const glm::ivec3& pos, int radius) {
                 if (x * x + y * y + z * z > radius * radius + 1) continue;
                 const glm::ivec3 p = pos + glm::ivec3(x, y, z);
                 Block b;
-                if (!world->GetBlock(p.x, p.y, p.z, b) || b.IsAir()) continue;
+                if (!world->GetBlock(p.x, p.y, p.z, b) || b.IsAir() || b.type == BlockType::OBSIDIAN) continue; // (obsidian takes it)
                 if (b.type == BlockType::TNT && p != pos) {
                     LightTnt(p, 0.4 + 0.1 * (std::abs(x) + std::abs(z)));
                     continue;

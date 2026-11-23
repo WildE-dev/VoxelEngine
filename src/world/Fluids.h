@@ -35,6 +35,10 @@
 //    what it's joined to), up to kVentRate units a second each, and every fluid outlet
 //    on its network, up to kOutletVentRate, into the cell there if it's open. Each unit becomes kSteamGas units
 //    of steam in the air. Pipes meant to carry steam to a turbine want their ends closed.
+//  - Lava: only a network of obsidian pipes alone holds it (any other part and it won't
+//    take any). An obsidian pipe touching lava draws it in, kLavaIntake units a second,
+//    as far as the network has room; a boiler beside a network of lava burns it
+//    (kLavaBurn a second) instead of coal.
 // The server runs it with the air (Server::UpdatePower), and saves what each pipe and
 // tank holds with the world.
 #include <cstdint>
@@ -43,7 +47,7 @@
 
 namespace Fluids {
 
-enum class Kind : uint8_t { None, Water, Crude, Fuel, Steam, Count };
+enum class Kind : uint8_t { None, Water, Crude, Fuel, Steam, Lava, Count };
 
 constexpr int kPerPipe = 64;
 constexpr int kPerTank = 128 * 16;
@@ -63,9 +67,13 @@ constexpr float kTurbineAir = 40.0f;
 constexpr float kVentRate = 32.0f;       // steam out of each open pipe end, a second
 constexpr float kOutletVentRate = 64.0f; // and out of each fluid outlet (the way to let it out on purpose)
 constexpr int kSteamGas = 10;      // steam in the air from each unit let out
+constexpr float kLavaIntake = 32.0f; // lava an obsidian pipe draws in from lava it touches, a second
+constexpr float kLavaBurn = 4.0f;    // lava a boiler burns a second (instead of coal)
 
-inline bool IsPart(BlockType t) { return t == BlockType::FLUID_PIPE || t == BlockType::FLUID_TANK || t == BlockType::FLUID_VALVE_OPEN; }
-inline int CapacityOf(BlockType t) { return t == BlockType::FLUID_TANK ? kPerTank : t == BlockType::FLUID_PIPE || t == BlockType::FLUID_VALVE_OPEN ? kPerPipe : 0; }
+inline bool IsPart(BlockType t) { return t == BlockType::FLUID_PIPE || t == BlockType::FLUID_TANK || t == BlockType::FLUID_VALVE_OPEN || t == BlockType::OBSIDIAN_PIPE; }
+inline int CapacityOf(BlockType t) {
+    return t == BlockType::FLUID_TANK ? kPerTank : t == BlockType::FLUID_PIPE || t == BlockType::FLUID_VALVE_OPEN || t == BlockType::OBSIDIAN_PIPE ? kPerPipe : 0;
+}
 // Machines that join fluid networks from beside them.
 inline bool IsMachine(BlockType t) {
     return t == BlockType::OIL_DERRICK || t == BlockType::REFINERY || t == BlockType::ENGINE || t == BlockType::DRAIN || t == BlockType::FLUID_OUTLET ||
@@ -80,6 +88,7 @@ inline const char* Name(Kind k) {
     case Kind::Crude: return "crude oil";
     case Kind::Fuel: return "fuel";
     case Kind::Steam: return "steam";
+    case Kind::Lava: return "lava";
     default: return "nothing";
     }
 }

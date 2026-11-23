@@ -459,7 +459,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                         const glm::ivec3 n = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
                         const Block& other = cellAt(n);
                         // (And an air or fluid pipe out to a pressure gauge fixed to it.)
-                        const bool gauge = !valve && (block.type == BlockType::AIR_PIPE || block.type == BlockType::FLUID_PIPE) && other.type == BlockType::PRESSURE_GAUGE &&
+                        const bool gauge = !valve && (block.type == BlockType::AIR_PIPE || block.type == BlockType::FLUID_PIPE || block.type == BlockType::OBSIDIAN_PIPE) && other.type == BlockType::PRESSURE_GAUGE &&
                                            other.axis % 6 == face;
                         if (Power::PipeJoins(tube.type, other.type) || gauge) joined |= 1u << face;
                         if (gauge) gauges |= 1u << face;

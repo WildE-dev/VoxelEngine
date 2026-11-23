@@ -145,6 +145,7 @@ inline bool PipeJoins(BlockType pipe, BlockType other) {
     if (pipe == BlockType::AIR_PIPE) return IsAirPart(other) || other == BlockType::VALVE;
     if (pipe == BlockType::ITEM_PIPE || pipe == BlockType::FILTER_PIPE) return IsItemPart(other);
     if (pipe == BlockType::FLUID_PIPE) return Fluids::PipeJoins(other) || other == BlockType::PUMP; // (a pump sends its water up fluid pipes)
+    if (pipe == BlockType::OBSIDIAN_PIPE) return Fluids::PipeJoins(other);
     return false;
 }
 

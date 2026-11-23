@@ -568,6 +568,17 @@ thicker it is.
 in loses half a heart every 0.75 seconds (armour doesn't help), so stand back from
 lava when you pour water on it. Thin steam at a cloud's edge is harmless.
 
+**Obsidian.** Water touching lava always boils into steam. Half a block of water or more
+at once also cools the lava it touches into **obsidian**, while a trickle leaves the lava
+as it is. So pour a bucket's worth (a pump, a sluice) onto a lava pool to make it.
+Obsidian is very hard: 30 seconds by hand, 7.5 with a stone pickaxe, faster with iron
+or steel. Nothing else breaks it: TNT's blast leaves it standing, and raiders can't hack
+through it. It makes **obsidian pipes** (four from one), the only pipe that holds lava. An
+obsidian pipe touching lava draws it in, 32 units a second, as far as its network has
+room; any other part in the network (a fluid pipe, a tank) and it won't take lava.
+Obsidian pipes from a lava pool to the side of a **boiler** fire it instead of coal,
+burning 4 units of lava a second.
+
 `SteamTest` covers both rules on their own:
 - steam rises and spreads, stays under a roof, keeps out of water and fades away;
 - lava spreads into a small pool keeping every unit, fills a pit from the bottom, and pours over an edge;

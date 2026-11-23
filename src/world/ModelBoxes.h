@@ -19,7 +19,7 @@ inline unsigned Joins(const BlockAccess& world, const glm::ivec3& cell, const Bl
     for (int face = 0; face < kFaceCount; ++face) {
         Block other;
         if (!world.GetBlock(cell.x + kFaceOffsets[face][0], cell.y + kFaceOffsets[face][1], cell.z + kFaceOffsets[face][2], other)) continue;
-        const bool gauge = (pipe == BlockType::AIR_PIPE || pipe == BlockType::FLUID_PIPE) && !IsValveType(block.type) && other.type == BlockType::PRESSURE_GAUGE &&
+        const bool gauge = (pipe == BlockType::AIR_PIPE || pipe == BlockType::FLUID_PIPE || pipe == BlockType::OBSIDIAN_PIPE) && !IsValveType(block.type) && other.type == BlockType::PRESSURE_GAUGE &&
                            other.axis % 6 == face;
         if (Power::PipeJoins(pipe, other.type) || gauge) joined |= 1u << face;
     }

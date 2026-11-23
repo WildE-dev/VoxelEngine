@@ -9,6 +9,7 @@
 #include "world/Breathing.h"
 #include "server/ServerWorld.h"
 #include "world/Crafting.h"
+#include "world/Lava.h"
 #include "world/Multiblocks.h"
 #include "world/Smelting.h"
 
@@ -450,10 +451,18 @@ void Server::UpdatePower() {
             Worker& w = workers[pos];
             FluidNet* in = FluidNetAt(pos - glm::ivec3(0, 1, 0));
             FluidNet* out = FluidNetAt(pos + glm::ivec3(0, 1, 0));
+            // (Lava in obsidian pipes beside it fires it instead of coal.)
+            FluidNet* lava = nullptr;
+            for (const auto& d : kFaces)
+                if (FluidNet* n = FluidNetAt(pos + d); n && n->kind == Fluids::Kind::Lava && n->amount > 0) lava = n;
             if (!in || !out || in == out) w.state = Power::DrillState::NoChest;
             else if (in->kind != Fluids::Kind::Water || in->amount <= 0 || !out->Takes(Fluids::Kind::Steam) || out->Room() <= 0) w.state = Power::DrillState::Idle;
             else {
                 bool fire = now < w.next;
+                if (!fire && lava) {
+                    const int burn = std::max(1, static_cast<int>(Fluids::kLavaBurn * Power::kInterval));
+                    if (lava->amount >= burn) lava->amount -= burn, fire = true;
+                }
                 if (!fire)
                     // (Coke first: it lasts longer.)
                     for (const BlockType fuel : { BlockType::COKE, BlockType::COAL }) {
@@ -486,6 +495,24 @@ void Server::UpdatePower() {
                 water.TakeDrainUse(pos);
                 water.SetDrainBudget(pos, 0);
             }
+        }
+    }
+    // Obsidian pipes touching lava draw it in, as far as their network has room.
+    {
+        const int perPipe = static_cast<int>(Fluids::kLavaIntake * Power::kInterval);
+        for (FluidNet& fn : fluidNets) {
+            if (!fn.lavaProof || !fn.Takes(Fluids::Kind::Lava)) continue;
+            for (const auto& m : fn.members)
+                for (const auto& d : kFaces) {
+                    if (fn.Room() <= 0) break;
+                    const glm::ivec3 c = m + d;
+                    const Block lavaCell = blockAt(c);
+                    if (!lavaCell.IsLava()) continue;
+                    const int take = std::min({ perPipe, Lava::Volume(lavaCell), fn.Room() });
+                    world->SetBlock(c.x, c.y, c.z, Lava::WithVolume(Lava::Volume(lavaCell) - take));
+                    fn.amount += take;
+                    fn.kind = Fluids::Kind::Lava;
+                }
         }
     }
     // Steam lets itself out into the air: out of the end face of every open end of its
@@ -794,8 +821,10 @@ void Server::BuildFluidNets() {
                 fluidNetOf[n] = index;
                 net.members.push_back(n);
             }
+        net.lavaProof = true;
         for (const auto& m : net.members) {
             net.capacity += Fluids::CapacityOf(blockAt(m).type);
+            net.lavaProof &= blockAt(m).type == BlockType::OBSIDIAN_PIPE;
             auto h = fluidHeld.find(m);
             if (h == fluidHeld.end() || h->second <= 0) continue;
             net.amount += h->second;
@@ -1224,6 +1253,9 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
         }
         else if (b.type == BlockType::TURBINE) {
             text += engines.count(pos) && engines[pos] ? "Steam turbine: running. " : "Steam turbine: stopped (it needs fluid pipes beside it with steam). ";
+        }
+        else if (b.type == BlockType::OBSIDIAN_PIPE && !FluidNetAt(pos)) {
+            text += "Obsidian pipe: empty. Dip an end in lava and it draws it in (only obsidian pipes hold lava). ";
         }
         else if (b.type == BlockType::BOILER) {
             const Worker w = workers.count(pos) ? workers[pos] : Worker{};

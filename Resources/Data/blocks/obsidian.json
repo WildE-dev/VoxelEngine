@@ -1,0 +1,2 @@
+// obsidian: a block (the format is in README.md, here)
+{ "name": "Obsidian", "textures": { "all": "obsidian" }, "hardness": 30, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#1c1028" }
