@@ -1915,11 +1915,19 @@ they happen and fade with distance.
 - **Hurt** grunts, splashes into water, a **thump** when a creature is hit, a dwarf's
   grunt now and then, a chime when crafting, and **rain** while it rains where you
   are. Under a roof it's quiet.
+- **Machines** at work hum where they stand: water wheels creak and splash (louder the
+  faster they turn), compressors chug, drills grind, pumps gurgle, engines putter,
+  turbines whoosh, smelters and furnaces roar, crushers crunch, boilers bubble, air
+  diffusers hiss, and formed structures each have their own (a derrick's pumpjack, a
+  refinery's hum). The nearest eight within earshot play, as seamless loops started at
+  different points so a row of one kind doesn't pulse in step. Pistons thunk as they
+  push and pull.
 
-Every sound is made by `tools/make_sounds.py` from noise and tones, so there are no
-recordings to license. Run it to remake `Resources/Sounds/` (16-bit mono WAV, with
-variants as `name_1.wav`, `name_2.wav` and so on, picked at random at a slightly varied
-pitch).
+The sounds were generated with Scenario's ElevenLabs Sound Effects model and converted
+by `tools/convert_sounds.py`, which trims, shortens, fades and levels them into
+`Resources/Sounds/` (16-bit mono WAV, with variants as `name_1.wav`, `name_2.wav` and so
+on, picked at random at a slightly varied pitch). `tools/sound_prompts.txt` has each
+sound's prompt and settings, to remake or change any of them.
 
 On macOS the game uses the system's OpenAL framework. Elsewhere it uses an
 installed OpenAL, such as openal-soft. Without one, or without an audio device, it
@@ -2038,5 +2046,5 @@ tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, We
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
             BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest, ChestTest, BedTest,
             PowerTest, SignalTest, FactoryTest, DataTest
-tools/      make_sounds.py (sound effects), make_item_textures.py (item icons)
+tools/      convert_sounds.py and sound_prompts.txt (sound effects), make_item_textures.py (item icons)
 ```

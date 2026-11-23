@@ -142,6 +142,13 @@ struct Audio::Impl {
     std::vector<ALuint> sources;                        // a pool for one-shot sounds
     ALuint loopSource = 0;
     std::string loopName;
+    // The hums' sources, and what each is playing (empty: nothing).
+    struct HumSource {
+        ALuint source = 0;
+        std::string name;
+        glm::vec3 position{ 0.0f };
+    };
+    std::vector<HumSource> hums;
     std::mt19937 rng{ 7 };
     size_t next = 0;
     float master = 1.0f, loopVolume = 0.0f;
@@ -178,6 +185,10 @@ Audio::~Audio() {
     if (impl->loopSource) {
         alSourceStop(impl->loopSource);
         alDeleteSources(1, &impl->loopSource);
+    }
+    for (auto& h : impl->hums) {
+        alSourceStop(h.source);
+        alDeleteSources(1, &h.source);
     }
     for (auto& [name, buffers] : impl->sounds) alDeleteBuffers(static_cast<ALsizei>(buffers.size()), buffers.data());
     alcMakeContextCurrent(nullptr);
@@ -232,6 +243,14 @@ bool Audio::Init(const std::string& directory) {
     alSourcei(impl->loopSource, AL_SOURCE_RELATIVE, AL_TRUE);
     alSourcei(impl->loopSource, AL_LOOPING, AL_TRUE);
     alSource3f(impl->loopSource, AL_POSITION, 0.0f, 0.0f, 0.0f);
+    impl->hums.resize(kMaxHums);
+    for (auto& h : impl->hums) {
+        alGenSources(1, &h.source);
+        alSourcei(h.source, AL_LOOPING, AL_TRUE);
+        alSourcef(h.source, AL_REFERENCE_DISTANCE, 2.5f);
+        alSourcef(h.source, AL_MAX_DISTANCE, 32.0f);
+        alSourcef(h.source, AL_ROLLOFF_FACTOR, 1.4f);
+    }
     std::cout << "[audio] " << LoadedCount() << " sounds loaded" << std::endl;
     return true;
 }
@@ -306,6 +325,49 @@ void Audio::SetLoop(const std::string& name, float volume) {
     alSourcef(impl->loopSource, AL_GAIN, volume * impl->master);
 }
 
+void Audio::SetHums(const std::vector<Hum>& wanted) {
+    if (!impl->context) return;
+    const size_t n = std::min(wanted.size(), kMaxHums);
+    // Sources already playing a wanted hum keep it; the others are free for the rest.
+    std::vector<bool> kept(impl->hums.size(), false), placed(n, false);
+    for (size_t i = 0; i < n; i++)
+        for (size_t s = 0; s < impl->hums.size(); s++) {
+            auto& h = impl->hums[s];
+            if (kept[s] || h.name != wanted[i].name || glm::distance(h.position, wanted[i].position) > 0.01f) continue;
+            kept[s] = placed[i] = true;
+            alSourcef(h.source, AL_GAIN, wanted[i].volume * impl->master);
+            break;
+        }
+    for (size_t i = 0; i < n; i++) {
+        if (placed[i]) continue;
+        const ALuint buffer = impl->Buffer(wanted[i].name);
+        if (!buffer) continue;
+        for (size_t s = 0; s < impl->hums.size(); s++) {
+            if (kept[s]) continue;
+            auto& h = impl->hums[s];
+            kept[s] = true;
+            alSourceStop(h.source);
+            alSourcei(h.source, AL_BUFFER, static_cast<ALint>(buffer));
+            alSource3f(h.source, AL_POSITION, wanted[i].position.x, wanted[i].position.y, wanted[i].position.z);
+            alSourcef(h.source, AL_GAIN, wanted[i].volume * impl->master);
+            // Start somewhere along the loop, so several of one kind don't pulse in step.
+            ALint frames = 0;
+            alGetBufferi(buffer, AL_SIZE, &frames);
+            const int samples = frames / 2;
+            if (samples > 0) alSourcei(h.source, AL_SAMPLE_OFFSET, std::uniform_int_distribution<int>(0, samples - 1)(impl->rng));
+            alSourcePlay(h.source);
+            h.name = wanted[i].name;
+            h.position = wanted[i].position;
+            break;
+        }
+    }
+    for (size_t s = 0; s < impl->hums.size(); s++)
+        if (!kept[s] && !impl->hums[s].name.empty()) {
+            alSourceStop(impl->hums[s].source);
+            impl->hums[s].name.clear();
+        }
+}
+
 #else // no audio: everything does nothing
 
 struct Audio::Impl {};
@@ -319,5 +381,6 @@ void Audio::SetVolume(float) {}
 void Audio::Play(const std::string&, const glm::vec3&, float, float) {}
 void Audio::PlayHere(const std::string&, float, float) {}
 void Audio::SetLoop(const std::string&, float) {}
+void Audio::SetHums(const std::vector<Hum>&) {}
 
 #endif

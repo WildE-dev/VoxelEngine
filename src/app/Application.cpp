@@ -453,7 +453,10 @@ void Application::StopGame() {
     mining = false;
     walkers.clear();
     creatureSounds.clear();
-    if (audio) audio->SetLoop("rain_loop", 0.0f);
+    if (audio) {
+        audio->SetLoop("rain_loop", 0.0f);
+        audio->SetHums({}); // (machines' hums stop with the world)
+    }
     paused = pauseSettings = false;
     chatOpen = inventoryOpen = false;
     landedAt = 0.0;
@@ -1230,6 +1233,57 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
         }
     }
     wheelAngles.swap(angles);
+
+    // Machines at work hum where they are: the nearest few within earshot (Audio::SetHums).
+    if (!audio) return;
+    const glm::vec3 ear = camera.GetPosition();
+    struct Near { Audio::Hum hum; float distance; };
+    std::vector<Near> near;
+    const auto working = static_cast<uint8_t>(Power::DrillState::Working);
+    for (const auto& m : client->GetMachines()) {
+        const glm::vec3 at = glm::vec3(m.pos) + 0.5f;
+        const float distance = glm::distance(at, ear);
+        if (distance > 28.0f) continue;
+        const char* name = nullptr;
+        float volume = 0.5f;
+        switch (static_cast<BlockType>(m.type)) {
+        case BlockType::WATER_WHEEL:
+            if (m.speed > 8) name = "hum_wheel", volume = 0.2f + 0.45f * m.speed / 255.0f; // louder the faster it turns
+            break;
+        case BlockType::COMPRESSOR: if (m.state == working) name = "hum_compressor", volume = 0.45f; break;
+        case BlockType::DRILL: if (m.state == working) name = "hum_drill", volume = 0.55f; break;
+        case BlockType::PUMP: if (m.state == working) name = "hum_pump", volume = 0.45f; break;
+        case BlockType::ENGINE: if (m.state == working) name = "hum_engine", volume = 0.55f; break;
+        case BlockType::TURBINE: if (m.state == working) name = "hum_turbine", volume = 0.5f; break;
+        case BlockType::SMELTER:
+        case BlockType::SMELTER_LIT: if (m.state == working) name = "hum_furnace", volume = 0.45f; break;
+        case BlockType::CRUSHER: if (m.state == working) name = "hum_crusher", volume = 0.55f; break;
+        case BlockType::BOILER: if (m.state == working) name = "hum_boiler", volume = 0.45f; break;
+        case BlockType::AIR_DIFFUSER: if (m.state == working) name = "hum_diffuser", volume = 0.25f; break;
+        case BlockType::HARVESTER:
+        case BlockType::EXTRACTOR:
+        case BlockType::CRAFTER: if (m.state == working) name = "hum_machine", volume = 0.35f; break;
+        case BlockType::MULTIBLOCK: {
+            Block core;
+            if (m.state != working || !world->GetBlock(m.pos.x, m.pos.y, m.pos.z, core) || core.type != BlockType::MULTIBLOCK) break;
+            switch (Multiblocks::KindOf(core)) {
+            case Multiblocks::Kind::OilDerrick: name = "hum_derrick", volume = 0.7f; break;
+            case Multiblocks::Kind::Refinery: name = "hum_refinery", volume = 0.6f; break;
+            case Multiblocks::Kind::BlastFurnace: name = "hum_furnace", volume = 0.75f; break;
+            case Multiblocks::Kind::DieselCompressor: name = "hum_engine", volume = 0.75f; break;
+            case Multiblocks::Kind::CokeOven: name = "hum_furnace", volume = 0.55f; break;
+            default: break;
+            }
+            break;
+        }
+        default: break;
+        }
+        if (name) near.push_back({ { name, at, volume }, distance });
+    }
+    std::sort(near.begin(), near.end(), [](const Near& a, const Near& b) { return a.distance < b.distance; });
+    std::vector<Audio::Hum> hums;
+    for (size_t i = 0; i < near.size() && i < Audio::kMaxHums; i++) hums.push_back(near[i].hum);
+    audio->SetHums(hums);
 }
 
 namespace {
@@ -3463,6 +3517,11 @@ void Application::UpdateSounds() {
     // What others broke and built (a few at a time: a collapse or the laser makes many).
     int played = 0;
     for (const auto& event : client->TakeBlockEvents()) {
+        // A piston's head shooting out or pulling back: a pneumatic thunk, not a block placed or broken.
+        if (event.type == BlockType::PISTON_HEAD) {
+            if (played++ < 4) PlayAt("piston", event.pos, 0.7f);
+            continue;
+        }
         if (played < 4) PlayAt(event.placed ? "place" : BreakSound(event.type), event.pos, 0.8f);
         if (!event.placed && played < 24 && event.type != BlockType::WATER) SpawnParticles(event.pos, event.type, played < 4 ? 14 : 4);
         played++;

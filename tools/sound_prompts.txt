@@ -1,0 +1,62 @@
+# How each sound in Resources/Sounds was made.
+#
+# Generated with Scenario (scenario.com), model "ElevenLabs Sound Effects v3"
+# (model_elevenlabs-sound-effects-v3), MP3 output (mp3_44100_192), then turned into the
+# game's WAVs with: python tools/convert_sounds.py <folder of name.mp3 files>
+# (which trims, shortens, fades and levels them; see that script).
+#
+# Columns: name | seconds asked for | prompt influence | loop | prompt
+# To remake one, generate it again with the same settings (or a changed prompt), save
+# it as name.mp3 in a folder, and convert that folder.
+
+step_soft_1 | 0.5 | 0.7 | no | One single soft footstep on grass and earth, short muffled thud with a light rustle, close up, dry, no reverb, isolated game sound effect
+step_soft_2 | 0.5 | 0.7 | no | One single soft footstep on grass and earth, a slightly heavier muffled step with a faint crunch of leaves, close up, dry, no reverb, isolated game sound effect
+step_soft_3 | 0.5 | 0.7 | no | One single light footstep on soft dirt path, quick soft thump, close up, dry, no reverb, isolated game sound effect
+step_hard_1 | 0.5 | 0.7 | no | One single boot footstep on hard stone floor, short crisp tap, close up, dry, no reverb, isolated game sound effect
+step_hard_2 | 0.5 | 0.7 | no | One single boot footstep on rough stone, short gritty knock, close up, dry, no reverb, isolated game sound effect
+step_hard_3 | 0.5 | 0.7 | no | One single footstep on smooth stone bricks, short hard click of a boot heel, close up, dry, no reverb, isolated game sound effect
+step_sand_1 | 0.5 | 0.7 | no | One single footstep in dry sand, short soft gritty crunch, close up, dry, no reverb, isolated game sound effect
+step_sand_2 | 0.5 | 0.7 | no | One single footstep in fresh snow, short soft squeaky crunch, close up, dry, no reverb, isolated game sound effect
+step_sand_3 | 0.5 | 0.7 | no | One single footstep on coarse gravelly sand, short crunchy scuff, close up, dry, no reverb, isolated game sound effect
+step_wood_1 | 0.5 | 0.7 | no | One single boot footstep on hollow wooden planks floor, short hollow knock, close up, dry, no reverb, isolated game sound effect
+step_wood_2 | 0.5 | 0.7 | no | One single footstep on a wooden deck, short woody thump with slight creak, close up, dry, no reverb, isolated game sound effect
+step_wood_3 | 0.5 | 0.7 | no | One single light footstep on wooden boards, short dull wooden tap, close up, dry, no reverb, isolated game sound effect
+dig_soft_1 | 0.5 | 0.7 | no | A single small shovel jab into soft dirt, short soft scrape, close up, dry, no reverb, isolated game sound effect
+dig_soft_2 | 0.5 | 0.7 | no | A single quick scoop of loose earth with a hand trowel, short dull crunch, close up, dry, no reverb, isolated game sound effect
+dig_hard_1 | 0.5 | 0.7 | no | A single metal pickaxe strike on rock, sharp short clink and chip, close up, dry, no reverb, isolated game sound effect
+dig_hard_2 | 0.5 | 0.7 | no | A single pickaxe hit chipping stone, short tick of metal on rock with a few tiny pebbles, close up, dry, no reverb, isolated game sound effect
+break_soft | 0.6 | 0.7 | no | A clump of dirt and grass breaking apart and crumbling, short soft earthy crunch and scatter, close up, dry, no reverb, isolated game sound effect
+break_hard | 0.6 | 0.7 | no | A block of stone cracking and breaking apart, short sharp rock crack with falling rubble, close up, dry, no reverb, isolated game sound effect
+break_wood | 0.5 | 0.7 | no | A wooden plank block snapping and breaking, short dry wood crack and splinter, close up, dry, no reverb, isolated game sound effect
+break_glass | 0.8 | 0.7 | no | A pane of glass shattering, short bright crash with tinkling shards, close up, dry, no reverb, isolated game sound effect
+place | 0.5 | 0.7 | no | Setting a heavy block down onto the ground, one short solid muffled thud, close up, dry, no reverb, isolated game sound effect
+pickup | 0.5 | 0.7 | no | Picking up a small item, a quick soft cheerful pop blip, short and bright, isolated game pickup sound effect
+craft | 0.7 | 0.7 | no | Crafting an item at a workbench, a quick wooden tap and clink followed by a short pleasant rising chime, isolated game sound effect
+hurt | 0.5 | 0.7 | no | A man getting hurt, one short pained grunt oof, close up, dry, no reverb, no words, isolated game sound effect
+hit | 0.5 | 0.7 | no | A punch landing on a body, one short dull fleshy thump, close up, dry, no reverb, isolated game hit sound effect
+splash | 0.8 | 0.7 | no | A person jumping into water, one short splash with a few droplets, close up, isolated game sound effect
+grunt_1 | 0.6 | 0.7 | no | A gruff bearded dwarf warrior gives one short low aggressive grunt, hostile, close up, dry, no words, isolated game creature sound effect
+grunt_2 | 0.6 | 0.7 | no | A gruff bearded dwarf gives one short low growling huh, menacing, close up, dry, no words, isolated game creature sound effect
+eat | 0.6 | 0.7 | no | Taking one big crunchy bite of bread and chewing briefly, close up, dry, no reverb, isolated game eating sound effect
+bow | 0.5 | 0.7 | no | A wooden bow releasing an arrow, short taut string twang and whoosh, close up, dry, isolated game sound effect
+explosion | 2.0 | 0.6 | no | A barrel of gunpowder exploding nearby, a deep boom with rumbling debris falling, isolated game explosion sound effect
+thunder | 4.0 | 0.6 | no | A thunder clap from a nearby lightning strike, a sharp crack followed by a long deep rolling rumble fading out, outdoors, isolated sound effect
+birds_1 | 1.5 | 0.6 | no | A single small songbird singing one short cheerful chirping phrase in a quiet forest, no other birds, isolated nature sound effect
+birds_2 | 1.8 | 0.6 | no | A single robin singing a short sweet warbling song phrase in the morning, no other birds, isolated nature sound effect
+birds_3 | 1.2 | 0.6 | no | A small finch giving two quick bright chirps and a short trill, no other birds, quiet countryside, isolated nature sound effect
+crickets | 2.5 | 0.6 | no | A few crickets chirping steadily in a meadow on a calm summer night, no other sounds, isolated nature ambience
+rain_loop | 8.0 | 0.6 | yes | Steady moderate rain falling on grass and leaves outdoors, even and continuous with no thunder, seamless ambience
+piston | 0.6 | 0.7 | no | A pneumatic piston firing once, a short sharp hiss of air with a solid metal clunk, close up, dry, isolated game sound effect
+hum_wheel | 5.0 | 0.6 | yes | A large wooden water wheel turning steadily in a stream, rhythmic creaking of the wooden axle and paddles with water splashing and pouring, continuous, seamless loop
+hum_compressor | 4.0 | 0.6 | yes | An old piston air compressor running, steady rhythmic mechanical chugging with pneumatic hissing, continuous, seamless loop, industrial machine
+hum_drill | 4.0 | 0.6 | yes | A pneumatic rock drill boring down into stone, continuous rumbling grinding and rattling, steady, seamless loop, industrial machine
+hum_pump | 4.0 | 0.6 | yes | An air powered water pump working, rhythmic sucking and gurgling of water through pipes with a soft mechanical thump each stroke, continuous, seamless loop
+hum_engine | 4.0 | 0.6 | yes | A small single cylinder diesel engine idling steadily, low rhythmic putt putt putt rumble, continuous, seamless loop, industrial machine
+hum_turbine | 4.0 | 0.6 | yes | A steam turbine spinning, a steady rushing whoosh of steam with a smooth high mechanical whine, continuous, seamless loop, industrial machine
+hum_furnace | 4.0 | 0.6 | yes | A roaring furnace with a strong coal fire, steady deep whooshing roar of flames and crackling embers, continuous, seamless loop
+hum_crusher | 4.0 | 0.6 | yes | A rock crusher machine grinding ore, heavy rhythmic crunching of stones between iron jaws with rattling gravel, continuous, seamless loop, industrial machine
+hum_boiler | 4.0 | 0.6 | yes | An iron steam boiler on a fire, water bubbling and rumbling inside with steady hissing steam escaping, continuous, seamless loop
+hum_derrick | 5.0 | 0.6 | yes | An old oil pumpjack working, slow heavy rhythmic creak and clank of the rocking beam with a deep pumping thud, continuous, seamless loop, industrial machine
+hum_refinery | 4.0 | 0.6 | yes | An oil refinery machine running, deep steady industrial hum with bubbling liquid in pipes and occasional hiss of valves, continuous, seamless loop
+hum_diffuser | 4.0 | 0.6 | yes | A ventilation vent gently blowing fresh air, soft steady airy hiss, quiet and continuous, seamless loop
+hum_machine | 4.0 | 0.6 | yes | A small workshop machine running, steady whirring gears and soft clicking mechanism, continuous, seamless loop

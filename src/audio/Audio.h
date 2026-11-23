@@ -1,9 +1,10 @@
 #pragma once
 // Sound effects through OpenAL: short sounds played at a place in the world (heard
-// from the listener's position, quieter with distance) or straight in the ears, and
-// one looping ambience (rain). Sounds are 16-bit mono WAV files in Resources/Sounds,
-// made by tools/make_sounds.py; "name" plays name.wav, or one of name_1.wav,
-// name_2.wav, ... at random, at a slightly varied pitch.
+// from the listener's position, quieter with distance) or straight in the ears, one
+// looping ambience (rain), and looping hums at places (machines at work). Sounds are
+// 16-bit mono WAV files in Resources/Sounds (generated, then converted by
+// tools/convert_sounds.py); "name" plays name.wav, or one of name_1.wav, name_2.wav, ...
+// at random, at a slightly varied pitch.
 //
 // Without OpenAL (VOXEL_AUDIO not defined) everything here quietly does nothing.
 #include <cstdint>
@@ -38,6 +39,16 @@ public:
     void PlayHere(const std::string& name, float volume = 1.0f, float pitchSpread = 0.05f);
     // The looping ambience: `name` at `volume` (0 stops it).
     void SetLoop(const std::string& name, float volume);
+    // Looping sounds at places in the world: every frame, the ones that should be
+    // playing now (nearest first). The first kMaxHums play, each carrying on from frame to
+    // frame while it's still asked for (by name and position); the rest stop.
+    struct Hum {
+        std::string name;
+        glm::vec3 position{ 0.0f };
+        float volume = 1.0f;
+    };
+    static constexpr size_t kMaxHums = 8;
+    void SetHums(const std::vector<Hum>& hums);
 
     // The sound family for a block: footsteps, mining and breaking go by what it's made of.
     static const char* Material(BlockType type); // "soft", "hard", "sand", "wood" or "glass"
