@@ -67,6 +67,7 @@ constexpr BlockType kInventoryBlocks[] = {
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
+constexpr const char* kChatHistoryFile = "chat_history.txt";
 
 // Atlas tile shown for a block in the hotbar and inventory: a sprite's own picture, a
 // block's side.
@@ -355,6 +356,7 @@ bool Application::Init(const ClientOptions& options) {
     LoadData();
     LoadBlockTextures();
     LoadHotbar();
+    LoadChatHistory();
     // VOXEL_OPEN_INVENTORY=1 starts with the inventory open (for screenshots).
     if (std::getenv("VOXEL_OPEN_INVENTORY")) SetInventoryOpen(true);
     ApplySettings();
@@ -1864,6 +1866,7 @@ void Application::OpenChat(char openedWith) {
     chatOpen = true;
     chatOpenedWith = openedWith;
     chatOpenFrames = 0;
+    chatHistoryAt = -1;
     std::snprintf(chatInput, sizeof chatInput, "%s", openedWith == '/' ? "/" : "");
 }
 
@@ -1926,12 +1929,33 @@ void Application::DrawChat() {
         // the 't', keep a single '/'), and the box would select what's in it (the '/'),
         // so the cursor goes to the end with nothing selected. Done inside the box's
         // own edit (a callback): it keeps its own copy of the text while typing.
+        // Up and Down step back and forward through what was typed before, the newest
+        // first; past the newest is the line being typed, as it was left.
         struct Opening {
             char with;
             int frames;
-        } opening{ chatOpenedWith, chatOpenFrames };
+            const std::vector<std::string>* history;
+            int* at;
+            std::string* draft;
+        } opening{ chatOpenedWith, chatOpenFrames, &chatHistory, &chatHistoryAt, &chatDraft };
         auto onEdit = [](ImGuiInputTextCallbackData* data) {
             const auto* o = static_cast<const Opening*>(data->UserData);
+            if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory) {
+                const int count = static_cast<int>(o->history->size());
+                const int was = *o->at;
+                if (data->EventKey == ImGuiKey_UpArrow && count > 0) {
+                    if (was == -1) *o->draft = std::string(data->Buf, data->BufTextLen), *o->at = count - 1;
+                    else if (was > 0) *o->at = was - 1;
+                }
+                else if (data->EventKey == ImGuiKey_DownArrow && was != -1)
+                    *o->at = was + 1 < count ? was + 1 : -1;
+                if (*o->at != was) {
+                    const std::string& text = *o->at == -1 ? *o->draft : (*o->history)[static_cast<size_t>(*o->at)];
+                    data->DeleteChars(0, data->BufTextLen);
+                    data->InsertChars(0, text.c_str());
+                }
+                return 0;
+            }
             if (o->frames >= 3) return 0;
             const std::string text(data->Buf, data->BufTextLen);
             if (o->with == 't' && (text == "t" || text == "T")) data->DeleteChars(0, data->BufTextLen);
@@ -1940,10 +1964,12 @@ void Application::DrawChat() {
             data->CursorPos = data->BufTextLen;
             return 0;
         };
-        const bool send = ImGui::InputText("##chat", chatInput, sizeof chatInput, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackAlways,
+        const bool send = ImGui::InputText("##chat", chatInput, sizeof chatInput,
+                                           ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_CallbackHistory,
                                            onEdit, &opening);
         chatOpenFrames++;
         if (send) {
+            RememberChat(chatInput);
             client->SendChat(chatInput);
             CloseChat();
         }
@@ -2351,6 +2377,26 @@ void Application::LoadHotbar() {
     // A second line: the tool in each slot (0 none).
     for (int i = 0, tool; i < kHotbarSlots && file >> tool; i++)
         if (tool > 0 && tool < static_cast<int>(Tool::Count)) hotbarTools[i] = static_cast<Tool>(tool);
+}
+
+void Application::LoadChatHistory() {
+    chatHistory.clear();
+    std::ifstream file(kChatHistoryFile);
+    for (std::string line; std::getline(file, line);) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!line.empty()) chatHistory.push_back(line.substr(0, sizeof chatInput - 1));
+    }
+    if (chatHistory.size() > kChatHistoryMax) chatHistory.erase(chatHistory.begin(), chatHistory.end() - kChatHistoryMax);
+}
+
+void Application::RememberChat(const std::string& line) {
+    // Nothing worth recalling in an empty line or a lone '/', and no repeats in a row.
+    if (line.find_first_not_of(" /") == std::string::npos) return;
+    if (!chatHistory.empty() && chatHistory.back() == line) return;
+    chatHistory.push_back(line);
+    if (chatHistory.size() > kChatHistoryMax) chatHistory.erase(chatHistory.begin());
+    std::ofstream file(kChatHistoryFile, std::ios::trunc);
+    for (const auto& l : chatHistory) file << l << '\n';
 }
 
 void Application::SaveHotbar() const {

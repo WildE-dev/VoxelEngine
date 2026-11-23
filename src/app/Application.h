@@ -120,6 +120,10 @@ private:
     void SetInventoryOpen(bool open);
     void LoadHotbar();
     void SaveHotbar() const;
+    // What was typed in the chat before (oldest first), kept in chat_history.txt: Up and
+    // Down in the chat box step through it.
+    void LoadChatHistory();
+    void RememberChat(const std::string& line);
 
     void HandleContinuousInput(float deltaTime);
     void UpdateNetwork();
@@ -245,6 +249,10 @@ private:
     char chatInput[260] = {};
     char chatOpenedWith = 0; // the key that opened it ('t', '/' or 0), see DrawChat
     int chatOpenFrames = 0;
+    std::vector<std::string> chatHistory;
+    int chatHistoryAt = -1; // the line of it shown in the box (-1: the new line being typed)
+    std::string chatDraft;  // the new line, kept while stepping back through the history
+    static constexpr size_t kChatHistoryMax = 100;
     bool sheltered = false; // something overhead: no rain falls here
     float rainHere = 0.0f;  // rain drawn around the camera, eased toward the weather
     static constexpr int kHotbarSlots = 10; // keys 1-9 and 0
