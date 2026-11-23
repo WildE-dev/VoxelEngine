@@ -38,12 +38,21 @@ void SteamCloud::Update(const BlockAccess& world) {
     const int fade = kFadePerThousand * (cells.size() > kMaxCells * 3 / 4 ? 3 : 1);
     Cells next;
     next.reserve(cells.size() * 2);
+    // Whether each cell's open, asked of the world once a step (cells and their neighbours
+    // are asked about over and over otherwise).
+    std::unordered_map<glm::ivec3, bool, Coords::IVec3Hash> open;
+    open.reserve(cells.size() * 3);
+    auto isOpen = [&](const glm::ivec3& c) {
+        auto it = open.find(c);
+        if (it != open.end()) return it->second;
+        return open[c] = Open(world, c);
+    };
     for (const auto& [cell, units] : cells) {
         int left = units;
-        if (!Open(world, cell)) {
+        if (!isOpen(cell)) {
             // Something filled its cell: up out of the way (or gone, if it can't).
             const glm::ivec3 up = cell + glm::ivec3(0, 1, 0);
-            if (Open(world, up)) next[up] = static_cast<uint16_t>(std::min(kMaxCell, next[up] + left));
+            if (isOpen(up)) next[up] = static_cast<uint16_t>(std::min(kMaxCell, next[up] + left));
             continue;
         }
         left -= left * fade / 1000 + (left < 40 ? 1 : 0); // (thin wisps go, a unit at a time)
@@ -52,7 +61,7 @@ void SteamCloud::Update(const BlockAccess& world) {
         for (const Way& w : kWays) {
             const glm::ivec3 n = cell + w.d;
             const int theirs = At(n);
-            if (theirs >= start || !Open(world, n)) continue;
+            if (theirs >= start || !isOpen(n)) continue;
             // (Thick steam rises hard; thin steam barely, hanging and spreading out.)
             const int share = w.d.y > 0 ? 20 + w.perThousand * std::min(start, 400) / 400 : w.perThousand;
             const int give = (start - theirs) * share / 1000;

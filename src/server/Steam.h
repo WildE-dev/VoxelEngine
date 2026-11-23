@@ -31,7 +31,7 @@ public:
     static constexpr int kFadePerThousand = 22; // of each cell, every step (and a unit off thin ones)
     static constexpr int kMin = 2;              // less than this and it's gone
     static constexpr int kMaxCell = 8000;       // most a cell holds
-    static constexpr size_t kMaxCells = 40000;  // cells of steam in the world, at most
+    static constexpr size_t kMaxCells = 16000;  // cells of steam in the world, at most (a step costs about a millisecond per thousand)
     // Thick steam scalds: a player with this much in a cell their body is in is hurt
     // kScaldDamage every kScaldInterval seconds (armour doesn't help).
     static constexpr int kScaldUnits = 200;

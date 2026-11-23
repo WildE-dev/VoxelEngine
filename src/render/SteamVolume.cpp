@@ -1,5 +1,7 @@
 #include "render/SteamVolume.h"
 
+#include <algorithm>
+#include <climits>
 #include <cmath>
 #include <unordered_map>
 
@@ -31,25 +33,31 @@ SteamVolume::~SteamVolume() {
 void SteamVolume::Update(const std::vector<glm::vec4>& cells, uint32_t version) {
     if (version == meshed) return;
     meshed = version;
-    std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> density;
-    density.reserve(cells.size() * 2);
-    for (const auto& c : cells) density[glm::ivec3(c)] = c.w;
+    // How thick the steam is in each cell, in a flat grid over the cloud's bounds (and a
+    // cell of nothing round them), for fast lookups.
+    glm::ivec3 lo(INT_MAX), hi(INT_MIN);
+    for (const auto& c : cells) lo = glm::min(lo, glm::ivec3(c)), hi = glm::max(hi, glm::ivec3(c));
+    lo -= glm::ivec3(1), hi += glm::ivec3(1);
+    const glm::ivec3 size = cells.empty() ? glm::ivec3(0) : hi - lo + glm::ivec3(1);
+    std::vector<float> grid(static_cast<size_t>(size.x) * size.y * size.z, -1.0f); // (-1: none)
+    auto slot = [&](const glm::ivec3& p) { return static_cast<size_t>(((p.z - lo.z) * size.y + (p.y - lo.y)) * size.x + (p.x - lo.x)); };
+    for (const auto& c : cells) grid[slot(glm::ivec3(c))] = c.w;
+    auto at = [&](const glm::ivec3& p) {
+        if (p.x < lo.x || p.y < lo.y || p.z < lo.z || p.x > hi.x || p.y > hi.y || p.z > hi.z) return -1.0f;
+        return grid[slot(p)];
+    };
     std::vector<float> data;
     data.reserve(cells.size() * 6 * 6 * 4);
     // How thick the steam is at a corner of the grid: the mean of the eight cells round it
     // (none counting as nothing). Faces take their mist from their corners, so it fades
     // smoothly across them and to nothing at the cloud's edge: the cells blend together
     // instead of showing as boxes.
-    std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> corners;
     auto corner = [&](const glm::ivec3& p) {
-        auto it = corners.find(p);
-        if (it != corners.end()) return it->second;
         float sum = 0.0f;
         for (int dx = -1; dx <= 0; dx++)
             for (int dy = -1; dy <= 0; dy++)
-                for (int dz = -1; dz <= 0; dz++)
-                    if (auto c = density.find(p + glm::ivec3(dx, dy, dz)); c != density.end()) sum += c->second;
-        return corners[p] = sum / 8.0f;
+                for (int dz = -1; dz <= 0; dz++) sum += std::max(0.0f, at(p + glm::ivec3(dx, dy, dz)));
+        return sum / 8.0f;
     };
     // A square across the cell's face on `axis`, at `at` (its low corner), misty by its
     // corners (`scale`: how much of each corner's steam it shows; shared faces carry the
@@ -66,7 +74,9 @@ void SteamVolume::Update(const std::vector<glm::vec4>& cells, uint32_t version) 
         if (!any) return;
         for (const int i : { 0, 1, 2, 0, 2, 3 }) data.insert(data.end(), { static_cast<float>(p[i].x), static_cast<float>(p[i].y), static_cast<float>(p[i].z), a[i] });
     };
-    for (const auto& [cell, d] : density) {
+    for (const auto& c4 : cells) {
+        const glm::ivec3 cell(c4);
+        const float d = c4.w;
         for (int axis = 0; axis < 3; axis++) {
             glm::ivec3 low = cell, high = cell;
             low[axis] -= 1;
@@ -74,9 +84,9 @@ void SteamVolume::Update(const std::vector<glm::vec4>& cells, uint32_t version) 
             // The face toward -axis: shared with steam there (each shared face once, as
             // misty as the two cells' steam), or the cloud's edge.
             (void)d;
-            face(cell, axis, density.count(low) ? 1.0f : 1.5f);
+            face(cell, axis, at(low) >= 0.0f ? 1.0f : 1.5f);
             // The face toward +axis, only at the cloud's edge (shared ones are the other's).
-            if (!density.count(high)) {
+            if (at(high) < 0.0f) {
                 glm::ivec3 at = cell;
                 at[axis] += 1;
                 face(at, axis, 1.5f);

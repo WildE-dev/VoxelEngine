@@ -548,7 +548,8 @@ thicker. A cell holds up to a block's worth, 128 units, and it's only ever moved
 made or lost. Every half second (a tenth of water's pace) it falls, as much as fits,
 into open space or thinner lava below. With nowhere to fall, it levels out with the
 cells beside it. It doesn't spread thinner than about a quarter of a block, so a block
-of lava ends as a small pool of a few cells. It lights its surroundings as brightly as a lamp. You
+of lava ends as a small pool of a few cells. The Deep's pools lie at rest until
+something beside them changes, so loading the Deep costs nothing. It lights its surroundings as brightly as a lamp. You
 can wade in it slowly (like swimming, at half the speed), and it burns for a heart
 and a half every half second. It can't be aimed at or broken, but a block put where
 it is replaces it.

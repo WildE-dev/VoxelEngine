@@ -185,6 +185,7 @@ private:
     void NoteWaterMoved(const glm::ivec3& pos, int units);                 // edit mutex held
     // Lava, guarded by the edit mutex: every loaded lava cell, and those woken.
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> lavaCells, lavaWake;
+    int lavaPrune = 0; // (TakeLavaWake calls since loaded lava was last looked through)
     std::vector<std::pair<glm::ivec3, Block>> knockedOff; // (guarded by logMutex)
     std::thread worker;
 };
