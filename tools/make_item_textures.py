@@ -517,6 +517,25 @@ ROD = """
 ................
 """
 ROD_COLOURS = {"w": (128, 86, 44), "s": (230, 230, 230), "r": (200, 40, 40)}
+CHISEL = """
+................
+................
+.............ss.
+............sSs.
+...........sSs..
+..........sSs...
+.........sss....
+........kk......
+.......wwk......
+......wwk.......
+.....wwk........
+....wwk.........
+...wwk..........
+..wwk...........
+..kk............
+................
+"""
+CHISEL_COLOURS = {"s": (150, 155, 160), "S": (215, 220, 225), "w": (150, 100, 52), "k": (95, 62, 32)}
 FISH = """
 ................
 ................
@@ -596,6 +615,26 @@ SMOKE = """
 ................
 """
 SMOKE_COLOURS = {"s": (120, 120, 124), "S": (160, 160, 164)}
+# White water thrown up by rapids: a lumpy cloud, bright white with soft grey shading.
+SPRAY = """
+....wwww..www...
+..wwWWWwwwWWWw..
+.wWWWWWWWWWWWWw.
+.wWWWWWWWWWWWWw.
+wwWWWWWWWWWWWWww
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+.wWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+wWWWWWWWWWWWWWWw
+wwWWWWWWWWWWWWww
+.wWWWWWWWWWWWWw.
+.wwWWWWwwWWWWww.
+..wwwww..wwwww..
+................
+"""
+SPRAY_COLOURS = {"w": (214, 224, 230), "W": (246, 250, 252)}
 
 SIGN = """
 ................
@@ -2348,11 +2387,13 @@ def main():
     draw("tool_bow", BOW, BOW_COLOURS, jitter=6, seed=34)
     draw("arrow", ARROW_ICON, ARROW_COLOURS, jitter=6, seed=35)
     draw("tool_rod", ROD, ROD_COLOURS, jitter=6, seed=36)
+    draw("tool_chisel", CHISEL, CHISEL_COLOURS, jitter=5, seed=142)
     draw("raw_fish", FISH, RAW_FISH_COLOURS, jitter=6, seed=37)
     draw("cooked_fish", FISH, COOKED_FISH_COLOURS, jitter=6, seed=38)
     draw("bobber", BOBBER, BOBBER_COLOURS, jitter=4, seed=39)
     draw("campfire", CAMPFIRE, CAMPFIRE_COLOURS, jitter=8, seed=40)
     draw("smoke", SMOKE, SMOKE_COLOURS, jitter=6, seed=41)
+    draw("spray", SPRAY, SPRAY_COLOURS, jitter=4, seed=141)
     draw("sign", SIGN, SIGN_COLOURS, jitter=5, seed=42)
     draw("tnt_side", TNT_SIDE, TNT_COLOURS, jitter=5, seed=43)
     draw("tnt_top", TNT_TOP, TNT_COLOURS, jitter=5, seed=44)

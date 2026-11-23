@@ -7,6 +7,7 @@
 #include <deque>
 #include <map>
 #include <memory>
+#include <future>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -163,6 +164,8 @@ private:
     // Both own GL resources, so they're destroyed explicitly before the context.
     std::unique_ptr<Renderer> renderer;
     std::unique_ptr<ClientWorld> world;
+    // A left world's chunks being freed in the background (see ClientWorld::Release).
+    std::future<void> freeingWorld;
     std::unique_ptr<Client> client;
     std::unique_ptr<Audio> audio;
     bool joined = false; // Welcome received and handled
@@ -179,6 +182,7 @@ private:
         float life, maxLife, size;
         glm::vec4 uv;
         bool rise = false; // smoke: drifts up instead of falling
+        bool mist = false; // spray: a cloud that drifts and slows, lifting a little, growing as it fades
     };
     std::vector<Particle> particles;
     std::vector<glm::ivec3> campfires; // near the player, for smoke
@@ -194,6 +198,7 @@ private:
     // Air power: wheels turning (angle by position), drills' dust (time to the next puff).
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> wheelAngles;
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> gaugeNeedles; // pressure gauges' needles, as drawn (0..1)
+    std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> doorSwings;   // doors' halves, how far open as drawn (0..1)
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> drillDust;
     double lastMachinesTime = 0.0;
     void UpdateMachines(FrameParams& params, const std::function<glm::vec2(const glm::vec3&)>& lightAt);
@@ -269,11 +274,25 @@ private:
     double miningStart = 0.0, nextMineAt = 0.0;
     float mineProgress = 0.0f; // 0..1
     int placeHeight = 8;  // eighths: how tall shapeable blocks are placed (V / Shift+V)
+    int chiselStep = 2;   // eighths: how far a chisel stroke moves a corner (V / Shift+V with the chisel)
     bool inventoryOpen = false;
     bool cursorBeforeInventory = true;
     // A chest is open (in place of the inventory): asked for at chestAskedAt, and seen
     // open by the server since.
     bool chestMode = false, chestSeenOpen = false;
+    // A machine's menu (right-click it): how it's doing and the server's description of it
+    // (asked for again every second while open). One with its own inventory shows this
+    // over its chest window instead.
+    bool machineMode = false;
+    glm::ivec3 machineAt{ 0 };
+    double machineAskedAt = 0.0, machineInspectAt = 0.0;
+    void OpenMachine(const glm::ivec3& pos, bool inventory);
+    void DrawMachine();
+    void DrawMachineInfo(const glm::ivec3& pos);
+    std::string MachineStatus(const glm::ivec3& pos) const;
+    // The core of the formed structure this block is part of (any of its blocks, its
+    // ports too), if it is.
+    std::optional<glm::ivec3> StructureCoreAt(const glm::ivec3& pos) const;
     // Writing on a sign (in place of the inventory): which one, and the text so far.
     bool signMode = false;
     glm::ivec3 signAt{ 0 };

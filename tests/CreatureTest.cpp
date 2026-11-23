@@ -22,6 +22,7 @@
 #include <string>
 #include <thread>
 
+#include "TestSections.h"
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "server/Server.h"
@@ -99,8 +100,9 @@ Server::Options BaseOptions(TerrainGenerator::Type type) {
 
 } // namespace
 
-int main() {
-    {
+int main(int argc, char** argv) {
+    TestSections sections(argc, argv);
+    if (sections.Any("fighting", "allies", "raids")) {
         Server server;
         if (!server.Start(BaseOptions(TerrainGenerator::Type::Empty))) return EXIT_FAILURE;
         server.RunInBackground();
@@ -119,273 +121,279 @@ int main() {
         wait(0.5);
         Check(a.client.GetCreatures().empty(), "an empty world has no creatures of its own");
 
-        std::cout << "Summoning" << std::endl;
-        server.QueueConsoleCommand("summon deer 12.5 3 8.5");
-        Check(both(20.0, [&] { return a.Find(CreatureType::Deer) && b.Find(CreatureType::Deer); }), "/summon brings a deer, and both players see it");
-        Check(both(20.0, [&] { const auto* d = a.Find(CreatureType::Deer); return d && std::abs(d->feet.y) < 0.05f; }), "it falls onto the ground");
+        if (sections.Run("fighting")) {
+            std::cout << "Summoning" << std::endl;
+            server.QueueConsoleCommand("summon deer 12.5 3 8.5");
+            Check(both(20.0, [&] { return a.Find(CreatureType::Deer) && b.Find(CreatureType::Deer); }), "/summon brings a deer, and both players see it");
+            Check(both(20.0, [&] { const auto* d = a.Find(CreatureType::Deer); return d && std::abs(d->feet.y) < 0.05f; }), "it falls onto the ground");
 
-        std::cout << "Fighting" << std::endl;
-        const uint16_t deer = a.Find(CreatureType::Deer)->id;
-        server.QueueConsoleCommand("tp Hunter 30.5 0 30.5"); // far away
-        wait(1.0);
-        a.client.Attack(deer, Tool::Axe);
-        wait(1.0);
-        Check(a.client.GetChat().empty() || !Has(a, "defeated"), "a hit from 20 blocks away doesn't count");
-        const auto* d = a.Find(CreatureType::Deer);
-        server.QueueConsoleCommand("tp Hunter " + std::to_string(d->feet.x - 2.0f) + " 0 " + std::to_string(d->feet.z));
-        both(20.0, [&] { return glm::distance(a.feet, glm::vec3(d->feet.x - 2.0f, 0.0f, d->feet.z)) < 0.5f; });
-        wait(0.5);
-        const glm::vec3 hitAt = a.Find(CreatureType::Deer)->feet;
-        a.client.Attack(deer, Tool::Axe);
-        Check(both(20.0, [&] { const auto* c = a.Find(CreatureType::Deer); return c && c->hurt; }), "a hit in reach lands: the deer flashes red");
-        Check(both(20.0, [&] { const auto* c = a.Find(CreatureType::Deer); return c && c->feet.x > hitAt.x + 3.0f; }), "and it runs off, away from the hunter");
-        a.client.Attack(deer, Tool::Axe); // too soon after the first
-        wait(0.6);
-        Check(a.Find(CreatureType::Deer) != nullptr, "two hits at once count as one");
-        const auto* runner = a.Find(CreatureType::Deer);
-        server.QueueConsoleCommand("tp Hunter " + std::to_string(runner->feet.x - 1.5f) + " " + std::to_string(runner->feet.y) + " " +
-                                   std::to_string(runner->feet.z));
-        bool gone = false;
-        for (int i = 0; i < 10 && !gone; i++) {
-            wait(0.5);
-            const auto* c = a.Find(CreatureType::Deer);
-            if (!c) { gone = true; break; }
-            server.QueueConsoleCommand("tp Hunter " + std::to_string(c->feet.x - 1.5f) + " " + std::to_string(c->feet.y) + " " + std::to_string(c->feet.z));
-            wait(0.4);
+            std::cout << "Fighting" << std::endl;
+            const uint16_t deer = a.Find(CreatureType::Deer)->id;
+            server.QueueConsoleCommand("tp Hunter 30.5 0 30.5"); // far away
+            wait(1.0);
             a.client.Attack(deer, Tool::Axe);
-            gone = both(1.0, [&] { return a.Find(CreatureType::Deer) == nullptr; });
+            wait(1.0);
+            Check(a.client.GetChat().empty() || !Has(a, "defeated"), "a hit from 20 blocks away doesn't count");
+            const auto* d = a.Find(CreatureType::Deer);
+            server.QueueConsoleCommand("tp Hunter " + std::to_string(d->feet.x - 2.0f) + " 0 " + std::to_string(d->feet.z));
+            both(20.0, [&] { return glm::distance(a.feet, glm::vec3(d->feet.x - 2.0f, 0.0f, d->feet.z)) < 0.5f; });
+            wait(0.5);
+            const glm::vec3 hitAt = a.Find(CreatureType::Deer)->feet;
+            a.client.Attack(deer, Tool::Axe);
+            Check(both(20.0, [&] { const auto* c = a.Find(CreatureType::Deer); return c && c->hurt; }), "a hit in reach lands: the deer flashes red");
+            Check(both(20.0, [&] { const auto* c = a.Find(CreatureType::Deer); return c && c->feet.x > hitAt.x + 3.0f; }), "and it runs off, away from the hunter");
+            a.client.Attack(deer, Tool::Axe); // too soon after the first
+            wait(0.6);
+            Check(a.Find(CreatureType::Deer) != nullptr, "two hits at once count as one");
+            const auto* runner = a.Find(CreatureType::Deer);
+            server.QueueConsoleCommand("tp Hunter " + std::to_string(runner->feet.x - 1.5f) + " " + std::to_string(runner->feet.y) + " " +
+                                       std::to_string(runner->feet.z));
+            bool gone = false;
+            for (int i = 0; i < 10 && !gone; i++) {
+                wait(0.5);
+                const auto* c = a.Find(CreatureType::Deer);
+                if (!c) { gone = true; break; }
+                server.QueueConsoleCommand("tp Hunter " + std::to_string(c->feet.x - 1.5f) + " " + std::to_string(c->feet.y) + " " + std::to_string(c->feet.z));
+                wait(0.4);
+                a.client.Attack(deer, Tool::Axe);
+                gone = both(1.0, [&] { return a.Find(CreatureType::Deer) == nullptr; });
+            }
+            Check(gone && both(5.0, [&] { return Has(a, "You defeated a deer"); }), "a second axe hit (8 health, 5 a hit) finishes it");
+
+            std::cout << "Dwarf warriors" << std::endl;
+            server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+            server.QueueConsoleCommand("tp Watcher 8.5 0 40.5");
+            wait(1.0);
+            server.QueueConsoleCommand("summon dwarf 16.5 0 8.5");
+            Check(both(20.0, [&] { return a.Find(CreatureType::DwarfWarrior) != nullptr; }), "a dwarf warrior is summoned 8 blocks from the hunter");
+            Check(both(20.0, [&] { return a.client.GetHealth() < 20; }), "it comes for the hunter (in survival) and hurts them");
+            server.QueueConsoleCommand("gamemode creative Hunter");
+            both(20.0, [&] { return a.client.IsCreative(); });
+            const int health = a.client.GetHealth();
+            wait(3.0);
+            Check(a.client.GetHealth() >= health, "a creative player is left alone");
+            server.QueueConsoleCommand("time noon");
+            wait(4.0);
+            Check(a.Find(CreatureType::DwarfWarrior) != nullptr, "daylight doesn't hurt it (dwarves don't burn)");
+            server.QueueConsoleCommand("creatures clear");
+
+            std::cout << "Dwarf crossbowmen" << std::endl;
+            server.QueueConsoleCommand("time midnight");
+            server.QueueConsoleCommand("gamemode survival Hunter");
+            server.QueueConsoleCommand("food 20 Hunter");
+            server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+            server.QueueConsoleCommand("summon crossbow_dwarf 20.5 0 8.5");
+            Check(both(20.0, [&] { return a.Find(CreatureType::DwarfCrossbow) != nullptr && !a.client.IsCreative(); }), "a dwarf crossbowman is summoned 12 blocks from the hunter");
+            both(4.0, [&] { return a.client.GetHealth() == 20; });
+            const int beforeVolley = a.client.GetHealth();
+            Check(both(20.0, [&] { return a.client.GetHealth() < beforeVolley; }), "it shoots the hunter from a distance");
+            const auto* bowman = a.Find(CreatureType::DwarfCrossbow);
+            Check(bowman && glm::distance(glm::vec2(bowman->feet.x, bowman->feet.z), glm::vec2(8.5f)) > 5.0f, "and keeps its distance");
+            server.QueueConsoleCommand("creatures clear");
+            server.QueueConsoleCommand("gamemode creative Hunter");
+            both(20.0, [&] { return a.client.GetCreatures().empty() && a.client.IsCreative(); });
+
+            std::cout << "Bats" << std::endl;
+            server.QueueConsoleCommand("summon bat 12.5 6 12.5");
+            Check(both(20.0, [&] { return a.Find(CreatureType::Bat) != nullptr; }), "a bat is summoned in mid air");
+            both(3.0, [] { return false; });
+            Check(a.Find(CreatureType::Bat) && a.Find(CreatureType::Bat)->feet.y > 1.0f, "and flies about rather than falling (at " +
+                                                                                          std::to_string(a.Find(CreatureType::Bat) ? a.Find(CreatureType::Bat)->feet.y : -1.0f) + ")");
+            server.QueueConsoleCommand("creatures clear");
+            both(20.0, [&] { return a.client.GetCreatures().empty(); });
+
         }
-        Check(gone && both(5.0, [&] { return Has(a, "You defeated a deer"); }), "a second axe hit (8 health, 5 a hit) finishes it");
+        if (sections.Run("allies")) {
+            std::cout << "Wolves" << std::endl;
+            server.QueueConsoleCommand("time noon");
+            server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+            server.QueueConsoleCommand("summon wolf 11.5 0 8.5");
+            server.QueueConsoleCommand("give raw_venison 2 Hunter");
+            Check(both(20.0, [&] { return a.Find(CreatureType::Wolf) != nullptr; }), "a wolf is summoned beside the hunter");
+            const uint16_t wolf = a.Find(CreatureType::Wolf)->id;
+            a.client.Interact(wolf); // (empty-handed: nothing)
+            both(1.0, [] { return false; });
+            Check(!a.Find(CreatureType::Wolf)->tame, "a wolf isn't tamed by an empty hand");
+            a.heldBlock = BlockType::RAW_VENISON;
+            both(0.3, [] { return false; });
+            a.client.Interact(wolf);
+            Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && w->tame; }) && Has(a, "The wolf is yours"), "fed raw venison, it's tamed (and wears a collar)");
+            a.heldBlock = BlockType::AIR;
+            server.QueueConsoleCommand("tp Hunter 22.5 0 8.5");
+            Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && glm::distance(glm::vec2(w->feet.x, w->feet.z), glm::vec2(22.5f, 8.5f)) < 5.0f; }),
+                  "it follows its owner");
+            server.QueueConsoleCommand("time midnight");
+            server.QueueConsoleCommand("summon dwarf 26.5 0 8.5");
+            Check(both(20.0, [&] { return a.Find(CreatureType::DwarfWarrior) != nullptr; }), "a dwarf warrior turns up near them");
+            Check(both(30.0, [&] { return a.Find(CreatureType::DwarfWarrior) == nullptr; }), "and the wolf sees it off");
+            server.QueueConsoleCommand("creatures clear");
+            both(20.0, [&] { return a.client.GetCreatures().empty(); });
 
-        std::cout << "Dwarf warriors" << std::endl;
-        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
-        server.QueueConsoleCommand("tp Watcher 8.5 0 40.5");
-        wait(1.0);
-        server.QueueConsoleCommand("summon dwarf 16.5 0 8.5");
-        Check(both(20.0, [&] { return a.Find(CreatureType::DwarfWarrior) != nullptr; }), "a dwarf warrior is summoned 8 blocks from the hunter");
-        Check(both(20.0, [&] { return a.client.GetHealth() < 20; }), "it comes for the hunter (in survival) and hurts them");
-        server.QueueConsoleCommand("gamemode creative Hunter");
-        both(20.0, [&] { return a.client.IsCreative(); });
-        const int health = a.client.GetHealth();
-        wait(3.0);
-        Check(a.client.GetHealth() >= health, "a creative player is left alone");
-        server.QueueConsoleCommand("time noon");
-        wait(4.0);
-        Check(a.Find(CreatureType::DwarfWarrior) != nullptr, "daylight doesn't hurt it (dwarves don't burn)");
-        server.QueueConsoleCommand("creatures clear");
-
-        std::cout << "Dwarf crossbowmen" << std::endl;
-        server.QueueConsoleCommand("time midnight");
-        server.QueueConsoleCommand("gamemode survival Hunter");
-        server.QueueConsoleCommand("food 20 Hunter");
-        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
-        server.QueueConsoleCommand("summon crossbow_dwarf 20.5 0 8.5");
-        Check(both(20.0, [&] { return a.Find(CreatureType::DwarfCrossbow) != nullptr && !a.client.IsCreative(); }), "a dwarf crossbowman is summoned 12 blocks from the hunter");
-        both(4.0, [&] { return a.client.GetHealth() == 20; });
-        const int beforeVolley = a.client.GetHealth();
-        Check(both(20.0, [&] { return a.client.GetHealth() < beforeVolley; }), "it shoots the hunter from a distance");
-        const auto* bowman = a.Find(CreatureType::DwarfCrossbow);
-        Check(bowman && glm::distance(glm::vec2(bowman->feet.x, bowman->feet.z), glm::vec2(8.5f)) > 5.0f, "and keeps its distance");
-        server.QueueConsoleCommand("creatures clear");
-        server.QueueConsoleCommand("gamemode creative Hunter");
-        both(20.0, [&] { return a.client.GetCreatures().empty() && a.client.IsCreative(); });
-
-        std::cout << "Bats" << std::endl;
-        server.QueueConsoleCommand("summon bat 12.5 6 12.5");
-        Check(both(20.0, [&] { return a.Find(CreatureType::Bat) != nullptr; }), "a bat is summoned in mid air");
-        both(3.0, [] { return false; });
-        Check(a.Find(CreatureType::Bat) && a.Find(CreatureType::Bat)->feet.y > 1.0f, "and flies about rather than falling (at " +
-                                                                                      std::to_string(a.Find(CreatureType::Bat) ? a.Find(CreatureType::Bat)->feet.y : -1.0f) + ")");
-        server.QueueConsoleCommand("creatures clear");
-        both(20.0, [&] { return a.client.GetCreatures().empty(); });
-
-        std::cout << "Wolves" << std::endl;
-        server.QueueConsoleCommand("time noon");
-        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
-        server.QueueConsoleCommand("summon wolf 11.5 0 8.5");
-        server.QueueConsoleCommand("give raw_venison 2 Hunter");
-        Check(both(20.0, [&] { return a.Find(CreatureType::Wolf) != nullptr; }), "a wolf is summoned beside the hunter");
-        const uint16_t wolf = a.Find(CreatureType::Wolf)->id;
-        a.client.Interact(wolf); // (empty-handed: nothing)
-        both(1.0, [] { return false; });
-        Check(!a.Find(CreatureType::Wolf)->tame, "a wolf isn't tamed by an empty hand");
-        a.heldBlock = BlockType::RAW_VENISON;
-        both(0.3, [] { return false; });
-        a.client.Interact(wolf);
-        Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && w->tame; }) && Has(a, "The wolf is yours"), "fed raw venison, it's tamed (and wears a collar)");
-        a.heldBlock = BlockType::AIR;
-        server.QueueConsoleCommand("tp Hunter 22.5 0 8.5");
-        Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && glm::distance(glm::vec2(w->feet.x, w->feet.z), glm::vec2(22.5f, 8.5f)) < 5.0f; }),
-              "it follows its owner");
-        server.QueueConsoleCommand("time midnight");
-        server.QueueConsoleCommand("summon dwarf 26.5 0 8.5");
-        Check(both(20.0, [&] { return a.Find(CreatureType::DwarfWarrior) != nullptr; }), "a dwarf warrior turns up near them");
-        Check(both(30.0, [&] { return a.Find(CreatureType::DwarfWarrior) == nullptr; }), "and the wolf sees it off");
-        server.QueueConsoleCommand("creatures clear");
-        both(20.0, [&] { return a.client.GetCreatures().empty(); });
-
-        std::cout << "Markets" << std::endl;
-        server.QueueConsoleCommand("gamemode survival Hunter");
-        server.QueueConsoleCommand("time noon");
-        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
-        server.QueueConsoleCommand("summon dwarf_trader 11.5 0 8.5");
-        server.QueueConsoleCommand("give gold_ingot 1 Hunter");
-        server.QueueConsoleCommand("give glass 8 Hunter");
-        Check(both(20.0, [&] { return a.Find(CreatureType::DwarfTrader) != nullptr; }), "a dwarf trader is summoned beside the hunter");
-        both(20.0, [&] { return a.client.GetResources(BlockType::GLASS) == 8 * Block::kUnitsPerBlock; });
-        const uint16_t trader = a.Find(CreatureType::DwarfTrader)->id;
-        a.client.Interact(trader);
-        Check(both(20.0, [&] { return a.client.GetTradePrices().size() == Trades::Offers().size() && a.client.GetTradePrices()[0] == 1; }),
-              "right-clicking the trader brings its prices");
-        a.client.Trade(trader, 0); // a gold ingot for 2 iron ingots
-        Check(both(20.0, [&] { return a.client.GetResources(BlockType::IRON_INGOT) == 2 * Block::kUnitsPerBlock && a.client.GetResources(BlockType::GOLD_INGOT) == 0; }),
-              "a gold ingot buys 2 iron ingots");
-        Check(both(10.0, [&] { return Has(a, "Merchant: trade with a dwarf trader"); }), "and earns Merchant");
-        Check(both(20.0, [&] { return !a.client.GetTradePrices().empty() && a.client.GetTradePrices()[0] == 2; }), "and that offer's price goes up (2 gold now)");
-        a.client.Trade(trader, 0);
-        Check(both(20.0, [&] { return Has(a, "You need 2"); }) && a.client.GetResources(BlockType::IRON_INGOT) == 2 * Block::kUnitsPerBlock,
-              "a trade without the goods is refused");
-        a.client.Trade(trader, 5); // 8 glass for a gold ingot
-        Check(both(20.0, [&] { return a.client.GetResources(BlockType::GOLD_INGOT) == Block::kUnitsPerBlock && a.client.GetResources(BlockType::GLASS) == 0; }),
-              "they buy 8 glass for a gold ingot");
-        Check(both(20.0, [&] { return a.client.GetTradePrices().size() > 5 && a.client.GetTradePrices()[5] == 10; }), "and want 10 glass the next time");
-        server.QueueConsoleCommand("give gold_ingot 2 Hunter");
-        both(20.0, [&] { return a.client.GetResources(BlockType::GOLD_INGOT) == 3 * Block::kUnitsPerBlock; });
-        a.client.Trade(trader, static_cast<uint8_t>(Trades::Offers().size() - 1)); // a guard, for 3 gold
-        Check(both(20.0, [&] { const auto* g = a.Find(CreatureType::DwarfGuard); return g && g->tame; }) && a.client.GetResources(BlockType::GOLD_INGOT) == 0,
-              "3 gold ingots hire a guard (wearing a band)");
-        server.QueueConsoleCommand("tp Hunter 22.5 0 8.5");
-        Check(both(20.0, [&] { const auto* g = a.Find(CreatureType::DwarfGuard); return g && glm::distance(glm::vec2(g->feet.x, g->feet.z), glm::vec2(22.5f, 8.5f)) < 5.0f; }),
-              "the guard follows whoever hired them");
-        server.QueueConsoleCommand("time midnight");
-        server.QueueConsoleCommand("gamemode creative Hunter");
-        server.QueueConsoleCommand("summon dwarf 27.5 0 8.5");
-        Check(both(20.0, [&] { return a.Find(CreatureType::DwarfWarrior) != nullptr; }), "a dwarf warrior turns up");
-        Check(both(30.0, [&] { return a.Find(CreatureType::DwarfWarrior) == nullptr; }), "and the guard cuts it down");
-        // Hit a market's dwarf, and the market won't deal with you.
-        server.QueueConsoleCommand("gamemode survival Hunter");
-        if (const auto* t = a.Find(CreatureType::DwarfTrader)) {
-            char tp[96];
-            std::snprintf(tp, sizeof tp, "tp Hunter %.2f 0 %.2f", t->feet.x - 1.5f, t->feet.z);
-            server.QueueConsoleCommand(tp);
-        }
-        both(20.0, [&] {
-            const auto* t = a.Find(CreatureType::DwarfTrader);
-            return t && !a.client.IsCreative() && glm::distance(glm::vec2(t->feet.x, t->feet.z), glm::vec2(a.feet.x, a.feet.z)) < 2.5f;
-        });
-        a.client.Attack(trader, Tool::None);
-        both(1.0, [] { return false; });
-        a.client.Trade(trader, 1);
-        Check(both(20.0, [&] { return Has(a, "won't deal with you"); }), "hit, the trader won't trade with you");
-        server.QueueConsoleCommand("gamemode survival Hunter");
-        server.QueueConsoleCommand("creatures clear");
-        both(20.0, [&] { return a.client.GetCreatures().empty(); });
-
-        std::cout << "The Dwarf King" << std::endl;
-        server.QueueConsoleCommand("gamemode creative Hunter");
-        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
-        server.QueueConsoleCommand("summon dwarf_king 10.5 0 8.5");
-        Check(both(20.0, [&] { const auto* k = a.Find(CreatureType::DwarfKing); return k && k->health > 0.99f; }), "a Dwarf King is summoned, at full health");
-        const uint16_t king = a.Find(CreatureType::DwarfKing)->id;
-        a.client.Attack(king, Tool::Sword);
-        Check(both(20.0, [&] { const auto* k = a.Find(CreatureType::DwarfKing); return k && k->health < 0.99f; }), "a hit shows on his health (for the health bar)");
-        // Hit after hit (keeping by him) until he falls.
-        bool slain = both(90.0, [&] {
-            const auto* k = a.Find(CreatureType::DwarfKing);
-            if (!k) return true;
-            if (glm::distance(a.feet, k->feet) > 2.5f) {
+            std::cout << "Markets" << std::endl;
+            server.QueueConsoleCommand("gamemode survival Hunter");
+            server.QueueConsoleCommand("time noon");
+            server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+            server.QueueConsoleCommand("summon dwarf_trader 11.5 0 8.5");
+            server.QueueConsoleCommand("give gold_ingot 1 Hunter");
+            server.QueueConsoleCommand("give glass 8 Hunter");
+            Check(both(20.0, [&] { return a.Find(CreatureType::DwarfTrader) != nullptr; }), "a dwarf trader is summoned beside the hunter");
+            both(20.0, [&] { return a.client.GetResources(BlockType::GLASS) == 8 * Block::kUnitsPerBlock; });
+            const uint16_t trader = a.Find(CreatureType::DwarfTrader)->id;
+            a.client.Interact(trader);
+            Check(both(20.0, [&] { return a.client.GetTradePrices().size() == Trades::Offers().size() && a.client.GetTradePrices()[0] == 1; }),
+                  "right-clicking the trader brings its prices");
+            a.client.Trade(trader, 0); // a gold ingot for 2 iron ingots
+            Check(both(20.0, [&] { return a.client.GetResources(BlockType::IRON_INGOT) == 2 * Block::kUnitsPerBlock && a.client.GetResources(BlockType::GOLD_INGOT) == 0; }),
+                  "a gold ingot buys 2 iron ingots");
+            Check(both(10.0, [&] { return Has(a, "Merchant: trade with a dwarf trader"); }), "and earns Merchant");
+            Check(both(20.0, [&] { return !a.client.GetTradePrices().empty() && a.client.GetTradePrices()[0] == 2; }), "and that offer's price goes up (2 gold now)");
+            a.client.Trade(trader, 0);
+            Check(both(20.0, [&] { return Has(a, "You need 2"); }) && a.client.GetResources(BlockType::IRON_INGOT) == 2 * Block::kUnitsPerBlock,
+                  "a trade without the goods is refused");
+            a.client.Trade(trader, 5); // 8 glass for a gold ingot
+            Check(both(20.0, [&] { return a.client.GetResources(BlockType::GOLD_INGOT) == Block::kUnitsPerBlock && a.client.GetResources(BlockType::GLASS) == 0; }),
+                  "they buy 8 glass for a gold ingot");
+            Check(both(20.0, [&] { return a.client.GetTradePrices().size() > 5 && a.client.GetTradePrices()[5] == 10; }), "and want 10 glass the next time");
+            server.QueueConsoleCommand("give gold_ingot 2 Hunter");
+            both(20.0, [&] { return a.client.GetResources(BlockType::GOLD_INGOT) == 3 * Block::kUnitsPerBlock; });
+            a.client.Trade(trader, static_cast<uint8_t>(Trades::Offers().size() - 1)); // a guard, for 3 gold
+            Check(both(20.0, [&] { const auto* g = a.Find(CreatureType::DwarfGuard); return g && g->tame; }) && a.client.GetResources(BlockType::GOLD_INGOT) == 0,
+                  "3 gold ingots hire a guard (wearing a band)");
+            server.QueueConsoleCommand("tp Hunter 22.5 0 8.5");
+            Check(both(20.0, [&] { const auto* g = a.Find(CreatureType::DwarfGuard); return g && glm::distance(glm::vec2(g->feet.x, g->feet.z), glm::vec2(22.5f, 8.5f)) < 5.0f; }),
+                  "the guard follows whoever hired them");
+            server.QueueConsoleCommand("time midnight");
+            server.QueueConsoleCommand("gamemode creative Hunter");
+            server.QueueConsoleCommand("summon dwarf 27.5 0 8.5");
+            Check(both(20.0, [&] { return a.Find(CreatureType::DwarfWarrior) != nullptr; }), "a dwarf warrior turns up");
+            Check(both(30.0, [&] { return a.Find(CreatureType::DwarfWarrior) == nullptr; }), "and the guard cuts it down");
+            // Hit a market's dwarf, and the market won't deal with you.
+            server.QueueConsoleCommand("gamemode survival Hunter");
+            if (const auto* t = a.Find(CreatureType::DwarfTrader)) {
                 char tp[96];
-                std::snprintf(tp, sizeof tp, "tp Hunter %.2f %.2f %.2f", k->feet.x - 1.5f, k->feet.y, k->feet.z);
+                std::snprintf(tp, sizeof tp, "tp Hunter %.2f 0 %.2f", t->feet.x - 1.5f, t->feet.z);
                 server.QueueConsoleCommand(tp);
             }
+            both(20.0, [&] {
+                const auto* t = a.Find(CreatureType::DwarfTrader);
+                return t && !a.client.IsCreative() && glm::distance(glm::vec2(t->feet.x, t->feet.z), glm::vec2(a.feet.x, a.feet.z)) < 2.5f;
+            });
+            a.client.Attack(trader, Tool::None);
+            both(1.0, [] { return false; });
+            a.client.Trade(trader, 1);
+            Check(both(20.0, [&] { return Has(a, "won't deal with you"); }), "hit, the trader won't trade with you");
+            server.QueueConsoleCommand("gamemode survival Hunter");
+            server.QueueConsoleCommand("creatures clear");
+            both(20.0, [&] { return a.client.GetCreatures().empty(); });
+
+            std::cout << "The Dwarf King" << std::endl;
+            server.QueueConsoleCommand("gamemode creative Hunter");
+            server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+            server.QueueConsoleCommand("summon dwarf_king 10.5 0 8.5");
+            Check(both(20.0, [&] { const auto* k = a.Find(CreatureType::DwarfKing); return k && k->health > 0.99f; }), "a Dwarf King is summoned, at full health");
+            const uint16_t king = a.Find(CreatureType::DwarfKing)->id;
             a.client.Attack(king, Tool::Sword);
-            return false;
-        });
-        Check(slain && both(10.0, [&] { return Has(a, "hoard is yours") && Has(b, "has defeated a Dwarf King"); }), "he falls at last: his hoard is the hunter's, and everyone's told");
-        server.QueueConsoleCommand("creatures clear");
-        both(20.0, [&] { return a.client.GetCreatures().empty(); });
-        server.QueueConsoleCommand("gamemode survival Hunter");
+            Check(both(20.0, [&] { const auto* k = a.Find(CreatureType::DwarfKing); return k && k->health < 0.99f; }), "a hit shows on his health (for the health bar)");
+            // Hit after hit (keeping by him) until he falls.
+            bool slain = both(90.0, [&] {
+                const auto* k = a.Find(CreatureType::DwarfKing);
+                if (!k) return true;
+                if (glm::distance(a.feet, k->feet) > 2.5f) {
+                    char tp[96];
+                    std::snprintf(tp, sizeof tp, "tp Hunter %.2f %.2f %.2f", k->feet.x - 1.5f, k->feet.y, k->feet.z);
+                    server.QueueConsoleCommand(tp);
+                }
+                a.client.Attack(king, Tool::Sword);
+                return false;
+            });
+            Check(slain && both(10.0, [&] { return Has(a, "hoard is yours") && Has(b, "has defeated a Dwarf King"); }), "he falls at last: his hoard is the hunter's, and everyone's told");
+            server.QueueConsoleCommand("creatures clear");
+            both(20.0, [&] { return a.client.GetCreatures().empty(); });
+            server.QueueConsoleCommand("gamemode survival Hunter");
 
-        std::cout << "The forge golem" << std::endl;
-        server.QueueConsoleCommand("gamemode creative Hunter");
-        server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
-        server.QueueConsoleCommand("summon forge_golem 10.5 0 8.5");
-        Check(both(20.0, [&] { return a.Find(CreatureType::ForgeGolem) != nullptr; }), "a forge golem is summoned");
-        const uint16_t golem = a.Find(CreatureType::ForgeGolem)->id;
-        const bool golemDown = both(90.0, [&] {
-            const auto* k = a.Find(CreatureType::ForgeGolem);
-            if (!k) return true;
-            if (glm::distance(a.feet, k->feet) > 2.5f) {
-                char tp[96];
-                std::snprintf(tp, sizeof tp, "tp Hunter %.2f %.2f %.2f", k->feet.x - 1.6f, k->feet.y, k->feet.z);
-                server.QueueConsoleCommand(tp);
-            }
-            a.client.Attack(golem, Tool::Sword);
-            return false;
-        });
-        Check(golemDown && both(10.0, [&] { return Has(a, "forge core") && a.client.GetResources(BlockType::FORGE_CORE) == Block::kUnitsPerBlock; }),
-              "it falls, leaving its forge core");
-        server.QueueConsoleCommand("creatures clear");
-        both(20.0, [&] { return a.client.GetCreatures().empty(); });
+            std::cout << "The forge golem" << std::endl;
+            server.QueueConsoleCommand("gamemode creative Hunter");
+            server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
+            server.QueueConsoleCommand("summon forge_golem 10.5 0 8.5");
+            Check(both(20.0, [&] { return a.Find(CreatureType::ForgeGolem) != nullptr; }), "a forge golem is summoned");
+            const uint16_t golem = a.Find(CreatureType::ForgeGolem)->id;
+            const bool golemDown = both(90.0, [&] {
+                const auto* k = a.Find(CreatureType::ForgeGolem);
+                if (!k) return true;
+                if (glm::distance(a.feet, k->feet) > 2.5f) {
+                    char tp[96];
+                    std::snprintf(tp, sizeof tp, "tp Hunter %.2f %.2f %.2f", k->feet.x - 1.6f, k->feet.y, k->feet.z);
+                    server.QueueConsoleCommand(tp);
+                }
+                a.client.Attack(golem, Tool::Sword);
+                return false;
+            });
+            Check(golemDown && both(10.0, [&] { return Has(a, "forge core") && a.client.GetResources(BlockType::FORGE_CORE) == Block::kUnitsPerBlock; }),
+                  "it falls, leaving its forge core");
+            server.QueueConsoleCommand("creatures clear");
+            both(20.0, [&] { return a.client.GetCreatures().empty(); });
 
-        std::cout << "Raids" << std::endl;
-        // A bed in a plank hut; the hunter (creative, so left alone) inside with it.
-        server.QueueConsoleCommand("gamemode creative Hunter");
-        server.QueueConsoleCommand("time noon");
-        server.QueueConsoleCommand("fill 30 0 30 36 3 36 planks");
-        server.QueueConsoleCommand("fill 31 0 31 35 2 35 air");
-        server.QueueConsoleCommand("fill 33 0 33 33 0 33 bed");
-        server.QueueConsoleCommand("tp Hunter 32.5 0 32.5");
-        auto planks = [&] {
-            int n = 0;
-            for (int x = 30; x <= 36; x++)
-                for (int z = 30; z <= 36; z++)
-                    for (int y = 0; y <= 1; y++) {
-                        Block blk;
-                        if (a.world.GetBlock(x, y, z, blk) && blk.type == BlockType::PLANKS) n++;
-                    }
-            return n;
-        };
-        both(20.0, [&] { return planks() > 40 && glm::distance(a.feet, glm::vec3(32.5f, 0.0f, 32.5f)) < 0.5f; });
-        const int wall = planks();
-        a.client.UseBed({ 33, 0, 33 });
-        both(5.0, [&] { return Has(a, "respawn"); });
-        server.QueueConsoleCommand("raid Hunter");
-        Check(both(20.0, [&] { return Has(a, "a dwarf raid is coming for your home"); }), "/raid sends a war band for the hunter's bed (and they're warned)");
-        auto raiders = [&] {
-            int n = 0;
-            for (const auto& c : a.client.GetCreatures()) n += c.type == CreatureType::DwarfWarrior || c.type == CreatureType::DwarfCrossbow;
-            return n;
-        };
-        Check(both(10.0, [&] { return raiders() >= 3; }), "a band of dwarves turns up");
-        Check(both(90.0, [&] { return planks() < wall; }), "they hack through the hut's plank walls");
-        Check(both(60.0, [&] {
-                  for (const auto& c : a.client.GetCreatures())
-                      if (glm::distance(glm::vec2(c.feet.x, c.feet.z), glm::vec2(33.5f, 33.5f)) < 3.5f) return true;
-                  return false;
-              }),
-              "and get in to the bed");
-        server.QueueConsoleCommand("time midnight");
-        wait(1.0);
-        server.QueueConsoleCommand("time noon");
-        Check(both(20.0, [&] { return raiders() == 0; }), "at dawn the raiders go");
-        server.QueueConsoleCommand("gamemode survival Hunter");
+        }
+        if (sections.Run("raids")) {
+            std::cout << "Raids" << std::endl;
+            // A bed in a plank hut; the hunter (creative, so left alone) inside with it.
+            server.QueueConsoleCommand("gamemode creative Hunter");
+            server.QueueConsoleCommand("time noon");
+            server.QueueConsoleCommand("fill 30 0 30 36 3 36 planks");
+            server.QueueConsoleCommand("fill 31 0 31 35 2 35 air");
+            server.QueueConsoleCommand("fill 33 0 33 33 0 33 bed");
+            server.QueueConsoleCommand("tp Hunter 32.5 0 32.5");
+            auto planks = [&] {
+                int n = 0;
+                for (int x = 30; x <= 36; x++)
+                    for (int z = 30; z <= 36; z++)
+                        for (int y = 0; y <= 1; y++) {
+                            Block blk;
+                            if (a.world.GetBlock(x, y, z, blk) && blk.type == BlockType::PLANKS) n++;
+                        }
+                return n;
+            };
+            both(20.0, [&] { return planks() > 40 && glm::distance(a.feet, glm::vec3(32.5f, 0.0f, 32.5f)) < 0.5f; });
+            const int wall = planks();
+            a.client.UseBed({ 33, 0, 33 });
+            both(5.0, [&] { return Has(a, "respawn"); });
+            server.QueueConsoleCommand("raid Hunter");
+            Check(both(20.0, [&] { return Has(a, "a dwarf raid is coming for your home"); }), "/raid sends a war band for the hunter's bed (and they're warned)");
+            auto raiders = [&] {
+                int n = 0;
+                for (const auto& c : a.client.GetCreatures()) n += c.type == CreatureType::DwarfWarrior || c.type == CreatureType::DwarfCrossbow;
+                return n;
+            };
+            Check(both(10.0, [&] { return raiders() >= 3; }), "a band of dwarves turns up");
+            Check(both(90.0, [&] { return planks() < wall; }), "they hack through the hut's plank walls");
+            Check(both(60.0, [&] {
+                      for (const auto& c : a.client.GetCreatures())
+                          if (glm::distance(glm::vec2(c.feet.x, c.feet.z), glm::vec2(33.5f, 33.5f)) < 3.5f) return true;
+                      return false;
+                  }),
+                  "and get in to the bed");
+            server.QueueConsoleCommand("time midnight");
+            wait(1.0);
+            server.QueueConsoleCommand("time noon");
+            Check(both(20.0, [&] { return raiders() == 0; }), "at dawn the raiders go");
+            server.QueueConsoleCommand("gamemode survival Hunter");
 
-        server.QueueConsoleCommand("time midnight");
-        server.QueueConsoleCommand("summon dwarf 20 0 20");
-        server.QueueConsoleCommand("summon deer 22 0 20");
-        server.QueueConsoleCommand("creatures");
-        wait(1.0);
-        server.QueueConsoleCommand("creatures clear");
-        Check(both(20.0, [&] { return a.client.GetCreatures().empty(); }), "/creatures clear removes them all");
+            server.QueueConsoleCommand("time midnight");
+            server.QueueConsoleCommand("summon dwarf 20 0 20");
+            server.QueueConsoleCommand("summon deer 22 0 20");
+            server.QueueConsoleCommand("creatures");
+            wait(1.0);
+            server.QueueConsoleCommand("creatures clear");
+            Check(both(20.0, [&] { return a.client.GetCreatures().empty(); }), "/creatures clear removes them all");
+        }
         a.client.Disconnect();
         b.client.Disconnect();
         Pump({ &a, &b }, 0.3, [] { return false; });
         server.Stop();
     }
 
-    std::cout << "PvP" << std::endl;
-    {
+    if (sections.Run("pvp")) {
+        std::cout << "PvP" << std::endl;
         Server server;
         if (!server.Start(BaseOptions(TerrainGenerator::Type::Empty))) return EXIT_FAILURE;
         server.RunInBackground();
@@ -537,8 +545,8 @@ int main() {
         server.Stop();
     }
 
-    std::cout << "Natural spawning" << std::endl;
-    {
+    if (sections.Run("spawning")) {
+        std::cout << "Natural spawning" << std::endl;
         Server server;
         if (!server.Start(BaseOptions(TerrainGenerator::Type::Normal))) return EXIT_FAILURE;
         server.RunInBackground();
@@ -579,6 +587,7 @@ int main() {
         server.Stop();
     }
 
+    if (!sections.Valid()) failures++;
     std::cout << (failures ? "CREATURE TEST FAILED (" : "ALL CREATURE CHECKS PASSED (") << failures << " failures)" << std::endl;
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }

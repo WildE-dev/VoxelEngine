@@ -188,7 +188,7 @@ private:
 
         net::GameMode mode = net::GameMode::Survival;
         std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{}; // units held (survival)
-        uint8_t tools = 0; // tools made (Crafting::ToolBit each; creative has them all)
+        uint16_t tools = 0; // tools made (Crafting::ToolBit each; creative has them all)
         uint8_t armour = 0; // armour worn (Armour::Bit each)
         std::optional<glm::ivec3> openChest; // the chest they have open
         std::optional<glm::ivec3> bed;       // where they respawn (if it's still a bed)
@@ -212,7 +212,7 @@ private:
         Breathing::Cause sentAirCause = Breathing::Cause::None;
         float tank = Breathing::kTankSeconds; // an oxygen tank's air (seconds), if they wear one
         bool onTank = false;
-        int sentTank = -1;
+        int sentTank = -1; // as last sent: 0..255 (see TankByte)
         bool sentOnTank = false;
         double nextBreathHit = 0.0;
         // Hunger (UpdateHunger): food left, drain not yet taken, where they were last

@@ -39,6 +39,7 @@ vec3 ApplyFog(vec3 color, vec3 worldPos) {
 
 uniform vec3 color;
 uniform vec3 sunDirection;
+uniform float soft; // 1: evenly lit all round (a cloud of spray), not shaded away from the sun
 uniform float sunBrightness;
 
 void main() {
@@ -55,7 +56,7 @@ void main() {
     float sunSide = max(dot(normalize(normal), normalize(sunDirection)), 0.0);
     float sky = lightLevels.x > 0.0 ? pow(0.85, 15.0 - lightLevels.x) : 0.0;
     float block = lightLevels.y > 0.0 ? pow(0.85, 15.0 - lightLevels.y) : 0.0;
-    float shade = 0.45 + 0.55 * sunSide;
+    float shade = mix(0.45 + 0.55 * sunSide, 1.0, soft);
     vec3 light = vec3(0.04) + vec3(sky * sunBrightness * shade) + block * blockLightColor * (0.7 + 0.3 * shade);
     light = mix(min(light, vec3(1.0)), vec3(1.0), glow);
     vec3 lit = mix(albedo * light, vec3(1.0, 0.95, 0.4), highlight);

@@ -777,6 +777,14 @@ void Block::AddPebbleVertices(std::vector<uint32_t>& vertices, int x, int y, int
 }
 
 std::vector<glm::vec3> Block::OutlineSegments() const {
+    if (const int dir = ShapeDir(); dir != 0 && IsPartial()) {
+        // Turned: the upright outline, turned into place.
+        Block upright = *this;
+        upright.axis = 0;
+        std::vector<glm::vec3> turned = upright.OutlineSegments();
+        for (auto& p : turned) p = ShapeToCell(dir, p);
+        return turned;
+    }
     std::vector<glm::vec3> lines;
     auto edge = [&](glm::vec3 a, glm::vec3 b) {
         lines.push_back(a);

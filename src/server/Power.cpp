@@ -1015,11 +1015,11 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
             std::snprintf(line, sizeof line, "Air pressure %d%%.", n != networkOf.end() ? int(std::lround(networks[n->second].Pressure() * 100)) : 0);
             text += line;
         }
-        return SendChat(client, net::ChatMessage::Kind::Info, text);
+        return SendChat(client, net::ChatMessage::Kind::Inspect, text);
     }
     if (Fluids::IsPart(b.type)) {
         text = std::string(b.type == BlockType::FLUID_TANK ? "Fluid tank. " : "Fluid pipe. ") + describeFluid(FluidNetAt(pos));
-        return SendChat(client, net::ChatMessage::Kind::Info, text);
+        return SendChat(client, net::ChatMessage::Kind::Inspect, text);
     }
     if (b.type == BlockType::DRAIN || b.type == BlockType::FLUID_OUTLET) {
         const FluidNet* net = nullptr;
@@ -1027,7 +1027,7 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
             if ((net = FluidNetAt(pos + d))) break;
         text = b.type == BlockType::DRAIN ? "Drain: takes water into the fluid pipes beside it, as much as they have room for. "
                                           : "Fluid outlet: lets water from the fluid pipes beside it out of its face. ";
-        return SendChat(client, net::ChatMessage::Kind::Info, text + describeFluid(net));
+        return SendChat(client, net::ChatMessage::Kind::Inspect, text + describeFluid(net));
     }
     if (b.type == BlockType::WATER_WHEEL) {
         const Wheel w = wheels.count(pos) ? wheels[pos] : Wheel{};
@@ -1106,12 +1106,12 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
         }
         else if (b.type == BlockType::PRESSURE_GAUGE) {
             text += "Pressure gauge. ";
-            if (const FluidNet* fn = FluidNetAt(pos - b.Facing())) return SendChat(client, net::ChatMessage::Kind::Info, text + describeFluid(fn));
+            if (const FluidNet* fn = FluidNetAt(pos - b.Facing())) return SendChat(client, net::ChatMessage::Kind::Inspect, text + describeFluid(fn));
         }
         else if (b.type == BlockType::OIL_DERRICK || b.type == BlockType::REFINERY) {
             text += b.type == BlockType::OIL_DERRICK ? "Oil derrick: build the derrick structure round it (steel frames), then strike it with an engineer's hammer. "
                                                      : "Refinery: build the refinery structure round it (machine casings and fluid tanks), then strike it with an engineer's hammer. ";
-            return SendChat(client, net::ChatMessage::Kind::Info, text);
+            return SendChat(client, net::ChatMessage::Kind::Inspect, text);
         }
         else if (false) {
             const Worker w = workers.count(pos) ? workers[pos] : Worker{};
@@ -1154,5 +1154,5 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
             text += line;
         }
     }
-    SendChat(client, net::ChatMessage::Kind::Info, text);
+    SendChat(client, net::ChatMessage::Kind::Inspect, text);
 }

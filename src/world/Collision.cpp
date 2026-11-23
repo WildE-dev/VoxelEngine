@@ -32,6 +32,20 @@ bool BoxBlocked(const BlockAccess& world, const AABB& box) {
             for (int z = z0; z <= z1; z++) {
                 Block block;
                 if (!world.GetBlock(x, y, z, block)) return true; // unloaded
+                const bool turned = block.ShapeDir() != 0 && block.IsPartial();
+                if (block.type == BlockType::DOOR || turned) {
+                    // A closed door blocks only its thin panel, not the whole cell; a shape
+                    // turned sideways or upside down, the box it fills.
+                    glm::vec3 lo, hi;
+                    if (turned) block.ShapeBounds(lo, hi);
+                    else block.DoorPanel(lo, hi);
+                    lo += glm::vec3(x, y, z);
+                    hi += glm::vec3(x, y, z);
+                    if (box.min.x < hi.x - kEpsilon && box.max.x > lo.x + kEpsilon && box.min.y < hi.y - kEpsilon && box.max.y > lo.y + kEpsilon &&
+                        box.min.z < hi.z - kEpsilon && box.max.z > lo.z + kEpsilon)
+                        return true;
+                    continue;
+                }
                 if (block.IsFullBlock()) return true;
             }
     return false;
@@ -48,7 +62,7 @@ std::optional<float> SlopeHeight(const BlockAccess& world, float x, float z, flo
             unknown = true;
             return std::nullopt;
         }
-        if (block.IsPassable()) continue; // air or a plant
+        if (block.IsPassable() || block.type == BlockType::DOOR || (block.ShapeDir() != 0 && block.IsPartial())) continue; // air, a plant, a door's panel, a turned shape (boxes)
         if (block.IsFullBlock()) return std::nullopt; // a full block, not a slope
         const float surface = y + block.SurfaceHeight(fx, fz);
         if (surface <= yHi && surface >= yLo) return surface;
@@ -75,6 +89,17 @@ std::optional<float> GroundHeight(const BlockAccess& world, const AABB& box, flo
                 if (!world.GetBlock(x, y, z, block)) {
                     unknown = true;
                     break;
+                }
+                if (block.type == BlockType::DOOR) continue; // (a thin panel: not something to stand on)
+                if (block.ShapeDir() != 0 && block.IsPartial()) {
+                    // A turned shape: the top of the box it fills, where the feet are over it.
+                    glm::vec3 lo, hi;
+                    block.ShapeBounds(lo, hi);
+                    if (box.min.x < x + hi.x && box.max.x > x + lo.x && box.min.z < z + hi.z && box.max.z > z + lo.z) {
+                        consider(static_cast<float>(y) + hi.y);
+                        break;
+                    }
+                    continue;
                 }
                 if (block.IsFullBlock()) {
                     consider(static_cast<float>(y + 1));

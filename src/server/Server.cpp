@@ -1000,67 +1000,48 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
 }
 
 void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType type, int height, int faceAxis) {
-    Block existing;
-    const bool valid = type != BlockType::AIR && !IsItemType(type) && InReach(client, pos, EditReach(client)) && world->GetBlock(pos.x, pos.y, pos.z, existing) &&
-                       existing.IsPassable();
-    if (!valid) {
-        // The client took the cost when it predicted the placement: put its count right.
+    // Refused: the client predicted it, so send back what's really there (the cells, and
+    // in survival the count it took the cost from).
+    auto refuse = [&] {
         if (!Creative(client)) SendResources(client);
-        return Echo(client, pos);
-    }
-
-    // A door needs room for its upper half too.
-    if (type == BlockType::DOOR) {
-        Block upper;
-        if (!world->GetBlock(pos.x, pos.y + 1, pos.z, upper) || !upper.IsPassable() || upper.type == BlockType::DOOR_OPEN) {
-            if (!Creative(client)) SendResources(client);
-            return Echo(client, pos);
-        }
-    }
-    // Seeds are planted on dirt or grass.
-    if (type == BlockType::CROP || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING) {
-        Block soil;
-        if (!world->GetBlock(pos.x, pos.y - 1, pos.z, soil) || !(soil.type == BlockType::DIRT || IsGrassType(soil.type)) || !soil.IsFullBlock()) {
-            if (!Creative(client)) SendResources(client);
-            return Echo(client, pos);
-        }
-    }
+        Echo(client, pos);
+        if (type == BlockType::DOOR) Echo(client, pos + glm::ivec3(0, 1, 0)); // (it predicted the upper half too)
+    };
+    // Room for it (a door's upper half too; seeds on dirt or grass): BlockAccess::CanPlace,
+    // which the client checks too before predicting it.
+    if (type == BlockType::AIR || IsItemType(type) || !InReach(client, pos, EditReach(client)) || !world->CanPlace(pos, type)) return refuse();
     const Block placed = Block::Placed(type, height, faceAxis);
     // Survival: it costs its worth, which the player must have. Water can't be
     // collected (only moved, with pumps), so it can't be placed either.
     const uint32_t cost = static_cast<uint32_t>(placed.ResourceUnits());
     uint32_t& held = client.resources[static_cast<size_t>(ResourceTypeOf(type))];
-    if (!Creative(client) && (held < cost || placed.IsLiquid())) {
-        SendResources(client); // so the client's count is right again
-        return Echo(client, pos);
-    }
+    if (!Creative(client) && (held < cost || placed.IsLiquid())) return refuse();
     // No solid blocks inside a walking player (water is fine).
     if (placed.IsFullBlock()) {
         const glm::vec3 lo(pos), hi = lo + glm::vec3(1.0f);
         for (const auto& [peer, other] : clients) {
             if (!other.welcomed || ((other.flags & net::kFlagFlying) && other.noclip)) continue;
             const Collision::AABB body = BodyAt(other.feet, 0.0f, (other.flags & net::kFlagCrouching) != 0);
-            if (glm::all(glm::lessThan(lo, body.max)) && glm::all(glm::greaterThan(hi, body.min))) return Echo(client, pos);
+            if (glm::all(glm::lessThan(lo, body.max)) && glm::all(glm::greaterThan(hi, body.min))) return refuse();
         }
     }
     world->SetBlock(pos.x, pos.y, pos.z, placed);
     if (IsStorageType(type)) chests[pos] = ChestItems{}; // a new chest is empty
     if (type == BlockType::CROP || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING) crops.insert(pos);
-    if (type == BlockType::DOOR) world->SetBlock(pos.x, pos.y + 1, pos.z, Block(BlockType::DOOR)); // its upper half (part of the one door)
+    if (type == BlockType::DOOR) world->SetBlock(pos.x, pos.y + 1, pos.z, placed); // its upper half (part of the one door, facing the same way)
     if (!Creative(client)) {
         held -= cost;
         SendResources(client);
     }
 }
 
-// A quarter of a block, up or down, per chisel stroke.
-constexpr int kChiselStep = 2; // eighths
-
 void Server::HandleChisel(ClientState& client, const net::EditChisel& chisel) {
     const glm::ivec3& p = chisel.pos;
     Block block;
-    if (!InReach(client, p, EditReach(client)) || !world->GetBlock(p.x, p.y, p.z, block) || !block.CanChisel()) return Echo(client, p);
-    const Block after = block.Chiselled(chisel.edge, chisel.raise ? kChiselStep : -kChiselStep);
+    // Needs the chisel (creative has every tool), and moves the corner by the step chosen.
+    if (Usable(client, Tool::Chisel) != Tool::Chisel || !InReach(client, p, EditReach(client)) || !world->GetBlock(p.x, p.y, p.z, block) || !block.CanChisel())
+        return Echo(client, p);
+    const Block after = block.ChiselledFrom(chisel.dir, chisel.edge, chisel.raise ? chisel.step : -chisel.step);
     // Survival: chiselling off gives back what it takes away; building up costs it.
     if (!Creative(client)) {
         uint32_t& held = client.resources[static_cast<size_t>(block.type)];
@@ -1190,6 +1171,11 @@ glm::vec3 Server::SpawnPoint() const {
     return glm::vec3(7.5f, static_cast<float>(terrain.ColumnAt(7, 7).FirstOpenRow()) + 1.0f, 7.5f);
 }
 
+namespace {
+// How full an oxygen tank is, as sent: 0 (empty) to 255 (full).
+int TankByte(float tank) { return static_cast<int>(std::clamp(std::lround(255.0f * tank / Breathing::kTankSeconds), 0L, 255L)); }
+} // namespace
+
 void Server::SendHealth(ClientState& client, bool hurt) {
     client.sentHealth = client.health;
     client.sentAir = static_cast<int>(std::ceil(client.air));
@@ -1204,9 +1190,9 @@ void Server::SendHealth(ClientState& client, bool hurt) {
     m.air = static_cast<uint8_t>(client.sentAir);
     m.airMax = static_cast<uint8_t>(Breathing::kMaxAir);
     m.airCause = static_cast<uint8_t>(client.airCause);
-    client.sentTank = static_cast<int>(std::ceil(client.tank));
+    client.sentTank = TankByte(client.tank);
     client.sentOnTank = client.onTank;
-    m.tank = static_cast<uint8_t>(std::clamp(std::lround(255.0f * client.tank / Breathing::kTankSeconds), 0L, 255L));
+    m.tank = static_cast<uint8_t>(client.sentTank);
     m.onTank = client.onTank ? 1 : 0;
     net.Send(client.peer, net::kChannelReliable, net::Encode(m));
 }
@@ -1403,7 +1389,13 @@ void Server::ToggleDoor(const glm::ivec3& pos, bool open) {
                 if (glm::all(glm::lessThan(lo, body.max)) && glm::all(glm::greaterThan(hi, body.min))) return;
             }
         }
-    for (const auto& h : halves) world->SetBlock(h.x, h.y, h.z, Block::Placed(to));
+    // Each half keeps the way it faces (where its hinge is); only open or shut changes.
+    for (const auto& h : halves) {
+        Block half;
+        if (!world->GetBlock(h.x, h.y, h.z, half)) continue;
+        half.type = to;
+        world->SetBlock(h.x, h.y, h.z, half);
+    }
 }
 
 glm::vec3 Server::RespawnPoint(const ClientState& client, std::string& why) const {
@@ -1464,7 +1456,9 @@ void Server::UpdateBreath(ClientState& client, float dt) {
         }
     }
     if (static_cast<int>(std::ceil(client.air)) != client.sentAir || client.airCause != client.sentAirCause || client.onTank != client.sentOnTank ||
-        std::abs(static_cast<int>(std::ceil(client.tank)) - client.sentTank) >= 3)
+        // The tank every 3 seconds' worth or so, and the moment it's full or empty (which
+        // those steps would otherwise stop short of, leaving it shown just under full).
+        std::abs(TankByte(client.tank) - client.sentTank) >= 8 || ((TankByte(client.tank) == 255 || TankByte(client.tank) == 0) && TankByte(client.tank) != client.sentTank))
         SendHealth(client, false);
 }
 

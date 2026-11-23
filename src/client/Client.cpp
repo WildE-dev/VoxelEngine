@@ -137,6 +137,11 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
     case net::MsgType::ChatMessage: {
         net::ChatMessage m;
         if (!(ok = net::Decode(in, m))) break;
+        if (m.kind == net::ChatMessage::Kind::Inspect) { // (for a machine's menu, not the chat)
+            inspections.push_back({ m.kind, m.text, Now() });
+            while (inspections.size() > kMaxInspections) inspections.pop_front();
+            break;
+        }
         chat.push_back({ m.kind, m.text, Now() });
         while (chat.size() > kMaxChatLines) chat.pop_front();
         break;
@@ -372,17 +377,26 @@ bool Client::CanAfford(BlockType type, int heightEighths) const {
 
 void Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths, int faceAxis) {
     if (!welcomed || IsItemType(type) || !CanAfford(type, heightEighths)) return; // (items aren't placed)
+    // Shown at once (predicted) only where the server will place it too, not over another
+    // block, or it would show for a moment and then be taken back. Where this copy of the
+    // world doesn't have the cell yet, it's left to the server (and shown when it answers).
+    Block here;
+    const bool known = world.GetBlock(pos.x, pos.y, pos.z, here);
+    if (known && !world.CanPlace(pos, type)) return; // the server would refuse it
     const Block placed = Block::Placed(type, heightEighths, faceAxis);
-    world.SetBlock(pos.x, pos.y, pos.z, placed);
-    if (!IsCreative()) resources[static_cast<size_t>(ResourceTypeOf(type))] -= static_cast<uint32_t>(placed.ResourceUnits());
+    if (known) {
+        world.SetBlock(pos.x, pos.y, pos.z, placed);
+        if (type == BlockType::DOOR) world.SetBlock(pos.x, pos.y + 1, pos.z, placed); // its upper half, as the server makes it
+        if (!IsCreative()) resources[static_cast<size_t>(ResourceTypeOf(type))] -= static_cast<uint32_t>(placed.ResourceUnits());
+    }
     net.Send(net::kChannelReliable, net::Encode(net::EditPlace{ pos, type, static_cast<uint8_t>(heightEighths), static_cast<uint8_t>(faceAxis) }));
 }
 
-void Client::Chisel(const glm::ivec3& pos, int edge, bool raise) {
-    if (!welcomed || edge < 0 || edge > 3) return;
+void Client::Chisel(const glm::ivec3& pos, int edge, bool raise, int dir, int step) {
+    if (!welcomed || edge < 0 || edge > 3 || dir < 0 || dir > 5 || !Block::IsChiselStep(step) || !HasTool(Tool::Chisel)) return;
     Block block;
     if (!world.GetBlock(pos.x, pos.y, pos.z, block) || !block.CanChisel()) return;
-    const Block after = block.Chiselled(edge, raise ? 2 : -2);
+    const Block after = block.ChiselledFrom(dir, edge, raise ? step : -step);
     if (!IsCreative()) {
         uint32_t& held = resources[static_cast<size_t>(block.type)];
         const int change = after.ResourceUnits() - block.ResourceUnits();
@@ -390,7 +404,8 @@ void Client::Chisel(const glm::ivec3& pos, int edge, bool raise) {
         held = static_cast<uint32_t>(static_cast<int64_t>(held) - change);
     }
     world.SetBlock(pos.x, pos.y, pos.z, after);
-    net.Send(net::kChannelReliable, net::Encode(net::EditChisel{ pos, static_cast<uint8_t>(edge), static_cast<uint8_t>(raise ? 1 : 0) }));
+    net.Send(net::kChannelReliable, net::Encode(net::EditChisel{ pos, static_cast<uint8_t>(edge), static_cast<uint8_t>(raise ? 1 : 0), static_cast<uint8_t>(dir),
+                                                                 static_cast<uint8_t>(step) }));
 }
 
 void Client::SendChat(const std::string& text) {

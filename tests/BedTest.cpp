@@ -160,6 +160,9 @@ int main() {
         a.client.PlaceBlock(doorAt, BlockType::DOOR);
         Check(both(20.0, [&] { return typeAt(doorAt) == BlockType::DOOR && typeAt(upper) == BlockType::DOOR; }) && a.client.GetResources(BlockType::DOOR) == 0,
               "a door is placed two blocks tall, for one door");
+        auto facingOf = [&](const glm::ivec3& p) { Block t; return a.world.GetBlock(p.x, p.y, p.z, t) ? t.Facing() : glm::ivec3(0); };
+        const glm::ivec3 doorFacing = facingOf(doorAt);
+        Check(doorFacing.y == 0 && doorFacing != glm::ivec3(0) && facingOf(upper) == doorFacing, "both halves face the same level way");
         a.client.UseBed(doorAt);
         Check(both(20.0, [&] { return typeAt(doorAt) == BlockType::DOOR_OPEN && typeAt(upper) == BlockType::DOOR_OPEN; }), "right-clicking opens both halves");
         server.QueueConsoleCommand("tp Owl 17.5 0 22.5"); // in the doorway
@@ -176,6 +179,7 @@ int main() {
               "opened from its upper half, both halves open (the top doesn't break off)");
         a.client.UseBed(doorAt);
         Check(both(20.0, [&] { return typeAt(doorAt) == BlockType::DOOR && typeAt(upper) == BlockType::DOOR; }), "and closed from the lower half, both close");
+        Check(facingOf(doorAt) == doorFacing && facingOf(upper) == doorFacing, "opening and closing keeps the way it faces (where its hinge is)");
         server.QueueConsoleCommand("gamemode creative Sleeper");
         both(20.0, [&] { return a.client.IsCreative(); });
         a.client.BreakBlock(upper);
@@ -190,13 +194,15 @@ int main() {
                 server.QueueConsoleCommand("tp " + killerName + " " + std::to_string(victim.feet.x - 1.5f) + " " + std::to_string(victim.feet.y) + " " +
                                            std::to_string(victim.feet.z));
                 Pump({ &victim, &killer }, 0.4, [] { return false; });
-                killer.client.AttackPlayer(victim.client.GetPlayerId(), Tool::None);
+                killer.client.AttackPlayer(victim.client.GetPlayerId(), Tool::Sword);
                 Pump({ &victim, &killer }, 0.4, [] { return false; });
             }
             return Count(victim, name + " was slain") > before;
         };
+        // (With a sword, three hits slay rather than ten bare-handed.)
+        server.QueueConsoleCommand("give sword Owl");
         server.QueueConsoleCommand("tp Sleeper 40.5 0 40.5");
-        both(20.0, [&] { return a.feet.x > 40.0f; });
+        both(20.0, [&] { return a.feet.x > 40.0f && b.client.HasTool(Tool::Sword); });
         Check(kill(a, "Sleeper", b, "Owl"), "the sleeper is slain far from the bed");
         auto nearBed = [&](const TestClient& c) { return glm::distance(c.feet, glm::vec3(bedAt) + glm::vec3(0.5f, 0.55f, 0.5f)) < 0.1f; };
         Check(both(20.0, [&] { return nearBed(a); }), "and comes back on their bed");
@@ -222,13 +228,14 @@ int main() {
             for (int i = 0; i < 30 && Count(a, "Sleeper was slain") == before; i++) {
                 server.QueueConsoleCommand("tp Owl " + std::to_string(a.feet.x - 1.5f) + " " + std::to_string(a.feet.y) + " " + std::to_string(a.feet.z));
                 both(0.4, [] { return false; });
-                b.client.AttackPlayer(a.client.GetPlayerId(), Tool::None);
+                b.client.AttackPlayer(a.client.GetPlayerId(), Tool::Sword);
                 both(0.4, [] { return false; });
             }
             return Count(a, "Sleeper was slain") > before;
         };
+        server.QueueConsoleCommand("give sword Owl");
         server.QueueConsoleCommand("tp Sleeper 40.5 0 40.5");
-        both(20.0, [&] { return a.feet.x > 40.0f; });
+        both(20.0, [&] { return a.feet.x > 40.0f && b.client.HasTool(Tool::Sword); });
         Check(kill(), "slain again");
         Check(both(20.0, [&] { return glm::distance(a.feet, glm::vec3(bedAt) + glm::vec3(0.5f, 0.55f, 0.5f)) < 0.1f; }), "they still come back on their bed");
         server.QueueConsoleCommand("gamemode creative Owl");

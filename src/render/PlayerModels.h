@@ -59,6 +59,7 @@ struct ParticleModel {
     float size = 0.1f;
     glm::vec4 uv{ 0.0f }; // the atlas tile region it shows (top-left, bottom-right)
     glm::vec2 light{ 15.0f, 0.0f };
+    float soft = 0.0f; // 1: lit evenly all round (spray), not shaded away from the sun
 };
 
 // An arrow: where it is and which way it points.
@@ -97,6 +98,17 @@ struct GaugeModel {
     glm::vec2 light{ 15.0f, 0.0f };
 };
 
+// One half of a door: a thin panel showing the door's texture, hinged at its left (seen
+// from the front) at the back of its cell, swung open by `open` (0 shut, 1 a quarter
+// turn in toward the front).
+struct DoorModel {
+    glm::vec3 origin{ 0.0f };     // the cell's corner
+    glm::ivec3 facing{ 0, 0, 1 }; // the way its front faces
+    float open = 0.0f;
+    glm::vec4 uv{ 0.0f };         // the door's atlas tile
+    glm::vec2 light{ 15.0f, 0.0f };
+};
+
 struct BoltModel {
     std::vector<glm::vec3> points;
     float brightness = 1.0f;
@@ -119,6 +131,7 @@ public:
     void DrawGlows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GlowModel>& glows);
     void DrawWheels(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<WheelModel>& wheels);
     void DrawGauges(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GaugeModel>& gauges);
+    void DrawDoors(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<DoorModel>& doors);
     void DrawBolts(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<BoltModel>& bolts);
     // Bits of broken blocks (tiny textured cubes).
     void DrawParticles(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ParticleModel>& particles);

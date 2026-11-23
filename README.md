@@ -50,8 +50,13 @@ GLFW), `NetSmokeTest` (see [Multiplayer](#multiplayer)), `SaveTest` (see
 (see [Signals](#signals)), `SyncTest` (two players: structures, chests, fluids, miners, the king and hired guards look the same to both), `ModelEditor` (see [The model editor](#the-model-editor)), `DataTest` (see [Editing blocks and creatures](#editing-blocks-and-creatures)) and `SoundTest` (see
 [Sound](#sound)).
 
-`ctest` in the build directory runs them all, and `ctest -j15` runs them all at
-once. They're written to pass even then, on a loaded machine:
+`ctest` in the build directory runs them all, and `ctest -j16` runs them all at
+once (about half a minute on 16 cores). The longest ones (CreatureTest, FactoryTest,
+BreathTest, TrapTest and FoodTest) run in parts side by side: each group of their
+sections is a ctest test of its own, such as `CreatureTest.raids`, run as
+`CreatureTest raids` (see `tests/TestSections.h`; the groups are listed in
+`CMakeLists.txt`). Run with no group, a test runs everything. They're written to pass
+even all at once, on a loaded machine:
 
 - They wait for things to happen rather than for fixed times.
 - Where the client shows a change before the server makes it (crafting, for
@@ -210,10 +215,10 @@ pauses. The menus can be driven with the pad as well.
 | Left click | Break block (survival: hold to mine it), or hit the creature in front of you |
 | Right click | Place the selected block; eat food in hand; open a chest; use a bed (Shift: place against a chest or bed instead) |
 | Middle click | Pick the block you're looking at into the selected hotbar slot (survival: if you have some) |
-| V / Shift+V | Placement height for building blocks: full, 3/4, 1/2, 1/4 (and back) |
+| V / Shift+V | Placement height for building blocks: full, 3/4, 1/2, 1/4 (and back); with the chisel in hand, how fine it cuts: 1/8, 1/4, 1/2 |
 | 1-9, 0 / mouse wheel | Select the hotbar slot to place from (with Tab you can also click a slot) |
 | I | Inventory: pick which tool or block goes in each hotbar slot |
-| C / Shift+C | Chisel: lower / raise the quarter of the block you're looking at by a quarter |
+| C / Shift+C | With the chisel in hand (or right-click / Shift+right-click): lower / raise the quarter of the block you're looking at |
 | L (hold) | Laser, operators only: carve a tunnel along the view ray |
 | R | Reload shaders, block textures and the data files (blocks, creature models), rebuild all chunk meshes |
 | Tab | Toggle mouse capture |
@@ -534,8 +539,10 @@ block: natural ground (grass, dirt, sand, stone, snow) slopes smoothly between i
 four corners, while anything built (bricks, logs, lamps and the rest) is four
 quarter-columns, each as high as its corner, like small steps.
 
-Shape blocks yourself with the chisel: **C** lowers the quarter you're looking at by
-a quarter of a block, **Shift+C** raises it again. Raising every quarter to the top
+Shape blocks yourself with the chisel, a tool (in survival, made from a little wood
+and stone). With it in hand, **C** or right-click lowers the quarter you're looking
+at, **Shift+C** or Shift+right-click raises it again. **V** sets how far each stroke
+goes: an eighth of a block (as fine as natural slopes), a quarter, or a half. Raising every quarter to the top
 makes the block whole; lowering them all removes it. Machines (pumps, pipes, sluice
 gates, pressure plates), water and plants can't be chiselled. Shaped blocks hold
 water above their quarters like the terrain's slopes do, and fill their lowest parts

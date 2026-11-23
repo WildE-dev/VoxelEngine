@@ -90,8 +90,16 @@ const char* HeightName(int eighths) {
     }
 }
 
+const char* ChiselStepName(int eighths) {
+    switch (eighths) {
+    case 1: return "1/8";
+    case 4: return "1/2";
+    default: return "1/4";
+    }
+}
+
 // The tools the inventory offers, and the icon (atlas tile) for one.
-constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel, Tool::Sword, Tool::Bow, Tool::Rod };
+constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel, Tool::Sword, Tool::Bow, Tool::Rod, Tool::Chisel };
 int ToolTile(const TextureAtlas& atlas, Tool tool) {
     const char* name = Mining::ToolTexture(tool);
     return name ? atlas.GetIndex(name) : 0;
@@ -104,6 +112,7 @@ const char* ToolHint(Tool tool) {
     case Tool::Sword: return "for fighting: 3.5 hearts a hit (and quick on leaves)";
     case Tool::Bow: return "right-click to shoot an arrow (2.5 hearts); needs arrows";
     case Tool::Rod: return "right-click water to cast; wait for a bite (stay close)";
+    case Tool::Chisel: return "right-click (or C) to cut a block's corner down, with Shift to build it up; V: how fine";
     default: return "";
     }
 }
@@ -448,6 +457,12 @@ void Application::StopGame() {
     }
     if (client) client->Disconnect();
     client.reset();
+    // The world's chunks are freed in the background: on Windows that alone takes over a
+    // second with a full view, and the menu needn't wait for it.
+    if (world) {
+        if (freeingWorld.valid()) freeingWorld.wait();
+        freeingWorld = std::async(std::launch::async, [chunks = world->Release()]() mutable { chunks.clear(); });
+    }
     world.reset();
     if (localServer) localServer->Stop(); // (saves the world)
     localServer.reset();
@@ -628,6 +643,11 @@ void Application::Shutdown() {
     audio.reset();
     if (client) client->Disconnect();
     client.reset();
+    // Quitting: the world's chunks aren't freed one by one (over a second on Windows with
+    // a full view); the process ends straight after and the system takes the memory back
+    // all at once. Their GPU objects go now, while the context is still here.
+    if (freeingWorld.valid()) freeingWorld.wait(); // (a world left earlier, still being freed)
+    if (world) new ClientWorld::ChunkMap(world->Release()); // (deliberately never freed)
     world.reset();
     renderer.reset();
     if (localServer) localServer->Stop();
@@ -801,8 +821,14 @@ void Application::Run() {
         }
         if (arrowFacing.size() > 512) arrowFacing.clear();
         UpdateMachines(params, lightAt);
-        for (const auto& p : particles)
-            params.particles.push_back({ p.position, p.size * std::min(1.0f, p.life / (0.4f * p.maxLife)), p.uv, lightAt(p.position - glm::vec3(0.0f, 0.1f, 0.0f)) });
+        for (const auto& p : particles) {
+            // Bits shrink away at the end; spray clouds billow out to two and a half times
+            // their size, and shrink away only right at the end.
+            const float age = 1.0f - p.life / p.maxLife;
+            const float size = p.mist ? p.size * (1.0f + 1.5f * age) * std::min(1.0f, p.life / (0.25f * p.maxLife))
+                                      : p.size * std::min(1.0f, p.life / (0.4f * p.maxLife));
+            params.particles.push_back({ p.position, size, p.uv, lightAt(p.position - glm::vec3(0.0f, 0.1f, 0.0f)), p.mist ? 1.0f : 0.0f });
+        }
         const TextureAtlas& atlas = renderer->GetAtlas();
         for (const auto& other : client->GetRemotePlayers()) {
             PlayerModel model{ other.feet, other.yaw, other.pitch, PlayerModels::ColorFor(other.id), (other.flags & net::kFlagHurt) != 0, lightAt(other.feet) };
@@ -1071,86 +1097,86 @@ void Application::DrawCrosshair() {
         label(only == BlockType::AIR ? std::string("Filter pipe: lets anything through").c_str() : (std::string("Filter pipe: lets only ") + BlockName(only) + " through").c_str());
         return;
     }
-    // Looking at a water wheel or a machine: how it's doing, under the crosshair.
-    if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
-        at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Power::IsMachine(target.type)) {
-        for (const auto& m : client->GetMachines()) {
-            if (m.pos != at->block) continue;
-            char text[128];
-            const int pressure = static_cast<int>(std::lround(m.pressure / 2.55f));
-            const auto state = static_cast<Power::DrillState>(m.state);
-            if (target.type == BlockType::WATER_WHEEL)
-                std::snprintf(text, sizeof text, state == Power::DrillState::Blocked ? "Water wheel: jammed" : m.speed ? "Water wheel: turning (%d%%)" : "Water wheel: still",
-                              int(std::lround(m.speed / 2.55f)));
-            else if (target.type == BlockType::COMPRESSOR)
-                std::snprintf(text, sizeof text, "Compressor: +%.1f air/s from %d wheel%s - air %d%%", m.speed / 2.0f, m.depth, m.depth == 1 ? "" : "s", pressure);
-            else if (target.type == BlockType::AIR_TANK) std::snprintf(text, sizeof text, "Air tank - air %d%%", pressure);
-            else if (target.type == BlockType::SMELTER || target.type == BlockType::SMELTER_LIT)
-                std::snprintf(text, sizeof text, "Smelter: %s - air %d%%",
-                              state == Power::DrillState::Working ? ("making " + std::string(m.depth < static_cast<uint8_t>(BlockType::COUNT) ? BlockName(static_cast<BlockType>(m.depth)) : "?")).c_str()
-                              : state == Power::DrillState::NoPressure ? "needs air pressure" : state == Power::DrillState::NoChest ? "needs a chest" : "nothing to smelt",
-                              pressure);
-            else if (target.type == BlockType::PRESSURE_GAUGE || target.type == BlockType::FLUID_TANK) {
-                // On fluid pipes, or a tank: how full, of what.
-                Block on;
-                const glm::ivec3 behind = target.type == BlockType::FLUID_TANK ? m.pos : m.pos - target.Facing();
-                const bool fluid = world->GetBlock(behind.x, behind.y, behind.z, on) && Fluids::IsPart(on.type);
-                const char* what = Fluids::Name(static_cast<Fluids::Kind>(std::min<uint8_t>(m.depth, static_cast<uint8_t>(Fluids::Kind::Count) - 1)));
-                if (fluid) std::snprintf(text, sizeof text, "%s - %d%% full%s%s", target.type == BlockType::FLUID_TANK ? "Fluid tank" : "Gauge", pressure,
-                                         pressure > 0 ? " of " : "", pressure > 0 ? what : "");
-                else std::snprintf(text, sizeof text, "Pressure gauge - air %d%%", pressure);
-            }
-            else if (target.type == BlockType::MULTIBLOCK) {
-                const char* doing = state == Power::DrillState::Working ? "working" : state == Power::DrillState::NoPressure ? "needs air pressure"
-                                  : state == Power::DrillState::NoChest ? "connect its ports" : state == Power::DrillState::Done ? "no oil under it" : "idle";
-                std::snprintf(text, sizeof text, "%s: %s - air %d%%", Multiblocks::PatternOf(Multiblocks::KindOf(target)).name, doing, pressure);
-            }
-            else if (target.type == BlockType::MINING_POST) {
-                const char* doing = state == Power::DrillState::NoPressure ? "waiting for pay (put cooked food in it)"
-                                  : state == Power::DrillState::Done        ? "no ore left within 12 blocks"
-                                                                            : "mining";
-                std::snprintf(text, sizeof text, "Mining post: %d miner%s - %s", m.depth, m.depth == 1 ? "" : "s", doing);
-            }
-            else if (target.type == BlockType::ENGINE)
-                std::snprintf(text, sizeof text, "Engine: %s - air %d%%", state == Power::DrillState::Working ? "running" : "stopped (no fuel)", pressure);
-            else if (target.type == BlockType::AIR_DIFFUSER)
-                std::snprintf(text, sizeof text, "Air diffuser: %s - air %d%%", state == Power::DrillState::Working ? "breathing out fresh air" : "stopped (needs air pressure)", pressure);
-            else if (target.type == BlockType::TURBINE)
-                std::snprintf(text, sizeof text, "Steam turbine: %s - air %d%%", state == Power::DrillState::Working ? "running" : "stopped (no steam)", pressure);
-            else if (target.type == BlockType::BOILER)
-                std::snprintf(text, sizeof text, "Boiler: %s", state == Power::DrillState::Working      ? "boiling"
-                                                              : state == Power::DrillState::NoPressure ? "out of fuel (coal or coke in its chests)"
-                                                              : state == Power::DrillState::NoChest    ? "needs fluid pipes under it (water) and over it (steam)"
-                                                                                                       : "no water under it, or no room for steam over it");
-            else if (target.type == BlockType::OIL_DERRICK || target.type == BlockType::REFINERY) {
-                const bool derrick = target.type == BlockType::OIL_DERRICK;
-                const char* doing = state == Power::DrillState::Working ? (derrick ? "pumping oil" : "making fuel") : state == Power::DrillState::NoPressure ? "needs air pressure"
-                                  : state == Power::DrillState::NoChest ? (derrick ? "needs fluid pipes" : "needs pipes in and out")
-                                  : state == Power::DrillState::Done ? "no oil under it" : "idle";
-                std::snprintf(text, sizeof text, "%s: %s - air %d%%", derrick ? "Oil derrick" : "Refinery", doing, pressure);
-            }
-            else if (target.type == BlockType::EXTRACTOR || target.type == BlockType::CRAFTER || target.type == BlockType::HARVESTER) {
-                const char* name = target.type == BlockType::EXTRACTOR ? "Extractor" : target.type == BlockType::CRAFTER ? "Crafter" : "Harvester";
-                std::string what;
-                if (target.type == BlockType::CRAFTER) {
-                    const int index = static_cast<int>(target.axis) - 1;
-                    what = index >= 0 && index < static_cast<int>(Crafting::Recipes().size()) ? std::string(" making ") + Crafting::Recipes()[index].name : " (no recipe)";
-                }
-                const char* doing = state == Power::DrillState::Working ? "working" : state == Power::DrillState::NoPressure ? "needs air pressure"
-                                  : state == Power::DrillState::NoChest ? "needs a chest" : state == Power::DrillState::Blocked ? "no recipe" : "idle";
-                std::snprintf(text, sizeof text, "%s%s: %s - air %d%%", name, what.c_str(), doing, pressure);
-            }
-            else if (target.type == BlockType::PISTON || target.type == BlockType::PISTON_HEAD || target.type == BlockType::PRESSURE_SENSOR) continue;
-            else if (target.type == BlockType::PUMP)
-                std::snprintf(text, sizeof text, "Pump: %s - air %d%%", state == Power::DrillState::Working ? "pumping" : state == Power::DrillState::NoPressure ? "needs air pressure" : "nothing to pump", pressure);
-            else std::snprintf(text, sizeof text, "Drill: %s - air %d%%", Power::Describe(state), pressure);
-            const ImVec2 size = ImGui::CalcTextSize(text);
-            const ImVec2 p(c.x - size.x * 0.5f, c.y + 22.0f);
-            draw->AddRectFilled(ImVec2(p.x - 6, p.y - 3), ImVec2(p.x + size.x + 6, p.y + size.y + 3), IM_COL32(0, 0, 0, 140), 4.0f);
-            draw->AddText(p, IM_COL32(255, 255, 255, 235), text);
-            break;
+}
+
+// How a machine is doing, in a line (empty for one that has nothing to say): shown in
+// its menu (right-click it). A structure's blocks go by its core.
+std::string Application::MachineStatus(const glm::ivec3& pos) const {
+    Block target;
+    if (!world->GetBlock(pos.x, pos.y, pos.z, target) || !Power::IsMachine(target.type)) return {};
+    for (const auto& m : client->GetMachines()) {
+        if (m.pos != pos) continue;
+        char text[128];
+        const int pressure = static_cast<int>(std::lround(m.pressure / 2.55f));
+        const auto state = static_cast<Power::DrillState>(m.state);
+        if (target.type == BlockType::WATER_WHEEL)
+            std::snprintf(text, sizeof text, state == Power::DrillState::Blocked ? "Water wheel: jammed" : m.speed ? "Water wheel: turning (%d%%)" : "Water wheel: still",
+                          int(std::lround(m.speed / 2.55f)));
+        else if (target.type == BlockType::COMPRESSOR)
+            std::snprintf(text, sizeof text, "Compressor: +%.1f air/s from %d wheel%s - air %d%%", m.speed / 2.0f, m.depth, m.depth == 1 ? "" : "s", pressure);
+        else if (target.type == BlockType::AIR_TANK) std::snprintf(text, sizeof text, "Air tank - air %d%%", pressure);
+        else if (target.type == BlockType::SMELTER || target.type == BlockType::SMELTER_LIT)
+            std::snprintf(text, sizeof text, "Smelter: %s - air %d%%",
+                          state == Power::DrillState::Working ? ("making " + std::string(m.depth < static_cast<uint8_t>(BlockType::COUNT) ? BlockName(static_cast<BlockType>(m.depth)) : "?")).c_str()
+                          : state == Power::DrillState::NoPressure ? "needs air pressure" : state == Power::DrillState::NoChest ? "needs a chest" : "nothing to smelt",
+                          pressure);
+        else if (target.type == BlockType::PRESSURE_GAUGE || target.type == BlockType::FLUID_TANK) {
+            // On fluid pipes, or a tank: how full, of what.
+            Block on;
+            const glm::ivec3 behind = target.type == BlockType::FLUID_TANK ? m.pos : m.pos - target.Facing();
+            const bool fluid = world->GetBlock(behind.x, behind.y, behind.z, on) && Fluids::IsPart(on.type);
+            const char* what = Fluids::Name(static_cast<Fluids::Kind>(std::min<uint8_t>(m.depth, static_cast<uint8_t>(Fluids::Kind::Count) - 1)));
+            if (fluid) std::snprintf(text, sizeof text, "%s - %d%% full%s%s", target.type == BlockType::FLUID_TANK ? "Fluid tank" : "Gauge", pressure,
+                                     pressure > 0 ? " of " : "", pressure > 0 ? what : "");
+            else std::snprintf(text, sizeof text, "Pressure gauge - air %d%%", pressure);
         }
+        else if (target.type == BlockType::MULTIBLOCK) {
+            const char* doing = state == Power::DrillState::Working ? "working" : state == Power::DrillState::NoPressure ? "needs air pressure"
+                              : state == Power::DrillState::NoChest ? "connect its ports" : state == Power::DrillState::Done ? "no oil under it" : "idle";
+            std::snprintf(text, sizeof text, "%s: %s - air %d%%", Multiblocks::PatternOf(Multiblocks::KindOf(target)).name, doing, pressure);
+        }
+        else if (target.type == BlockType::MINING_POST) {
+            const char* doing = state == Power::DrillState::NoPressure ? "waiting for pay (put cooked food in it)"
+                              : state == Power::DrillState::Done        ? "no ore left within 12 blocks"
+                                                                        : "mining";
+            std::snprintf(text, sizeof text, "Mining post: %d miner%s - %s", m.depth, m.depth == 1 ? "" : "s", doing);
+        }
+        else if (target.type == BlockType::ENGINE)
+            std::snprintf(text, sizeof text, "Engine: %s - air %d%%", state == Power::DrillState::Working ? "running" : "stopped (no fuel)", pressure);
+        else if (target.type == BlockType::AIR_DIFFUSER)
+            std::snprintf(text, sizeof text, "Air diffuser: %s - air %d%%", state == Power::DrillState::Working ? "breathing out fresh air" : "stopped (needs air pressure)", pressure);
+        else if (target.type == BlockType::TURBINE)
+            std::snprintf(text, sizeof text, "Steam turbine: %s - air %d%%", state == Power::DrillState::Working ? "running" : "stopped (no steam)", pressure);
+        else if (target.type == BlockType::BOILER)
+            std::snprintf(text, sizeof text, "Boiler: %s", state == Power::DrillState::Working      ? "boiling"
+                                                          : state == Power::DrillState::NoPressure ? "out of fuel (coal or coke in its chests)"
+                                                          : state == Power::DrillState::NoChest    ? "needs fluid pipes under it (water) and over it (steam)"
+                                                                                                   : "no water under it, or no room for steam over it");
+        else if (target.type == BlockType::OIL_DERRICK || target.type == BlockType::REFINERY) {
+            const bool derrick = target.type == BlockType::OIL_DERRICK;
+            const char* doing = state == Power::DrillState::Working ? (derrick ? "pumping oil" : "making fuel") : state == Power::DrillState::NoPressure ? "needs air pressure"
+                              : state == Power::DrillState::NoChest ? (derrick ? "needs fluid pipes" : "needs pipes in and out")
+                              : state == Power::DrillState::Done ? "no oil under it" : "idle";
+            std::snprintf(text, sizeof text, "%s: %s - air %d%%", derrick ? "Oil derrick" : "Refinery", doing, pressure);
+        }
+        else if (target.type == BlockType::EXTRACTOR || target.type == BlockType::CRAFTER || target.type == BlockType::HARVESTER) {
+            const char* name = target.type == BlockType::EXTRACTOR ? "Extractor" : target.type == BlockType::CRAFTER ? "Crafter" : "Harvester";
+            std::string what;
+            if (target.type == BlockType::CRAFTER) {
+                const int index = static_cast<int>(target.axis) - 1;
+                what = index >= 0 && index < static_cast<int>(Crafting::Recipes().size()) ? std::string(" making ") + Crafting::Recipes()[index].name : " (no recipe)";
+            }
+            const char* doing = state == Power::DrillState::Working ? "working" : state == Power::DrillState::NoPressure ? "needs air pressure"
+                              : state == Power::DrillState::NoChest ? "needs a chest" : state == Power::DrillState::Blocked ? "no recipe" : "idle";
+            std::snprintf(text, sizeof text, "%s%s: %s - air %d%%", name, what.c_str(), doing, pressure);
+        }
+        else if (target.type == BlockType::PISTON || target.type == BlockType::PISTON_HEAD || target.type == BlockType::PRESSURE_SENSOR) return {};
+        else if (target.type == BlockType::PUMP)
+            std::snprintf(text, sizeof text, "Pump: %s - air %d%%", state == Power::DrillState::Working ? "pumping" : state == Power::DrillState::NoPressure ? "needs air pressure" : "nothing to pump", pressure);
+        else std::snprintf(text, sizeof text, "Drill: %s - air %d%%", Power::Describe(state), pressure);
+        return text;
     }
+    return {};
 }
 
 void Application::UpdateMachines(FrameParams& params, const std::function<glm::vec2(const glm::vec3&)>& lightAt) {
@@ -1191,6 +1217,23 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
         params.gauges.push_back({ glm::vec3(pos) + 0.5f, g.Facing(), shown, lightAt(glm::vec3(pos)) });
     }
     gaugeNeedles.swap(needles);
+
+    // Doors swing open and shut over a quarter of a second (eased in and out) rather than
+    // jumping. One seen for the first time is drawn as it is.
+    glm::vec2 door0, door1;
+    renderer->GetAtlas().GetTileUV(renderer->GetAtlas().GetIndex("door"), door0, door1);
+    std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> swings;
+    for (const auto& pos : world->GetModelBlocks()) {
+        Block d;
+        if (!world->GetBlock(pos.x, pos.y, pos.z, d) || (d.type != BlockType::DOOR && d.type != BlockType::DOOR_OPEN)) continue;
+        const float target = d.type == BlockType::DOOR_OPEN ? 1.0f : 0.0f;
+        float swing = doorSwings.count(pos) ? doorSwings[pos] : target;
+        swing = target > swing ? std::min(target, swing + dt * 4.0f) : std::max(target, swing - dt * 4.0f);
+        swings[pos] = swing;
+        const float eased = swing * swing * (3.0f - 2.0f * swing);
+        params.doors.push_back({ glm::vec3(pos), d.Facing(), eased, glm::vec4(door0, door1), lightAt(glm::vec3(pos) + glm::vec3(0.5f)) });
+    }
+    doorSwings.swap(swings);
 
     // Formed structures: their models, at their pattern's corner, working or not.
     std::unordered_map<glm::ivec3, uint8_t, Coords::IVec3Hash> states;
@@ -2089,6 +2132,7 @@ void Application::DrawHotbar() {
         const Tool selectedTool = SelectedTool();
         const bool survival = !client->IsCreative();
         std::string label = selectedTool != Tool::None ? Mining::ToolName(selectedTool) : BlockName(selected);
+        if (selectedTool == Tool::Chisel) label += std::string(" - ") + ChiselStepName(chiselStep) + " a stroke (V)";
         if (selectedTool == Tool::None && Block::CanShape(selected))
             label += std::string(" - ") + HeightName(placeHeight) + (placeHeight < 8 ? " height" : " block") + " (V)";
         const bool affordable = selectedTool != Tool::None ? client->HasTool(selectedTool)
@@ -2259,8 +2303,16 @@ void Application::OnKey(int key, int action) {
     }
     if (is(Action::Inventory)) return SetInventoryOpen(true);
     if (is(Action::PlaceHeight)) {
-        // Placement height: full, 3/4, 1/2, 1/4 (with Shift, back up).
+        // Placement height: full, 3/4, 1/2, 1/4 (with Shift, back up). With the chisel in
+        // hand, how fine it cuts instead: an eighth, a quarter, a half (Shift: back).
         const bool shift = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+        if (SelectedTool() == Tool::Chisel) {
+            constexpr int kSteps = static_cast<int>(std::size(Block::kChiselSteps));
+            int i = 0;
+            while (i < kSteps - 1 && Block::kChiselSteps[i] != chiselStep) i++;
+            chiselStep = Block::kChiselSteps[(i + (shift ? kSteps - 1 : 1)) % kSteps];
+            return;
+        }
         placeHeight = shift ? (placeHeight >= 8 ? 2 : placeHeight + 2) : (placeHeight <= 2 ? 8 : placeHeight - 2);
         return;
     }
@@ -2414,7 +2466,7 @@ void Application::SetInventoryOpen(bool open) {
         client->CloseChest();
         chestMode = chestSeenOpen = false;
     }
-    if (!open) signMode = false, signalMode = false, tradeMode = false;
+    if (!open) signMode = false, signalMode = false, tradeMode = false, machineMode = false;
     // The cursor is needed to click blocks; give it back to the game on closing.
     if (open) cursorBeforeInventory = captureCursor;
     captureCursor = open ? false : cursorBeforeInventory;
@@ -2491,6 +2543,7 @@ void Application::DrawTrade() {
 void Application::DrawInventory() {
     if (!inventoryOpen) return;
     if (chestMode) return DrawChest();
+    if (machineMode) return DrawMachine();
     if (signMode) return DrawSignEditor();
     if (signalMode) return DrawSignalEditor();
     if (tradeMode) return DrawTrade();
@@ -2653,6 +2706,82 @@ void Application::DrawInventory() {
     if (!open) SetInventoryOpen(false);
 }
 
+std::optional<glm::ivec3> Application::StructureCoreAt(const glm::ivec3& pos) const {
+    // Structures are 3 across and a few high: a core within reach whose pattern covers it.
+    for (int dx = -2; dx <= 2; dx++)
+        for (int dz = -2; dz <= 2; dz++)
+            for (int dy = -5; dy <= 5; dy++) {
+                const glm::ivec3 p = pos + glm::ivec3(dx, dy, dz);
+                Block core;
+                if (!world->GetBlock(p.x, p.y, p.z, core) || core.type != BlockType::MULTIBLOCK) continue;
+                const glm::ivec3 origin = Multiblocks::OriginOf(p, core);
+                for (const auto& cell : Multiblocks::PatternOf(Multiblocks::KindOf(core)).cells)
+                    if (Multiblocks::Place(origin, Multiblocks::TurnOf(core), cell.at) == pos) return p;
+            }
+    return std::nullopt;
+}
+
+void Application::OpenMachine(const glm::ivec3& pos, bool inventory) {
+    machineAt = pos;
+    machineAskedAt = machineInspectAt = Client::Now();
+    Block b;
+    if (world->GetBlock(pos.x, pos.y, pos.z, b) && Power::IsPart(b.type)) client->Inspect(pos);
+    SetInventoryOpen(true);
+    if (inventory) {
+        client->OpenChest(pos);
+        chestMode = true;
+        chestSeenOpen = false;
+        chestAskedAt = Client::Now();
+    }
+    else machineMode = true;
+}
+
+void Application::DrawMachineInfo(const glm::ivec3& pos) {
+    Block b;
+    if (!world->GetBlock(pos.x, pos.y, pos.z, b) || !Power::IsPart(b.type)) return;
+    const double now = Client::Now();
+    // The description is asked for again every second, so it stays current.
+    if (now - machineInspectAt > 1.0) {
+        client->Inspect(pos);
+        machineInspectAt = now;
+    }
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 460.0f);
+    if (const std::string status = MachineStatus(pos); !status.empty()) ImGui::TextUnformatted(status.c_str());
+    const auto& said = client->GetInspections();
+    if (!said.empty() && said.back().time >= machineAskedAt - 0.5) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
+        ImGui::TextUnformatted(said.back().text.c_str());
+        ImGui::PopStyleColor();
+    }
+    else ImGui::TextDisabled("...");
+    ImGui::PopTextWrapPos();
+    ImGui::Separator();
+}
+
+void Application::DrawMachine() {
+    // Gone, or walked away from: the menu goes.
+    Block b;
+    if (!world->GetBlock(machineAt.x, machineAt.y, machineAt.z, b) || !Power::IsPart(b.type) ||
+        glm::distance(camera.GetPosition(), glm::vec3(machineAt) + 0.5f) > 8.0f) {
+        SetInventoryOpen(false);
+        return;
+    }
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.42f),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowBgAlpha(0.85f);
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize;
+    bool keepOpen = true;
+    const std::string title = std::string(BlockName(b.type)) + "###machine";
+    if (ImGui::Begin(title.c_str(), &keepOpen, flags)) {
+        DrawMachineInfo(machineAt);
+        ImGui::TextDisabled("I or Esc closes.");
+    }
+    ImGui::End();
+    if (!keepOpen) SetInventoryOpen(false);
+}
+
 void Application::DrawChest() {
     // Waiting for the server to say it's open; once open, closed by the server (broken,
     // walked away from): the window goes.
@@ -2674,13 +2803,15 @@ void Application::DrawChest() {
     std::string title = "Chest";
     if (const auto at = client->GetOpenChest()) {
         Block b;
-        if (world->GetBlock(at->x, at->y, at->z, b) && b.type != BlockType::CHEST) title = b.type == BlockType::MULTIBLOCK ? "Structure" : BlockName(b.type);
+        if (world->GetBlock(at->x, at->y, at->z, b) && b.type != BlockType::CHEST)
+            title = b.type == BlockType::MULTIBLOCK ? Multiblocks::PatternOf(Multiblocks::KindOf(b)).name : BlockName(b.type);
     }
     title += "###chest";
     if (ImGui::Begin(title.c_str(), &keepOpen, flags)) {
         const TextureAtlas& atlas = renderer->GetAtlas();
         const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
         const bool all = ImGui::GetIO().KeyShift;
+        if (const auto at = client->GetOpenChest()) DrawMachineInfo(*at); // (a machine: how it's doing)
         ImGui::TextDisabled("Click to move a block's worth (or one item); Shift-click moves them all. I or Esc closes.");
         // One grid: every type with some in it, each a button that moves some across.
         auto grid = [&](const char* id, bool inChest) {
@@ -2719,6 +2850,8 @@ void Application::DrawChest() {
 }
 
 void Application::ChiselTarget(bool raise) {
+    // Only with the chisel in hand (made, in survival).
+    if (SelectedTool() != Tool::Chisel || !client->HasTool(Tool::Chisel)) return;
     auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach());
     if (!hit) return;
     // Where the view ray enters the block's cube decides the quarter (in x and z).
@@ -2732,10 +2865,16 @@ void Application::ChiselTarget(bool raise) {
         tNear = std::max(tNear, t0);
         tFar = std::min(tFar, t1);
     }
-    const glm::vec3 p = origin + dir * std::min(tNear, tFar) - lo;
+    // A full block is chiselled from the side looked at (that side becomes its top); a
+    // shaped one in its own direction. The quarter goes by where the view meets it, seen
+    // in the shape's own upright frame.
+    Block target;
+    if (!world->GetBlock(hit->block.x, hit->block.y, hit->block.z, target)) return;
+    const int shapeDir = target.IsFullBlock() && Block::CanTurnShape(target.type) ? Block::ShapeDirFacing(hit->normal) : target.ShapeDir();
+    const glm::vec3 p = Block::CellToShape(shapeDir, origin + dir * std::min(tNear, tFar) - lo);
     const bool highX = p.x >= 0.5f, highZ = p.z >= 0.5f;
     const int edge = highX ? (highZ ? 3 : 1) : (highZ ? 0 : 2); // EdgeData order
-    client->Chisel(hit->block, edge, raise);
+    client->Chisel(hit->block, edge, raise, shapeDir, chiselStep);
 }
 
 void Application::OnMouseButton(int button, int action) {
@@ -2802,25 +2941,23 @@ void Application::OnMouseButton(int button, int action) {
             if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f)) client->UseBed(at->block);
             return;
         }
-        // A machine with its own inventory (a structure's any block: its core's) opens like
-        // a chest with an empty hand or a tool (and says how it's doing); with a block in
-        // hand it's built against, and a crafter takes what's in hand as its recipe.
+        // A machine with its own inventory opens like a chest with an empty hand or a tool,
+        // with how it's doing at the top. Any block of a formed structure (its ports too)
+        // opens the structure's. With a block in hand it's built against, and a crafter
+        // takes what's in hand as its recipe.
         const bool holding = SelectedTool() == Tool::None && SelectedBlock() != BlockType::AIR;
         const bool blockInHand = holding && !IsItemType(SelectedBlock());
         auto opens = [&](BlockType t) {
             if (t == BlockType::CHEST || t == BlockType::MINING_POST) return true;
             if (t == BlockType::CRAFTER) return !holding;
-            return (IsMachineInventory(t) || t == BlockType::MULTIBLOCK_PART) && !blockInHand;
+            return IsMachineInventory(t) && !blockInHand;
         };
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
-            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && opens(target.type)) {
-            if (IsMachineInventory(target.type) || target.type == BlockType::MULTIBLOCK_PART) client->Inspect(at->block);
-            client->OpenChest(at->block);
-            SetInventoryOpen(true);
-            chestMode = true;
-            chestSeenOpen = false;
-            chestAskedAt = Client::Now();
-            return;
+            at && world->GetBlock(at->block.x, at->block.y, at->block.z, target)) {
+            glm::ivec3 pos = at->block;
+            if (!blockInHand)
+                if (const auto core = StructureCoreAt(pos); core && world->GetBlock(core->x, core->y, core->z, target)) pos = *core;
+            if (opens(target.type)) return OpenMachine(pos, true);
         }
         // A filter pipe or a crafter: set it to what's in hand (with Shift held, it's
         // built against instead).
@@ -2856,12 +2993,16 @@ void Application::OnMouseButton(int button, int action) {
             client->UseBed(at->block);
             return;
         }
-        // Part of an air network: how it's doing (the server says, in chat).
+        // Any other machine, or a pipe: its menu, saying how it's doing.
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
-            at && !building && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Power::IsPart(target.type)) {
-            client->Inspect(at->block);
-            return;
-        }
+            at && !building && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Power::IsPart(target.type))
+            return OpenMachine(at->block, false);
+    }
+
+    // Right-click with the chisel: cut the corner looked at (Shift: build it up).
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::Chisel) {
+        ChiselTarget(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
+        return;
     }
 
     // Right-click with the rod: cast into the water looked at (the first water surface
@@ -3001,6 +3142,18 @@ void Application::OnMouseButton(int button, int action) {
         if (placeBlock == BlockType::PRESSURE_GAUGE || placeBlock == BlockType::FLUID_OUTLET)
             for (int f = 0; f < kFaceCount; f++)
                 if (glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]) == hit->normal) faceAxis = f;
+        // A door faces whoever puts it up (level); a ladder faces out from the wall it's
+        // put on, or, put on top of another ladder, the way that one does.
+        if (IsWallFacingType(placeBlock)) {
+            const glm::vec3 look = camera.GetDirection();
+            faceAxis = std::abs(look.x) >= std::abs(look.z) ? (look.x > 0.0f ? 1 : 0) : (look.z > 0.0f ? 5 : 4);
+            if (placeBlock == BlockType::LADDER) {
+                if (hit->normal.y == 0)
+                    for (int f = 0; f < kFaceCount; f++)
+                        if (glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]) == hit->normal) faceAxis = f;
+                if (aimed.type == BlockType::LADDER && hit->normal.y != 0) faceAxis = aimed.axis;
+            }
+        }
         client->PlaceBlock(place, placeBlock, height, faceAxis);
         PlayAt("place", place, 0.8f);
         if (placeBlock == BlockType::SIGN) OpenSign(place); // and write on it
@@ -3427,32 +3580,44 @@ void Application::UpdateParticles(float dt) {
                                        std::min(1.0f, static_cast<float>(bestDrop) / (kFull / 2)) });
                 }
     }
-    // Spray off the rapids: flecks of foam and water kicked up and on downstream, more
+    // Spray off the rapids: big white clouds of water thrown up and carried on
+    // downstream, billowing as they go, with a few drops flung out of them; more, bigger
     // and faster where the water runs more steeply.
     if (!rapids.empty()) {
         static std::mt19937 sprayRng(4321);
         const TextureAtlas& atlas = renderer->GetAtlas();
-        glm::vec2 foam0, foam1, water0, water1;
-        atlas.GetTileUV(atlas.GetIndex("snow"), foam0, foam1);
+        glm::vec2 cloud0, cloud1, water0, water1;
+        atlas.GetTileUV(atlas.GetIndex("spray"), cloud0, cloud1);
         atlas.GetTileUV(IconTile(BlockType::WATER), water0, water1);
-        float budget = dt * 7.0f * static_cast<float>(std::min<size_t>(rapids.size(), 48));
+        float budget = dt * 6.0f * static_cast<float>(std::min<size_t>(rapids.size(), 48));
         while (budget > 0.0f && particles.size() < 600) {
             if (budget < 1.0f && unit(sprayRng) >= budget) break;
             budget -= 1.0f;
             const Rapid& r = rapids[static_cast<size_t>(unit(sprayRng) * rapids.size()) % rapids.size()];
-            if (unit(sprayRng) > 0.25f + 0.75f * r.strength) continue; // gentle runs spray less
+            if (unit(sprayRng) > 0.3f + 0.7f * r.strength) continue; // gentle runs spray less
             const glm::vec2 across(-r.direction.y, r.direction.x);
-            const float speed = (0.5f + 2.5f * r.strength) * (0.6f + 0.8f * unit(sprayRng));
             Particle p;
-            p.position = glm::vec3(r.cell.x + 0.15f + 0.7f * unit(sprayRng), r.surfaceY + 0.03f, r.cell.z + 0.15f + 0.7f * unit(sprayRng));
-            const glm::vec2 h = r.direction * speed + across * (unit(sprayRng) - 0.5f) * 0.8f;
-            p.velocity = glm::vec3(h.x, (1.0f + 1.6f * unit(sprayRng)) * (0.6f + 0.6f * r.strength), h.y);
-            p.maxLife = p.life = 0.35f + 0.35f * unit(sprayRng);
-            p.size = 0.035f + 0.04f * unit(sprayRng);
-            const bool isFoam = unit(sprayRng) < 0.6f;
-            const glm::vec2 uv0 = isFoam ? foam0 : water0, uv1 = isFoam ? foam1 : water1;
-            const glm::vec2 span = (uv1 - uv0) * 0.25f, at = uv0 + (uv1 - uv0 - span) * glm::vec2(unit(sprayRng), unit(sprayRng));
-            p.uv = glm::vec4(at, at + span);
+            p.position = glm::vec3(r.cell.x + 0.1f + 0.8f * unit(sprayRng), r.surfaceY + 0.05f, r.cell.z + 0.1f + 0.8f * unit(sprayRng));
+            if (unit(sprayRng) < 0.75f) {
+                // A cloud: a third of a block or more to start, growing as it drifts.
+                const float speed = (0.4f + 1.4f * r.strength) * (0.6f + 0.8f * unit(sprayRng));
+                const glm::vec2 h = r.direction * speed + across * (unit(sprayRng) - 0.5f) * 0.5f;
+                p.velocity = glm::vec3(h.x, 0.3f + 0.6f * unit(sprayRng), h.y);
+                p.maxLife = p.life = 1.0f + 0.9f * unit(sprayRng);
+                p.size = (0.28f + 0.22f * unit(sprayRng)) * (0.7f + 0.6f * r.strength);
+                p.uv = glm::vec4(cloud0, cloud1);
+                p.mist = true;
+            }
+            else {
+                // A drop flung out: small, falling.
+                const float speed = (0.5f + 2.5f * r.strength) * (0.6f + 0.8f * unit(sprayRng));
+                const glm::vec2 h = r.direction * speed + across * (unit(sprayRng) - 0.5f) * 0.8f;
+                p.velocity = glm::vec3(h.x, (1.0f + 1.6f * unit(sprayRng)) * (0.6f + 0.6f * r.strength), h.y);
+                p.maxLife = p.life = 0.35f + 0.35f * unit(sprayRng);
+                p.size = 0.05f + 0.05f * unit(sprayRng);
+                const glm::vec2 span = (water1 - water0) * 0.25f, at = water0 + (water1 - water0 - span) * glm::vec2(unit(sprayRng), unit(sprayRng));
+                p.uv = glm::vec4(at, at + span);
+            }
             particles.push_back(p);
         }
     }
@@ -3475,6 +3640,13 @@ void Application::UpdateParticles(float dt) {
         p.life -= dt;
         if (p.rise) {
             p.velocity.y += (1.1f - p.velocity.y) * std::min(1.0f, dt * 2.0f);
+            p.position += p.velocity * dt;
+            continue;
+        }
+        if (p.mist) {
+            // Slowing as it spreads, and lifting gently: no falling, no bouncing.
+            p.velocity *= std::exp(-1.4f * dt);
+            p.velocity.y += (0.25f - p.velocity.y) * std::min(1.0f, dt * 1.5f);
             p.position += p.velocity * dt;
             continue;
         }

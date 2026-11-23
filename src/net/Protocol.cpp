@@ -476,11 +476,14 @@ std::vector<uint8_t> Encode(const EditChisel& m) {
     w.IVec3(m.pos);
     w.U8(m.edge);
     w.U8(m.raise);
+    w.U8(m.dir);
+    w.U8(m.step);
     return std::move(w.data);
 }
 
 bool Decode(ByteReader& in, EditChisel& m) {
-    return in.IVec3(m.pos) && in.U8(m.edge) && in.U8(m.raise) && m.edge < 4 && m.raise <= 1 && in.AtEnd();
+    return in.IVec3(m.pos) && in.U8(m.edge) && in.U8(m.raise) && in.U8(m.dir) && in.U8(m.step) && m.edge < 4 && m.raise <= 1 && m.dir <= 5 &&
+           Block::IsChiselStep(m.step) && in.AtEnd();
 }
 
 std::vector<uint8_t> Encode(const SkipTime&) {
@@ -522,7 +525,7 @@ std::vector<uint8_t> Encode(const Resources& m) {
         w.U8(static_cast<uint8_t>(type));
         w.VarU32(units);
     }
-    w.U8(m.tools);
+    w.U16(m.tools);
     w.U8(m.armour);
     return std::move(w.data);
 }
@@ -544,7 +547,7 @@ bool Decode(ByteReader& in, Resources& m) {
         if (!in.U8(t) || t >= static_cast<uint8_t>(BlockType::COUNT) || !in.VarU32(units)) return false;
         type = static_cast<BlockType>(t);
     }
-    return in.U8(m.tools) && in.U8(m.armour) && in.AtEnd();
+    return in.U16(m.tools) && in.U8(m.armour) && in.AtEnd();
 }
 
 bool Decode(ByteReader& in, Craft& m) {
@@ -673,7 +676,7 @@ bool Decode(ByteReader& in, ChatSend& m) {
 
 bool Decode(ByteReader& in, ChatMessage& m) {
     uint8_t kind;
-    if (!in.U8(kind) || kind > static_cast<uint8_t>(ChatMessage::Kind::Private)) return false;
+    if (!in.U8(kind) || kind > static_cast<uint8_t>(ChatMessage::Kind::Inspect)) return false;
     m.kind = static_cast<ChatMessage::Kind>(kind);
     return in.Str(m.text, 2 * kMaxChatLength);
 }

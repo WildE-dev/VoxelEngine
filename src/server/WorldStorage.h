@@ -45,7 +45,7 @@ public:
         uint8_t flags = 0; // net::kFlagFlying etc.
         uint8_t mode = 0;  // net::GameMode
         std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{}; // units held (survival)
-        uint8_t tools = 0; // tools made (Crafting::ToolBit each)
+        uint16_t tools = 0; // tools made (Crafting::ToolBit each)
         // From format 7, each saved as a tagged field (unknown tags are skipped, so
         // more can be added without breaking older saves).
         int health = 20; // half hearts

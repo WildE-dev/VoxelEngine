@@ -254,6 +254,11 @@ int main() {
     Check(both(20.0, [&] { return At(*b, brick).type == BlockType::STONE_BRICK && a->client.GetResources(BlockType::STONE_BRICK) == 32; }),
           "a full brick costs 64");
     a->client.Chisel(brick, 0, false);
+    Pump({ a.get(), b.get() }, 0.5, [] { return false; });
+    Check(At(*b, brick).IsFullBlock() && a->client.GetResources(BlockType::STONE_BRICK) == 32, "chiselling needs a chisel");
+    server->QueueConsoleCommand("give chisel Alice");
+    Check(both(20.0, [&] { return a->client.HasTool(Tool::Chisel); }), "given a chisel");
+    a->client.Chisel(brick, 0, false);
     Check(both(20.0, [&] { return At(*b, brick).ResourceUnits() == 60; }) && a->client.GetResources(BlockType::STONE_BRICK) == 36,
           "chiselling it down gives back the 4 taken off");
     a->client.Chisel(brick, 0, true);

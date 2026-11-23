@@ -13,6 +13,7 @@
 
 #include "net/Protocol.h"
 #include "world/Armour.h"
+#include "world/Crafting.h"
 #include "world/Coords.h"
 #include "world/Breathing.h"
 #include "net/Transport.h"
@@ -84,7 +85,9 @@ public:
     // faceAxis: the axis of the face it's placed against (0 x, 1 y, 2 z); logs lie along it.
     void PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths = 8, int faceAxis = 1);
     // Lowers (or raises) one quarter of a block by a quarter (predicted, like edits).
-    void Chisel(const glm::ivec3& pos, int edge, bool raise);
+    // dir: the side chiselled from, for a full block (Block::ShapeDir; it becomes that way up).
+    // step: how far the corner moves, in eighths (1, 2 or 4: Block::kChiselSteps). Needs the chisel.
+    void Chisel(const glm::ivec3& pos, int edge, bool raise, int dir = 0, int step = 2);
     void Carve(const std::vector<glm::ivec3>& centers, int radius);
     // Asks the server to skip to the next dawn or dusk.
     void SkipTime();
@@ -97,6 +100,9 @@ public:
     };
     void SendChat(const std::string& text);
     const std::deque<ChatLine>& GetChat() const { return chat; }
+    // Machines' descriptions, as the server answered Inspect (newest last), kept apart from
+    // the chat.
+    const std::deque<ChatLine>& GetInspections() const { return inspections; }
     std::vector<uint16_t> tradePrices;
     // The dwarf sites around us, as the server last said (for the map).
     std::vector<net::SiteInfo> sites;
@@ -150,7 +156,7 @@ public:
     // The steel upgrade (Crafting::kSteelBit), made after the iron one.
     bool HasSteel() const { return (tools & 1u) != 0; }
     uint8_t GetArmour() const { return armour; }
-    bool HasTool(Tool tool) const { return tool == Tool::None || IsCreative() || (tools & (1u << static_cast<unsigned>(tool))); }
+    bool HasTool(Tool tool) const { return tool == Tool::None || IsCreative() || (tools & Crafting::ToolBit(tool)); }
     // The tool we really work with: that one if we have it, a hand if not.
     Tool Usable(Tool tool) const { return HasTool(tool) ? tool : Tool::None; }
     // Survival: make `count` of recipe `index` (Crafting::Recipes()); the server checks.
@@ -297,11 +303,13 @@ private:
     bool onTank = false;
     net::GameMode mode = net::GameMode::Creative;
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{};
-    uint8_t tools = 0;
+    uint16_t tools = 0;
     uint8_t armour = 0;
     double lastHurt = -1000.0;
     std::deque<ChatLine> chat; // the last kMaxChatLines
     static constexpr size_t kMaxChatLines = 100;
+    std::deque<ChatLine> inspections; // the last kMaxInspections
+    static constexpr size_t kMaxInspections = 32;
 
     std::unique_ptr<net::ChunkBlocks> blocks;
     std::unique_ptr<net::ChunkLight> light;

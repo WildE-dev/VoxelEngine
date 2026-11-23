@@ -18,6 +18,7 @@
 #include <functional>
 #include <iostream>
 #include <map>
+#include <tuple>
 #include <memory>
 #include <set>
 #include <string>
@@ -31,7 +32,9 @@
 #include "client/ClientWorld.h"
 #include "server/Server.h"
 #include "world/BlockAccess.h"
+#include "world/Collision.h"
 #include "world/Coords.h"
+#include "world/Multiblocks.h"
 #include "world/Raycast.h"
 #include "world/TerrainGenerator.h"
 
@@ -471,6 +474,95 @@ int main() {
         }
         Check(lake[Chunk::Index(4, 4, 4)].IsPartial() && sides == 0,
               "a waterlogged slope a little off the lake's level joins its surface, no little steps (" + std::to_string(sides) + " side vertices)");
+    }
+
+    std::cout << "Ladders and doors" << std::endl;
+    {
+        // A closed door facing +z at the origin, on a stone floor: only its thin panel at
+        // the back of the cell (z 0 to 3/16) is solid, and it isn't ground to stand on.
+        struct Cells : BlockAccess {
+            std::map<std::tuple<int, int, int>, Block> blocks;
+            bool GetBlock(int x, int y, int z, Block& block) const override {
+                auto it = blocks.find({ x, y, z });
+                block = it != blocks.end() ? it->second : (y < 0 ? Block(BlockType::STONE) : Block());
+                return true;
+            }
+        } cells;
+        cells.blocks[{ 0, 0, 0 }] = Block::Placed(BlockType::DOOR, 8, 4);
+        cells.blocks[{ 0, 1, 0 }] = Block::Placed(BlockType::DOOR, 8, 4);
+        auto box = [](float x0, float z0, float x1, float z1) { return Collision::AABB{ { x0, 0.0f, z0 }, { x1, 1.8f, z1 } }; };
+        Check(cells.blocks[{ 0, 0, 0 }].Facing() == glm::ivec3(0, 0, 1), "a door keeps the way it was put up facing");
+        Check(Collision::BoxBlocked(cells, box(0.2f, 0.05f, 0.8f, 0.15f)), "a closed door blocks its thin panel");
+        Check(!Collision::BoxBlocked(cells, box(0.2f, 0.4f, 0.8f, 0.9f)), "but not the rest of its cell");
+        bool unknown = false;
+        const auto ground = Collision::GroundHeight(cells, Collision::AABB{ { 0.3f, 0.0f, 0.5f }, { 0.7f, 1.8f, 0.9f } }, 0.6f, 0.6f, unknown);
+        Check(ground && std::abs(*ground) < 1e-4f, "standing in a door's cell, the ground is the floor (not the door's top)");
+
+        // A ladder facing +x hangs on the wall to its -x side: a thin panel, not a cube.
+        Chunk::Blocks ladder{};
+        ladder[Chunk::Index(4, 4, 4)] = Block::Placed(BlockType::LADDER, 8, 0);
+        std::vector<uint32_t> v, w;
+        Mesh(ladder, v, w);
+        float lo = 99.0f, hi = -99.0f;
+        for (const auto& p : Positions(v, false)) lo = std::min(lo, p.x), hi = std::max(hi, p.x);
+        Check(!v.empty() && lo == 4.0f && hi <= 4.0f + 1.0f / 8.0f + 1e-4f, "a ladder is a thin panel against its wall");
+    }
+
+    std::cout << "Turned shapes" << std::endl;
+    {
+        // Chiselled on its +x side, a full block turns that way up: its shape now runs
+        // along +x, the corner looked at lowered a quarter.
+        const Block full(BlockType::STONE);
+        const Block cut = full.ChiselledFrom(1, 0, -2);
+        Check(cut.ShapeDir() == 1 && cut.edgeData.GetTopY(0) == 6 && cut.ResourceUnits() == full.Chiselled(0, -2).ResourceUnits() && cut.ResourceUnits() < full.ResourceUnits(),
+              "chiselled from its side, a block turns that way (one corner down a quarter, for what that costs from the top)");
+        Check(Block(BlockType::LOG).ChiselledFrom(1, 0, -2).ShapeDir() == 0, "but a log keeps to its grain (it doesn't turn)");
+
+        // A half slab turned along +x fills the half of its cell against its -x side.
+        Block wall = Block::Placed(BlockType::STONE, 4);
+        wall.axis = 1;
+        glm::vec3 lo, hi;
+        wall.ShapeBounds(lo, hi);
+        Check(glm::all(glm::lessThan(glm::abs(lo - glm::vec3(0.0f)), glm::vec3(1e-4f))) && glm::all(glm::lessThan(glm::abs(hi - glm::vec3(0.5f, 1.0f, 1.0f)), glm::vec3(1e-4f))),
+              "a half slab turned along +x fills the half of the cell against -x");
+        struct Cells : BlockAccess {
+            std::map<std::tuple<int, int, int>, Block> blocks;
+            bool GetBlock(int x, int y, int z, Block& block) const override {
+                auto it = blocks.find({ x, y, z });
+                block = it != blocks.end() ? it->second : (y < 0 ? Block(BlockType::STONE) : Block());
+                return true;
+            }
+        } cells;
+        cells.blocks[{ 0, 0, 0 }] = wall;
+        auto box = [](float x0, float x1) { return Collision::AABB{ { x0, 0.1f, 0.2f }, { x1, 0.9f, 0.8f } }; };
+        Check(Collision::BoxBlocked(cells, box(0.1f, 0.4f)) && !Collision::BoxBlocked(cells, box(0.6f, 0.9f)), "it blocks that half, not the other");
+        const auto aimed = Raycast(cells, glm::vec3(3.0f, 0.5f, 0.5f), glm::vec3(-1.0f, 0.0f, 0.0f), 6.0f);
+        Check(aimed && aimed->block == glm::ivec3(0) && aimed->normal == glm::ivec3(1, 0, 0), "aimed at from +x, it's hit on its +x face");
+        Chunk::Blocks one{};
+        one[Chunk::Index(4, 4, 4)] = wall;
+        std::vector<uint32_t> v, w;
+        Mesh(one, v, w);
+        float xMax = 0.0f;
+        for (const auto& q : Positions(v, false)) xMax = std::max(xMax, q.x);
+        Check(!v.empty() && xMax <= 4.5f + 1e-4f, "and is drawn in that half");
+
+        // Grass: aimed at only where it's drawn (its two crossed sprites), not anywhere in its cell.
+        cells.blocks[{ 2, 0, 0 }] = Block::Plant(BlockType::TALL_GRASS, 0);
+        const auto past = Raycast(cells, glm::vec3(2.05f, 0.5f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), 2.85f); // along its cell's edge
+        const auto through = Raycast(cells, glm::vec3(2.5f, 0.5f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), 6.0f); // through its middle
+        Check(!past && through && through->block == glm::ivec3(2, 0, 0), "grass is aimed at only where it's drawn");
+
+        // Nothing built into a formed structure's hollow: a blast furnace's top middle.
+        Block core(BlockType::MULTIBLOCK);
+        core.axis = Multiblocks::Encode(Multiblocks::Kind::BlastFurnace, 0);
+        cells.blocks[{ 11, 1, 11 }] = core; // its smelter's place (pattern 1 1 1, corner at 10 0 10)
+        Check(cells.InsideStructure({ 11, 2, 11 }) && !cells.CanPlace({ 11, 2, 11 }, BlockType::STONE) && cells.CanPlace({ 11, 4, 11 }, BlockType::STONE),
+              "nothing can be built into a formed structure's hollow (but above it, yes)");
+
+        // A fine chisel moves a corner an eighth (as fine as natural slopes), a coarse one a half.
+        Check(full.Chiselled(0, -1).edgeData.GetTopY(0) == 7 && full.Chiselled(0, -4).edgeData.GetTopY(0) == 4 && Block::IsChiselStep(1) &&
+                  !Block::IsChiselStep(3),
+              "a chisel stroke moves a corner an eighth, a quarter or a half");
     }
 
     std::cout << "Seeing through chunks (cave culling)" << std::endl;

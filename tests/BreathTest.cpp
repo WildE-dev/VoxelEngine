@@ -15,6 +15,7 @@
 #include <string>
 #include <thread>
 
+#include "TestSections.h"
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "server/Server.h"
@@ -74,7 +75,8 @@ bool Has(const HoldingClient& c, const std::string& text) {
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    TestSections sections(argc, argv);
     using namespace Breathing;
     std::cout << "Rules" << std::endl;
     Check(At(10.0f, false).cause == Cause::None && At(10.0f, false).rate > 0.0f, "on the surface the air comes back");
@@ -125,79 +127,91 @@ int main() {
     both(2.0, [] { return false; });
     Check(a.client.GetAir() == a.client.GetMaxAir() && a.client.GetAirCause() == Cause::None, "on the ground the air stays full");
 
-    std::cout << "Water" << std::endl;
-    // A two-deep, one-wide well, full of water: it can't flow anywhere.
-    const glm::ivec3 well(20, -1, 20);
-    builder.client.BreakBlock(well);
-    builder.client.BreakBlock(well + glm::ivec3(0, -1, 0));
-    auto at = [&](const glm::ivec3& p) { Block b; return a.world.GetBlock(p.x, p.y, p.z, b) ? b : Block(BlockType::COUNT); };
-    both(20.0, [&] { return at(well).IsAir() && at(well + glm::ivec3(0, -1, 0)).IsAir(); });
-    builder.client.PlaceBlock(well + glm::ivec3(0, -1, 0), BlockType::WATER);
-    builder.client.PlaceBlock(well, BlockType::WATER);
-    both(20.0, [&] { return at(well).HasWater() && at(well + glm::ivec3(0, -1, 0)).HasWater(); });
-    server.QueueConsoleCommand("tp Diver 20.5 -2 20.5"); // eyes at -0.38: in the top cell's water
-    Check(both(20.0, [&] { return a.client.GetAirCause() == Cause::Water && a.client.GetAir() < a.client.GetMaxAir(); }), "head under water: the air drains");
-    const auto t0 = std::chrono::steady_clock::now();
-    Check(both(20.0, [&] { return a.client.GetAir() == 0; }), "and runs out");
-    const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-    Check(took > 10.0 && took < 19.0, "after about 15 seconds (" + std::to_string(took) + ")");
-    Check(both(20.0, [&] { return a.client.GetHealth() < 20; }), "then drowning hurts");
-    Check(both(15.0, [&] { return Has(builder, "Diver drowned"); }), "until the diver drowns, which everyone hears about");
-    Check(both(20.0, [&] { return a.client.GetAir() == a.client.GetMaxAir() && a.client.GetHealth() == 20; }), "and respawns with full air and health");
+    if (sections.Run("water")) {
+        std::cout << "Water" << std::endl;
+        // A two-deep, one-wide well, full of water: it can't flow anywhere.
+        const glm::ivec3 well(20, -1, 20);
+        builder.client.BreakBlock(well);
+        builder.client.BreakBlock(well + glm::ivec3(0, -1, 0));
+        auto at = [&](const glm::ivec3& p) { Block b; return a.world.GetBlock(p.x, p.y, p.z, b) ? b : Block(BlockType::COUNT); };
+        both(20.0, [&] { return at(well).IsAir() && at(well + glm::ivec3(0, -1, 0)).IsAir(); });
+        builder.client.PlaceBlock(well + glm::ivec3(0, -1, 0), BlockType::WATER);
+        builder.client.PlaceBlock(well, BlockType::WATER);
+        both(20.0, [&] { return at(well).HasWater() && at(well + glm::ivec3(0, -1, 0)).HasWater(); });
+        server.QueueConsoleCommand("tp Diver 20.5 -2 20.5"); // eyes at -0.38: in the top cell's water
+        Check(both(20.0, [&] { return a.client.GetAirCause() == Cause::Water && a.client.GetAir() < a.client.GetMaxAir(); }), "head under water: the air drains");
+        const auto t0 = std::chrono::steady_clock::now();
+        Check(both(20.0, [&] { return a.client.GetAir() == 0; }), "and runs out");
+        const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        Check(took > 10.0 && took < 19.0, "after about 15 seconds (" + std::to_string(took) + ")");
+        Check(both(20.0, [&] { return a.client.GetHealth() < 20; }), "then drowning hurts");
+        Check(both(15.0, [&] { return Has(builder, "Diver drowned"); }), "until the diver drowns, which everyone hears about");
+        Check(both(20.0, [&] { return a.client.GetAir() == a.client.GetMaxAir() && a.client.GetHealth() == 20; }), "and respawns with full air and health");
 
-    std::cout << "Thin and stale air" << std::endl;
-    server.QueueConsoleCommand("tp Diver 8.5 345 8.5"); // eyes at 346.6
-    Check(both(20.0, [&] { return a.client.GetAirCause() == Cause::ThinAir && a.client.GetAir() == 11; }), "high up, the air thins to its cap (10.7 at 346.6)");
-    both(4.0, [] { return false; });
-    Check(a.client.GetAir() == 11 && a.client.GetHealth() == 20, "and stays there, without hurting");
-    server.QueueConsoleCommand("tp Diver 8.5 400 8.5");
-    Check(both(20.0, [&] { return a.client.GetAir() == 0; }) && both(20.0, [&] { return a.client.GetHealth() < 20; }), "above 400 there's none, and that hurts");
-    server.QueueConsoleCommand("tp Diver 8.5 0 8.5");
-    Check(both(20.0, [&] { return a.client.GetAir() == a.client.GetMaxAir() && a.client.GetAirCause() == Cause::None; }), "back on the ground, breath comes back");
-    server.QueueConsoleCommand("tp Diver 8.5 -95 8.5"); // eyes at -93.4: not yet
-    both(2.0, [] { return false; });
-    Check(a.client.GetAirCause() == Cause::None && a.client.GetAir() == a.client.GetMaxAir(), "at -95 the air is still fine");
-    server.QueueConsoleCommand("tp Diver 8.5 -130 8.5");
-    Check(both(20.0, [&] { return a.client.GetAirCause() == Cause::StaleAir && a.client.GetAir() == 15; }), "deep underground the air is stale (capped at 14.3 at -128.4)");
-
-    std::cout << "Air diffuser" << std::endl;
-    // A diffuser beside the diver, an air pipe on it, the pipe filled with air.
-    server.QueueConsoleCommand("fill 10 -129 8 10 -129 8 air_diffuser");
-    server.QueueConsoleCommand("fill 11 -129 8 12 -129 8 air_pipe");
-    Check(both(10.0, [&] { return a.client.GetAirCause() == Cause::StaleAir; }), "with the diffuser built but no air in its pipes, it's still stale");
-    bool fresh = false;
-    for (int i = 0; i < 10 && !fresh; i++) {
-        server.QueueConsoleCommand("pressurise 12 -129 8");
-        fresh = both(1.0, [&] { return a.client.GetAirCause() == Cause::None && a.client.GetAir() == a.client.GetMaxAir(); });
     }
-    Check(fresh, "with air pressure it breathes out fresh air: a full breath again, deep underground");
-    server.QueueConsoleCommand("tp Diver 30.5 -130 8.5"); // twenty blocks off
-    Check(both(20.0, [&] { return a.client.GetAirCause() == Cause::StaleAir; }), "out of its reach, the air is stale again");
-    server.QueueConsoleCommand("tp Diver 8.5 -130 8.5");
+    if (sections.Run("air")) {
+        std::cout << "Thin and stale air" << std::endl;
+        server.QueueConsoleCommand("tp Diver 8.5 345 8.5"); // eyes at 346.6
+        Check(both(20.0, [&] { return a.client.GetAirCause() == Cause::ThinAir && a.client.GetAir() == 11; }), "high up, the air thins to its cap (10.7 at 346.6)");
+        both(4.0, [] { return false; });
+        Check(a.client.GetAir() == 11 && a.client.GetHealth() == 20, "and stays there, without hurting");
+        server.QueueConsoleCommand("tp Diver 8.5 400 8.5");
+        Check(both(20.0, [&] { return a.client.GetAir() == 0; }) && both(20.0, [&] { return a.client.GetHealth() < 20; }), "above 400 there's none, and that hurts");
+        server.QueueConsoleCommand("tp Diver 8.5 0 8.5");
+        Check(both(20.0, [&] { return a.client.GetAir() == a.client.GetMaxAir() && a.client.GetAirCause() == Cause::None; }), "back on the ground, breath comes back");
+        server.QueueConsoleCommand("tp Diver 8.5 -95 8.5"); // eyes at -93.4: not yet
+        both(2.0, [] { return false; });
+        Check(a.client.GetAirCause() == Cause::None && a.client.GetAir() == a.client.GetMaxAir(), "at -95 the air is still fine");
+        server.QueueConsoleCommand("tp Diver 8.5 -130 8.5");
+        Check(both(20.0, [&] { return a.client.GetAirCause() == Cause::StaleAir && a.client.GetAir() == 15; }), "deep underground the air is stale (capped at 14.3 at -128.4)");
 
-    std::cout << "Oxygen tank" << std::endl;
-    server.QueueConsoleCommand("give iron_ingot 3 Diver");
-    server.QueueConsoleCommand("give glass 1 Diver");
-    both(10.0, [&] { return a.client.GetResources(BlockType::GLASS) >= Block::kUnitsPerBlock && a.client.GetResources(BlockType::IRON_INGOT) >= 3 * Block::kUnitsPerBlock; });
-    a.client.Craft(Crafting::Find("tank"), 1);
-    Check(both(10.0, [&] { return (a.client.GetArmour() & Armour::Bit(ArmourPiece::OxygenTank)) != 0; }), "the diver makes an oxygen tank, and wears it");
-    server.QueueConsoleCommand("tp Diver 20.5 -2 20.5"); // under water again
-    Check(both(10.0, [&] { return a.client.OnTank(); }), "under water they breathe from the tank");
-    both(4.0, [] { return false; });
-    Check(a.client.OnTank() && a.client.GetAir() == a.client.GetMaxAir() && a.client.GetTank() < 0.98f && a.client.GetHealth() == 20,
-          "their breath stays full while the tank empties (" + std::to_string(static_cast<int>(a.client.GetTank() * 100)) + "%)");
-    server.QueueConsoleCommand("tp Diver 8.5 0 8.5");
-    Check(both(20.0, [&] { return !a.client.OnTank() && a.client.GetTank() > 0.999f; }), "back in good air, the tank fills up again");
+        std::cout << "Air diffuser" << std::endl;
+        // A diffuser beside the diver, an air pipe on it, the pipe filled with air.
+        server.QueueConsoleCommand("fill 10 -129 8 10 -129 8 air_diffuser");
+        server.QueueConsoleCommand("fill 11 -129 8 12 -129 8 air_pipe");
+        Check(both(10.0, [&] { return a.client.GetAirCause() == Cause::StaleAir; }), "with the diffuser built but no air in its pipes, it's still stale");
+        bool fresh = false;
+        for (int i = 0; i < 10 && !fresh; i++) {
+            server.QueueConsoleCommand("pressurise 12 -129 8");
+            fresh = both(1.0, [&] { return a.client.GetAirCause() == Cause::None && a.client.GetAir() == a.client.GetMaxAir(); });
+        }
+        Check(fresh, "with air pressure it breathes out fresh air: a full breath again, deep underground");
+        server.QueueConsoleCommand("tp Diver 30.5 -130 8.5"); // twenty blocks off
+        Check(both(20.0, [&] { return a.client.GetAirCause() == Cause::StaleAir; }), "out of its reach, the air is stale again");
+        server.QueueConsoleCommand("tp Diver 8.5 -130 8.5");
 
-    std::cout << "Creative" << std::endl;
-    server.QueueConsoleCommand("gamemode creative Diver");
-    Check(both(20.0, [&] { return a.client.GetAirCause() == Cause::None && a.client.IsCreative(); }), "in creative, nothing takes your breath");
-    Check(both(20.0, [&] { return a.client.GetAir() == a.client.GetMaxAir(); }), "and it comes back even down there");
+    }
+    if (sections.Run("water")) {
+        std::cout << "Oxygen tank" << std::endl;
+        server.QueueConsoleCommand("give iron_ingot 3 Diver");
+        server.QueueConsoleCommand("give glass 1 Diver");
+        both(10.0, [&] { return a.client.GetResources(BlockType::GLASS) >= Block::kUnitsPerBlock && a.client.GetResources(BlockType::IRON_INGOT) >= 3 * Block::kUnitsPerBlock; });
+        a.client.Craft(Crafting::Find("tank"), 1);
+        Check(both(10.0, [&] { return (a.client.GetArmour() & Armour::Bit(ArmourPiece::OxygenTank)) != 0; }), "the diver makes an oxygen tank, and wears it");
+        server.QueueConsoleCommand("tp Diver 20.5 -2 20.5"); // under water again
+        Check(both(10.0, [&] { return a.client.OnTank(); }), "under water they breathe from the tank");
+        both(4.0, [] { return false; });
+        Check(a.client.OnTank() && a.client.GetAir() == a.client.GetMaxAir() && a.client.GetTank() < 0.98f && a.client.GetHealth() == 20,
+              "their breath stays full while the tank empties (" + std::to_string(static_cast<int>(a.client.GetTank() * 100)) + "%)");
+        server.QueueConsoleCommand("tp Diver 8.5 0 8.5");
+        const bool refilled = both(20.0, [&] { return !a.client.OnTank() && a.client.GetTank() > 0.999f; });
+        Check(refilled,
+              "back in good air, the tank fills up again (" + std::to_string(static_cast<int>(a.client.GetTank() * 100)) + "%" +
+                  (a.client.OnTank() ? ", still on it" : "") + ")");
 
+    }
+    if (sections.Run("air")) {
+        std::cout << "Creative" << std::endl;
+        server.QueueConsoleCommand("gamemode creative Diver");
+        Check(both(20.0, [&] { return a.client.GetAirCause() == Cause::None && a.client.IsCreative(); }), "in creative, nothing takes your breath");
+        Check(both(20.0, [&] { return a.client.GetAir() == a.client.GetMaxAir(); }), "and it comes back even down there");
+
+    }
     a.client.Disconnect();
     builder.client.Disconnect();
     Pump({ &a, &builder }, 0.3, [] { return false; });
     server.Stop();
+    if (!sections.Valid()) failures++;
     std::cout << (failures ? "BREATH TEST FAILED (" : "ALL BREATH CHECKS PASSED (") << failures << " failures)" << std::endl;
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }

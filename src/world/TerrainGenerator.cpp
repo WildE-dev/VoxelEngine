@@ -45,7 +45,7 @@ bool DeepCavern(int x, int y, int z) {
 }
 
 constexpr int S = TerrainGenerator::S;
-constexpr float kSmoothness = 8.0f; // surface heights snap to eighths of a block
+constexpr float kSmoothness = 8.0f; // surface heights snap to eighths of a block (a fine chisel's step: Block::kChiselSteps)
 
 int Index(int x, int y, int z) { return x + S * (y + S * z); }
 float Quantise(float h) { return std::round(h * kSmoothness) / kSmoothness; }

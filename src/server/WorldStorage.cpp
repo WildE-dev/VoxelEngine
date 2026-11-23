@@ -18,7 +18,8 @@ constexpr char kRegionMagic[4] = { 'V', 'X', 'R', 'G' };
 constexpr char kWorldMagic[4] = { 'V', 'X', 'W', 'D' };
 constexpr size_t kMaxNameLength = 256;
 // Tagged player fields (format 7 on).
-constexpr uint8_t kFieldHealth = 1, kFieldFood = 2, kFieldArmour = 3, kFieldBed = 4, kFieldAchievements = 5;
+constexpr uint8_t kFieldHealth = 1, kFieldFood = 2, kFieldArmour = 3, kFieldBed = 4, kFieldAchievements = 5,
+                  kFieldMoreTools = 6; // the tools mask's high byte (the chisel's bit, and after)
 
 int FloorDiv(int a, int b) {
     return a >= 0 ? a / b : -((-a + b - 1) / b);
@@ -139,7 +140,8 @@ bool WorldStorage::ReadWorldFile() {
                 ok = r.U8(type) && type < p.resources.size() && r.VarU32(units);
                 if (ok) p.resources[type] = units;
             }
-            if (ok && version >= 6) ok = r.U8(p.tools);
+            uint8_t lowTools = 0;
+            if (ok && version >= 6) ok = r.U8(lowTools), p.tools = lowTools;
             // Tagged fields: tag, length, then that many bytes.
             uint32_t fields = 0;
             if (ok && version >= 7) ok = r.VarU32(fields) && fields < 256;
@@ -153,6 +155,7 @@ bool WorldStorage::ReadWorldFile() {
                 else if (tag == kFieldFood && length == 1) ok = r.U8(v), p.food = v;
                 else if (tag == kFieldArmour && length == 1) ok = r.U8(v), p.armour = v;
                 else if (tag == kFieldAchievements && length == 4) ok = r.U32(p.achievements);
+                else if (tag == kFieldMoreTools && length == 1) ok = r.U8(v), p.tools = static_cast<uint16_t>((p.tools & 0xFF) | (v << 8));
                 else if (tag == kFieldBed && length == 12) {
                     glm::ivec3 bed;
                     ok = r.IVec3(bed);
@@ -495,13 +498,14 @@ bool WorldStorage::Flush() {
                         w.U8(static_cast<uint8_t>(t));
                         w.VarU32(p.resources[t]);
                     }
-                w.U8(p.tools);
-                w.VarU32(p.bed ? 5 : 4);
+                w.U8(static_cast<uint8_t>(p.tools));
+                w.VarU32((p.bed ? 5 : 4) + (p.tools > 0xFF ? 1 : 0));
                 w.U8(kFieldHealth), w.VarU32(1), w.U8(static_cast<uint8_t>(std::clamp(p.health, 0, 255)));
                 w.U8(kFieldFood), w.VarU32(1), w.U8(static_cast<uint8_t>(std::clamp(p.food, 0, 255)));
                 w.U8(kFieldArmour), w.VarU32(1), w.U8(p.armour);
                 if (p.bed) w.U8(kFieldBed), w.VarU32(12), w.IVec3(*p.bed);
                 w.U8(kFieldAchievements), w.VarU32(4), w.U32(p.achievements);
+                if (p.tools > 0xFF) w.U8(kFieldMoreTools), w.VarU32(1), w.U8(static_cast<uint8_t>(p.tools >> 8));
             }
             w.VarU32(static_cast<uint32_t>(chests.size()));
             for (const auto& [pos, held] : chests) {

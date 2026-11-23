@@ -13,6 +13,10 @@ ClientWorld::ClientWorld() {
 }
 
 ClientWorld::~ClientWorld() {
+    Release(); // (and the chunks it hands back are freed here)
+}
+
+ClientWorld::ChunkMap ClientWorld::Release() {
     {
         std::lock_guard<std::mutex> lock(queueMutex);
         stopping = true;
@@ -24,6 +28,23 @@ ClientWorld::~ClientWorld() {
         chunk->MarkRemoved();
         chunk->ReleaseGpu();
     }
+    {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        rebuildQueue.clear(); // (they hold chunks too)
+    }
+    {
+        std::lock_guard<std::mutex> lock(uploadMutex);
+        uploadQueue.clear();
+    }
+    uploading.clear();
+    drawList.clear();
+    visible.clear();
+    ChunkMap out;
+    {
+        std::unique_lock<std::shared_mutex> lock(chunksMutex);
+        out.swap(chunks);
+    }
+    return out;
 }
 
 void ClientWorld::SetViewDistance(int horizontal, int vertical) {

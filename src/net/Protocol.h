@@ -28,7 +28,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 52;
+constexpr uint32_t kProtocolVersion = 53;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -43,7 +43,7 @@ enum class MsgType : uint8_t {
     EditCarve,     // laser: clear spheres around a list of centres
     SkipTime,      // jump to the next dawn (at night) or dusk (by day)
     ChatSend,      // a chat line, or a command if it starts with '/'
-    EditChisel,    // lower (or raise) one quarter of a block by a quarter of a block
+    EditChisel,    // lower (or raise) one quarter of a block by an eighth, a quarter or a half
     MineStart,     // started mining a block (survival: breaking it takes time)
     Attack,        // hit a creature
     Craft,         // make something from resources (survival)
@@ -253,7 +253,7 @@ struct GameModeIs {
 // Units held of each block type (see Block::ResourceUnits), types with none left out.
 struct Resources {
     std::vector<std::pair<BlockType, uint32_t>> held;
-    uint8_t tools = 0; // tools made (Crafting::ToolBit each)
+    uint16_t tools = 0; // tools made (Crafting::ToolBit each)
     uint8_t armour = 0; // armour worn (Armour::Bit each)
 };
 
@@ -267,6 +267,8 @@ struct EditChisel {
     glm::ivec3 pos{0};
     uint8_t edge = 0;  // which quarter (EdgeData order, 0..3)
     uint8_t raise = 0; // 1: raise it instead of lowering it
+    uint8_t dir = 0;   // the side chiselled from, for a full block (Block::ShapeDir: 0 its top)
+    uint8_t step = 2;  // how far, in eighths (Block::kChiselSteps: 1, 2 or 4)
 };
 
 struct EditCarve {
@@ -497,7 +499,9 @@ struct ChatSend {
     std::string text;
 };
 struct ChatMessage {
-    enum class Kind : uint8_t { Chat = 0, Info = 1, Error = 2, Private = 3 };
+    // Inspect: a machine's description, asked for by right-clicking it (shown in its
+    // menu, not the chat).
+    enum class Kind : uint8_t { Chat = 0, Info = 1, Error = 2, Private = 3, Inspect = 4 };
     Kind kind = Kind::Chat;
     std::string text;
 };

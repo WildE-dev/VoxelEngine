@@ -76,6 +76,7 @@ inline std::vector<Recipe> Defaults() {
         { "sword", "Sword", { { BlockType::PLANKS, kBlock / 2 }, { BlockType::STONE, 2 * kBlock } }, BlockType::AIR, 0, Tool::Sword },
         { "bow", "Bow", { { BlockType::PLANKS, kBlock }, { BlockType::HIDE, kBlock } }, BlockType::AIR, 0, Tool::Bow },
         { "rod", "Fishing rod", { { BlockType::PLANKS, kBlock }, { BlockType::HIDE, kBlock / 4 } }, BlockType::AIR, 0, Tool::Rod },
+        { "chisel", "Chisel", { { BlockType::PLANKS, kBlock / 4 }, { BlockType::STONE, kBlock / 2 } }, BlockType::AIR, 0, Tool::Chisel },
         { "arrows", "4 arrows", { { BlockType::PLANKS, kBlock / 2 }, { BlockType::STONE, kBlock / 4 } }, BlockType::ARROW, 4 * kBlock },
         // Armour, from deer hide.
         { "cap", "Hide cap", { { BlockType::HIDE, 2 * kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Cap },
@@ -162,17 +163,21 @@ inline int Find(const char* id) {
     return -1;
 }
 
-// The iron upgrade's bit in the tools mask (tools use bits 1..4): every tool you make
+// The iron upgrade's bit in the tools mask (tools use bits 1..6, and 8 up): every tool you make
 // mines at Mining::kIronToolSpeed and hits a heart harder.
-constexpr uint8_t kIronBit = 1u << 7;
+constexpr uint16_t kIronBit = 1u << 7;
 // The steel upgrade's bit (bit 0: no tool uses it), made once you have the iron one:
 // tools mine at Mining::kSteelToolSpeed and hit harder still.
-constexpr uint8_t kSteelBit = 1u << 0;
+constexpr uint16_t kSteelBit = 1u << 0;
 // What the tools are made of, from the tools mask: 0 stone, 1 iron, 2 steel.
-inline int Tier(uint8_t tools) { return (tools & kSteelBit) ? 2 : (tools & kIronBit) ? 1 : 0; }
+inline int Tier(uint16_t tools) { return (tools & kSteelBit) ? 2 : (tools & kIronBit) ? 1 : 0; }
 
-// Tools held, one bit each (1 << Tool).
-inline uint8_t ToolBit(Tool tool) { return static_cast<uint8_t>(1u << static_cast<unsigned>(tool)); }
+// Tools held, one bit each: 1 << Tool, skipping bit 7 (the iron upgrade's) for the
+// tools after the rod.
+inline uint16_t ToolBit(Tool tool) {
+    const unsigned t = static_cast<unsigned>(tool);
+    return static_cast<uint16_t>(1u << (t < 7 ? t : t + 1));
+}
 
 // How many times `held` (units by block type) covers the recipe's inputs.
 template <typename Held>

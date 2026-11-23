@@ -53,10 +53,60 @@ void WalkVoxels(const glm::vec3& origin, const glm::vec3& direction, float maxDi
 // inside the cell (a slope's surface, a quarter's top, a step) rather than right
 // where it came into the cell: the face it touched is the block's top, not the side
 // of the cell it entered by.
+// Where a grass-like plant's picture is on its sprite (two crossed quads along the
+// cell's diagonals, see Block::AddPlantVertices): across each quad (u, 0..1) and up from
+// its foot (0..1), measured from the textures. False for other plants (aimed at by
+// their whole cell).
+bool SpriteArea(BlockType type, float& u0, float& u1, float& height) {
+    switch (type) {
+    case BlockType::TALL_GRASS: u0 = 0.06f, u1 = 0.94f, height = 0.94f; return true;
+    case BlockType::FLOWER_RED:
+    case BlockType::FLOWER_YELLOW: u0 = 0.3f, u1 = 0.63f, height = 0.88f; return true;
+    case BlockType::DEAD_BUSH: u0 = 0.0f, u1 = 1.0f, height = 0.75f; return true;
+    case BlockType::SAPLING:
+    case BlockType::PINE_SAPLING: u0 = 0.12f, u1 = 0.82f, height = 0.88f; return true;
+    case BlockType::CROP: u0 = 0.12f, u1 = 0.88f, height = 0.56f; return true;
+    case BlockType::RIPE_WHEAT: u0 = 0.0f, u1 = 1.0f, height = 1.0f; return true;
+    default: return false;
+    }
+}
+
+// Whether the ray, inside the cell, passes through the picture of a grass-like plant
+// (rather than the empty space around it).
+bool HitsSprite(const Block& block, const glm::ivec3& cell, const glm::vec3& origin, const glm::vec3& direction, float tEnter, float tExit, float u0,
+                float u1, float height) {
+    const glm::vec3 o = origin - glm::vec3(cell);
+    const float bottom = -block.PlantDrop();
+    // The two diagonals: x = z (u along x) and x + z = 1 (u back along x).
+    for (int d = 0; d < 2; d++) {
+        const float denom = d == 0 ? direction.x - direction.z : direction.x + direction.z;
+        if (std::abs(denom) < 1e-6f) continue;
+        const float t = d == 0 ? (o.z - o.x) / denom : (1.0f - o.x - o.z) / denom;
+        if (t < tEnter - 1e-4f || t > tExit + 1e-4f) continue;
+        const glm::vec3 p = o + direction * t;
+        const float u = d == 0 ? p.x : 1.0f - p.x;
+        const float up = p.y - bottom;
+        if (u >= u0 && u <= u1 && up >= 0.0f && up <= height) return true;
+    }
+    return false;
+}
+
 bool HitsShape(const Block& block, const glm::ivec3& cell, const glm::vec3& origin, const glm::vec3& direction, float tEnter, float tExit,
                bool& onTop) {
     onTop = false;
-    if (block.IsFullBlock() || block.IsPlant()) return true;
+    if (block.IsFullBlock()) return true;
+    if (const int dir = block.ShapeDir(); dir != 0 && block.IsPartial()) {
+        // Turned (Block::ShapeDir): the ray into the shape's own upright frame, and tested
+        // there as an upright one (the same distances along it).
+        const glm::vec3 base(cell);
+        Block upright = block;
+        upright.axis = 0;
+        return HitsShape(upright, cell, Block::CellToShape(dir, origin - base) + base, Block::CellVectorToShape(dir, direction), tEnter, tExit, onTop);
+    }
+    if (block.IsPlant()) {
+        float u0, u1, height;
+        return SpriteArea(block.type, u0, u1, height) ? HitsSprite(block, cell, origin, direction, tEnter, tExit, u0, u1, height) : true;
+    }
     const glm::vec3 base(cell);
     if (block.IsStepped()) {
         const int h[2][2] = { { block.edgeData.GetTopY(2), block.edgeData.GetTopY(0) }, { block.edgeData.GetTopY(1), block.edgeData.GetTopY(3) } };
@@ -108,7 +158,8 @@ std::optional<RaycastHit> Raycast(const BlockAccess& world, const glm::vec3& ori
         if (world.GetBlock(pos.x, pos.y, pos.z, block) && !block.IsAir() && !block.IsLiquid() &&
             HitsShape(block, pos, origin, direction, tEnter, tExit, onTop)) {
             // Met the shape inside the cell (over a slope, onto a quarter): its top.
-            hit = RaycastHit{ pos, onTop ? glm::ivec3(0, 1, 0) : normal };
+            // (A turned shape's top faces the way it's turned.)
+            hit = RaycastHit{ pos, onTop ? glm::ivec3(glm::round(Block::ShapeVectorToCell(block.ShapeDir(), glm::vec3(0.0f, 1.0f, 0.0f)))) : normal };
             return false;
         }
         return true;

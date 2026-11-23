@@ -282,8 +282,21 @@ add_custom_target(copy_resources ALL
 set_target_properties(${PROJECT_NAME} PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY $<TARGET_FILE_DIR:${PROJECT_NAME}>)
 
-# `ctest` (or `ctest -j14` to run them all at once) runs every test suite.
+# `ctest` (or `ctest -j16` to run them all at once) runs every test suite.
 enable_testing()
+# The long tests run in parts, side by side: each group of their sections is a test of its
+# own (see tests/TestSections.h). Run without a group, a test runs everything.
+set(CreatureTest_GROUPS fighting allies raids pvp spawning)
+set(FactoryTest_GROUPS machines mining structures)
+set(BreathTest_GROUPS water air)
+set(TrapTest_GROUPS traps falling tnt)
+set(FoodTest_GROUPS hunger food)
 foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest SyncTest)
-    add_test(NAME ${test} COMMAND ${test} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+    if(DEFINED ${test}_GROUPS)
+        foreach(group ${${test}_GROUPS})
+            add_test(NAME ${test}.${group} COMMAND ${test} ${group} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+        endforeach()
+    else()
+        add_test(NAME ${test} COMMAND ${test} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+    endif()
 endforeach()

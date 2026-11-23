@@ -309,8 +309,12 @@ inline bool IsStorageType(BlockType t) { return t == BlockType::CHEST || t == Bl
 // drawn as thin tubes: neither hides what's beside it or blocks light.
 inline bool IsModelType(BlockType type) {
     return type == BlockType::WATER_WHEEL || type == BlockType::SHAFT || type == BlockType::PRESSURE_GAUGE || type == BlockType::MULTIBLOCK ||
-           type == BlockType::MULTIBLOCK_PART;
+           type == BlockType::MULTIBLOCK_PART || type == BlockType::DOOR || type == BlockType::DOOR_OPEN; // (a door swings open: drawn as it turns)
 }
+// Ladders and doors face one of the four level ways (their `axis`, a Face: +x, -x, +z or
+// -z): a ladder out from the wall it hangs on, a door toward whoever put it up. Each is a
+// thin panel at the back of its cell (a door's hinge at its left, seen from the front).
+inline bool IsWallFacingType(BlockType type) { return type == BlockType::LADDER || type == BlockType::DOOR || type == BlockType::DOOR_OPEN; }
 inline bool IsPipeType(BlockType type) {
     return type == BlockType::PIPE || type == BlockType::AIR_PIPE || type == BlockType::ITEM_PIPE || type == BlockType::FILTER_PIPE || type == BlockType::FLUID_PIPE;
 }
@@ -504,6 +508,10 @@ struct Block {
     // takes a Face (0..5) instead.
     Block Turned(int faceAxis) const {
         Block b = *this;
+        if (IsWallFacingType(type)) {
+            b.axis = static_cast<uint8_t>(faceAxis == 0 || faceAxis == 1 || faceAxis == 4 || faceAxis == 5 ? faceAxis : 4); // (level only)
+            return b;
+        }
         if (IsFacingType(type)) {
             b.axis = static_cast<uint8_t>(faceAxis >= 0 && faceAxis <= kMaxAxis ? faceAxis : 2);
             return b;
@@ -575,7 +583,86 @@ struct Block {
     bool IsFullWater() const { return IsLiquid() && water == kMaxWaterVolume; }
     // A sloped block: solid below its surface, open above it.
     bool IsPartial() const { return !IsAir() && !IsPlant() && !IsLiquid() && !IsFullBlock(); }
-    bool CanHoldWater() const { return IsReplaceableByWater() || IsLiquid() || IsPartial(); }
+    // (A shape turned sideways or upside down holds no water: see ShapeDir.)
+    bool CanHoldWater() const { return IsReplaceableByWater() || IsLiquid() || (IsPartial() && ShapeDir() == 0); }
+
+    // Which way a shaped block's shape runs (its `axis`): 0 upright (its corners' heights
+    // up from its bottom, as it always was), 1 and 2 along +x and +z (as a log's axis), 3
+    // upside down (down from its top), 4 and 5 along -x and -z. The shape is kept as if
+    // upright and turned into place wherever it's drawn, collided with or aimed at.
+    // Chiselling a full block on a side (or underneath) turns it that way first. Only
+    // plain building blocks turn: a log's axis is its grain, a piston's its facing.
+    static bool CanTurnShape(BlockType t) { return CanShape(t) && !IsOrientable(t) && !IsFacingType(t) && !IsWallFacingType(t); }
+    int ShapeDir() const { return CanTurnShape(type) && axis <= 5 ? axis : 0; }
+    // The direction whose top faces the way `n` points (a face's normal).
+    static int ShapeDirFacing(const glm::ivec3& n) {
+        if (n.x > 0) return 1;
+        if (n.z > 0) return 2;
+        if (n.y < 0) return 3;
+        if (n.x < 0) return 4;
+        if (n.z < 0) return 5;
+        return 0;
+    }
+    // A point in the cell (0..1 each way) from the shape's own upright frame, and back;
+    // and a direction (no offset) likewise.
+    static glm::vec3 ShapeToCell(int dir, const glm::vec3& p) {
+        switch (dir) {
+        case 1: return { p.y, 1.0f - p.x, p.z };
+        case 2: return { p.x, 1.0f - p.z, p.y };
+        case 3: return { p.x, 1.0f - p.y, 1.0f - p.z };
+        case 4: return { 1.0f - p.y, p.x, p.z };
+        case 5: return { p.x, p.z, 1.0f - p.y };
+        default: return p;
+        }
+    }
+    static glm::vec3 CellToShape(int dir, const glm::vec3& p) {
+        switch (dir) {
+        case 1: return { 1.0f - p.y, p.x, p.z };
+        case 2: return { p.x, p.z, 1.0f - p.y };
+        case 3: return { p.x, 1.0f - p.y, 1.0f - p.z };
+        case 4: return { p.y, 1.0f - p.x, p.z };
+        case 5: return { p.x, 1.0f - p.z, p.y };
+        default: return p;
+        }
+    }
+    static glm::vec3 ShapeVectorToCell(int dir, const glm::vec3& v) {
+        switch (dir) {
+        case 1: return { v.y, -v.x, v.z };
+        case 2: return { v.x, -v.z, v.y };
+        case 3: return { v.x, -v.y, -v.z };
+        case 4: return { -v.y, v.x, v.z };
+        case 5: return { v.x, v.z, -v.y };
+        default: return v;
+        }
+    }
+    static glm::vec3 CellVectorToShape(int dir, const glm::vec3& v) {
+        switch (dir) {
+        case 1: return { -v.y, v.x, v.z };
+        case 2: return { v.x, v.z, -v.y };
+        case 3: return { v.x, -v.y, -v.z };
+        case 4: return { v.y, -v.x, v.z };
+        case 5: return { v.x, -v.z, v.y };
+        default: return v;
+        }
+    }
+    // The box (in the cell, 0..1) a shape fills, turned: what a turned one collides as.
+    void ShapeBounds(glm::vec3& lo, glm::vec3& hi) const {
+        int top = 0, bottom = 8;
+        for (int e = 0; e < 4; e++) top = std::max<int>(top, edgeData.GetTopY(e)), bottom = std::min<int>(bottom, edgeData.GetBottomY(e));
+        const glm::vec3 a = ShapeToCell(ShapeDir(), { 0.0f, bottom / 8.0f, 0.0f }), b = ShapeToCell(ShapeDir(), { 1.0f, top / 8.0f, 1.0f });
+        lo = glm::min(a, b);
+        hi = glm::max(a, b);
+    }
+    // Chiselled (see Chiselled), from the side `dir` says when it's still a full block that
+    // can turn (that side then becomes its top); a shaped one keeps its own direction.
+    // How far a chisel stroke moves a corner, in eighths, finest first (V picks one).
+    static constexpr int kChiselSteps[] = { 1, 2, 4 };
+    static constexpr bool IsChiselStep(int s) { return s == 1 || s == 2 || s == 4; }
+    Block ChiselledFrom(int dir, int edge, int deltaEighths) const {
+        Block b = *this;
+        if (b.IsFullBlock() && CanTurnShape(b.type) && dir >= 0 && dir <= 5) b.axis = static_cast<uint8_t>(dir);
+        return b.Chiselled(edge, deltaEighths);
+    }
     // Water in a partial block sits above its slope. For flow it's treated as a cell
     // with a raised floor at the slope's average height, so the capacity is right.
     uint8_t WaterFloor() const;
@@ -650,6 +737,19 @@ struct Block {
     // Drawn as a thin tube joining its neighbours (still solid as a whole block).
     bool IsPipe() const { return IsPipeType(type); }
     bool IsShell() const { return type == BlockType::LADDER || type == BlockType::DOOR_OPEN; }
+    // A closed door's panel within its cell (0..1 each way): kDoorThickness thick, at the
+    // back of the cell (away from the way it faces). Collision is this box, not the cell.
+    static constexpr float kDoorThickness = 3.0f / 16.0f;
+    void DoorPanel(glm::vec3& lo, glm::vec3& hi) const {
+        const glm::ivec3 f = Facing();
+        constexpr float t = kDoorThickness;
+        lo = glm::vec3(0.0f);
+        hi = glm::vec3(1.0f);
+        if (f.x > 0) hi.x = t;
+        else if (f.x < 0) lo.x = 1.0f - t;
+        else if (f.z < 0) lo.z = 1.0f - t;
+        else hi.z = t; // +z (and any other)
+    }
     // Wild growth that a block placed on it simply replaces (aiming at a tuft of grass
     // puts the block where the tuft was, not on top of it).
     bool IsReplaceablePlant() const { return type == BlockType::TALL_GRASS || type == BlockType::DEAD_BUSH; }
@@ -692,7 +792,7 @@ inline Block Block::Placed(BlockType t, int heightEighths, int faceAxis) {
     if (t == BlockType::WATER) return Water(kMaxWaterVolume);
     if (t == BlockType::PRESSURE_PLATE) return PressurePlate();
     if (t == BlockType::BED) return Bed();
-    if (t == BlockType::LADDER || t == BlockType::DOOR_OPEN) return Block(t); // (a whole cell, not a sprite's drop)
+    if (t == BlockType::LADDER || t == BlockType::DOOR_OPEN) return Block(t).Turned(faceAxis); // (a panel, not a sprite's drop)
     if (IsPlantType(t)) return Plant(t, 0);
     if (heightEighths >= 8 || heightEighths <= 0 || !CanShape(t)) return Block(t).Turned(faceAxis);
     EdgeData slab;

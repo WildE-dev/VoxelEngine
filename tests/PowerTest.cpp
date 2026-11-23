@@ -69,16 +69,18 @@ const net::MachineInfo* MachineAt(const Client& c, const glm::ivec3& pos) {
     return nullptr;
 }
 
+// In the chat, or in a machine's description (right-clicking it).
 bool Has(const Client& c, const std::string& text) {
-    for (const auto& line : c.GetChat())
-        if (line.text.find(text) != std::string::npos) return true;
+    for (const auto* lines : { &c.GetChat(), &c.GetInspections() })
+        for (const auto& line : *lines)
+            if (line.text.find(text) != std::string::npos) return true;
     return false;
 }
 
 // What the last "Air tank: holding N of ..." line said (-1 if there's none).
 int TankHeld(const Client& c) {
     int held = -1;
-    for (const auto& line : c.GetChat())
+    for (const auto& line : c.GetInspections())
         if (const size_t at = line.text.find("Air tank: holding "); at != std::string::npos) held = std::atoi(line.text.c_str() + at + 18);
     return held;
 }
@@ -207,6 +209,17 @@ int main() {
     Check(pump(20.0, [&] { return a.client.GetChestUnits(BlockType::STONE) >= 2 * Block::kUnitsPerBlock; }), "and what it digs is in the chest");
     a.client.CloseChest();
 
+    std::cout << "Placing over a block" << std::endl;
+    // The server places only into air, plants or water, so placing stone where the
+    // compressor is is refused; the client checks the same and doesn't show it at all
+    // (not for a moment before the server takes it back).
+    {
+        a.client.PlaceBlock(compressor, BlockType::STONE);
+        Check(blockAt(compressor) == BlockType::COMPRESSOR, "placing over a block isn't shown, even for a moment");
+        wait(0.5);
+        Check(blockAt(compressor) == BlockType::COMPRESSOR, "and the block is still there");
+    }
+
     std::cout << "Tanks and valves" << std::endl;
     const glm::ivec3 valve{ 19, 3, 13 }, tank{ 18, 3, 13 };
     a.client.Inspect(tank);
@@ -222,7 +235,7 @@ int main() {
     wait(2.0);
     a.client.Inspect(tank);
     Check(pump(10.0, [&] {
-              for (const auto& line : a.client.GetChat())
+              for (const auto& line : a.client.GetInspections())
                   if (line.text.find("Air tank: holding") != std::string::npos && line.text.find("holding 0 of") == std::string::npos &&
                       line.text.find("1 tanks") != std::string::npos)
                       return true;

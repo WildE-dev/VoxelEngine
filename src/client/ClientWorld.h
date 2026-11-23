@@ -108,8 +108,16 @@ public:
     size_t GetChunkCount() const { return chunks.size(); }
     size_t GetLoadedChunkCount() const { return loadedCount; }
 
-private:
     using ChunkPtr = std::shared_ptr<ClientChunk>;
+    using ChunkMap = std::unordered_map<glm::ivec3, ChunkPtr, Coords::IVec3Hash>;
+    // Stops the mesh worker, releases every chunk's GPU objects (call with the GL context
+    // current) and hands the chunks over, emptied out of this world: the caller frees
+    // them when it likes. Freeing thousands of chunks takes over a second on Windows
+    // (macOS's allocator is far quicker), so leaving a world or quitting needn't wait for
+    // it. The destructor does this itself if it wasn't done (and frees them there).
+    ChunkMap Release();
+
+private:
 
     // Caller must be the main thread or hold `chunksMutex`.
     ChunkPtr FindChunk(const glm::ivec3& chunkCoords) const;
@@ -124,7 +132,7 @@ private:
     // Returns false (and builds nothing) while a neighbour is still waiting for data.
     bool BuildChunkMesh(ClientChunk& chunk);
 
-    std::unordered_map<glm::ivec3, ChunkPtr, Coords::IVec3Hash> chunks;
+    ChunkMap chunks;
     mutable std::shared_mutex chunksMutex;
     size_t loadedCount = 0; // main thread
 

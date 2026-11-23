@@ -2,6 +2,7 @@
 #include "world/Power.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <mutex>
 
@@ -456,6 +457,18 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     }
                     continue;
                 }
+                if (block.type == BlockType::LADDER) {
+                    // A thin panel of rungs against the wall behind it (away from the way
+                    // it faces), seen from both sides.
+                    const glm::ivec3 f = block.Facing();
+                    glm::ivec3 lo(0), hi(8);
+                    if (f.x > 0) hi.x = 1;
+                    else if (f.x < 0) lo.x = 7;
+                    else if (f.z < 0) lo.z = 7;
+                    else hi.z = 1;
+                    block.AddBoxVertices(vertices, x, y, z, lo, hi, 0, static_cast<uint8_t>(blockLightAt(pos)), static_cast<uint8_t>(skyLightAt(pos)));
+                    continue;
+                }
                 if (block.IsShell()) {
                     // A see-through cube of rungs: its faces, both ways round (seen from
                     // inside while climbing too), except where a solid block hides them.
@@ -468,6 +481,38 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 }
                 if (block.IsPlant()) {
                     block.AddPlantVertices(vertices, x, y, z, static_cast<uint8_t>(blockLightAt(pos)), static_cast<uint8_t>(skyLightAt(pos)));
+                    continue;
+                }
+
+                // A shape turned sideways or upside down (Block::ShapeDir): its faces drawn as
+                // if upright, each lit from the side it ends up facing, then turned into
+                // place about the cell.
+                if (const int dir = block.ShapeDir(); dir != 0 && !block.IsFullBlock()) {
+                    const size_t first = vertices.size();
+                    const bool quarters = block.IsStepped();
+                    for (int face = 0; face < kFaceCount; ++face) {
+                        const glm::vec3 n = Block::ShapeVectorToCell(dir, glm::vec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]));
+                        int worldFace = face;
+                        for (int f = 0; f < kFaceCount; f++)
+                            if (glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]) == glm::ivec3(glm::round(n))) worldFace = f;
+                        const auto shading = shadeFace(pos, worldFace, false, true);
+                        if (quarters) block.AddSteppedFaces(vertices, static_cast<Face>(face), x, y, z, shading, true);
+                        else block.AddFaceVertices(vertices, static_cast<Face>(face), x, y, z, shading);
+                    }
+                    for (size_t i = first; i + 1 < vertices.size(); i += 2) {
+                        const uint32_t p = vertices[i], s = vertices[i + 1];
+                        // Position: eighths in the chunk (y one block up), see Block's VertexData.
+                        const glm::vec3 local(((p >> 24) & 0xFFu) / 8.0f - x, (static_cast<int>((p >> 16) & 0xFFu) - 8) / 8.0f - y, ((p >> 8) & 0xFFu) / 8.0f - z);
+                        const glm::vec3 c = Block::ShapeToCell(dir, local);
+                        const uint32_t px = static_cast<uint32_t>(std::lround((x + c.x) * 8.0f)), py = static_cast<uint32_t>(std::lround((y + c.y + 1.0f) * 8.0f)),
+                                       pz = static_cast<uint32_t>(std::lround((z + c.z) * 8.0f));
+                        vertices[i] = ((px & 0xFFu) << 24) | ((py & 0xFFu) << 16) | ((pz & 0xFFu) << 8) | (p & 0xFFu);
+                        // Normal: 4 bits an axis.
+                        const glm::vec3 normal(((s >> 28) & 0xFu) / 7.5f - 1.0f, ((s >> 24) & 0xFu) / 7.5f - 1.0f, ((s >> 20) & 0xFu) / 7.5f - 1.0f);
+                        const glm::vec3 turned = Block::ShapeVectorToCell(dir, normal);
+                        auto bits = [](float v) { return static_cast<uint32_t>(std::clamp(std::lround((v + 1.0f) * 7.5f), 0L, 15L)); };
+                        vertices[i + 1] = (s & ~(0xFFFu << 20)) | (bits(turned.x) << 28) | (bits(turned.y) << 24) | (bits(turned.z) << 20);
+                    }
                     continue;
                 }
 

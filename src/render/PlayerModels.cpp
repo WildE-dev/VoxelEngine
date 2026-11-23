@@ -5,10 +5,12 @@
 #include <functional>
 #include <map>
 
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "render/Shader.h"
 #include "render/TextureAtlas.h"
+#include "world/Block.h"
 #include "world/Creatures.h"
 #include "world/Json.h"
 #include "world/Armour.h"
@@ -303,6 +305,37 @@ void PlayerModels::DrawGauges(Shader& shader, const glm::mat4& view, const glm::
     }
 }
 
+void PlayerModels::DrawDoors(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<DoorModel>& doors) {
+    if (doors.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 0.0f);
+    shader.SetUniform("textured", 1.0f);
+    shader.SetUniform("boxRepeat", glm::vec3(0.0f));
+    shader.SetUniform("color", glm::vec3(1.0f));
+    glBindVertexArray(vao);
+    const glm::vec3 eye = glm::vec3(glm::inverse(view)[3]);
+    constexpr float t = Block::kDoorThickness;
+    for (const auto& d : doors) {
+        const glm::vec3 centre = d.origin + glm::vec3(0.5f);
+        if (glm::distance(eye, centre) > 96.0f) continue;
+        shader.SetUniform("lightLevels", d.light);
+        shader.SetUniform("tileRect", d.uv);
+        // Local frame: +z the way it faces. Shut, the panel lies across the back of the
+        // cell; it turns a quarter turn about its hinge, in the middle of its thickness at
+        // its left end, to lie along the inside of the cell's left side (turning about the
+        // corner itself would swing it out into the block beside the doorway).
+        glm::mat4 frame = glm::translate(glm::mat4(1.0f), centre);
+        frame = glm::rotate(frame, std::atan2(static_cast<float>(d.facing.x), static_cast<float>(d.facing.z)), glm::vec3(0, 1, 0));
+        frame = glm::translate(frame, glm::vec3(-0.5f + t * 0.5f, 0.0f, -0.5f + t * 0.5f));
+        frame = glm::rotate(frame, -glm::half_pi<float>() * std::clamp(d.open, 0.0f, 1.0f), glm::vec3(0, 1, 0));
+        shader.SetUniform("model", glm::scale(glm::translate(frame, glm::vec3(0.5f - t * 0.5f, 0.0f, 0.0f)), glm::vec3(1.0f, 1.0f, t)));
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+    shader.SetUniform("textured", 0.0f);
+}
+
 void PlayerModels::DrawGlows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GlowModel>& glows) {
     if (glows.empty()) return;
     shader.Use();
@@ -361,10 +394,12 @@ void PlayerModels::DrawParticles(Shader& shader, const glm::mat4& view, const gl
     for (const auto& p : particles) {
         shader.SetUniform("lightLevels", p.light);
         shader.SetUniform("tileRect", p.uv);
+        shader.SetUniform("soft", p.soft);
         shader.SetUniform("model", glm::scale(glm::translate(glm::mat4(1.0f), p.position), glm::vec3(p.size)));
         glDrawArrays(GL_TRIANGLES, 0, 36);
     }
     shader.SetUniform("textured", 0.0f);
+    shader.SetUniform("soft", 0.0f);
 }
 
 void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<CreatureModel>& creatures,

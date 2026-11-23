@@ -33,6 +33,7 @@
   { "id": "sword", "name": "Sword", "takes": { "planks": 0.5, "stone": 2 }, "tool": "sword" },
   { "id": "bow", "name": "Bow", "takes": { "planks": 1, "hide": 1 }, "tool": "bow" },
   { "id": "rod", "name": "Fishing rod", "takes": { "planks": 1, "hide": 0.25 }, "tool": "rod" },
+  { "id": "chisel", "name": "Chisel", "takes": { "planks": 0.25, "stone": 0.5 }, "tool": "chisel" },
   { "id": "arrows", "name": "4 arrows", "takes": { "planks": 0.5, "stone": 0.25 }, "makes": { "arrow": 4 } },
   { "id": "cap", "name": "Hide cap", "takes": { "hide": 2 }, "armour": "cap" },
   { "id": "tunic", "name": "Hide tunic", "takes": { "hide": 4 }, "armour": "tunic" },
