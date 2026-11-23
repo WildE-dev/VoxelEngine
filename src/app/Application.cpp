@@ -2832,13 +2832,17 @@ void Application::OnMouseButton(int button, int action) {
             return;
         }
         // Seeds are planted on the dirt or grass you're looking at.
+        // (Or in place of a tuft of grass growing on it.)
         if (item == BlockType::SEEDS) {
-            Block soil;
-            if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach());
-                at && at->normal == glm::ivec3(0, 1, 0) && world->GetBlock(at->block.x, at->block.y, at->block.z, soil) &&
-                (soil.type == BlockType::DIRT || IsGrassType(soil.type)) && client->CanAfford(BlockType::CROP, 8)) {
-                client->PlaceBlock(at->block + at->normal, BlockType::CROP);
-                PlayAt("place", at->block + at->normal, 0.5f);
+            Block soil, aimed;
+            if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
+                const bool intoPlant = world->GetBlock(at->block.x, at->block.y, at->block.z, aimed) && aimed.IsReplaceablePlant();
+                const glm::ivec3 plot = intoPlant ? at->block : at->block + at->normal;
+                if ((intoPlant || at->normal == glm::ivec3(0, 1, 0)) && world->GetBlock(plot.x, plot.y - 1, plot.z, soil) &&
+                    (soil.type == BlockType::DIRT || IsGrassType(soil.type)) && client->CanAfford(BlockType::CROP, 8)) {
+                    client->PlaceBlock(plot, BlockType::CROP);
+                    PlayAt("place", plot, 0.5f);
+                }
             }
             return;
         }
@@ -2866,7 +2870,10 @@ void Application::OnMouseButton(int button, int action) {
     }
     else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         if (SelectedTool() != Tool::None) return; // tools don't place anything
-        const glm::ivec3 place = hit->block + hit->normal;
+        // Aimed at a tuft of grass: the block replaces it, rather than going beside it.
+        Block aimed;
+        const bool intoPlant = world->GetBlock(hit->block.x, hit->block.y, hit->block.z, aimed) && aimed.IsReplaceablePlant();
+        const glm::ivec3 place = intoPlant ? hit->block : hit->block + hit->normal;
         // Don't build a solid block inside yourself when walking (water, sprites and
         // pressure plates are fine).
         const BlockType placeBlock = SelectedBlock();
@@ -3268,13 +3275,86 @@ void Application::UpdateParticles(float dt) {
     if (now >= nextFireScan) {
         nextFireScan = now + 1.0;
         campfires.clear();
+        rapids.clear();
+        constexpr int kFull = Block::kMaxWaterVolume;
+        // The water surface that water at `q`'s row would run onto there, in units from
+        // the world's base: its own top surface, or, where the cell is open and dry, the
+        // water just below it (a stream stepping down). False for a solid block, dry
+        // ground, or water with more water above it (not a surface).
+        auto surfaceAt = [&](const glm::ivec3& q, int& height) {
+            Block n, other;
+            if (!world->GetBlock(q.x, q.y, q.z, n)) return false;
+            if (n.HasWater()) {
+                if (world->GetBlock(q.x, q.y + 1, q.z, other) && other.HasWater()) return false;
+                height = q.y * kFull + n.WaterShownLevel();
+                return true;
+            }
+            if (!n.CanHoldWater() || !world->GetBlock(q.x, q.y - 1, q.z, other) || !other.HasWater()) return false;
+            height = (q.y - 1) * kFull + other.WaterShownLevel();
+            return true;
+        };
         const glm::ivec3 c(glm::floor(player.GetFeetPosition()));
         for (int x = -16; x <= 16; x++)
             for (int z = -16; z <= 16; z++)
                 for (int y = -6; y <= 6; y++) {
+                    const glm::ivec3 p = c + glm::ivec3(x, y, z);
                     Block b;
-                    if (world->GetBlock(c.x + x, c.y + y, c.z + z, b) && b.type == BlockType::CAMPFIRE) campfires.push_back(c + glm::ivec3(x, y, z));
+                    if (!world->GetBlock(p.x, p.y, p.z, b)) continue;
+                    if (b.type == BlockType::CAMPFIRE) {
+                        campfires.push_back(p);
+                        continue;
+                    }
+                    // Rapids: shallow water (a top layer lying on its bed, at most three
+                    // quarters deep) whose surface stands clearly above the water beside
+                    // it, so it's running that way. Water at rest is level, and dry ground
+                    // beside a puddle doesn't count, so still water stays calm.
+                    if (!b.HasWater() || rapids.size() >= 400) continue;
+                    const int level = b.WaterShownLevel();
+                    if (level > kFull * 3 / 4) continue;
+                    Block above, below;
+                    if (world->GetBlock(p.x, p.y + 1, p.z, above) && above.HasWater()) continue;
+                    if (world->GetBlock(p.x, p.y - 1, p.z, below) && below.HasWater()) continue;
+                    const int mine = p.y * kFull + level;
+                    int bestDrop = 0;
+                    glm::ivec2 bestDir(0);
+                    for (const glm::ivec2 d : { glm::ivec2(1, 0), glm::ivec2(-1, 0), glm::ivec2(0, 1), glm::ivec2(0, -1) }) {
+                        int theirs;
+                        if (surfaceAt(p + glm::ivec3(d.x, 0, d.y), theirs) && mine - theirs > bestDrop) bestDrop = mine - theirs, bestDir = d;
+                    }
+                    constexpr int kMinDrop = kFull / 24; // about a twentieth of a block
+                    if (bestDrop < kMinDrop) continue;
+                    rapids.push_back({ p, static_cast<float>(p.y) + level / static_cast<float>(kFull), glm::vec2(bestDir),
+                                       std::min(1.0f, static_cast<float>(bestDrop) / (kFull / 2)) });
                 }
+    }
+    // Spray off the rapids: flecks of foam and water kicked up and on downstream, more
+    // and faster where the water runs more steeply.
+    if (!rapids.empty()) {
+        static std::mt19937 sprayRng(4321);
+        const TextureAtlas& atlas = renderer->GetAtlas();
+        glm::vec2 foam0, foam1, water0, water1;
+        atlas.GetTileUV(atlas.GetIndex("snow"), foam0, foam1);
+        atlas.GetTileUV(IconTile(BlockType::WATER), water0, water1);
+        float budget = dt * 7.0f * static_cast<float>(std::min<size_t>(rapids.size(), 48));
+        while (budget > 0.0f && particles.size() < 600) {
+            if (budget < 1.0f && unit(sprayRng) >= budget) break;
+            budget -= 1.0f;
+            const Rapid& r = rapids[static_cast<size_t>(unit(sprayRng) * rapids.size()) % rapids.size()];
+            if (unit(sprayRng) > 0.25f + 0.75f * r.strength) continue; // gentle runs spray less
+            const glm::vec2 across(-r.direction.y, r.direction.x);
+            const float speed = (0.5f + 2.5f * r.strength) * (0.6f + 0.8f * unit(sprayRng));
+            Particle p;
+            p.position = glm::vec3(r.cell.x + 0.15f + 0.7f * unit(sprayRng), r.surfaceY + 0.03f, r.cell.z + 0.15f + 0.7f * unit(sprayRng));
+            const glm::vec2 h = r.direction * speed + across * (unit(sprayRng) - 0.5f) * 0.8f;
+            p.velocity = glm::vec3(h.x, (1.0f + 1.6f * unit(sprayRng)) * (0.6f + 0.6f * r.strength), h.y);
+            p.maxLife = p.life = 0.35f + 0.35f * unit(sprayRng);
+            p.size = 0.035f + 0.04f * unit(sprayRng);
+            const bool isFoam = unit(sprayRng) < 0.6f;
+            const glm::vec2 uv0 = isFoam ? foam0 : water0, uv1 = isFoam ? foam1 : water1;
+            const glm::vec2 span = (uv1 - uv0) * 0.25f, at = uv0 + (uv1 - uv0 - span) * glm::vec2(unit(sprayRng), unit(sprayRng));
+            p.uv = glm::vec4(at, at + span);
+            particles.push_back(p);
+        }
     }
     if (!campfires.empty() && unit(smokeRng) < dt * 5.0f * std::min<size_t>(campfires.size(), 4)) {
         const glm::ivec3 fire = campfires[static_cast<size_t>(unit(smokeRng) * campfires.size()) % campfires.size()];

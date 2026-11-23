@@ -650,6 +650,9 @@ struct Block {
     // Drawn as a thin tube joining its neighbours (still solid as a whole block).
     bool IsPipe() const { return IsPipeType(type); }
     bool IsShell() const { return type == BlockType::LADDER || type == BlockType::DOOR_OPEN; }
+    // Wild growth that a block placed on it simply replaces (aiming at a tuft of grass
+    // puts the block where the tuft was, not on top of it).
+    bool IsReplaceablePlant() const { return type == BlockType::TALL_GRASS || type == BlockType::DEAD_BUSH; }
     uint8_t GetLightEmission() const { return ::GetLightEmission(type); }
 
     // Height of the block's top surface (0..1) at a point inside its footprint,

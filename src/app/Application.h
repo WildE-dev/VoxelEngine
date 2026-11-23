@@ -178,6 +178,11 @@ private:
     };
     std::vector<Particle> particles;
     std::vector<glm::ivec3> campfires; // near the player, for smoke
+    // Shallow water running downhill near the player, for spray (found by the same
+    // look round as the campfires): the cell, where its surface is, which way it runs
+    // (unit, horizontal) and how steeply (0..1).
+    struct Rapid { glm::ivec3 cell; float surfaceY; glm::vec2 direction; float strength; };
+    std::vector<Rapid> rapids;
     double nextFireScan = 0.0;
     double nextShot = 0.0; // the bow's next shot
     std::optional<glm::ivec3> lastBobber; // where our bobber was (for the splash when a fish bites)
