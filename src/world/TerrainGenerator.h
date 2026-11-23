@@ -136,7 +136,7 @@ public:
     static constexpr int kDeepTop = -100, kDeepBottom = -160;
     // Whether a column's top is a tar seep (one in 40 of those over oil, on dry land).
     bool TarSeepAt(int x, int z) const;
-    // The nearest column within `range` with oil under it (sampled every 4 blocks).
+    // The nearest column within `range` with oil under it (sampled every 8 blocks).
     std::optional<glm::ivec2> OilNear(int x, int z, int range) const;
     // Whether a column's middle is in a river's channel (within `margin` more of it).
     bool InRiver(int x, int z, float margin = 0.0f) const;

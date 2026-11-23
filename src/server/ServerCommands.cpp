@@ -470,8 +470,8 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         }
         if (what == "oil") {
             const glm::vec3 at = sender ? sender->feet : glm::vec3(0.0f);
-            const auto oil = world->GetTerrain().OilNear(static_cast<int>(std::floor(at.x)), static_cast<int>(std::floor(at.z)), 600);
-            if (!oil) return reply(Kind::Info, "No oil within 600 blocks");
+            const auto oil = world->GetTerrain().OilNear(static_cast<int>(std::floor(at.x)), static_cast<int>(std::floor(at.z)), 1500);
+            if (!oil) return reply(Kind::Info, "No oil within 1500 blocks");
             return reply(Kind::Info, "There's oil shale under " + std::to_string(oil->x) + " " + std::to_string(oil->y) + " (between " +
                                          std::to_string(TerrainGenerator::kOilBottom) + " and " + std::to_string(TerrainGenerator::kOilTop) + "), " +
                                          std::to_string(static_cast<int>(glm::distance(glm::vec2(at.x, at.z), glm::vec2(*oil)))) + " blocks away");

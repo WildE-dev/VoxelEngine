@@ -1269,8 +1269,8 @@ and right-clicking the gauge describes the network.
 ## Oil and fluids
 
 **Oil** lies deep underground, in pockets of **oil shale** (dark rock streaked with
-crude) between 30 and 80 blocks below sea level, in broad oil fields that cover part of
-the world. Over a field, here and there a block of the ground is a black **tar seep**:
+crude) between 30 and 80 blocks below sea level, in broad oil fields that are rare: about
+3% of the world has oil under it, so it takes some looking for. Over a field, here and there a block of the ground is a black **tar seep**:
 the sign to drill. `/locate oil` (operators) says where the nearest is.
 
 **Fluid pipes** (thin grey tubes) join face to face and to **fluid tanks**; everything

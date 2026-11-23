@@ -358,12 +358,14 @@ std::vector<glm::ivec2> TerrainGenerator::DrainsIn(int chunkX, int chunkZ) const
 
 bool TerrainGenerator::OilAt(int x, int y, int z) {
     if (y > kOilTop || y < kOilBottom) return false;
-    // Broad fields (most of the world has none), and pockets in them, flattened.
+    // Broad fields, and pockets in them, flattened. The fields are rare: about 3% of
+    // the world has oil under it, and the nearest is typically 500 blocks off or more.
+    constexpr float kField = 0.34f;
     const float field = Noise::Perlin2(x / 700.0f + 41.3f, z / 700.0f - 19.7f);
-    if (field < 0.18f) return false;
+    if (field < kField) return false;
     const float pocket = Noise::Perlin3(x / 28.0f, y / 9.0f, z / 28.0f, 0x0111u);
     const float edge = std::min(y - kOilBottom, kOilTop - y) / 6.0f; // (fading out at the top and bottom of the band)
-    return pocket > 0.5f - 0.25f * std::min(1.0f, (field - 0.18f) * 4.0f) + 0.3f * std::max(0.0f, 1.0f - edge);
+    return pocket > 0.5f - 0.25f * std::min(1.0f, (field - kField) * 4.0f) + 0.3f * std::max(0.0f, 1.0f - edge);
 }
 
 bool TerrainGenerator::TarSeepAt(int x, int z) const {
@@ -377,8 +379,8 @@ bool TerrainGenerator::TarSeepAt(int x, int z) const {
 std::optional<glm::ivec2> TerrainGenerator::OilNear(int x, int z, int range) const {
     std::optional<glm::ivec2> best;
     float bestDistance = 1e9f;
-    for (int dx = -range; dx <= range; dx += 4)
-        for (int dz = -range; dz <= range; dz += 4) {
+    for (int dx = -range; dx <= range; dx += 8)
+        for (int dz = -range; dz <= range; dz += 8) {
             const float d = std::sqrt(static_cast<float>(dx * dx + dz * dz));
             if (d >= bestDistance) continue;
             for (int y = kOilTop; y >= kOilBottom; y -= 3)
