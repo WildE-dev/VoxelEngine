@@ -432,9 +432,7 @@ void Server::UpdatePower() {
                     // (Coke first: it lasts longer.)
                     for (const BlockType fuel : { BlockType::COKE, BlockType::COAL }) {
                         for (const auto& c : ChestsJoined(pos)) {
-                            ChestItems& chest = ChestAt(c);
-                            if (chest[static_cast<size_t>(fuel)] < Block::kUnitsPerBlock) continue;
-                            chest[static_cast<size_t>(fuel)] -= Block::kUnitsPerBlock;
+                            if (!ChestAt(c).TakeUnits(fuel, Block::kUnitsPerBlock)) continue;
                             SendChestToViewers(c);
                             w.next = now + (fuel == BlockType::COKE ? Fluids::kCokeBurn : Fluids::kCoalBurn);
                             fire = true;
@@ -488,17 +486,24 @@ bool Server::Crush(const glm::ivec3& pos, Worker& w) {
         { BlockType::IRON_ORE, { BlockType::CRUSHED_IRON, 2 * Block::kUnitsPerBlock } },
         { BlockType::STONE, { BlockType::SAND, Block::kUnitsPerBlock } },
     };
+    bool full = false;
     for (const auto& [from, to] : grinds)
         for (const auto& c : joined) {
-            ChestItems& chest = ChestAt(c);
-            if (chest[static_cast<size_t>(from)] < Block::kUnitsPerBlock) continue;
-            chest[static_cast<size_t>(from)] -= Block::kUnitsPerBlock;
-            chest[static_cast<size_t>(to.first)] += to.second;
+            Inventory& chest = ChestAt(c);
+            if (chest.Units(from) < Block::kUnitsPerBlock) continue;
+            // (What it grinds is gone first, so it may make the room.)
+            Inventory after = chest;
+            after.TakeUnits(from, Block::kUnitsPerBlock);
+            if (after.AddUnits(to.first, to.second) != 0) {
+                full = true;
+                continue;
+            }
+            chest = std::move(after);
             SendChestToViewers(c);
             w.state = Power::DrillState::Working;
             return true;
         }
-    w.state = Power::DrillState::Idle;
+    w.state = full ? Power::DrillState::Full : Power::DrillState::Idle;
     return false;
 }
 
@@ -528,15 +533,20 @@ bool Server::Extract(const glm::ivec3& pos, const Block& extractor, Worker& w) {
         w.state = Power::DrillState::NoChest;
         return false;
     }
-    ChestItems& held = ChestAt(from);
-    constexpr size_t kTypes = static_cast<size_t>(BlockType::COUNT);
-    // Through what the chest has in turn, the first thing somewhere will take.
-    for (size_t k = 1; k <= kTypes; k++) {
-        const size_t t = (w.cursor + k) % kTypes;
-        if (held[t] == 0) continue;
-        const BlockType type = static_cast<BlockType>(t);
+    // The kinds of things in the chest, in order (whole items: offcuts stay).
+    std::vector<ItemId> kinds;
+    for (const Stack& st : ChestAt(from).slots)
+        if (!st.Empty()) kinds.push_back(st.item);
+    std::sort(kinds.begin(), kinds.end());
+    kinds.erase(std::unique(kinds.begin(), kinds.end()), kinds.end());
+    // Through them in turn (after the last one it moved), the first thing somewhere will take.
+    const size_t start = static_cast<size_t>(std::upper_bound(kinds.begin(), kinds.end(), w.cursor) - kinds.begin());
+    for (size_t k = 0; k < kinds.size(); k++) {
+        const ItemId item = kinds[(start + k) % kinds.size()];
+        const BlockType type = Items::IsBlock(item) ? Items::BlockOf(item) : BlockType::COUNT; // (filters pass blocks of their kind)
         std::vector<glm::ivec3> to = ChestsJoined(pos, type, &back);
         to.erase(std::remove(to.begin(), to.end(), from), to.end());
+        to.erase(std::remove_if(to.begin(), to.end(), [&](const glm::ivec3& c) { return ChestAt(c).Room(item) == 0; }), to.end());
         if (to.empty()) continue;
         // Where it goes: a chest behind a filter set to it (one already holding some
         // first), else one already holding some, else the nearest.
@@ -544,19 +554,18 @@ bool Server::Extract(const glm::ivec3& pos, const Block& extractor, Worker& w) {
         auto filtered = [&](const glm::ivec3& c) { return std::find(open.begin(), open.end(), c) == open.end(); };
         auto pick = [&](bool needFilter, bool needSome) -> std::optional<glm::ivec3> {
             for (const auto& c : to)
-                if ((!needFilter || filtered(c)) && (!needSome || ChestAt(c)[t] > 0)) return c;
+                if ((!needFilter || filtered(c)) && (!needSome || ChestAt(c).Count(item) > 0)) return c;
             return std::nullopt;
         };
         glm::ivec3 dest = to.front();
         if (auto c = pick(true, true)) dest = *c;
         else if (auto c2 = pick(true, false)) dest = *c2;
         else if (auto c3 = pick(false, true)) dest = *c3;
-        const uint32_t units = std::min<uint32_t>(held[t], Block::kUnitsPerBlock);
-        held[t] -= units;
-        ChestAt(dest)[t] += units;
+        ChestAt(from).Take(item, 1);
+        ChestAt(dest).Add(item, 1);
         SendChestToViewers(from);
         SendChestToViewers(dest);
-        w.cursor = t;
+        w.cursor = item;
         w.state = Power::DrillState::Working;
         return true;
     }
@@ -567,7 +576,7 @@ bool Server::Extract(const glm::ivec3& pos, const Block& extractor, Worker& w) {
 bool Server::CraftAt(const glm::ivec3& pos, const Block& crafter, Worker& w) {
     const auto& recipes = Crafting::Recipes();
     const int index = static_cast<int>(crafter.axis) - 1;
-    if (index < 0 || index >= static_cast<int>(recipes.size()) || recipes[index].MadeOnce()) {
+    if (index < 0 || index >= static_cast<int>(recipes.size()) || recipes[index].MakesItem()) {
         w.state = Power::DrillState::Blocked; // (no recipe)
         return false;
     }
@@ -577,16 +586,22 @@ bool Server::CraftAt(const glm::ivec3& pos, const Block& crafter, Worker& w) {
         w.state = Power::DrillState::NoChest;
         return false;
     }
+    bool full = false;
     for (const auto& c : joined) {
-        ChestItems& chest = ChestAt(c);
+        Inventory& chest = ChestAt(c);
         if (Crafting::TimesAffordable(recipe, chest) < 1) continue;
-        for (const auto& in : recipe.inputs) chest[static_cast<size_t>(in.type)] -= in.units;
-        chest[static_cast<size_t>(recipe.output)] += recipe.outputUnits;
+        Inventory after = chest;
+        for (const auto& in : recipe.inputs) after.TakeUnits(in.type, in.units);
+        if (after.AddUnits(recipe.output, recipe.outputUnits) != 0) {
+            full = true;
+            continue;
+        }
+        chest = std::move(after);
         SendChestToViewers(c);
         w.state = Power::DrillState::Working;
         return true;
     }
-    w.state = Power::DrillState::Idle;
+    w.state = full ? Power::DrillState::Full : Power::DrillState::Idle;
     return false;
 }
 
@@ -596,6 +611,12 @@ bool Server::Harvest(const glm::ivec3& pos, Worker& w) {
     if (joined.size() > 1 && joined.front() == pos) std::rotate(joined.begin(), joined.begin() + 1, joined.end());
     if (joined.empty()) {
         w.state = Power::DrillState::NoChest;
+        return false;
+    }
+    // (Somewhere with room for the wheat.)
+    joined.erase(std::remove_if(joined.begin(), joined.end(), [&](const glm::ivec3& c) { return !ChestAt(c).FitsUnits(BlockType::WHEAT, Block::kUnitsPerBlock); }), joined.end());
+    if (joined.empty()) {
+        w.state = Power::DrillState::Full;
         return false;
     }
     const int r = Power::kHarvestReach;
@@ -608,7 +629,7 @@ bool Server::Harvest(const glm::ivec3& pos, Worker& w) {
                 // Reaped and replanted from its own seed: a young crop again.
                 world->SetBlock(p.x, p.y, p.z, Block::Plant(BlockType::CROP, b.edgeData.edges[0]));
                 crops.insert(p);
-                ChestAt(joined.front())[static_cast<size_t>(BlockType::WHEAT)] += Block::kUnitsPerBlock;
+                ChestAt(joined.front()).AddUnits(BlockType::WHEAT, Block::kUnitsPerBlock);
                 SendChestToViewers(joined.front());
                 w.state = Power::DrillState::Working;
                 return true;
@@ -623,19 +644,21 @@ bool Server::Smelt(const glm::ivec3& pos, Smelter& smelter) {
         smelter.state = Power::DrillState::NoChest;
         return false;
     }
+    bool full = false;
     for (const auto& c : joined) {
-        ChestItems& chest = ChestAt(c);
+        Inventory& chest = ChestAt(c);
         const SmeltRecipe* r = Smelting::FirstAffordable(chest);
         if (!r) continue;
-        chest[static_cast<size_t>(r->input)] -= r->inputUnits;
-        if (r->extra != BlockType::AIR) chest[static_cast<size_t>(r->extra)] -= r->extraUnits;
-        chest[static_cast<size_t>(r->output)] += r->outputUnits;
+        if (!Smelting::Apply(*r, chest)) {
+            full = true;
+            continue;
+        }
         SendChestToViewers(c);
         smelter.made = r->output;
         smelter.state = Power::DrillState::Working;
         return true;
     }
-    smelter.state = Power::DrillState::Idle;
+    smelter.state = full ? Power::DrillState::Full : Power::DrillState::Idle;
     return false;
 }
 
@@ -654,11 +677,19 @@ bool Server::DrillDig(const glm::ivec3& pos, Drill& drill) {
         // (A chest joined to it first; its own inventory if there's none.)
         auto found = ChestsJoined(pos, next);
         if (found.size() > 1 && found.front() == pos) std::rotate(found.begin(), found.begin() + 1, found.end());
+        bool any = false;
         for (const auto& c : found)
             if (c != pos - glm::ivec3(0, 1, 0)) {
+                any = true;
+                // (Room for a whole block of it: it may be cut down to less.)
+                if (next != BlockType::COUNT && !ChestAt(c).FitsUnits(next, Block::kUnitsPerBlock)) continue;
                 chestAt = c;
                 break;
             }
+        if (any && !chestAt) {
+            drill.state = Power::DrillState::Full;
+            return false;
+        }
     }
     if (!chestAt) {
         drill.state = Power::DrillState::NoChest;
@@ -677,8 +708,7 @@ bool Server::DrillDig(const glm::ivec3& pos, Drill& drill) {
             return false;
         }
         world->SetBlock(p.x, p.y, p.z, Block());
-        ChestItems& chest = ChestAt(*chestAt);
-        chest[static_cast<size_t>(b.ResourceType())] += static_cast<uint32_t>(b.ResourceUnits());
+        ChestAt(*chestAt).AddUnits(b.ResourceType(), static_cast<uint32_t>(b.ResourceUnits()));
         SendChestToViewers(*chestAt);
         drill.depth = depth;
         drill.state = Power::DrillState::Working;

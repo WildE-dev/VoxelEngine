@@ -232,7 +232,7 @@ int main(int argc, char** argv) {
             a.held = BlockType::AIR;
             server.QueueConsoleCommand("give stone 2 Builder");
             pump(5.0, [&] { return a.client.GetResources(BlockType::STONE) >= 2 * Crafting::kBlock; });
-            a.client.MoveChestItems(BlockType::STONE, 2 * Crafting::kBlock, true);
+            a.client.MoveChestItems(BlockType::STONE, 2, true);
             pump(5.0, [&] { return a.client.GetChestUnits(BlockType::STONE) > 0; });
             // (Whatever went in: a block of stone makes a block of bricks.)
             bool crafted = false;
@@ -400,7 +400,7 @@ int main(int argc, char** argv) {
             pump(5.0, [&] { return a.client.GetResources(BlockType::BREAD) >= 2 * Crafting::kBlock; });
             a.client.OpenChest(post);
             Check(pump(10.0, [&] { return a.client.GetOpenChest() == post; }), "it opens like a chest");
-            a.client.MoveChestItems(BlockType::BREAD, Crafting::kBlock, true);
+            a.client.MoveChestItems(BlockType::BREAD, 1, true);
             Check(pump(10.0, [&] { return miners() >= 1; }), "paid in bread, dwarf miners come to work it");
             Check(pump(30.0, [&] { return a.client.GetChestUnits(BlockType::COAL) == Crafting::kBlock && a.client.GetChestUnits(BlockType::IRON_ORE) == Crafting::kBlock; }),
                   "they dig out the coal and the iron ore and put them in the post");
@@ -448,7 +448,7 @@ int main(int argc, char** argv) {
             pump(5.0, [&] { return a.client.GetResources(BlockType::SAND) >= 4 * Crafting::kBlock; });
             a.client.OpenChest({ 61, 1, 59 });
             pump(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(61, 1, 59); });
-            a.client.MoveChestItems(BlockType::SAND, 4 * Crafting::kBlock, true);
+            a.client.MoveChestItems(BlockType::SAND, 4, true);
             const auto started = std::chrono::steady_clock::now();
             bool glass = false;
             for (int i = 0; i < 15 && !glass; i++) {
@@ -507,8 +507,8 @@ int main(int argc, char** argv) {
             pump(5.0, [&] { return a.client.GetResources(BlockType::IRON_ORE) >= Crafting::kBlock && a.client.GetResources(BlockType::COAL) >= 4 * Crafting::kBlock; });
             a.client.OpenChest({ 80, 0, 50 });
             pump(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(80, 0, 50); });
-            a.client.MoveChestItems(BlockType::IRON_ORE, Crafting::kBlock, true);
-            a.client.MoveChestItems(BlockType::STONE, Crafting::kBlock, true);
+            a.client.MoveChestItems(BlockType::IRON_ORE, 1, true);
+            a.client.MoveChestItems(BlockType::STONE, 1, true);
             bool crushed = false;
             for (int i = 0; i < 12 && !crushed; i++) {
                 server.QueueConsoleCommand("pressurise 80 2 50");
@@ -532,7 +532,7 @@ int main(int argc, char** argv) {
             a.held = BlockType::AIR;
             a.client.OpenChest({ 83, 0, 51 });
             pump(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(83, 0, 51); });
-            a.client.MoveChestItems(BlockType::COAL, 4 * Crafting::kBlock, true);
+            a.client.MoveChestItems(BlockType::COAL, 4, true);
             bool coke = false;
             for (int i = 0; i < 15 && !coke; i++) {
                 server.QueueConsoleCommand("pressurise 87 0 51");
@@ -587,7 +587,7 @@ int main(int argc, char** argv) {
             pump(5.0, [&] { return a.client.GetResources(BlockType::COAL) >= 2 * Crafting::kBlock; });
             a.client.OpenChest({ 99, 1, 50 });
             pump(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(99, 1, 50); });
-            a.client.MoveChestItems(BlockType::COAL, 2 * Crafting::kBlock, true);
+            a.client.MoveChestItems(BlockType::COAL, 2, true);
             a.client.CloseChest();
             auto steamTank = [&] {
                 for (const auto& m : a.client.GetMachines())
@@ -614,14 +614,14 @@ int main(int argc, char** argv) {
             pump(5.0, [&] { return a.client.GetResources(BlockType::SAND) >= 2 * Crafting::kBlock; });
             a.client.OpenChest({ 110, 0, 50 });
             Check(pump(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(110, 0, 50); }), "a smelter opens like a chest: its own inventory");
-            a.client.MoveChestItems(BlockType::SAND, 2 * Crafting::kBlock, true);
+            a.client.MoveChestItems(BlockType::SAND, 2, true);
             bool ownGlass = false;
             for (int i = 0; i < 12 && !ownGlass; i++) {
                 server.QueueConsoleCommand("pressurise 112 0 50");
                 ownGlass = pump(1.0, [&] { return a.client.GetChestUnits(BlockType::GLASS) == 2 * Crafting::kBlock; });
             }
             Check(ownGlass, "with no chest beside it, it smelts the sand in its own inventory into glass, there");
-            a.client.MoveChestItems(BlockType::GLASS, 2 * Crafting::kBlock, false);
+            a.client.MoveChestItems(BlockType::GLASS, 2, false);
             Check(pump(5.0, [&] { return a.client.GetResources(BlockType::GLASS) >= 2 * Crafting::kBlock; }), "and the glass can be taken out of it");
             a.client.CloseChest();
 

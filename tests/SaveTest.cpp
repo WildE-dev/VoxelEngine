@@ -5,6 +5,9 @@
 //  - stored chunks above a column report it as blocked for the sky light estimate,
 //    and light under a saved roof comes out right after a restart,
 //  - corrupt or newer-format files are refused instead of silently dropped,
+//  - a world saved before inventories (format 13) loads with each player's units,
+//    tools (at their upgrade's tier) and armour, and each chest's units, as stacks,
+//    and saves and loads again as they are,
 //  - a player who rejoins a saved server by name gets their position and look back,
 //    and lands exactly there; a new player doesn't.
 #include <chrono>
@@ -240,6 +243,61 @@ int main() {
         WorldStorage newer(bad);
         Check(!newer.Open(), "a world from a newer format is refused");
         fs::remove_all(bad);
+    }
+
+    std::cout << "Old saves" << std::endl;
+    {
+        const fs::path old = dir.string() + "-old";
+        fs::create_directories(old);
+        const auto stone = static_cast<size_t>(BlockType::STONE), planks = static_cast<size_t>(BlockType::PLANKS), coal = static_cast<size_t>(BlockType::COAL);
+        net::ByteWriter w;
+        for (char c : { 'V', 'X', 'W', 'D' }) w.U8(static_cast<uint8_t>(c));
+        w.U32(13);  // format
+        w.U8(0);    // world type
+        w.F32(0.3f); // time of day
+        w.U8(0);    // default mode: survival
+        w.VarU32(1); // one player
+        w.Str("Old");
+        w.Vec3(glm::vec3(3.0f, 10.0f, 4.0f));
+        w.F32(0.0f), w.F32(0.0f), w.U8(0);
+        w.U8(0); // survival
+        w.VarU32(2); // units of two types: 100.25 stone, 3 planks
+        w.U8(static_cast<uint8_t>(stone)), w.VarU32(100 * 64 + 16);
+        w.U8(static_cast<uint8_t>(planks)), w.VarU32(3 * 64);
+        w.U8((1 << 1) | (1 << 2) | (1 << 7)); // a pickaxe, an axe, and the iron upgrade
+        w.VarU32(2);
+        w.U8(3), w.VarU32(1), w.U8(static_cast<uint8_t>(Armour::Bit(ArmourPiece::Cap))); // armour: a cap
+        w.U8(6), w.VarU32(1), w.U8(1);                                                   // more tools: the chisel
+        w.VarU32(1); // one chest: 5.5 coal
+        w.IVec3(glm::ivec3(1, 2, 3));
+        w.VarU32(1);
+        w.U8(static_cast<uint8_t>(coal)), w.VarU32(5 * 64 + 32);
+        for (int i = 0; i < 5; i++) w.VarU32(0); // no crops, signs, signals, fluids or air
+        std::ofstream(old / "world.dat", std::ios::binary).write(reinterpret_cast<const char*>(w.data.data()), static_cast<std::streamsize>(w.data.size()));
+
+        auto check = [&](const char* when) {
+            WorldStorage storage(old);
+            const bool opened = storage.Open();
+            const auto p = opened ? storage.FindPlayer("Old") : std::nullopt;
+            const auto chests = opened ? storage.GetChests() : WorldStorage::Chests{};
+            Check(p && p->inventory.Count(Items::OfBlock(BlockType::STONE)) == 100 && p->inventory.offcuts[stone] == 16 &&
+                      p->inventory.Units(BlockType::PLANKS) == 3 * 64 && p->inventory.slots.size() == Inventory::kPlayerSlots,
+                  std::string(when) + ": the old player's 100.25 stone and 3 planks are stacks (and a quarter offcut)");
+            Check(p && p->inventory.Count(Items::OfTool(Tool::Pickaxe, 1)) == 1 && p->inventory.Count(Items::OfTool(Tool::Axe, 1)) == 1 &&
+                      p->inventory.Count(Items::OfTool(Tool::Chisel, 1)) == 1 && p->inventory.BestTier(Tool::Shovel) < 0 &&
+                      p->armour == Armour::Bit(ArmourPiece::Cap),
+                  std::string(when) + ": their pickaxe, axe and chisel are iron (they had the upgrade), and the cap is still worn");
+            Check(chests.size() == 1 && chests[0].second.Count(Items::OfBlock(BlockType::COAL)) == 5 && chests[0].second.offcuts[coal] == 32,
+                  std::string(when) + ": the chest's 5.5 coal are 5 coal and half an offcut");
+            if (p && opened && std::string(when) == "converted") {
+                storage.StorePlayer("Old", *p);
+                storage.SetChests(chests);
+                Check(storage.Flush(), "saved again in the new format");
+            }
+        };
+        check("converted");
+        check("saved again");
+        fs::remove_all(old);
     }
 
     std::cout << "Players" << std::endl;

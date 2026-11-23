@@ -104,7 +104,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Operator, "/noclip [player] - fly through blocks, on or off (operators may also use the laser, L)" },
     { Level::Everyone, "/gamemode - show your game mode" },
     { Level::Operator, "/gamemode <creative|survival> [player] - creative: anything, unhurt; survival: collect what you build with" },
-    { Level::Operator, "/give <block> [count] [player] - give survival blocks (count in whole blocks, default 64), or /give <tool|cap|tunic|boots> [player]" },
+    { Level::Operator, "/give <item> [count] [player] - give a block (count in blocks, default 64), a tool (pickaxe, iron_pickaxe, steel_pickaxe...) or armour (cap...)" },
     { Level::Operator, "/fill <x1 y1 z1> <x2 y2 z2> <block> - fill a box with a block (air clears it; up to 32768 cells)" },
     { Level::Operator, "/summon <deer|wolf|bat|dwarf|crossbow_dwarf|dwarf_chief|dwarf_miner> [x y z] - bring a creature (default: a few blocks ahead of you)" },
     { Level::Operator, "/locate <spring|sinkhole|oil> - where the nearest spring (a lake's overflow), sinkhole (where its river ends) or oil is" },
@@ -315,39 +315,48 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         reply(Kind::Info, std::string(target == sender ? "You're" : target->name + " is") + " now in " + name(mode) + " mode");
     }
     else if (command == "give") {
-        if (words.size() < 2) return usage("/give <block|tool> [count] [player]");
-        // A tool: theirs to keep.
-        if (const Tool tool = Mining::ToolFromId(Lower(words[1])); tool != Tool::None) {
-            ClientState* target = words.size() > 2 ? FindPlayer(words.back()) : sender;
-            if (!target) return usage("give <tool> <player>");
-            target->tools |= Crafting::ToolBit(tool);
-            SendResources(*target);
-            if (target != sender) SendChat(*target, Kind::Info, who + " gave you a " + Mining::ToolId(tool));
-            return reply(Kind::Info, std::string("Gave a ") + Mining::ToolId(tool) + (target != sender ? " to " + target->name : ""));
+        if (words.size() < 2) return usage("/give <item> [count] [player]");
+        // A block, a tool ("pickaxe", "iron_pickaxe", "steel_pickaxe") or a piece of armour.
+        const ItemId item = Items::FromId(Lower(words[1]));
+        if (item == Items::kNone || (Items::IsBlock(item) && Block(Items::BlockOf(item)).IsLiquid()))
+            return reply(Kind::Error, "No block or item called " + words[1] + " (e.g. dirt, stone, log, pickaxe, iron_axe, cap)");
+        // Then a count (blocks: 64 if none; tools and armour: one), then a player.
+        size_t next = 2;
+        double count = Items::IsBlock(item) ? 64.0 : 1.0;
+        if (double n; words.size() > next && ParseNumber(words[next], n)) {
+            if (n <= 0.0 || n > 1e5) return usage("/give <item> [count] [player]");
+            count = n;
+            next++;
         }
-        // A piece of armour: worn from now on.
-        if (const ArmourPiece piece = Armour::FromId(Lower(words[1])); piece != ArmourPiece::Count) {
-            ClientState* target = words.size() > 2 ? FindPlayer(words.back()) : sender;
-            if (!target) return usage("give <cap|tunic|boots> <player>");
-            target->armour |= Armour::Bit(piece);
-            SendResources(*target);
-            if (target != sender) SendChat(*target, Kind::Info, who + " gave you a " + Armour::Name(piece));
-            return reply(Kind::Info, std::string("Gave a ") + Armour::Name(piece) + (target != sender ? " to " + target->name : ""));
+        ClientState* target = words.size() > next ? FindPlayer(words[next]) : sender;
+        if (words.size() > next && !target) return reply(Kind::Error, "No player called " + words[next]);
+        if (!target) return usage("give <item> [count] <player>");
+        uint32_t given = 0;
+        std::string amount;
+        if (Items::IsBlock(item)) {
+            // (Part of a block goes to the offcut.)
+            const uint32_t units = static_cast<uint32_t>(count * Block::kUnitsPerBlock + 0.5);
+            const uint32_t lost = target->inventory.AddUnits(Items::BlockOf(item), units);
+            given = units - lost;
+            char text[32];
+            std::snprintf(text, sizeof text, "%g", given / static_cast<double>(Block::kUnitsPerBlock));
+            amount = text;
         }
-        const BlockType type = BlockFromId(Lower(words[1]));
-        if (type == BlockType::COUNT || Block(type).IsLiquid())
-            return reply(Kind::Error, "No block called " + words[1] + " (e.g. dirt, stone, stone_brick, sand, log)");
-        double count = 64.0;
-        if (words.size() > 2 && (!ParseNumber(words[2], count) || count <= 0.0 || count > 1e6)) return usage("/give <block> [count] [player]");
-        ClientState* target = words.size() > 3 ? FindPlayer(words[3]) : sender;
-        if (words.size() > 3 && !target) return reply(Kind::Error, "No player called " + words[3]);
-        if (!target) return usage("give <block> <count> <player>");
-        target->resources[static_cast<size_t>(type)] += static_cast<uint32_t>(count * Block::kUnitsPerBlock + 0.5);
-        SendResources(*target);
-        char amount[32];
-        std::snprintf(amount, sizeof amount, "%g", count);
-        if (target != sender) SendChat(*target, Kind::Info, who + " gave you " + amount + " " + BlockId(type));
-        reply(Kind::Info, std::string("Gave ") + amount + " " + BlockId(type) + (target != sender ? " to " + target->name : ""));
+        else {
+            uint32_t n = static_cast<uint32_t>(count + 0.5);
+            // Armour goes on, if that slot's free.
+            if (Items::IsArmour(item) && n > 0 && !(target->armour & Armour::Bit(Items::ArmourOf(item)))) {
+                target->armour |= Armour::Bit(Items::ArmourOf(item));
+                n--, given++;
+            }
+            given += n - target->inventory.Add(item, n);
+            amount = std::to_string(given);
+        }
+        SendInventory(*target);
+        if (given == 0) return reply(Kind::Error, (target != sender ? target->name + "'s" : std::string("Your")) + " inventory is full");
+        const std::string what = amount + " " + Items::Id(item);
+        if (target != sender) SendChat(*target, Kind::Info, who + " gave you " + what);
+        reply(Kind::Info, "Gave " + what + (target != sender ? " to " + target->name : ""));
     }
     else if (command == "fill") {
         if (words.size() != 8) return usage("/fill <x1 y1 z1> <x2 y2 z2> <block>");
@@ -367,7 +376,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
                     if (!world->GetBlock(x, y, z, old)) continue;
                     if (IsStorageType(old.type)) RemoveChest({ x, y, z }, nullptr);
                     world->SetBlock(x, y, z, block);
-                    if (IsStorageType(type)) chests[{ x, y, z }] = ChestItems{};
+                    if (IsStorageType(type)) chests[{ x, y, z }] = Inventory(Inventory::kChestSlots);
                 }
         reply(Kind::Info, "Filled " + std::to_string(size.x * size.y * size.z) + " cells with " + BlockId(type));
     }

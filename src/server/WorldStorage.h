@@ -15,6 +15,7 @@
 
 #include "world/Chunk.h"
 #include "world/Coords.h"
+#include "world/Inventory.h"
 
 // A saved world on disk. Terrain generation is deterministic, so only chunks that were
 // edited are stored; everything else is generated again when it loads. Light isn't
@@ -36,16 +37,16 @@ class WorldStorage
 public:
     static constexpr int kRegionSize = 8;      // chunks per region along each axis
     // 2: world type; 3: time of day; 4: game modes and resources; 5: block axes (logs);
-    // 6: tools players have made
-    static constexpr uint32_t kFormatVersion = 13;
+    // 6: tools players have made; ...; 14: inventories of item stacks (world/Inventory.h)
+    // in place of units by type, tool and upgrade masks (older ones are converted)
+    static constexpr uint32_t kFormatVersion = 14;
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
         float yaw = -90.0f, pitch = 0.0f;
         uint8_t flags = 0; // net::kFlagFlying etc.
         uint8_t mode = 0;  // net::GameMode
-        std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{}; // units held (survival)
-        uint16_t tools = 0; // tools made (Crafting::ToolBit each)
+        Inventory inventory{ Inventory::kPlayerSlots }; // what they carry
         // From format 7, each saved as a tagged field (unknown tags are skipped, so
         // more can be added without breaking older saves).
         int health = 20; // half hearts
@@ -55,8 +56,9 @@ public:
         uint32_t achievements = 0;     // Achievements::Bit each
     };
 
-    // Chests' contents (units by block type), by position (format 8 on).
-    using ChestItems = std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)>;
+    // Chests' contents, by position (format 8 on; units by block type before format 14,
+    // converted into stacks when read).
+    using ChestItems = Inventory;
     using Chests = std::vector<std::pair<glm::ivec3, ChestItems>>;
     Chests GetChests() const;
     void SetChests(Chests chests); // saved with the next Flush
@@ -96,6 +98,11 @@ public:
     using ColumnMask = std::array<uint64_t, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE / 64>;
 
     explicit WorldStorage(std::filesystem::path directory);
+    // What an old save's player held (units by block type, the tools mask with its iron
+    // and steel upgrade bits) as an inventory: each tool made at the upgrade's tier, then
+    // the blocks (whole ones into slots, the rest offcuts). Nothing is lost: the slots
+    // grow past `slots` if they have to.
+    static Inventory FromOld(const std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)>& units, uint16_t tools, size_t slots);
 
     // Creates the directory if needed and reads everything saved in it. Returns false
     // (with a message on stderr) if the save can't be read.

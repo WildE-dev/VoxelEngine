@@ -1,8 +1,8 @@
 #pragma once
-// Armour (survival): pieces made from deer hide (see world/Crafting.h), each made once
-// and then always worn, like tools are kept. Together they cut the damage you take
-// from hits (creatures, other players) and traps; not from drowning, thin or stale air,
-// or starving. The server applies it (Server::Hurt).
+// Armour (survival): pieces made from deer hide (see world/Crafting.h), items worn in
+// armour slots of their own, one for each piece (world/Inventory.h). Together they cut
+// the damage you take from hits (creatures, other players) and traps; not from
+// drowning, thin or stale air, or starving. The server applies it (Server::Hurt).
 // A shield (planks and iron) and a steel plate (steel over hide, worn over the tunic)
 // are armour too. Crouching with a shield blocks: half of a hit's damage, after armour.
 // An oxygen tank (worn on the back) protects nothing: it holds air to breathe (see

@@ -37,9 +37,9 @@ void Server::UpdateMiningPosts() {
             }
             else i++;
 
-        ChestItems& held = ChestAt(pos);
+        Inventory& held = ChestAt(pos);
         uint32_t food = 0;
-        for (BlockType t : kPay) food += held[static_cast<size_t>(t)];
+        for (BlockType t : kPay) food += held.Units(t);
         const bool paid = food >= kMinerPay;
         if (!paid) {
             if (post.unpaidSince < 0.0) post.unpaidSince = now;
@@ -92,16 +92,21 @@ void Server::UpdateMiningPosts() {
             }
             Block ore;
             world->GetBlock(best->x, best->y, best->z, ore);
-            world->SetBlock(best->x, best->y, best->z, Block());
-            creatures.Act(post.miners[i], 2, now);
-            held[static_cast<size_t>(ore.ResourceType())] += static_cast<uint32_t>(ore.ResourceUnits());
+            // (Room in the post for it, once they've been paid.)
+            Inventory after = held;
             uint32_t owed = kMinerPay;
             for (BlockType t : kPay) {
-                uint32_t& f = held[static_cast<size_t>(t)];
-                const uint32_t take = std::min(owed, f);
-                f -= take;
+                const uint32_t take = std::min(owed, after.Units(t));
+                after.TakeUnits(t, take);
                 owed -= take;
             }
+            if (after.AddUnits(ore.ResourceType(), static_cast<uint32_t>(ore.ResourceUnits())) != 0) {
+                post.state = Power::DrillState::Full;
+                continue;
+            }
+            held = std::move(after);
+            world->SetBlock(best->x, best->y, best->z, Block());
+            creatures.Act(post.miners[i], 2, now);
             SendChestToViewers(pos);
             post.state = Power::DrillState::Working;
         }

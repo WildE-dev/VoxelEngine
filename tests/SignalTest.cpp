@@ -415,9 +415,9 @@ int main() {
             pump(5.0, [&] { return a.client.GetResources(BlockType::STONE) >= Block::kUnitsPerBlock; });
             a.client.OpenChest(chest);
             pump(5.0, [&] { return a.client.GetOpenChest() == chest; });
-            a.client.MoveChestItems(BlockType::STONE, Block::kUnitsPerBlock, true);
+            a.client.MoveChestItems(BlockType::STONE, 1, true);
             Check(pump(5.0, [&] { return lit(chestLamp); }), "a stone in the chest lights it");
-            a.client.MoveChestItems(BlockType::STONE, Block::kUnitsPerBlock, false);
+            a.client.MoveChestItems(BlockType::STONE, 1, false);
             Check(pump(5.0, [&] { return !lit(chestLamp); }), "taken out again, it goes dark");
             a.client.CloseChest();
         }

@@ -59,7 +59,7 @@ sections is a ctest test of its own, such as `CreatureTest.raids`, run as
 even all at once, on a loaded machine:
 
 - They wait for things to happen rather than for fixed times.
-- Where the client shows a change before the server makes it (crafting, for
+- Where the client shows a change before the server makes it (building, for
   example), they wait for the server's answer before checking.
 - Their servers and clients use a 4-chunk view distance, about 27 times less terrain
   than the full 12, so sixteen at once don't starve each other.
@@ -179,7 +179,7 @@ were). If that spot has been built over since, you land on the surface instead.
   loads.
 - **Format** (`src/server/WorldStorage.h`): `world.dat` holds the format version,
   the world type, the time of day, the default game mode and the players (with their
-  game modes and survival resources); `regions/r.X.Y.Z.vxr` holds the stored chunks of an 8x8x8-chunk
+  game modes and inventories) and chests; `regions/r.X.Y.Z.vxr` holds the stored chunks of an 8x8x8-chunk
   region, as the same run-length encoded block planes the network uses (an edited
   surface chunk is a few KB). Each file is written to a temporary file and renamed,
   so a crash mid-save leaves the previous save intact. A damaged file, or one from
@@ -214,10 +214,10 @@ pauses. The menus can be driven with the pad as well.
 | Mouse | Look (a crosshair marks the middle of the screen) |
 | Left click | Break block (survival: hold to mine it), or hit the creature in front of you |
 | Right click | Place the selected block; eat food in hand; open a chest; use a bed (Shift: place against a chest or bed instead) |
-| Middle click | Pick the block you're looking at into the selected hotbar slot (survival: if you have some) |
+| Middle click | Pick the block you're looking at: creative puts a stack of it in the selected hotbar slot; survival selects the hotbar slot holding it, or swaps a stack of it from the rest of the inventory into the selected slot |
 | V / Shift+V | Placement height for building blocks: full, 3/4, 1/2, 1/4 (and back); with the chisel in hand, how fine it cuts: 1/8, 1/4, 1/2 |
 | 1-9, 0 / mouse wheel | Select the hotbar slot to place from (with Tab you can also click a slot) |
-| I | Inventory: pick which tool or block goes in each hotbar slot |
+| I | Inventory: move stacks between slots, the hotbar and your armour; craft (survival), or take any block or item (creative) |
 | C / Shift+C | With the chisel in hand (or right-click / Shift+right-click): lower / raise the quarter of the block you're looking at |
 | L (hold) | Laser, operators only: carve a tunnel along the view ray |
 | R | Reload shaders, block textures and the data files (blocks, creature models), rebuild all chunk meshes |
@@ -590,11 +590,43 @@ encoding, and that another player sees a sideways log.
 
 ## Inventory
 
-The hotbar holds ten tools or blocks (keys 1-9 and 0). Press I to open the
-inventory: the tools along the top (see [Mining](#mining)), then every block you can
-place (in survival, the ones you have), in a grid. Click one to put it in the selected hotbar slot; pick
-the slot with the number keys or by clicking it. I or Esc closes it. Your hotbar is
-kept in `hotbar.txt` in the working directory, so it's the same next time.
+Everything you carry is in a grid of **slots**: the ten of the hotbar (keys 1-9 and
+0, or the mouse wheel) and thirty more. Each slot holds a **stack** of one kind of
+thing: up to 64 of a block or item, or a single tool or piece of armour. What's in the
+selected hotbar slot is what's in your hand: a block to build with, food to eat, a
+tool to work with. An empty slot is a bare hand.
+
+Press I to open the inventory: your armour, the thirty slots, and the hotbar below
+them. Click a stack to pick it up (it follows the cursor) and click a slot to put it
+down, or drag it there. Onto the same kind it adds what fits; onto something else it
+swaps. Right-click picks up half a stack, or, holding one, puts down one at a time.
+Shift-click moves a stack across: between the hotbar and the rest, into an open
+chest and back, and armour on and off. Clicking off the slots lets go. I or Esc
+closes it. The server makes every move, so a modified client can't make things up.
+
+**Armour** has six slots of its own, one for each piece (cap, tunic, boots, shield,
+steel plate, oxygen tank), and a slot takes only its own piece. What's in them is what
+you wear (see [Swords and armour](#swords-and-armour)).
+
+**Tools are items** too. A tool comes in three tiers, **stone**, **iron** and
+**steel** (marked Fe and St on its icon), and a tool works at the tier of the best one
+of its kind you carry (see [Ores and iron](#ores-and-iron)). Without one, it's a bare
+hand.
+
+In **creative** the inventory also shows every block and item, every tool in each
+tier, and every piece of armour: click one to take a full stack (right-click: one),
+and put a stack back there to get rid of it. Shift-click puts a stack in the selected
+hotbar slot. Nothing you build with runs out. A creative player who joins with an
+empty hotbar gets the usual building blocks in it (or what an older `hotbar.txt`
+chose).
+
+The server keeps everyone's slots, armour and offcuts (see [Game modes](#game-modes))
+and saves them with the player. Worlds saved before inventories (world format 13 and
+older) load with what each player had turned into stacks: every block type's units as
+whole blocks plus an offcut, each tool they had made at the tier of their upgrade, and
+their armour in its slots. Old chests become stacks the same way. Nothing is lost: a
+player or chest with more than fits gets extra slots, which go again once emptied.
+`SaveTest` checks an old save converts, and saves and loads again.
 
 ## Game modes
 
@@ -612,11 +644,18 @@ The server checks the reach too (with a little slack for movement).
 
 A full block is worth 64 units. Shaped blocks are worth their volume: a half slab is
 32, a quarter slab 16, and a chiselled block whatever's left of it (a slope its mean
-height). Press V to pick the height you place building blocks at (full, 3/4, 1/2,
+height). Slots only hold whole blocks, so each block type also has an **offcut**: what
+you have of it short of a whole block. Placing a quarter slab takes a quarter from the
+stone offcut, and if that's short, one whole stone is cut into it first (leaving three
+quarters). Breaking or chiselling a shaped block puts its volume back in the offcut,
+and every whole block's worth goes back into a slot. Recipes that take part of a block
+(half a plank, a quarter of coal) work the same way. Offcuts stay where they are: only
+whole blocks and items move between slots and chests. The inventory lists your
+offcuts under the slots. Press V to pick the height you place building blocks at (full, 3/4, 1/2,
 1/4; Shift+V goes back up). The hotbar shows the selected item's name and, for building
-blocks, the height they're placed at; it's reddish when you can't use it (not enough of a block, or a tool not made yet), and how much you
-have on each slot. Counts are shown in blocks, so 32 units reads as 0.5. Chiselling a
-block down gives back what it takes off, and building it up costs the same.
+blocks, the height they're placed at; it's reddish when you haven't enough of a block,
+and shows how many are in each slot. Chiselling a block down gives back what it takes
+off, and building it up costs the same.
 Plants, pumps, pipes, sluices and pressure plates can't be shaped, so they're
 always worth a whole block. Pebbles are the exception. They're small clusters of
 stones lying about on the ground, more often on beaches and bare rock, and they're
@@ -624,16 +663,20 @@ picked up at once with a click. Each one counts as a quarter of a block of stone
 (16 units), and putting pebbles down costs the same. Water can't be collected, so in survival it can't be
 placed either; use pumps to move it. The laser gives nothing.
 
-In survival the inventory (I) lists only the blocks you have, with counts on them
-and on the hotbar slots; a slot you've run out of is dimmed. The server keeps
-everyone's mode and resources and saves them with the player. It refuses an edit you
-can't afford, so a modified client gets nothing for free.
+The server keeps everyone's mode and inventory and saves them with the player. It
+refuses an edit you can't afford, so a modified client gets nothing for free. With a
+full inventory, a block whose worth won't fit won't break (the chat says so); nor will
+a chest whose contents won't fit. Spoils that won't fit (venison from a hunt, a fish)
+are lost, and the chat says that too.
 
 A new world starts players in survival, or in creative with `--empty-world`, since
 that world is for testing. Choose with `--mode creative|survival` (for `VoxelEngine`
 and `VoxelServer`). The world remembers the mode it was made with. Operators change a
-player's mode with `/gamemode <creative|survival> [player]`, and hand out blocks
-with `/give <block> [count] [player]`, for example `/give stone_brick 32`.
+player's mode with `/gamemode <creative|survival> [player]`, and hand out blocks and
+items with `/give <item> [count] [player]`, for example `/give stone_brick 32` (a
+block's count is in blocks, 64 if left out, and may be part of one), `/give
+iron_pickaxe` or `/give cap 2 Alex` (tools and armour: one if left out; armour goes on
+if its slot is free).
 
 `ModeTest` checks:
 
@@ -643,7 +686,7 @@ with `/give <block> [count] [player]`, for example `/give stone_brick 32`.
 - that chisel refunds and costs balance;
 - that spikes hurt in survival and not in creative;
 - that `/gamemode` and `/give` are for operators;
-- that modes and resources survive a restart.
+- that modes and what players carry survive a restart.
 
 ## Health and traps
 
@@ -712,9 +755,9 @@ spread across it until it breaks. Looking away, or switching tools, starts over.
 | Stone bricks | 5 s | pickaxe, 1.25 s |
 
 A carved block takes time in proportion to what's left of it, but never less than
-30%: a half slab takes half as long. The wrong tool is no better than a hand. The
-pickaxe, axe and shovel are in the inventory's top row (I). In survival you make them
-first (see [Crafting](#crafting)). Put one in a hotbar slot to hold it. A tool places
+30%: a half slab takes half as long. The wrong tool is no better than a hand. In
+survival you make the pickaxe, axe and shovel (see [Crafting](#crafting)); in creative
+take them from the inventory. Put one in a hotbar slot to hold it. A tool places
 nothing on a right click. In creative everything breaks at once, as before.
 
 The server times every break, so a modified client can't mine faster. The client
@@ -959,8 +1002,8 @@ where you're looking (one arrow each, at most about every 0.6 s; creative player
 need none). The server flies it: fast, with gravity pulling it down, until it hits a
 block (where it sticks for six seconds), a creature or a player. A hit does 2.5 hearts
 and knocks the target back; players only when PvP is on (see [PvP](#pvp)), and armour
-helps. Everyone near sees arrows in flight and stuck in the ground. With the iron
-upgrade the bow doesn't hit harder (the arrow does the work). `CreatureTest` checks a
+helps. Everyone near sees arrows in flight and stuck in the ground. An iron or steel
+bow doesn't hit harder (the arrow does the work). `CreatureTest` checks a
 hit from ten blocks off, that a bow's shots are spaced out, and arrows sticking in
 the ground.
 
@@ -972,21 +1015,22 @@ Both want a pickaxe (iron ore is harder). Coal ore breaks into **coal**; iron or
 smelted into **iron ingots** (1 iron ore + 0.25 coal). Coal also makes a lamp more
 cheaply (0.5 glass + 0.25 coal).
 
-Three ingots and a plank make the **iron upgrade**, once: from then on every tool you
-make mines faster (6 times a hand's speed on what it's for, instead of 4) and hits a
-heart harder (a sword does 4.5 hearts). It's kept like tools are. `MiningTest` checks
-where ore lies, what it breaks into, and what the upgrade does.
+An iron ingot makes a stone tool into an **iron** one: hold the tool and make the
+**iron upgrade**. An iron tool mines faster (6 times a hand's speed on what it's for,
+instead of 4) and hits a heart harder (an iron sword does 4.5 hearts). Each tool is
+upgraded on its own. `MiningTest` checks where ore lies, what it breaks into, and what
+iron does.
 
 **Steel** comes next, and only from machines: a **smelter** (see
 [Air power](#air-power)) turns an iron ingot and half a coal into a **steel ingot**;
 there's no recipe for it by hand. A smelter also gets twice the iron out of ore that
 crafting does, so the way on is: iron by hand for a compressor, a water wheel and a
-smelter, then the smelter's iron and steel. Three steel ingots and a plank make the
-**steel upgrade**, once you have the iron one: tools mine 9 times a hand's speed and
-hit harder again (a steel sword does 5.5 hearts). A **drill** takes a steel ingot
-too, so it comes after the smelter. `CraftTest` checks the steel upgrade needs the
-iron one, what it does, and that both are kept; `FactoryTest` that a smelter makes
-steel from the iron it smelts and the coal a drill digs.
+smelter, then the smelter's iron and steel. A steel ingot makes an iron tool in hand
+into a **steel** one (the **steel upgrade**): it mines 9 times a hand's speed and hits
+harder again (a steel sword does 5.5 hearts). A **drill** takes a steel ingot too, so
+it comes after the smelter. `CraftTest` checks a tool goes stone to iron to steel, one
+step at a time, and stays that way; `FactoryTest` that a smelter makes steel from the
+iron it smelts and the coal a drill digs.
 
 
 **Copper.** Copper ore runs through the rock from 6 blocks down, commoner than iron.
@@ -1038,8 +1082,8 @@ players (an axe does 2.5). It's also quick on leaves. Make it from 0.5 planks an
 stone.
 
 **Armour** is made from deer **hide** (each deer you kill gives one, along with its
-venison). There are three pieces, each made once and then always worn, like tools are
-kept:
+venison). There are three pieces, each worn in an armour slot of its own (see
+[Inventory](#inventory)):
 
 | Piece | From | Takes off |
 | --- | --- | --- |
@@ -1049,12 +1093,14 @@ kept:
 
 All three take 48% off the damage from hits (creatures and other players) and traps,
 rounded, but a hit always does at least half a heart. Armour doesn't help against
-drowning, thin or stale air, or starving. The inventory shows your pieces beside the
-tools (shaded until made) and the total. Armour is saved with you; operators can hand
-it out with `/give cap|tunic|boots [player]`. The rules are in `src/world/Armour.h`.
-`CraftTest` checks making the sword and the armour, that each piece is made once, the
-damage sums, and that they're kept after a restart; `CreatureTest` checks that armour
-takes a sword hit from 3.5 hearts down to 2.
+drowning, thin or stale air, or starving. The inventory shows the armour slots (an
+empty one shows its piece faintly) and the total. A piece crafted goes straight on if
+its slot is free, else into your slots; drag it onto its slot (or Shift-click it) to
+wear it, and off again to take it off. Armour is saved with you; operators can hand it
+out with `/give cap|tunic|boots [count] [player]`. The rules are in
+`src/world/Armour.h`. `CraftTest` checks making the sword and the armour, the damage
+sums, and that they're kept after a restart; `CreatureTest` checks that armour takes a
+sword hit from 3.5 hearts down to 2.
 
 
 **Shield, steel plate and crossbow.** A **shield** (2 planks and an iron ingot) and a
@@ -1103,20 +1149,27 @@ someone, closing from the other half, and breaking.
 
 ## Chests
 
-A **chest** (crafted from 2 planks) stores things. Right-click one within 6 blocks
-to open it (Shift-right-click builds against it instead). The window shows what's in
-it above what you have: click a block or item to move a block's worth (or one item)
-across, and Shift-click to move all of that kind. I or Esc closes it, and so does
-walking away. Anyone can open any chest, and everyone with it open sees changes at
-once. Breaking a chest gives what was in it to whoever broke it. Chests can't be
-shaped, and they're fastest to break with an axe.
+A **chest** (crafted from 2 planks) stores things: thirty slots of stacks, like
+yours (see [Inventory](#inventory)). Right-click one within 6 blocks to open it
+(Shift-right-click builds against it instead). The window shows its slots above
+yours: click or drag stacks between them, right-click for half or one, and
+Shift-click to move a stack across. I or Esc closes it, and so does walking away.
+Anyone can open any chest, and everyone with it open sees changes at once. Breaking a
+chest gives what was in it to whoever broke it (if it fits in their inventory).
+Chests can't be shaped, and they're fastest to break with an axe. Machines that work
+from chests (drills, smelters, crushers, crafters, harvesters, extractors, mining
+posts) stop when the chest they'd fill is full, and say so ("its chest is full"). A
+chest has offcuts too, from what machines put in it.
 
-The server keeps what's in every chest and saves it with the world (world format 8).
+The server keeps what's in every chest and saves it with the world (world format 8;
+stacks from format 14).
 The client is only told what's in a chest while it has it open. `ChestTest` checks:
 
 - crafting and placing a chest;
 - opening it within reach and not from afar, and nothing going in unopened;
 - moving things in and out, and not more than you have;
+- moving stacks between slots, swapping, Shift-click, and armour slots taking only
+  their own piece;
 - a second player seeing the same contents and taking from them;
 - breaking it (it closes, and the contents go to the breaker);
 - the chest and its contents after a restart.
@@ -1184,11 +1237,11 @@ The machines:
 - **Item pipes** (thin wooden tubes) join face to face and to chests, drills and
   smelters: a drill or smelter reaches every chest along them (up to 512 pipes).
 - An **extractor** faces the way you look when you place it: put it against a chest.
-  Twice a second, for 1 unit of air, it takes a block's worth of something out of
-  that chest and sends it out of its back along item pipes to another chest: one
+  Twice a second, for 1 unit of air, it takes one block or item (whole: offcuts stay)
+  out of that chest and sends it out of its back along item pipes to another chest: one
   behind a filter pipe set to it if there is one, else one that already holds some of
-  it (so a row of chests sorts itself by example), else the nearest. It works through
-  what the chest holds in turn, and leaves what nowhere will take.
+  it (so a row of chests sorts itself by example), else the nearest, with room for it.
+  It works through what the chest holds in turn, and leaves what nowhere will take.
 - A **filter pipe** (a blue item pipe) lets only one thing through. Right-click it
   with something in hand to set it to that, or empty-handed to let anything through
   (Shift-right-click builds against it). Drills and extractors send things through a
@@ -1525,9 +1578,10 @@ and health are saved with you. Operators can set someone's food with
 
 ## Crafting
 
-In survival, the inventory (I) has a crafting list below your blocks. Each recipe
+In survival, the inventory (I) has a crafting list below your slots. Each recipe
 shows what it takes, and is greyed out until you have it. Make makes one, and x4
-makes four.
+makes four. What it makes goes into your slots (if there's no room, nothing is made).
+Tools are made of stone; crafted armour goes straight on if its slot is free.
 
 | Makes | From |
 | --- | --- |
@@ -1561,17 +1615,17 @@ makes four.
 | Bed | 3 planks + 1 hide |
 | Iron ingot | 1 iron ore + 0.25 coal |
 | Lamp (with coal) | 0.5 glass + 0.25 coal |
-| Iron upgrade | 3 iron ingots + 1 planks |
-| Steel upgrade (after the iron one) | 3 steel ingots + 1 planks |
+| Iron upgrade (a stone tool in hand becomes iron) | 1 iron ingot |
+| Steel upgrade (an iron tool in hand becomes steel) | 1 steel ingot |
 | Bread | 3 wheat |
 | Hide cap / tunic / boots | 2 / 4 / 2 hide |
 
-Amounts are in blocks, using the same resource units as building (a block is 64).
-Tools are made once and kept, and saved with the player. In survival you can only
-use the tools you've made: an unmade one in the hotbar is shaded over and works like
-a bare hand, for mining and for fighting. The server checks that too. Creative
-players have every tool and don't need to craft. Operators can hand out tools with
-`/give pickaxe [player]`.
+Amounts are in blocks, using the same units as building (a block is 64): part of a
+block comes out of its offcut. Tools are items in your slots, saved with the player,
+and you can make as many as you like. In survival you can only use the tools you
+carry; without one you work with a bare hand, for mining and for fighting. The server
+checks that too. Creative players have every tool and don't need to craft. Operators
+can hand out tools with `/give pickaxe [player]` (or `iron_pickaxe`, `steel_pickaxe`).
 
 Two blocks are new with crafting:
 
@@ -1585,7 +1639,9 @@ The recipes are in `src/world/Crafting.h` and the server's checks in
 - the recipes;
 - crafting several at once;
 - that crafts you can't afford change nothing;
-- that a tool is made once and kept;
+- inventories: stacks, slots filling up, offcuts, a full inventory;
+- that a tool is an item (and a second can be made);
+- that upgrades work on the tool in hand, stone to iron to steel;
 - that creative doesn't craft;
 - that tools survive a restart.
 
@@ -1801,8 +1857,9 @@ a model may still inherit from one in another file. (A single `blocks.json`, or
 **Recipes are data too**: `recipes.json` (crafting) and `smelting.json`, each a list in
 order. A crafting recipe is `{ "id": "planks", "name": "4 planks", "takes": { "log": 1 },
 "makes": { "planks": 4 } }`, amounts in blocks (or items: 0.25 is a quarter); instead of
-`makes` it can make a `tool` (pickaxe, axe, shovel, sword, bow, rod), a piece of
-`armour` (cap, tunic, boots, shield, plate, tank) or an `upgrade` (iron, steel). Keep
+`makes` it can make a `tool` (pickaxe, axe, shovel, sword, bow, rod, chisel: of
+stone), a piece of `armour` (cap, tunic, boots, shield, plate, tank) or an `upgrade`
+(iron, steel: the tool in your hand goes up a tier). Keep
 the order and add new ones at the end: a crafter remembers its recipe by its place in
 the list. A smelting recipe takes one or two things and makes one, the first a chest
 can afford being smelted. A file with a mistake (a block that doesn't exist, nothing

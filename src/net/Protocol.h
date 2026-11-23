@@ -12,6 +12,7 @@
 
 #include "world/Block.h"
 #include "world/Creatures.h"
+#include "world/Inventory.h"
 #include "world/Mining.h"
 #include "world/Chunk.h"
 
@@ -28,7 +29,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 53;
+constexpr uint32_t kProtocolVersion = 54;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -46,11 +47,11 @@ enum class MsgType : uint8_t {
     EditChisel,    // lower (or raise) one quarter of a block by an eighth, a quarter or a half
     MineStart,     // started mining a block (survival: breaking it takes time)
     Attack,        // hit a creature
-    Craft,         // make something from resources (survival)
+    Craft,         // make something from what you carry (survival)
     AttackPlayer,  // hit another player (when PvP is on)
     Eat,           // eat a food item (survival)
     OpenChest,     // open the chest at a position (or close the open one)
-    ChestMove,     // move units of a type between you and the open chest
+    ChestMove,     // move items of a kind between you and the open chest
     UseBed,        // right-clicked a bed: respawn there (and sleep, at night)
     Shoot,         // shoot an arrow from your bow, this way
     Cast,          // cast the fishing rod into the water here (or reel in)
@@ -59,6 +60,8 @@ enum class MsgType : uint8_t {
     Inspect,       // right-clicked part of an air network: tell me how it's doing
     ConfigureSignal, // set a signal block's channels (and a gate's mode)
     Trade,         // take a dwarf trader's offer (world/Trades.h)
+    InventoryMove, // move items between slots: yours, your armour's, the open chest's
+    CreativeSlot,  // creative: put any item in one of your slots
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -73,7 +76,7 @@ enum class MsgType : uint8_t {
     Abilities,     // what you may do: operator (laser), no-clip
     Health,        // your health changed (hurt, healing, or respawned)
     GameModeIs,    // you're in creative or survival
-    Resources,     // what you hold (survival): units of each block type
+    InventoryIs,   // what you carry: your slots, offcuts and armour (world/Inventory.h)
     CreatureSnapshot, // the creatures near you
     PlayerName,    // a player's name, by id (for their name tag)
     ChestContents, // what's in the chest you have open (or that it closed)
@@ -245,22 +248,50 @@ struct EditPlace {
 };
 
 // Game modes. Creative: build with anything, nothing hurts you. Survival: blocks cost
-// the resources you've collected by breaking blocks, and traps hurt.
+// what you've collected by breaking blocks (world/Inventory.h), and traps hurt.
 enum class GameMode : uint8_t { Survival = 0, Creative = 1 };
 struct GameModeIs {
     GameMode mode = GameMode::Survival;
 };
-// Units held of each block type (see Block::ResourceUnits), types with none left out.
-struct Resources {
-    std::vector<std::pair<BlockType, uint32_t>> held;
-    uint16_t tools = 0; // tools made (Crafting::ToolBit each)
-    uint8_t armour = 0; // armour worn (Armour::Bit each)
+// An inventory's slots and offcuts (world/Inventory.h), as they travel (and are saved):
+// the slot count, each slot's item (U16, 0 empty) and, if not empty, its count (U8);
+// then the offcuts: how many, and each one's type and units.
+void WriteInventory(ByteWriter& out, const ::Inventory& inv);
+// Rejects unknown items, impossible counts and offcuts, and more than maxSlots slots.
+bool ReadInventory(ByteReader& in, ::Inventory& inv, size_t maxSlots = 512);
+// What you carry: your slots (the hotbar first), offcuts and armour worn.
+struct InventoryIs {
+    ::Inventory items{ ::Inventory::kPlayerSlots };
+    uint8_t armour = 0; // what's in your armour slots (Armour::Bit each)
 };
 
-// Survival: make `count` of a recipe (an index into Crafting::Recipes()).
+// Survival: make `count` of a recipe (an index into Crafting::Recipes()). An upgrade
+// recipe works on `tool`, the tool in your hand.
 struct Craft {
     uint8_t recipe = 0;
     uint8_t count = 1;
+    Tool tool = Tool::None;
+};
+
+// Moving items: `count` (0: all) of the stack in one slot to another. Boxes: your slots,
+// your armour slots (slot = the ArmourPiece; only that piece goes there), the open chest.
+// Onto the same kind it adds what fits; onto something else, a whole stack swaps with
+// it. `toSlot` kAnySlot: wherever it fits in that box (from the hotbar into the rest of
+// your slots and back, armour onto you and off, between you and the chest).
+enum class Box : uint8_t { Player = 0, Armour = 1, Chest = 2 };
+constexpr uint8_t kAnySlot = 255;
+struct InventoryMove {
+    Box fromBox = Box::Player;
+    uint8_t fromSlot = 0;
+    Box toBox = Box::Player;
+    uint8_t toSlot = 0;
+    uint8_t count = 0;
+};
+// Creative: put `count` of an item in one of your slots (kNone empties it).
+struct CreativeSlot {
+    uint8_t slot = 0;
+    ItemId item = Items::kNone;
+    uint8_t count = 0;
 };
 
 struct EditChisel {
@@ -469,18 +500,20 @@ struct OpenChest {
     glm::ivec3 pos{0};
     uint8_t open = 1;
 };
+// Whole items of a kind (as many as there are, up to `count`), wherever they are and
+// wherever they fit.
 struct ChestMove {
     glm::ivec3 pos{0};
-    BlockType type = BlockType::AIR;
-    uint32_t units = 0;
+    ItemId item = Items::kNone;
+    uint32_t count = 0;
     uint8_t intoChest = 1; // 1: from you into the chest; 0: out of it
 };
-// What's in the open chest, by type (none left out), sent on opening and whenever it
-// changes; `open` 0: it's closed (broken, out of reach, or you closed it).
+// What's in the open chest, sent on opening and whenever it changes; `open` 0: it's
+// closed (broken, out of reach, or you closed it).
 struct ChestContents {
     glm::ivec3 pos{0};
     uint8_t open = 1;
-    std::vector<std::pair<BlockType, uint32_t>> held;
+    ::Inventory items{ 0 };
 };
 
 // Right-clicked a bed (in reach).
@@ -551,8 +584,12 @@ std::vector<uint8_t> Encode(const Health& m);
 bool Decode(ByteReader& in, Health& m);
 std::vector<uint8_t> Encode(const GameModeIs& m);
 bool Decode(ByteReader& in, GameModeIs& m);
-std::vector<uint8_t> Encode(const Resources& m);
-bool Decode(ByteReader& in, Resources& m);
+std::vector<uint8_t> Encode(const InventoryIs& m);
+bool Decode(ByteReader& in, InventoryIs& m);
+std::vector<uint8_t> Encode(const InventoryMove& m);
+bool Decode(ByteReader& in, InventoryMove& m);
+std::vector<uint8_t> Encode(const CreativeSlot& m);
+bool Decode(ByteReader& in, CreativeSlot& m);
 std::vector<uint8_t> Encode(const ChatSend& m);
 std::vector<uint8_t> Encode(const ChatMessage& m);
 bool Decode(ByteReader& in, ChatSend& m);

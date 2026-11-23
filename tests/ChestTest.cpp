@@ -4,6 +4,8 @@
 //  - things moved in leave the player and show in the chest, and another player who
 //    opens it sees them and can take them out,
 //  - you can't move more than you have, or into a chest you haven't opened,
+//  - stacks move between slots (yours and the chest's), swap with another kind, and
+//    Shift-click across; an armour slot takes only its own piece,
 //  - breaking a chest gives its contents to whoever broke it, and closes it for
 //    anyone who had it open,
 //  - a chest and what's in it are still there after a restart.
@@ -18,6 +20,7 @@
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "server/Server.h"
+#include "world/Inventory.h"
 #include "world/Crafting.h"
 
 namespace fs = std::filesystem;
@@ -120,7 +123,7 @@ int main() {
               "it's placed, and the other player sees it");
 
         std::cout << "Storing" << std::endl;
-        a.client.MoveChestItems(BlockType::STONE, kBlock, true);
+        a.client.MoveChestItems(BlockType::STONE, 1, true);
         wait(0.5);
         Check(!a.client.GetOpenChest(), "nothing goes into a chest that isn't open");
         server.QueueConsoleCommand("give stone 5 Keeper");
@@ -128,12 +131,12 @@ int main() {
         sync();
         a.client.OpenChest(chestAt);
         Check(both(20.0, [&] { return a.client.GetOpenChest() == chestAt; }), "right-clicking opens it");
-        a.client.MoveChestItems(BlockType::STONE, 3 * kBlock, true);
-        a.client.MoveChestItems(BlockType::COOKED_VENISON, 2 * kBlock, true);
+        a.client.MoveChestItems(BlockType::STONE, 3, true);
+        a.client.MoveChestItems(BlockType::COOKED_VENISON, 2, true);
         Check(both(20.0, [&] { return a.client.GetChestUnits(BlockType::STONE) == 3 * kBlock && a.client.GetChestUnits(BlockType::COOKED_VENISON) == 2 * kBlock; }) &&
                   a.client.GetResources(BlockType::STONE) == 2 * kBlock && a.client.GetResources(BlockType::COOKED_VENISON) == 0,
               "3 stone and 2 cooked venison go in, and leave the player");
-        a.client.MoveChestItems(BlockType::STONE, 10 * kBlock, true);
+        a.client.MoveChestItems(BlockType::STONE, 10, true);
         Check(both(20.0, [&] { return a.client.GetChestUnits(BlockType::STONE) == 5 * kBlock; }) && a.client.GetResources(BlockType::STONE) == 0,
               "asking to put in 10 stone puts in the 2 they had left");
 
@@ -141,9 +144,43 @@ int main() {
         b.client.OpenChest(chestAt);
         Check(both(20.0, [&] { return b.client.GetOpenChest() == chestAt && b.client.GetChestUnits(BlockType::STONE) == 5 * kBlock; }),
               "the other player opens it and sees the same things");
-        b.client.MoveChestItems(BlockType::COOKED_VENISON, kBlock, false);
+        b.client.MoveChestItems(BlockType::COOKED_VENISON, 1, false);
         Check(both(20.0, [&] { return b.client.GetResources(BlockType::COOKED_VENISON) == kBlock && a.client.GetChestUnits(BlockType::COOKED_VENISON) == kBlock; }),
               "and takes a cooked venison out (the keeper's open chest shows it gone)");
+
+        std::cout << "Slots" << std::endl;
+        // Where a kind of item is (-1: nowhere).
+        auto slotOf = [](const Inventory& inv, ItemId item) {
+            for (size_t i = 0; i < inv.slots.size(); i++)
+                if (!inv.slots[i].Empty() && inv.slots[i].item == item) return static_cast<int>(i);
+            return -1;
+        };
+        const ItemId venison = Items::OfBlock(BlockType::COOKED_VENISON), stone = Items::OfBlock(BlockType::STONE);
+        b.client.MoveItems(net::Box::Player, slotOf(b.client.GetInventory(), venison), net::Box::Player, 15);
+        Check(both(20.0, [&] { return slotOf(b.client.GetInventory(), venison) == 15; }), "a stack moves from one slot to another");
+        b.client.MoveItems(net::Box::Chest, slotOf(b.client.GetChest(), stone), net::Box::Player, net::kAnySlot);
+        Check(both(20.0, [&] { return b.client.GetCount(stone) == 5 && a.client.GetChestUnits(BlockType::STONE) == 0 && slotOf(b.client.GetInventory(), stone) == 0; }),
+              "Shift-click: the chest's stone comes over, into the first free slot (the hotbar's)");
+        b.client.MoveItems(net::Box::Player, 0, net::Box::Chest, 7, 2);
+        Check(both(20.0, [&] { return b.client.GetCount(stone) == 3 && b.client.GetChest().slots[7] == Stack{ stone, 2 }; }), "two of the five go into slot 8 of the chest");
+        b.client.MoveItems(net::Box::Player, 0, net::Box::Player, 15);
+        Check(both(20.0, [&] { return b.client.GetInventory().slots[15] == Stack{ stone, 3 } && b.client.GetInventory().slots[0] == Stack{ venison, 1 }; }),
+              "a stack put on another kind swaps with it");
+        b.client.MoveItems(net::Box::Player, 0, net::Box::Player, net::kAnySlot);
+        Check(both(20.0, [&] { return slotOf(b.client.GetInventory(), venison) == 10; }), "Shift-click in the hotbar moves it to the rest of the inventory");
+        b.client.MoveItems(net::Box::Player, 15, net::Box::Chest, net::kAnySlot);
+        Check(both(20.0, [&] { return b.client.GetCount(stone) == 0 && a.client.GetChestUnits(BlockType::STONE) == 5 * kBlock; }), "and the stone all goes back in");
+        server.QueueConsoleCommand("give cap 2 Visitor");
+        Check(both(20.0, [&] { return b.client.HasArmour(ArmourPiece::Cap) && b.client.GetCount(Items::OfArmour(ArmourPiece::Cap)) == 1; }),
+              "given two caps: one goes on, the other into a slot");
+        const int cap = slotOf(b.client.GetInventory(), Items::OfArmour(ArmourPiece::Cap));
+        b.client.MoveItems(net::Box::Player, cap, net::Box::Armour, static_cast<int>(ArmourPiece::Tunic));
+        b.client.MoveItems(net::Box::Armour, static_cast<int>(ArmourPiece::Cap), net::Box::Player, net::kAnySlot);
+        Check(both(20.0, [&] { return !b.client.HasArmour(ArmourPiece::Cap) && b.client.GetCount(Items::OfArmour(ArmourPiece::Cap)) == 2; }) &&
+                  !b.client.HasArmour(ArmourPiece::Tunic),
+              "a cap won't go in the tunic's slot; taken off, both caps are in slots");
+        b.client.MoveItems(net::Box::Player, cap, net::Box::Armour, net::kAnySlot);
+        Check(both(20.0, [&] { return b.client.HasArmour(ArmourPiece::Cap) && b.client.GetCount(Items::OfArmour(ArmourPiece::Cap)) == 1; }), "and one goes back on");
         b.client.CloseChest();
         server.QueueConsoleCommand("tp Visitor 40 0 40");
         both(20.0, [&] { return b.feet.x > 39.0f; });

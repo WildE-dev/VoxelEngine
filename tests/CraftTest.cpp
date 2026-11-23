@@ -1,10 +1,13 @@
 // Crafting (survival). Checks that
 //  - every recipe makes sense (takes something, makes something), and glass lets light
 //    through and doesn't hide what's behind it,
-//  - over a real connection: a recipe turns resources into its output, as many times
-//    as asked; one that can't be afforded changes nothing; a tool is made once and
-//    kept; creative players don't craft (they have everything),
-//  - the steel upgrade needs the iron one first, and steel tools beat iron,
+//  - inventories (world/Inventory.h): stacks fill up and spill into empty slots, part
+//    blocks come out of (and go back into) the type's offcut, a full one takes no more,
+//  - over a real connection: a recipe turns what you carry into its output, as many
+//    times as asked; one that can't be afforded changes nothing; tools are items (a
+//    second can be made); creative players don't craft (they have everything),
+//  - upgrades work on the tool in hand: stone to iron, then iron to steel, and steel
+//    tools beat iron,
 //  - tools made are saved with the player.
 #include <array>
 #include <chrono>
@@ -82,7 +85,7 @@ int main() {
     std::cout << "Recipes" << std::endl;
     bool sensible = true;
     for (const auto& r : Crafting::Recipes()) {
-        sensible &= !r.inputs.empty() && (r.MadeOnce() ? r.output == BlockType::AIR : r.outputUnits > 0 && r.output != BlockType::AIR);
+        sensible &= !r.inputs.empty() && (r.MakesItem() ? r.output == BlockType::AIR : r.outputUnits > 0 && r.output != BlockType::AIR);
         for (const auto& in : r.inputs) sensible &= in.units > 0 && in.type != BlockType::AIR;
     }
     Check(sensible && Crafting::Recipes().size() >= 10, "every recipe takes something and makes something");
@@ -111,6 +114,29 @@ int main() {
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> held{};
     held[static_cast<size_t>(BlockType::LOG)] = 3 * kBlock;
     Check(Crafting::TimesAffordable(Crafting::Recipes()[Crafting::Find("planks")], held) == 3, "three logs make planks three times");
+    {
+        std::cout << "Inventories" << std::endl;
+        Inventory inv(3);
+        const ItemId stone = Items::OfBlock(BlockType::STONE);
+        Check(inv.Add(stone, 100) == 0 && inv.slots[0].count == 64 && inv.slots[1].count == 36 && inv.Count(stone) == 100, "100 stone fill a stack of 64 and spill into the next slot");
+        Check(inv.Add(Items::OfTool(Tool::Pickaxe), 2) == 1 && inv.Count(Items::OfTool(Tool::Pickaxe)) == 1, "tools don't stack: one pickaxe fits in the last slot");
+        Check(inv.Room(stone) == 28 && inv.Add(stone, 30) == 2, "28 more stone fit, and no more");
+        Check(inv.TakeUnits(BlockType::STONE, kBlock / 4) && inv.Count(stone) == 127 && inv.offcuts[static_cast<size_t>(BlockType::STONE)] == kBlock * 3 / 4 &&
+                  inv.Units(BlockType::STONE) == 128 * kBlock - kBlock / 4,
+              "a quarter block of stone cuts one, leaving three quarters as an offcut");
+        Check(inv.TakeUnits(BlockType::STONE, kBlock / 2) && inv.Count(stone) == 127 && inv.offcuts[static_cast<size_t>(BlockType::STONE)] == kBlock / 4,
+              "the next half comes from the offcut");
+        Check(inv.AddUnits(BlockType::STONE, kBlock * 3 / 4) == 0 && inv.Count(stone) == 128 && inv.offcuts[static_cast<size_t>(BlockType::STONE)] == 0,
+              "three quarters back make it whole again");
+        Check(!inv.TakeUnits(BlockType::STONE, 200 * kBlock) && inv.Count(stone) == 128, "taking more than there is takes nothing");
+        Check(!inv.FitsUnits(BlockType::DIRT, kBlock) && inv.FitsUnits(BlockType::DIRT, kBlock / 2) && inv.FitsUnits(BlockType::STONE, 0),
+              "a full inventory takes no whole block of something new (but an offcut, yes)");
+        Check(Items::FromId("iron_pickaxe") == Items::OfTool(Tool::Pickaxe, 1) && Items::FromId("steel_chisel") == Items::OfTool(Tool::Chisel, 2) &&
+                  Items::FromId("cap") == Items::OfArmour(ArmourPiece::Cap) && Items::FromId("stone") == stone && Items::FromId("cake") == Items::kNone &&
+                  Items::Id(Items::OfTool(Tool::Axe, 2)) == "steel_axe",
+              "items by id: blocks, tools of each tier, armour");
+        Check(inv.BestTier(Tool::Pickaxe) == 0 && inv.BestTier(Tool::Axe) == -1, "the best tool of a kind carried");
+    }
     Check(!Block(BlockType::GLASS).BlocksLight() && !Block(BlockType::GLASS).HidesNeighbours() && Block(BlockType::GLASS).IsFullBlock() &&
               Block(BlockType::STONE).HidesNeighbours(),
           "glass is solid but lets light through and shows what's behind it");
@@ -165,7 +191,8 @@ int main() {
         Check(pump(20.0, [&] { return a.client.HasTool(Tool::Pickaxe); }) && units(BlockType::PLANKS) == 7 * kBlock &&
                   units(BlockType::STONE) == 3 * kBlock - kBlock * 3 / 2,
               "a pickaxe takes a plank and 1.5 stone, and is kept");
-        Check(!a.client.CanCraft(Crafting::Find("pickaxe")), "a second pickaxe can't be made");
+        Check(a.client.GetCount(Items::OfTool(Tool::Pickaxe)) == 1 && a.client.ToolTier(Tool::Pickaxe) == 0 && a.client.CanCraft(Crafting::Find("pickaxe")),
+              "it's a stone pickaxe in a slot (and a second could be made)");
         a.client.Craft(Crafting::Find("glass"), 1);
         sync();
         Check(pump(20.0, [&] { return units(BlockType::GLASS) == kBlock && units(BlockType::SAND) == 0; }), "sand makes glass");
@@ -195,8 +222,8 @@ int main() {
         Check(pump(20.0, [&] { return a.client.HasArmour(ArmourPiece::Cap) && a.client.HasArmour(ArmourPiece::Tunic) && a.client.HasArmour(ArmourPiece::Boots); }) &&
                   units(BlockType::HIDE) == 0,
               "8 hide make a cap, a tunic and boots, worn at once");
-        Check(!a.client.CanCraft(Crafting::Find("cap")) && std::abs(Armour::Protection(a.client.GetArmour()) - 0.48f) < 1e-4f,
-              "each is made once; together they take off 48%");
+        Check(std::abs(Armour::Protection(a.client.GetArmour()) - 0.48f) < 1e-4f && a.client.GetCount(Items::OfArmour(ArmourPiece::Cap)) == 0,
+              "they go into the armour slots, and together take off 48%");
         Check(Armour::Reduce(7, a.client.GetArmour()) == 4 && Armour::Reduce(1, a.client.GetArmour()) == 1 && Armour::Reduce(4, 0) == 4,
               "a sword's 7 comes down to 4; a hit always does at least one");
         // (Planks were used for the sword: 6.5 left.)
@@ -206,19 +233,25 @@ int main() {
         server.QueueConsoleCommand("give iron_ingot 3 Crafter");
         sync();
         pump(20.0, [&] { return units(BlockType::STEEL_INGOT) == 3 * kBlock && units(BlockType::IRON_INGOT) == 3 * kBlock; });
-        Check(!a.client.CanCraft(Crafting::Find("steel_tools")), "the steel upgrade can't be made before the iron one");
-        a.client.Craft(Crafting::Find("iron_tools"), 1);
+        const int iron = Crafting::Find("iron_tools"), steel = Crafting::Find("steel_tools");
+        Check(!a.client.CanCraft(steel, 1, Tool::Pickaxe) && !a.client.CanCraft(iron, 1, Tool::Axe) && !a.client.CanCraft(iron, 1, Tool::None) &&
+                  a.client.CanCraft(iron, 1, Tool::Pickaxe),
+              "an upgrade needs the tool in hand, of the tier below: no steel before iron, nothing for a tool not carried");
+        a.client.Craft(iron, 1, Tool::Pickaxe);
         sync();
-        Check(pump(20.0, [&] { return a.client.HasIron(); }), "3 iron ingots and a planks make the iron upgrade");
-        Check(a.client.CanCraft(Crafting::Find("steel_tools")), "after which the steel one can be made");
-        a.client.Craft(Crafting::Find("steel_tools"), 1);
+        Check(pump(20.0, [&] { return a.client.ToolTier(Tool::Pickaxe) == 1; }) && units(BlockType::IRON_INGOT) == 2 * kBlock && a.client.ToolTier(Tool::Sword) == 0 &&
+                  a.client.GetCount(Items::OfTool(Tool::Pickaxe)) == 0,
+              "an iron ingot makes the stone pickaxe in hand iron (the sword stays stone)");
+        Check(a.client.CanCraft(steel, 1, Tool::Pickaxe), "after which it can be made steel");
+        a.client.Craft(steel, 1, Tool::Pickaxe);
         sync();
-        Check(pump(20.0, [&] { return a.client.HasSteel(); }) && units(BlockType::STEEL_INGOT) == 0, "3 steel ingots and a planks make the steel upgrade");
+        Check(pump(20.0, [&] { return a.client.ToolTier(Tool::Pickaxe) == 2; }) && units(BlockType::STEEL_INGOT) == 2 * kBlock &&
+                  a.client.GetCount(Items::OfTool(Tool::Pickaxe, 2)) == 1,
+              "and a steel ingot makes it steel");
         const Block stone(BlockType::STONE);
         Check(Mining::Seconds(stone, Tool::Pickaxe, 2) < Mining::Seconds(stone, Tool::Pickaxe, 1) &&
                   Mining::Seconds(stone, Tool::Pickaxe, 1) < Mining::Seconds(stone, Tool::Pickaxe, 0) && Combat::Damage(Tool::Sword, 2) > Combat::Damage(Tool::Sword, 1),
               "steel tools mine faster than iron ones, and a steel sword hits harder");
-        // (Planks were used for the upgrades: 4.5 left.)
 
         server.QueueConsoleCommand("gamemode creative Crafter");
         pump(20.0, [&] { return a.client.IsCreative(); });
@@ -239,12 +272,12 @@ int main() {
         std::string error;
         a.client.Connect("127.0.0.1", server.GetPort(), "Crafter", error, kTestViewDistance);
         const bool back = Pump(a, 20.0, [&] { return a.joined && a.client.GetResources(BlockType::PLANKS) > 0; });
-        Check(back && a.client.HasTool(Tool::Pickaxe) && !a.client.HasTool(Tool::Shovel) && a.client.GetResources(BlockType::PLANKS) == 5 * kBlock - kBlock / 2,
+        Check(back && a.client.HasTool(Tool::Pickaxe) && !a.client.HasTool(Tool::Shovel) && a.client.GetResources(BlockType::PLANKS) == 7 * kBlock - kBlock / 2,
               "after a restart: the pickaxe and the planks are still theirs (joined " + std::to_string(a.joined) + ", mode " +
                   std::to_string(static_cast<int>(a.client.GetMode())) + ", planks " + std::to_string(a.client.GetResources(BlockType::PLANKS)) +
                   ", pickaxe " + std::to_string(a.client.HasTool(Tool::Pickaxe)) + ")");
         Check(a.client.HasTool(Tool::Sword) && a.client.HasArmour(ArmourPiece::Tunic), "and so are the sword and the armour");
-        Check(a.client.HasIron() && a.client.HasSteel(), "and the iron and steel upgrades");
+        Check(a.client.ToolTier(Tool::Pickaxe) == 2 && a.client.ToolTier(Tool::Sword) == 0, "and the pickaxe is still steel");
         a.client.Disconnect();
         Pump(a, 0.3, [] { return false; });
         server.Stop();

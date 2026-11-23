@@ -1,10 +1,12 @@
 #pragma once
-// Crafting (survival): turning resources into other blocks, and making tools. Each
-// recipe takes resource units of one or two block types (64 to a block, see
-// Block::ResourceUnits) and gives units of another type, or a tool. Tools are made
-// once and kept; a survival player can only use the tools they've made (creative
-// players have them all). The server checks and applies crafts (Server::HandleCraft);
-// the inventory screen shows the recipes.
+// Crafting (survival): turning what you carry into other blocks, tools and armour. Each
+// recipe takes units of one or more block types (64 to a block, see
+// Block::ResourceUnits; part of a block comes out of the type's offcut, see
+// world/Inventory.h) and gives units of another type, a tool (stone) or a piece of
+// armour, into the player's inventory. A survival player can only use the tools they
+// carry (creative players have them all, of steel). An upgrade recipe makes the tool in
+// your hand iron (from stone) or steel (from iron). The server checks and applies crafts
+// (Server::HandleCraft); the inventory screen shows the recipes.
 // They're data: Resources/Data/recipes.json (kRecipesPath), read at start and again when
 // it changes (Load); without it, the game's own (Defaults). The order matters: a
 // crafter keeps its recipe by its place in the list. The server and its players
@@ -17,6 +19,7 @@
 
 #include "world/Armour.h"
 #include "world/Block.h"
+#include "world/Inventory.h"
 #include "world/Mining.h"
 
 struct Ingredient {
@@ -31,11 +34,12 @@ struct Recipe {
     BlockType output = BlockType::AIR; // AIR when it makes a tool
     uint32_t outputUnits = 0;
     Tool tool = Tool::None;
-    ArmourPiece armour = ArmourPiece::Count; // a piece of armour (made once, then worn)
-    bool ironUpgrade = false;                // the iron upgrade (made once: Crafting::kIronBit)
-    bool steelUpgrade = false;               // the steel upgrade (made once, after the iron one: Crafting::kSteelBit)
-    // Made once and kept: a tool, a piece of armour, or an upgrade.
-    bool MadeOnce() const { return tool != Tool::None || armour != ArmourPiece::Count || ironUpgrade || steelUpgrade; }
+    ArmourPiece armour = ArmourPiece::Count; // a piece of armour
+    bool ironUpgrade = false;                // makes the stone tool in your hand iron
+    bool steelUpgrade = false;               // makes the iron tool in your hand steel
+    // Makes a tool, a piece of armour or an upgrade, not blocks (crafters can't).
+    bool MakesItem() const { return tool != Tool::None || armour != ArmourPiece::Count || ironUpgrade || steelUpgrade; }
+    bool Upgrade() const { return ironUpgrade || steelUpgrade; }
 };
 
 namespace Crafting {
@@ -124,10 +128,8 @@ inline std::vector<Recipe> Defaults() {
         // (Steel comes from a smelter: a drill is the next step after one.)
         { "drill", "Drill", { { BlockType::STEEL_INGOT, kBlock }, { BlockType::IRON_INGOT, kBlock }, { BlockType::STONE, 2 * kBlock } }, BlockType::DRILL, kBlock },
         { "coal_lamp", "Lamp (with coal)", { { BlockType::GLASS, kBlock / 2 }, { BlockType::COAL, kBlock / 4 } }, BlockType::LAMP, kBlock },
-        { "iron_tools", "Iron upgrade (all tools)", { { BlockType::IRON_INGOT, 3 * kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::AIR, 0, Tool::None,
-          ArmourPiece::Count, true },
-        { "steel_tools", "Steel upgrade (all tools)", { { BlockType::STEEL_INGOT, 3 * kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::AIR, 0, Tool::None,
-          ArmourPiece::Count, false, true },
+        { "iron_tools", "Iron upgrade (tool in hand)", { { BlockType::IRON_INGOT, kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Count, true },
+        { "steel_tools", "Steel upgrade (tool in hand)", { { BlockType::STEEL_INGOT, kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Count, false, true },
         // (New recipes go at the end: a crafter keeps its recipe by its place here.)
         { "crusher", "Crusher", { { BlockType::STEEL_INGOT, kBlock }, { BlockType::STONE_BRICK, 2 * kBlock } }, BlockType::CRUSHER, kBlock },
         { "shield", "Shield", { { BlockType::PLANKS, 2 * kBlock }, { BlockType::IRON_INGOT, kBlock } }, BlockType::AIR, 0, Tool::None, ArmourPiece::Shield },
@@ -163,27 +165,26 @@ inline int Find(const char* id) {
     return -1;
 }
 
-// The iron upgrade's bit in the tools mask (tools use bits 1..6, and 8 up): every tool you make
-// mines at Mining::kIronToolSpeed and hits a heart harder.
-constexpr uint16_t kIronBit = 1u << 7;
-// The steel upgrade's bit (bit 0: no tool uses it), made once you have the iron one:
-// tools mine at Mining::kSteelToolSpeed and hit harder still.
-constexpr uint16_t kSteelBit = 1u << 0;
-// What the tools are made of, from the tools mask: 0 stone, 1 iron, 2 steel.
-inline int Tier(uint16_t tools) { return (tools & kSteelBit) ? 2 : (tools & kIronBit) ? 1 : 0; }
-
-// Tools held, one bit each: 1 << Tool, skipping bit 7 (the iron upgrade's) for the
-// tools after the rod.
-inline uint16_t ToolBit(Tool tool) {
+// What tools were before they were items: one bit each in a mask (1 << Tool, skipping
+// bit 7 for the tools after the rod), with an iron upgrade (bit 7) and a steel one (bit
+// 0) for all of them. Only for reading old saves (WorldStorage).
+constexpr uint16_t kOldIronBit = 1u << 7;
+constexpr uint16_t kOldSteelBit = 1u << 0;
+inline uint16_t OldToolBit(Tool tool) {
     const unsigned t = static_cast<unsigned>(tool);
     return static_cast<uint16_t>(1u << (t < 7 ? t : t + 1));
 }
+
+// Units of a type in `held`: an Inventory, or units by type.
+inline uint32_t UnitsOf(const Inventory& held, BlockType t) { return held.Units(t); }
+template <typename Held>
+uint32_t UnitsOf(const Held& held, BlockType t) { return held[static_cast<size_t>(t)]; }
 
 // How many times `held` (units by block type) covers the recipe's inputs.
 template <typename Held>
 uint32_t TimesAffordable(const Recipe& recipe, const Held& held) {
     uint32_t times = UINT32_MAX;
-    for (const auto& in : recipe.inputs) times = std::min(times, held[static_cast<size_t>(in.type)] / in.units);
+    for (const auto& in : recipe.inputs) times = std::min(times, UnitsOf(held, in.type) / in.units);
     return times;
 }
 

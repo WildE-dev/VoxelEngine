@@ -269,8 +269,7 @@ void Server::StorePlayer(const ClientState& client) {
     record.pitch = client.pitch;
     record.flags = static_cast<uint8_t>(client.noclip ? client.flags : client.flags & ~net::kFlagFlying);
     record.mode = static_cast<uint8_t>(client.mode);
-    record.resources = client.resources;
-    record.tools = client.tools;
+    record.inventory = client.inventory;
     record.health = client.health;
     record.food = client.food;
     record.armour = client.armour;
@@ -421,7 +420,17 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     }
     case net::MsgType::ChestMove: {
         net::ChestMove m;
-        if ((ok = net::Decode(in, m))) HandleChestMove(client, m.pos, m.type, m.units, m.intoChest != 0);
+        if ((ok = net::Decode(in, m))) HandleChestMove(client, m.pos, m.item, m.count, m.intoChest != 0);
+        break;
+    }
+    case net::MsgType::InventoryMove: {
+        net::InventoryMove m;
+        if ((ok = net::Decode(in, m))) HandleInventoryMove(client, m);
+        break;
+    }
+    case net::MsgType::CreativeSlot: {
+        net::CreativeSlot m;
+        if ((ok = net::Decode(in, m))) HandleCreativeSlot(client, m);
         break;
     }
     case net::MsgType::Eat: {
@@ -431,7 +440,7 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     }
     case net::MsgType::Craft: {
         net::Craft m;
-        if ((ok = net::Decode(in, m))) HandleCraft(client, m.recipe, m.count);
+        if ((ok = net::Decode(in, m))) HandleCraft(client, m.recipe, m.count, m.tool);
         break;
     }
     case net::MsgType::MineStart: {
@@ -515,8 +524,7 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
             client.yaw = saved->yaw;
             client.pitch = saved->pitch;
             client.mode = static_cast<net::GameMode>(saved->mode);
-            client.resources = saved->resources;
-            client.tools = saved->tools;
+            client.inventory = saved->inventory;
             client.flags = saved->flags;
             client.health = std::clamp(saved->health, 1, kMaxHealth);
             client.food = std::clamp(saved->food, 0, Hunger::kMaxFood);
@@ -549,7 +557,7 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
     SendAbilities(client);
     SendHealth(client, false);
     SendMode(client);
-    SendResources(client);
+    SendInventory(client);
 }
 
 void Server::HandlePlayerState(ClientState& client, const net::PlayerState& state) {
@@ -674,36 +682,143 @@ void Server::Echo(ClientState& client, const glm::ivec3& pos) {
 }
 
 Tool Server::Usable(const ClientState& client, Tool tool) {
-    return Creative(client) || (client.tools & Crafting::ToolBit(tool)) ? tool : Tool::None;
+    return Creative(client) || client.inventory.BestTier(tool) >= 0 ? tool : Tool::None;
 }
 
-void Server::HandleCraft(ClientState& client, int recipeIndex, int count) {
+int Server::ToolTier(const ClientState& client, Tool tool) {
+    if (tool == Tool::None) return 0;
+    return Creative(client) ? Items::kTiers - 1 : std::max(0, client.inventory.BestTier(tool));
+}
+
+bool Server::Give(ClientState& client, BlockType type, uint32_t units) {
+    const uint32_t lost = client.inventory.AddUnits(type, units);
+    if (lost == 0) return true;
+    SendChat(client, net::ChatMessage::Kind::Error, "Your inventory is full: " + std::to_string(lost / Items::kUnits) + " " + Items::Name(Items::OfBlock(type)) + " lost");
+    return false;
+}
+
+void Server::HandleCraft(ClientState& client, int recipeIndex, int count, Tool upgrade) {
     const auto& recipes = Crafting::Recipes();
     if (Creative(client) || recipeIndex < 0 || recipeIndex >= static_cast<int>(recipes.size())) return;
     const Recipe& recipe = recipes[recipeIndex];
-    if (recipe.MadeOnce()) {
-        const bool made = recipe.ironUpgrade       ? (client.tools & Crafting::kIronBit) != 0
-                          : recipe.steelUpgrade     ? (client.tools & Crafting::kSteelBit) != 0
-                          : recipe.tool != Tool::None ? (client.tools & Crafting::ToolBit(recipe.tool)) != 0
-                                                      : (client.armour & Armour::Bit(recipe.armour)) != 0;
-        if (made) return SendResources(client); // made already
-        if (recipe.steelUpgrade && !(client.tools & Crafting::kIronBit)) return SendResources(client); // iron first
-        count = 1;
+    Inventory& inv = client.inventory;
+    if (Crafting::TimesAffordable(recipe, inv) < static_cast<uint32_t>(count)) return SendInventory(client); // can't afford
+    if (recipe.Upgrade()) {
+        // The tool in their hand, one tier up (in the same slot).
+        const ItemId from = Items::OfTool(upgrade, recipe.steelUpgrade ? 1 : 0);
+        auto slot = std::find_if(inv.slots.begin(), inv.slots.end(), [&](const Stack& st) { return !st.Empty() && st.item == from; });
+        if (upgrade == Tool::None || slot == inv.slots.end()) {
+            SendChat(client, net::ChatMessage::Kind::Error, recipe.steelUpgrade ? "Hold an iron tool to make it steel" : "Hold a stone tool to make it iron");
+            return SendInventory(client);
+        }
+        for (const auto& in : recipe.inputs) inv.TakeUnits(in.type, in.units);
+        slot->item = Items::OfTool(upgrade, recipe.steelUpgrade ? 2 : 1);
+        if (recipe.ironUpgrade) Award(client, Achievement::IronAge);
+        return SendInventory(client);
     }
-    if (Crafting::TimesAffordable(recipe, client.resources) < static_cast<uint32_t>(count)) return SendResources(client); // can't afford
-    for (const auto& in : recipe.inputs) client.resources[static_cast<size_t>(in.type)] -= in.units * count;
-    if (recipe.ironUpgrade) client.tools |= Crafting::kIronBit;
-    else if (recipe.steelUpgrade) client.tools |= Crafting::kSteelBit;
-    else if (recipe.tool != Tool::None) client.tools |= Crafting::ToolBit(recipe.tool);
-    else if (recipe.armour != ArmourPiece::Count) client.armour |= Armour::Bit(recipe.armour);
-    else client.resources[static_cast<size_t>(recipe.output)] += recipe.outputUnits * count;
+    // What it makes must fit (once what it takes is gone).
+    Inventory after = inv;
+    for (const auto& in : recipe.inputs) after.TakeUnits(in.type, in.units * count);
+    bool fits = true;
+    // Armour goes straight on if that slot's free; the rest into the inventory.
+    const bool wear = recipe.armour != ArmourPiece::Count && !(client.armour & Armour::Bit(recipe.armour));
+    if (recipe.tool != Tool::None) fits = after.Add(Items::OfTool(recipe.tool), count) == 0;
+    else if (recipe.armour != ArmourPiece::Count) fits = after.Add(Items::OfArmour(recipe.armour), static_cast<uint32_t>(count) - (wear ? 1 : 0)) == 0;
+    else fits = after.AddUnits(recipe.output, recipe.outputUnits * count) == 0;
+    if (!fits) {
+        SendChat(client, net::ChatMessage::Kind::Error, "No room in your inventory for that");
+        return SendInventory(client);
+    }
+    inv = std::move(after);
+    if (wear) client.armour |= Armour::Bit(recipe.armour);
     if (recipe.tool != Tool::None) Award(client, Achievement::Toolmaker);
-    if (recipe.ironUpgrade) Award(client, Achievement::IronAge);
     if (recipe.output == BlockType::COOKED_VENISON) Award(client, Achievement::Cook);
     if (recipe.output == BlockType::BREAD) Award(client, Achievement::Baker);
     if (recipe.output == BlockType::TURBINE) Award(client, Achievement::FullSteam);
     if (client.armour == (Armour::Bit(ArmourPiece::Cap) | Armour::Bit(ArmourPiece::Tunic) | Armour::Bit(ArmourPiece::Boots))) Award(client, Achievement::Armoured);
-    SendResources(client);
+    SendInventory(client);
+}
+
+void Server::HandleInventoryMove(ClientState& client, const net::InventoryMove& m) {
+    // The armour slots as a little inventory of their own (slot = piece), put back after.
+    Inventory armourBox(static_cast<size_t>(ArmourPiece::Count));
+    for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++)
+        if (client.armour & Armour::Bit(static_cast<ArmourPiece>(p))) armourBox.slots[p] = { Items::OfArmour(static_cast<ArmourPiece>(p)), 1 };
+    Inventory* chest = (m.fromBox == net::Box::Chest || m.toBox == net::Box::Chest) ? OpenChestOf(client) : nullptr;
+    auto box = [&](net::Box b) -> Inventory* {
+        return b == net::Box::Player ? &client.inventory : b == net::Box::Armour ? &armourBox : chest;
+    };
+    // What may go in a slot: an armour slot takes only its own piece.
+    auto fits = [&](net::Box b, size_t slot, ItemId item) { return b != net::Box::Armour || item == Items::OfArmour(static_cast<ArmourPiece>(slot)); };
+    Inventory* src = box(m.fromBox);
+    Inventory* dst = box(m.toBox);
+    if (!src || !dst || m.fromSlot >= src->slots.size()) return SendInventory(client), SendChest(client);
+    Stack& from = src->slots[m.fromSlot];
+    if (from.Empty()) return SendInventory(client), SendChest(client);
+    const uint32_t n = m.count == 0 ? from.count : std::min<uint32_t>(m.count, from.count);
+    const ItemId item = from.item;
+    const uint32_t max = Items::MaxStack(item);
+    if (m.toSlot == net::kAnySlot) {
+        // Wherever it fits: armour onto its slot; within their own slots, from the hotbar
+        // into the rest and back; otherwise anywhere in that box.
+        size_t begin = 0, end = dst->slots.size();
+        if (m.toBox == net::Box::Armour) {
+            if (!Items::IsArmour(item)) return SendInventory(client);
+            begin = static_cast<size_t>(Items::ArmourOf(item)), end = begin + 1;
+        }
+        else if (src == dst) {
+            if (m.fromSlot < Inventory::kHotbarSlots) begin = Inventory::kHotbarSlots;
+            else end = Inventory::kHotbarSlots;
+        }
+        uint32_t left = n;
+        for (int pass = 0; pass < 2; pass++)
+            for (size_t i = begin; i < end && left > 0; i++) {
+                Stack& to = dst->slots[i];
+                if (&to == &from) continue;
+                if (pass == 0 && !to.Empty() && to.item == item && to.count < max) {
+                    const uint32_t k = std::min(left, max - to.count);
+                    to.count = static_cast<uint8_t>(to.count + k), left -= k;
+                }
+                else if (pass == 1 && to.Empty()) {
+                    const uint32_t k = std::min(left, max);
+                    to = { item, static_cast<uint8_t>(k) }, left -= k;
+                }
+            }
+        from.count = static_cast<uint8_t>(from.count - (n - left));
+        if (from.count == 0) from = {};
+    }
+    else {
+        if (m.toSlot >= dst->slots.size()) return SendInventory(client), SendChest(client);
+        Stack& to = dst->slots[m.toSlot];
+        if (&to == &from) return SendInventory(client);
+        if (to.Empty() || to.item == item) {
+            if (!fits(m.toBox, m.toSlot, item)) return SendInventory(client);
+            const uint32_t k = std::min(n, max - (to.Empty() ? 0u : to.count));
+            to = { item, static_cast<uint8_t>((to.Empty() ? 0 : to.count) + k) };
+            from.count = static_cast<uint8_t>(from.count - k);
+            if (from.count == 0) from = {};
+        }
+        else {
+            // Something else there: a whole stack swaps with it.
+            if (n != from.count || !fits(m.toBox, m.toSlot, item) || !fits(m.fromBox, m.fromSlot, to.item)) return SendInventory(client);
+            std::swap(from, to);
+        }
+    }
+    client.armour = 0;
+    for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++)
+        if (!armourBox.slots[p].Empty()) client.armour |= Armour::Bit(static_cast<ArmourPiece>(p));
+    client.inventory.Trim(Inventory::kPlayerSlots);
+    if (chest) chest->Trim(Inventory::kChestSlots);
+    if (client.armour == (Armour::Bit(ArmourPiece::Cap) | Armour::Bit(ArmourPiece::Tunic) | Armour::Bit(ArmourPiece::Boots))) Award(client, Achievement::Armoured);
+    SendInventory(client);
+    if (chest) SendChestToViewers(*client.openChest);
+}
+
+void Server::HandleCreativeSlot(ClientState& client, const net::CreativeSlot& m) {
+    if (!Creative(client) || m.slot >= client.inventory.slots.size()) return SendInventory(client);
+    if (m.item == Items::kNone || m.count == 0) client.inventory.slots[m.slot] = {};
+    else client.inventory.slots[m.slot] = { m.item, static_cast<uint8_t>(std::min<uint32_t>(m.count, Items::MaxStack(m.item))) };
+    SendInventory(client);
 }
 
 void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
@@ -716,22 +831,22 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
     const CreatureSystem::Creature* target = creatures.Find(creature);
     const CreatureType type = target ? target->type : CreatureType::Count;
     const bool raider = target && target->raider;
-    const bool landed = creatures.Attack(creature, eye, tool, Crafting::Tier(client.tools), now, killed);
+    const bool landed = creatures.Attack(creature, eye, tool, ToolTier(client, tool), now, killed);
     if (landed && !killed) creatures.Provoke(creature, client.id, now);
     if (landed && killed) {
         std::string spoils;
         // A deer gives venison (one or two).
         if (type == CreatureType::Deer) {
             const uint32_t venison = 1 + static_cast<uint32_t>(tickCount % 2);
-            client.resources[static_cast<size_t>(BlockType::RAW_VENISON)] += venison * Block::kUnitsPerBlock;
-            client.resources[static_cast<size_t>(BlockType::HIDE)] += Block::kUnitsPerBlock; // and its hide
-            SendResources(client);
+            Give(client, BlockType::RAW_VENISON, venison * Block::kUnitsPerBlock);
+            Give(client, BlockType::HIDE, Block::kUnitsPerBlock); // and its hide
+            SendInventory(client);
             spoils = " (+" + std::to_string(venison) + " raw venison, +1 hide)";
         }
         // A crossbowman leaves some of its bolts (arrows).
         if (type == CreatureType::DwarfCrossbow) {
-            client.resources[static_cast<size_t>(BlockType::ARROW)] += 2 * Block::kUnitsPerBlock;
-            SendResources(client);
+            Give(client, BlockType::ARROW, 2 * Block::kUnitsPerBlock);
+            SendInventory(client);
             spoils = " (+2 arrows)";
         }
         if (type == CreatureType::DwarfKing) KingSlain(client);
@@ -761,21 +876,20 @@ void Server::HandleInteract(ClientState& client, uint16_t creature) {
     const Collision::AABB box = CreatureSystem::Box(*c);
     if (glm::distance(eye, glm::clamp(eye, box.min, box.max)) > Combat::kReach + 0.5f) return;
     // Raw venison in hand tames it.
-    uint32_t& venison = client.resources[static_cast<size_t>(BlockType::RAW_VENISON)];
-    if (client.heldBlock != BlockType::RAW_VENISON || (!Creative(client) && venison < Block::kUnitsPerBlock)) return;
+    if (client.heldBlock != BlockType::RAW_VENISON || (!Creative(client) && client.inventory.Units(BlockType::RAW_VENISON) < Block::kUnitsPerBlock)) return;
     if (!creatures.Tame(creature, client.id)) return;
     if (!Creative(client)) {
-        venison -= Block::kUnitsPerBlock;
-        SendResources(client);
+        client.inventory.TakeUnits(BlockType::RAW_VENISON, Block::kUnitsPerBlock);
+        SendInventory(client);
     }
     SendChat(client, net::ChatMessage::Kind::Info, "The wolf is yours: it'll follow you, and fight for you");
     Award(client, Achievement::BestFriend);
 }
 
 void Server::KingSlain(ClientState& client) {
-    client.resources[static_cast<size_t>(BlockType::STEEL_INGOT)] += 6 * Block::kUnitsPerBlock;
-    client.resources[static_cast<size_t>(BlockType::IRON_INGOT)] += 8 * Block::kUnitsPerBlock;
-    SendResources(client);
+    Give(client, BlockType::STEEL_INGOT, 6 * Block::kUnitsPerBlock);
+    Give(client, BlockType::IRON_INGOT, 8 * Block::kUnitsPerBlock);
+    SendInventory(client);
     SendChat(client, net::ChatMessage::Kind::Info, "The Dwarf King's hoard is yours: +6 steel ingots, +8 iron ingots");
     Award(client, Achievement::Kingslayer);
     for (auto& [peer, other] : clients)
@@ -783,9 +897,9 @@ void Server::KingSlain(ClientState& client) {
 }
 
 void Server::GolemSlain(ClientState& client) {
-    client.resources[static_cast<size_t>(BlockType::FORGE_CORE)] += Block::kUnitsPerBlock;
-    client.resources[static_cast<size_t>(BlockType::STEEL_INGOT)] += 3 * Block::kUnitsPerBlock;
-    SendResources(client);
+    Give(client, BlockType::FORGE_CORE, Block::kUnitsPerBlock);
+    Give(client, BlockType::STEEL_INGOT, 3 * Block::kUnitsPerBlock);
+    SendInventory(client);
     SendChat(client, net::ChatMessage::Kind::Info, "The golem's fire goes out: +1 forge core, +3 steel ingots");
     Award(client, Achievement::GolemBreaker);
     for (auto& [peer, other] : clients)
@@ -823,8 +937,7 @@ void Server::HandleTrade(ClientState& client, uint16_t trader, uint8_t offerInde
     tradePressure.resize(offers.size(), 0);
     const int price = Trades::Price(o, tradePressure[offerIndex]);
     const uint32_t cost = static_cast<uint32_t>(price) * Block::kUnitsPerBlock;
-    uint32_t& have = client.resources[static_cast<size_t>(o.give)];
-    if (!Creative(client) && have < cost)
+    if (!Creative(client) && client.inventory.Units(o.give) < cost)
         return SendChat(client, net::ChatMessage::Kind::Error, "You need " + std::to_string(price) + " " + name(o.give) + " for that");
     const glm::vec3 at = c->feet; // (c may move once a creature is added)
     if (o.hire) {
@@ -837,12 +950,17 @@ void Server::HandleTrade(ClientState& client, uint16_t trader, uint8_t offerInde
         SendChat(client, net::ChatMessage::Kind::Info, "A dwarf guard will follow you and fight for you for ten minutes");
     }
     else {
-        client.resources[static_cast<size_t>(o.get)] += static_cast<uint32_t>(o.getCount) * Block::kUnitsPerBlock;
+        // (What they pay is gone first, so it may make the room.)
+        Inventory after = client.inventory;
+        if (!Creative(client)) after.TakeUnits(o.give, cost);
+        if (after.AddUnits(o.get, static_cast<uint32_t>(o.getCount) * Block::kUnitsPerBlock) != 0)
+            return SendChat(client, net::ChatMessage::Kind::Error, "You have no room for " + std::to_string(o.getCount) + " " + name(o.get));
+        client.inventory = std::move(after); // (paid, and given)
         SendChat(client, net::ChatMessage::Kind::Info,
                  "Traded " + std::to_string(price) + " " + name(o.give) + " for " + std::to_string(o.getCount) + " " + name(o.get));
     }
-    if (!Creative(client)) have -= cost;
-    SendResources(client);
+    if (o.hire && !Creative(client)) client.inventory.TakeUnits(o.give, cost);
+    SendInventory(client);
     Award(client, Achievement::Merchant);
     // The price goes up (for everyone), and they're told the new prices.
     tradePressure[offerIndex] = std::min(tradePressure[offerIndex] + 1, Trades::kMaxPressure);
@@ -866,7 +984,7 @@ void Server::HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool)
         // Knocked back, away from the hitter and a little up (as creatures are). The
         // target moves itself, so it's told to; a slain player respawns instead.
         const double before = target.invulnerableUntil;
-        Hurt(target, Combat::Damage(tool, Crafting::Tier(client.tools)), "was slain by " + client.name);
+        Hurt(target, Combat::Damage(tool, ToolTier(client, tool)), "was slain by " + client.name);
         if (target.health > 0 && target.lastHurt >= now && target.invulnerableUntil == before) {
             glm::vec2 away(target.feet.x - client.feet.x, target.feet.z - client.feet.z);
             away = glm::length(away) > 1e-3f ? glm::normalize(away) : glm::vec2(1.0f, 0.0f);
@@ -952,7 +1070,7 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
     }
     // Survival: only once it's been mined for long enough, with that tool.
     if (!Creative(client)) {
-        const double needed = Mining::Seconds(block, tool, Crafting::Tier(client.tools));
+        const double needed = Mining::Seconds(block, tool, ToolTier(client, tool));
         const bool started = client.mining && client.miningPos == pos && client.miningTool == tool;
         const double mined = started ? Now() - client.miningSince : 0.0;
         if (needed > 0.0 && mined < needed * (1.0 - Mining::kSlackShare) - Mining::kSlackSeconds) {
@@ -960,6 +1078,28 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
             return Echo(client, pos);
         }
         client.mining = false;
+        // Somewhere to put it: refused (and kept mining) if what it gives won't fit.
+        const Block whole = (block.type == BlockType::MULTIBLOCK || block.type == BlockType::MULTIBLOCK_PART) ? Block() : block;
+        if (!whole.IsAir() && !client.inventory.FitsUnits(whole.ResourceType(), static_cast<uint32_t>(whole.ResourceUnits()))) {
+            client.mining = true;
+            SendChat(client, net::ChatMessage::Kind::Error, "Your inventory is full");
+            return Echo(client, pos);
+        }
+        // A chest's contents go to whoever breaks it: they must fit too.
+        if (IsStorageType(block.type)) {
+            Inventory after = client.inventory;
+            after.AddUnits(block.ResourceType(), static_cast<uint32_t>(block.ResourceUnits()));
+            const Inventory& held = ChestAt(pos);
+            bool fit = true;
+            for (const Stack& st : held.slots)
+                if (!st.Empty()) fit &= after.Add(st.item, st.count) == 0;
+            for (size_t t = 0; t < held.offcuts.size(); t++) fit &= after.AddUnits(static_cast<BlockType>(t), held.offcuts[t]) == 0;
+            if (!fit) {
+                client.mining = true;
+                SendChat(client, net::ChatMessage::Kind::Error, "What's in it won't fit in your inventory: empty it first");
+                return Echo(client, pos);
+            }
+        }
     }
     // Part of a formed structure: it comes apart, and the block broken is what it was.
     if (block.type == BlockType::MULTIBLOCK || block.type == BlockType::MULTIBLOCK_PART) block = TakeApart(pos);
@@ -983,19 +1123,18 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
         uint32_t seeds = 0;
         if (block.type == BlockType::RIPE_WHEAT) seeds = roll < 0.5f ? 1 : 2;
         if (block.type == BlockType::TALL_GRASS && roll < 0.3f) seeds = 1;
-        client.resources[static_cast<size_t>(BlockType::SEEDS)] += seeds * Block::kUnitsPerBlock;
+        if (seeds) Give(client, BlockType::SEEDS, seeds * Block::kUnitsPerBlock);
         // Leaves now and then drop a sapling (a pine's, from pine needles).
         if (IsLeavesType(block.type) && roll > 0.88f)
-            client.resources[static_cast<size_t>(block.type == BlockType::PINE_LEAVES ? BlockType::PINE_SAPLING : BlockType::SAPLING)] += Block::kUnitsPerBlock;
+            Give(client, block.type == BlockType::PINE_LEAVES ? BlockType::PINE_SAPLING : BlockType::SAPLING, Block::kUnitsPerBlock);
     }
     // Survival: the block's worth goes to the player.
     if (!Creative(client)) {
         Award(client, Achievement::FirstBlock);
         if (block.type == BlockType::IRON_ORE) Award(client, Achievement::Miner);
         if (block.type == BlockType::RIPE_WHEAT) Award(client, Achievement::Farmer);
-        uint32_t& held = client.resources[static_cast<size_t>(block.ResourceType())]; // (pebbles are stone)
-        held += static_cast<uint32_t>(block.ResourceUnits());
-        SendResources(client);
+        Give(client, block.ResourceType(), static_cast<uint32_t>(block.ResourceUnits())); // (pebbles are stone)
+        SendInventory(client);
     }
 }
 
@@ -1003,7 +1142,7 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
     // Refused: the client predicted it, so send back what's really there (the cells, and
     // in survival the count it took the cost from).
     auto refuse = [&] {
-        if (!Creative(client)) SendResources(client);
+        if (!Creative(client)) SendInventory(client);
         Echo(client, pos);
         if (type == BlockType::DOOR) Echo(client, pos + glm::ivec3(0, 1, 0)); // (it predicted the upper half too)
     };
@@ -1014,8 +1153,7 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
     // Survival: it costs its worth, which the player must have. Water can't be
     // collected (only moved, with pumps), so it can't be placed either.
     const uint32_t cost = static_cast<uint32_t>(placed.ResourceUnits());
-    uint32_t& held = client.resources[static_cast<size_t>(ResourceTypeOf(type))];
-    if (!Creative(client) && (held < cost || placed.IsLiquid())) return refuse();
+    if (!Creative(client) && (client.inventory.Units(ResourceTypeOf(type)) < cost || placed.IsLiquid())) return refuse();
     // No solid blocks inside a walking player (water is fine).
     if (placed.IsFullBlock()) {
         const glm::vec3 lo(pos), hi = lo + glm::vec3(1.0f);
@@ -1026,12 +1164,12 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
         }
     }
     world->SetBlock(pos.x, pos.y, pos.z, placed);
-    if (IsStorageType(type)) chests[pos] = ChestItems{}; // a new chest is empty
+    if (IsStorageType(type)) chests[pos] = Inventory(Inventory::kChestSlots); // a new chest is empty
     if (type == BlockType::CROP || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING) crops.insert(pos);
     if (type == BlockType::DOOR) world->SetBlock(pos.x, pos.y + 1, pos.z, placed); // its upper half (part of the one door, facing the same way)
     if (!Creative(client)) {
-        held -= cost;
-        SendResources(client);
+        client.inventory.TakeUnits(ResourceTypeOf(type), cost);
+        SendInventory(client);
     }
 }
 
@@ -1044,14 +1182,17 @@ void Server::HandleChisel(ClientState& client, const net::EditChisel& chisel) {
     const Block after = block.ChiselledFrom(chisel.dir, chisel.edge, chisel.raise ? chisel.step : -chisel.step);
     // Survival: chiselling off gives back what it takes away; building up costs it.
     if (!Creative(client)) {
-        uint32_t& held = client.resources[static_cast<size_t>(block.type)];
+        const BlockType type = block.ResourceType();
         const int change = after.ResourceUnits() - block.ResourceUnits(); // + costs, - gives
-        if (change > 0 && held < static_cast<uint32_t>(change)) {
-            SendResources(client);
+        const bool ok = change > 0 ? client.inventory.TakeUnits(type, static_cast<uint32_t>(change))
+                                   : client.inventory.FitsUnits(type, static_cast<uint32_t>(-change));
+        if (!ok) {
+            if (change < 0) SendChat(client, net::ChatMessage::Kind::Error, "Your inventory is full");
+            SendInventory(client);
             return Echo(client, p);
         }
-        held = static_cast<uint32_t>(static_cast<int64_t>(held) - change);
-        SendResources(client);
+        if (change < 0) client.inventory.AddUnits(type, static_cast<uint32_t>(-change));
+        SendInventory(client);
     }
     world->SetBlock(p.x, p.y, p.z, after);
 }
@@ -1158,11 +1299,9 @@ void Server::SendMode(ClientState& client) {
     net.Send(client.peer, net::kChannelReliable, net::Encode(net::GameModeIs{ client.mode }));
 }
 
-void Server::SendResources(ClientState& client) {
-    net::Resources m;
-    for (size_t t = 0; t < client.resources.size(); t++)
-        if (client.resources[t] > 0) m.held.emplace_back(static_cast<BlockType>(t), client.resources[t]);
-    m.tools = client.tools;
+void Server::SendInventory(ClientState& client) {
+    net::InventoryIs m;
+    m.items = client.inventory;
     m.armour = client.armour;
     net.Send(client.peer, net::kChannelReliable, net::Encode(m));
 }
@@ -1228,14 +1367,15 @@ void Server::Hurt(ClientState& client, int amount, const std::string& deathMessa
 
 void Server::DropOnDeath(ClientState& client) {
     if (!options.dropOnDeath || Creative(client)) return;
-    // Half of each kind (whole units, rounded down: the other half's theirs to keep).
-    ChestItems dropped{};
-    bool any = false;
-    for (size_t t = 0; t < dropped.size(); t++) {
-        dropped[t] = client.resources[t] / 2;
-        any |= dropped[t] > 0;
-    }
-    if (!any) return;
+    // Half of each kind of block or item (whole ones, rounded down: the other half's
+    // theirs to keep; tools and armour they keep).
+    Inventory dropped(Inventory::kChestSlots);
+    std::vector<std::pair<ItemId, uint32_t>> halves;
+    for (const Stack& st : client.inventory.slots)
+        if (!st.Empty() && Items::IsBlock(st.item) && std::none_of(halves.begin(), halves.end(), [&](const auto& h) { return h.first == st.item; }))
+            if (const uint32_t half = client.inventory.Count(st.item) / 2) halves.emplace_back(st.item, half);
+    if (halves.empty()) return;
+    for (const auto& [item, n] : halves) dropped.Add(item, n, true);
     // Into a chest in the nearest open cell where they died: their feet's cell, or one
     // around or just above it (air first; water or a wild plant will do, not a trap).
     const glm::ivec3 at(glm::floor(client.feet + glm::vec3(0.0f, 0.1f, 0.0f)));
@@ -1255,8 +1395,8 @@ void Server::DropOnDeath(ClientState& client) {
     if (!spot) return; // nowhere to put it: they keep it all
     world->SetBlock(spot->x, spot->y, spot->z, Block(BlockType::CHEST));
     chests[*spot] = dropped;
-    for (size_t t = 0; t < dropped.size(); t++) client.resources[t] -= dropped[t];
-    SendResources(client);
+    for (const auto& [item, n] : halves) client.inventory.Take(item, n);
+    SendInventory(client);
     char where[64];
     std::snprintf(where, sizeof where, "%d, %d, %d", spot->x, spot->y, spot->z);
     SendChat(client, net::ChatMessage::Kind::Info, std::string("Half of what you carried is in a chest where you died (") + where + ")");
@@ -1283,7 +1423,7 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
         return;
     }
     // An engineer's hammer in hand: form the structure this block is part of.
-    if (client.heldBlock == BlockType::HAMMER && (Creative(client) || client.resources[static_cast<size_t>(BlockType::HAMMER)] >= Block::kUnitsPerBlock))
+    if (client.heldBlock == BlockType::HAMMER && (Creative(client) || client.inventory.Count(Items::OfBlock(BlockType::HAMMER)) > 0))
         return TryForm(&client, pos);
     // A filter pipe or a crafter: set to what's in hand.
     if (block.type == BlockType::FILTER_PIPE || block.type == BlockType::CRAFTER) {
@@ -1297,7 +1437,7 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
             const auto& recipes = Crafting::Recipes();
             int found = -1;
             for (int i = 0; i < static_cast<int>(recipes.size()) && found < 0; i++)
-                if (!recipes[i].MadeOnce() && recipes[i].output == held && held != BlockType::AIR) found = i;
+                if (!recipes[i].MakesItem() && recipes[i].output == held && held != BlockType::AIR) found = i;
             if (held == BlockType::AIR) {
                 const int index = static_cast<int>(block.axis) - 1;
                 return SendChat(client, net::ChatMessage::Kind::Info,
@@ -1324,11 +1464,9 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
         const BlockType cooked = client.heldBlock == BlockType::RAW_VENISON ? BlockType::COOKED_VENISON
                                : client.heldBlock == BlockType::RAW_FISH    ? BlockType::COOKED_FISH
                                                                              : BlockType::AIR;
-        uint32_t& raw = client.resources[static_cast<size_t>(client.heldBlock)];
-        if (cooked == BlockType::AIR || raw < Block::kUnitsPerBlock) return;
-        raw -= Block::kUnitsPerBlock;
-        client.resources[static_cast<size_t>(cooked)] += Block::kUnitsPerBlock;
-        SendResources(client);
+        if (cooked == BlockType::AIR || !client.inventory.TakeUnits(client.heldBlock, Block::kUnitsPerBlock)) return;
+        Give(client, cooked, Block::kUnitsPerBlock);
+        SendInventory(client);
         if (cooked == BlockType::COOKED_VENISON) Award(client, Achievement::Cook);
         return;
     }
@@ -1489,13 +1627,12 @@ void Server::UpdateHunger(ClientState& client, float dt) {
 
 void Server::HandleEat(ClientState& client, BlockType food) {
     const int value = Hunger::FoodValue(food);
-    uint32_t& held = client.resources[static_cast<size_t>(food)];
     // Food you hold, while not full (creative players have it all and aren't hungry).
-    if (value == 0 || Creative(client) || held < Block::kUnitsPerBlock || client.food >= Hunger::kMaxFood) return SendResources(client);
-    held -= Block::kUnitsPerBlock;
+    if (value == 0 || Creative(client) || client.inventory.Units(food) < Block::kUnitsPerBlock || client.food >= Hunger::kMaxFood) return SendInventory(client);
+    client.inventory.TakeUnits(food, Block::kUnitsPerBlock);
     client.food = std::min(Hunger::kMaxFood, client.food + value);
     Award(client, Achievement::FirstMeal);
-    SendResources(client);
+    SendInventory(client);
     SendHealth(client, false);
 }
 
@@ -1511,26 +1648,35 @@ void Server::HandleOpenChest(ClientState& client, const glm::ivec3& at, bool ope
     if (open && (pos != at || InReach(client, pos, kChestReach)) && world->GetBlock(pos.x, pos.y, pos.z, block) && IsStorageType(block.type)) {
         client.openChest = pos;
         const bool unopened = chests.count(pos) == 0;
-        const ChestItems& chest = ChestAt(pos);
+        const Inventory& chest = ChestAt(pos);
         // The first look into a dungeon's chest.
-        if (unopened && std::any_of(chest.begin(), chest.end(), [](uint32_t u) { return u > 0; })) Award(client, Achievement::TreasureHunter);
+        if (unopened && !chest.Empty()) Award(client, Achievement::TreasureHunter);
     }
     SendChest(client);
 }
 
-void Server::HandleChestMove(ClientState& client, const glm::ivec3& pos, BlockType type, uint32_t units, bool intoChest) {
-    // Only with that chest open, still there and in reach.
+Inventory* Server::OpenChestOf(ClientState& client) {
+    if (!client.openChest) return nullptr;
+    const glm::ivec3 pos = *client.openChest;
     Block block;
-    if (client.openChest != pos || !InReach(client, pos, kChestReach + 2.0f) || !world->GetBlock(pos.x, pos.y, pos.z, block) || !IsStorageType(block.type) ||
-        type == BlockType::AIR || block.IsLiquid())
-        return SendResources(client);
-    ChestItems& chest = chests[pos];
-    uint32_t& from = intoChest ? client.resources[static_cast<size_t>(type)] : chest[static_cast<size_t>(type)];
-    uint32_t& to = intoChest ? chest[static_cast<size_t>(type)] : client.resources[static_cast<size_t>(type)];
-    units = std::min(units, from);
-    from -= units;
-    to += units;
-    SendResources(client);
+    if (!world->GetBlock(pos.x, pos.y, pos.z, block) || !IsStorageType(block.type)) return nullptr;
+    // (A structure's part is opened as its core, which may be further away.)
+    if (!InReach(client, pos, kChestReach + 2.0f) && !IsMachineInventory(block.type)) return nullptr;
+    return &ChestAt(pos);
+}
+
+void Server::HandleChestMove(ClientState& client, const glm::ivec3& pos, ItemId item, uint32_t count, bool intoChest) {
+    // Only with that chest open, still there and in reach.
+    Inventory* chest = client.openChest == pos ? OpenChestOf(client) : nullptr;
+    if (!chest) return SendInventory(client);
+    Inventory& from = intoChest ? client.inventory : *chest;
+    Inventory& to = intoChest ? *chest : client.inventory;
+    const uint32_t n = std::min({ count, from.Count(item), to.Room(item) });
+    from.Take(item, n);
+    to.Add(item, n);
+    client.inventory.Trim(Inventory::kPlayerSlots);
+    chest->Trim(Inventory::kChestSlots);
+    SendInventory(client);
     SendChestToViewers(pos);
 }
 
@@ -1539,9 +1685,7 @@ void Server::SendChest(ClientState& client) {
     m.open = client.openChest.has_value();
     if (client.openChest) {
         m.pos = *client.openChest;
-        const ChestItems& chest = chests[*client.openChest];
-        for (size_t t = 0; t < chest.size(); t++)
-            if (chest[t] > 0) m.held.emplace_back(static_cast<BlockType>(t), chest[t]);
+        m.items = ChestAt(*client.openChest);
     }
     net.Send(client.peer, net::kChannelReliable, net::Encode(m));
 }
@@ -1556,10 +1700,10 @@ Server::ChestItems& Server::ChestAt(const glm::ivec3& pos) {
     if (it != chests.end()) return it->second;
     // Never opened: placed chests are always recorded, so this is a dungeon's, and its
     // loot is rolled now (from its position, so it's the same whenever it's found).
-    ChestItems& chest = chests[pos];
-    chest.fill(0);
-    for (const auto& [type, units] : Dungeons::LootFor(terrain, pos)) chest[static_cast<size_t>(type)] += units;
-    for (const auto& [type, units] : Dwarves::LootFor(terrain, pos)) chest[static_cast<size_t>(type)] += units;
+    Inventory& chest = chests[pos];
+    chest = Inventory(Inventory::kChestSlots);
+    for (const auto& [type, units] : Dungeons::LootFor(terrain, pos)) chest.AddUnits(type, units, true);
+    for (const auto& [type, units] : Dwarves::LootFor(terrain, pos)) chest.AddUnits(type, units, true);
     return chest;
 }
 
@@ -1569,8 +1713,12 @@ void Server::RemoveChest(const glm::ivec3& pos, ClientState* breaker) {
     if (it == chests.end()) return;
     // What was in it goes to whoever broke it.
     if (breaker) {
-        for (size_t t = 0; t < it->second.size(); t++) breaker->resources[t] += it->second[t];
-        SendResources(*breaker);
+        // (HandleBreak made sure it fits; a creative player's grows if need be.)
+        const Inventory& held = it->second;
+        for (const Stack& st : held.slots)
+            if (!st.Empty()) breaker->inventory.Add(st.item, st.count, true);
+        for (size_t t = 0; t < held.offcuts.size(); t++) breaker->inventory.AddUnits(static_cast<BlockType>(t), held.offcuts[t], true);
+        SendInventory(*breaker);
     }
     chests.erase(it);
     for (auto& [peer, client] : clients)
@@ -1584,13 +1732,11 @@ void Server::HandleShoot(ClientState& client, const glm::vec3& direction) {
     const double now = Now();
     // A crossbow in hand (theirs), or a bow of their own; an arrow to shoot (survival),
     // and not too often.
-    const bool crossbow = client.heldBlock == BlockType::CROSSBOW && (Creative(client) || client.resources[static_cast<size_t>(BlockType::CROSSBOW)] > 0);
+    const bool crossbow = client.heldBlock == BlockType::CROSSBOW && (Creative(client) || client.inventory.Count(Items::OfBlock(BlockType::CROSSBOW)) > 0);
     if (now < client.nextShot || (!crossbow && Usable(client, Tool::Bow) != Tool::Bow)) return;
-    uint32_t& held = client.resources[static_cast<size_t>(BlockType::ARROW)];
     if (!Creative(client)) {
-        if (held < Block::kUnitsPerBlock) return SendResources(client);
-        held -= Block::kUnitsPerBlock;
-        SendResources(client);
+        if (!client.inventory.TakeUnits(BlockType::ARROW, Block::kUnitsPerBlock)) return SendInventory(client);
+        SendInventory(client);
     }
     client.nextShot = now + (crossbow ? kCrossbowInterval : kShotInterval) * 0.8; // (a little slack for timing)
     const glm::vec3 dir = glm::normalize(direction);
@@ -1714,8 +1860,8 @@ void Server::UpdateFishing() {
         if (now < client.biteAt) continue;
         // A bite: the fish is theirs.
         client.bobber.reset();
-        client.resources[static_cast<size_t>(BlockType::RAW_FISH)] += Block::kUnitsPerBlock;
-        SendResources(client);
+        Give(client, BlockType::RAW_FISH, Block::kUnitsPerBlock);
+        SendInventory(client);
         SendChat(client, net::ChatMessage::Kind::Info, "You caught a fish!");
         net.Send(peer, net::kChannelReliable, net::Encode(net::Bobber{ at, 0, 1 }));
         Award(client, Achievement::Angler);

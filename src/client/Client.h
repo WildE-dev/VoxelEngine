@@ -142,27 +142,38 @@ public:
     std::vector<glm::ivec3> TakeLightning() { std::vector<glm::ivec3> out; out.swap(lightning); return out; }
     // Explosions since the last call (where, and how big).
     std::vector<net::Explosion> TakeExplosions() { std::vector<net::Explosion> out; out.swap(explosions); return out; }
-    // Game mode, and in survival the resource units held of each block type (predicted
-    // on edits, put right by the server).
+    // Game mode, and what we carry (world/Inventory.h: predicted on edits, put right by
+    // the server).
     net::GameMode GetMode() const { return mode; }
     bool IsCreative() const { return mode == net::GameMode::Creative; }
-    // (By what the type counts as: pebbles show the stone held.)
-    uint32_t GetResources(BlockType type) const { return resources[static_cast<size_t>(ResourceTypeOf(type))]; }
-    // Tools: whether we have one (creative: all of them; survival: those we've made).
-    // Armour worn (survival; world/Armour.h).
+    const Inventory& GetInventory() const { return inventory; }
+    // Whether the server has said what we carry yet (since joining).
+    bool HasInventory() const { return inventoryKnown; }
+    // Units of a type we carry, whole and offcut (by what the type counts as: pebbles
+    // show the stone held).
+    uint32_t GetResources(BlockType type) const { return inventory.Units(ResourceTypeOf(type)); }
+    // Whole items of a kind we carry.
+    uint32_t GetCount(ItemId item) const { return inventory.Count(item); }
+    // Armour worn: what's in our armour slots (world/Armour.h).
     bool HasArmour(ArmourPiece piece) const { return (armour & Armour::Bit(piece)) != 0; }
-    // The iron upgrade (Crafting::kIronBit): faster tools, harder hits.
-    bool HasIron() const { return (tools & (1u << 7)) != 0; }
-    // The steel upgrade (Crafting::kSteelBit), made after the iron one.
-    bool HasSteel() const { return (tools & 1u) != 0; }
     uint8_t GetArmour() const { return armour; }
-    bool HasTool(Tool tool) const { return tool == Tool::None || IsCreative() || (tools & Crafting::ToolBit(tool)); }
+    // Tools: whether we carry one (creative: we have them all).
+    bool HasTool(Tool tool) const { return tool == Tool::None || IsCreative() || inventory.BestTier(tool) >= 0; }
+    // What the best one we carry is made of (0 stone, 1 iron, 2 steel; -1 none).
+    int ToolTier(Tool tool) const { return IsCreative() ? Items::kTiers - 1 : inventory.BestTier(tool); }
     // The tool we really work with: that one if we have it, a hand if not.
     Tool Usable(Tool tool) const { return HasTool(tool) ? tool : Tool::None; }
     // Survival: make `count` of recipe `index` (Crafting::Recipes()); the server checks.
-    void Craft(int index, int count);
-    // Whether this player could craft `count` of recipe `index` now (and hasn't the tool yet).
-    bool CanCraft(int index, int count = 1) const;
+    // An upgrade works on `held`, the tool in our hand.
+    void Craft(int index, int count, Tool held = Tool::None);
+    // Whether this player could craft `count` of recipe `index` now (an upgrade: with
+    // `held` in hand, of the tier below).
+    bool CanCraft(int index, int count = 1, Tool held = Tool::None) const;
+    // Moving items (net::InventoryMove): `count` (0: all) from one slot to another, or
+    // to net::kAnySlot in a box. Our armour slots are numbered by piece.
+    void MoveItems(net::Box fromBox, int fromSlot, net::Box toBox, int toSlot, int count = 0);
+    // Creative: put `count` of an item in one of our slots (kNone empties it).
+    void SetCreativeSlot(int slot, ItemId item, int count);
     // Whether we may place this (creative, or we hold enough of it).
     bool CanAfford(BlockType type, int heightEighths) const;
 
@@ -229,11 +240,14 @@ public:
     // Arrows near us, as of the last update, moved on by their speed since.
     std::vector<net::ArrowInfo> GetArrows() const;
     void CloseChest();
-    void MoveChestItems(BlockType type, uint32_t units, bool intoChest);
+    // Up to `count` whole items of a kind, wherever they are, into the chest or out of it.
+    void MoveChestItems(ItemId item, uint32_t count, bool intoChest);
+    void MoveChestItems(BlockType type, uint32_t count, bool intoChest) { MoveChestItems(Items::OfBlock(type), count, intoChest); }
     // The chest open now (none until the server says it's open, or once it's closed),
     // and what's in it.
     std::optional<glm::ivec3> GetOpenChest() const { return openChest; }
-    uint32_t GetChestUnits(BlockType type) const { return chestHeld[static_cast<size_t>(type)]; }
+    const Inventory& GetChest() const { return chestHeld; }
+    uint32_t GetChestUnits(BlockType type) const { return chestHeld.Units(type); }
 
     struct Stats {
         uint32_t roundTripMs = 0;
@@ -273,7 +287,7 @@ private:
     std::unordered_map<glm::ivec3, std::string, Coords::IVec3Hash> signs;
     double arrowsAt = 0.0;
     std::optional<glm::ivec3> openChest;
-    std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> chestHeld{};
+    Inventory chestHeld{ 0 };
     std::optional<glm::vec3> pendingCorrection;
     double lastStateSent = 0.0;
 
@@ -302,8 +316,8 @@ private:
     float tank = 1.0f;
     bool onTank = false;
     net::GameMode mode = net::GameMode::Creative;
-    std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{};
-    uint16_t tools = 0;
+    Inventory inventory{ Inventory::kPlayerSlots };
+    bool inventoryKnown = false;
     uint8_t armour = 0;
     double lastHurt = -1000.0;
     std::deque<ChatLine> chat; // the last kMaxChatLines

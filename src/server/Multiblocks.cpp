@@ -195,12 +195,9 @@ bool Server::RunStructure(const glm::ivec3& core, const Block& block, Worker& w)
             return false;
         }
         for (const auto& c : joined) {
-            ChestItems& chest = ChestAt(c);
+            Inventory& chest = ChestAt(c);
             const SmeltRecipe* r = Smelting::FirstAffordable(chest);
-            if (!r) continue;
-            chest[static_cast<size_t>(r->input)] -= r->inputUnits;
-            if (r->extra != BlockType::AIR) chest[static_cast<size_t>(r->extra)] -= r->extraUnits;
-            chest[static_cast<size_t>(r->output)] += r->outputUnits;
+            if (!r || !Smelting::Apply(*r, chest)) continue;
             SendChestToViewers(c);
             w.state = Power::DrillState::Working;
             return true;
@@ -217,10 +214,12 @@ bool Server::RunStructure(const glm::ivec3& core, const Block& block, Worker& w)
             return false;
         }
         for (const auto& c : joined) {
-            ChestItems& chest = ChestAt(c);
-            if (chest[static_cast<size_t>(BlockType::COAL)] < 2 * Block::kUnitsPerBlock) continue;
-            chest[static_cast<size_t>(BlockType::COAL)] -= 2 * Block::kUnitsPerBlock;
-            chest[static_cast<size_t>(BlockType::COKE)] += Block::kUnitsPerBlock;
+            Inventory& chest = ChestAt(c);
+            if (chest.Units(BlockType::COAL) < 2 * Block::kUnitsPerBlock) continue;
+            Inventory after = chest;
+            after.TakeUnits(BlockType::COAL, 2 * Block::kUnitsPerBlock);
+            if (after.AddUnits(BlockType::COKE, Block::kUnitsPerBlock) != 0) continue; // (full)
+            chest = std::move(after);
             SendChestToViewers(c);
             w.state = Power::DrillState::Working;
             return true;

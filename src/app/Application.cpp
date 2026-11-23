@@ -126,6 +126,43 @@ const char* DefaultBlockName(BlockType type);
 // What the game calls a block: Resources/Data/blocks.json's name, or its own.
 const char* BlockName(BlockType type) { return BlockData::NameOr(type, DefaultBlockName(type)); }
 
+// An item's icon (atlas tile) and name: a block's, a tool's, a piece of armour's.
+int ItemTile(const TextureAtlas& atlas, ItemId item) {
+    if (Items::IsTool(item)) return ToolTile(atlas, Items::ToolOf(item));
+    if (Items::IsArmour(item)) return atlas.GetIndex(Armour::Texture(Items::ArmourOf(item)));
+    return IconTile(Items::BlockOf(item));
+}
+std::string ItemName(ItemId item) {
+    if (Items::IsBlock(item)) return BlockName(Items::BlockOf(item));
+    return Items::Name(item);
+}
+
+// A stack drawn in a slot from lo to hi (the icon inset by `pad`): what it is, what a
+// tool's made of (top right: Fe iron, St steel) and how many (bottom right, if asked).
+void DrawStackOn(ImDrawList* draw, const TextureAtlas& atlas, ImTextureID texture, ImVec2 lo, ImVec2 hi, float pad, const Stack& st, bool dim,
+                 bool showCount) {
+    if (st.Empty()) return;
+    glm::vec2 uv0, uv1;
+    atlas.GetTileUV(ItemTile(atlas, st.item), uv0, uv1);
+    draw->AddImage(texture, ImVec2(lo.x + pad, lo.y + pad), ImVec2(hi.x - pad, hi.y - pad), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y),
+                   dim ? IM_COL32(255, 255, 255, 80) : IM_COL32_WHITE);
+    auto text = [&](ImVec2 at, ImU32 colour, const char* t) {
+        draw->AddText(ImVec2(at.x + 1.0f, at.y + 1.0f), IM_COL32(0, 0, 0, 230), t);
+        draw->AddText(at, colour, t);
+    };
+    if (Items::IsTool(st.item) && Items::TierOf(st.item) > 0) {
+        const bool steel = Items::TierOf(st.item) == 2;
+        const char* badge = steel ? "St" : "Fe";
+        const ImVec2 size = ImGui::CalcTextSize(badge);
+        text(ImVec2(hi.x - size.x - 3.0f, lo.y + 1.0f), steel ? IM_COL32(150, 220, 255, 255) : IM_COL32(215, 215, 225, 255), badge);
+    }
+    if (showCount && st.count > 1) {
+        const std::string count = std::to_string(st.count);
+        const ImVec2 size = ImGui::CalcTextSize(count.c_str());
+        text(ImVec2(hi.x - size.x - 3.0f, hi.y - size.y - 1.0f), IM_COL32_WHITE, count.c_str());
+    }
+}
+
 const char* DefaultBlockName(BlockType type) {
     switch (type) {
     case BlockType::GRASS: return "Grass";
@@ -2093,9 +2130,8 @@ void Application::HandleContinuousInput(float deltaTime) {
         if (player.IsCrouching()) flags |= net::kFlagCrouching;
         if (player.IsBoating()) flags |= net::kFlagBoat;
         // What's in hand, for others to see (a survival player's empty slot holds nothing).
-        const Tool heldTool = client->HasTool(SelectedTool()) ? SelectedTool() : Tool::None;
-        BlockType heldBlock = SelectedTool() == Tool::None ? SelectedBlock() : BlockType::AIR;
-        if (!client->IsCreative() && heldBlock != BlockType::AIR && client->GetResources(heldBlock) == 0) heldBlock = BlockType::AIR;
+        const Tool heldTool = SelectedTool();
+        const BlockType heldBlock = SelectedBlock();
         client->SendPlayerState(player.GetFeetPosition(), player.GetVelocity(), camera.GetYaw(), camera.GetDirectionAngles().x, flags, heldTool,
                                 heldBlock);
     }
@@ -2109,6 +2145,7 @@ void Application::HandleContinuousInput(float deltaTime) {
 }
 
 void Application::DrawHotbar() {
+    SeedCreativeHotbar();
     constexpr int kSlots = kHotbarSlots;
     constexpr float kIcon = 40.0f, kPad = 6.0f, kGap = 4.0f;
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -2131,12 +2168,12 @@ void Application::DrawHotbar() {
         const BlockType selected = SelectedBlock();
         const Tool selectedTool = SelectedTool();
         const bool survival = !client->IsCreative();
-        std::string label = selectedTool != Tool::None ? Mining::ToolName(selectedTool) : BlockName(selected);
+        std::string label = SelectedItem() != Items::kNone ? ItemName(SelectedItem()) : "Empty hand";
         if (selectedTool == Tool::Chisel) label += std::string(" - ") + ChiselStepName(chiselStep) + " a stroke (V)";
         if (selectedTool == Tool::None && Block::CanShape(selected))
             label += std::string(" - ") + HeightName(placeHeight) + (placeHeight < 8 ? " height" : " block") + " (V)";
-        const bool affordable = selectedTool != Tool::None ? client->HasTool(selectedTool)
-                                                           : client->CanAfford(selected, Block::CanShape(selected) ? placeHeight : 8);
+        const bool affordable = SelectedItem() == Items::kNone || !Items::IsBlock(SelectedItem()) || IsItemType(selected) ||
+                                client->CanAfford(selected, Block::CanShape(selected) ? placeHeight : 8);
         const bool affordableShown = affordable;
         const float nameWidth = ImGui::CalcTextSize(label.c_str()).x;
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (barWidth - nameWidth) * 0.5f));
@@ -2160,22 +2197,8 @@ void Application::DrawHotbar() {
             ImGui::PopID();
 
             draw->AddRectFilled(slotMin, slotMax, selected ? IM_COL32(255, 255, 255, 60) : hovered ? IM_COL32(255, 255, 255, 30) : IM_COL32(0, 0, 0, 70), 4.0f);
-            // The block's side texture, straight from the world's atlas.
-            glm::vec2 uv0, uv1;
-            const bool isTool = hotbarTools[i] != Tool::None;
-            atlas.GetTileUV(isTool ? ToolTile(atlas, hotbarTools[i]) : IconTile(hotbar[i]), uv0, uv1);
-            const uint32_t held = isTool ? 0 : client->GetResources(hotbar[i]);
-            const bool empty = survival && (isTool ? !client->HasTool(hotbarTools[i]) : held == 0);
-            draw->AddImage(atlasTexture, ImVec2(slotMin.x + kPad, slotMin.y + kPad), ImVec2(slotMax.x - kPad, slotMax.y - kPad),
-                           ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y), empty ? IM_COL32(255, 255, 255, 70) : IM_COL32_WHITE);
-            // Survival: how many we have, in the bottom right.
-            if (survival && held > 0) {
-                const std::string count = FormatBlocks(held);
-                const ImVec2 size = ImGui::CalcTextSize(count.c_str());
-                const ImVec2 at(slotMax.x - size.x - 4.0f, slotMax.y - size.y - 2.0f);
-                draw->AddText(ImVec2(at.x + 1.0f, at.y + 1.0f), IM_COL32(0, 0, 0, 230), count.c_str());
-                draw->AddText(at, IM_COL32(255, 255, 255, 255), count.c_str());
-            }
+            // What's in the slot (survival: how many, in the bottom right).
+            DrawStackOn(draw, atlas, atlasTexture, slotMin, slotMax, kPad, StackIn(SlotBox::Player, i), false, survival);
             draw->AddRect(slotMin, slotMax, selected ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 255, 255, 60), 4.0f, 0, selected ? 3.0f : 1.0f);
             // Number key in the corner (1-9, then 0; later slots are picked with the wheel).
             char key[2] = { static_cast<char>(i < 9 ? '1' + i : i == 9 ? '0' : 0), 0 };
@@ -2413,8 +2436,25 @@ void Application::HandleGamepad(float deltaTime) {
     std::copy(std::begin(pad.buttons), std::end(pad.buttons), std::begin(padWas));
 }
 
-BlockType Application::SelectedBlock() const {
-    return hotbar[selectedSlot];
+ItemId Application::SelectedItem() const {
+    const auto& slots = client->GetInventory().slots;
+    return selectedSlot < static_cast<int>(slots.size()) && !slots[selectedSlot].Empty() ? slots[selectedSlot].item : Items::kNone;
+}
+
+void Application::SeedCreativeHotbar() {
+    // Once, when the server has said what we carry: a creative player with an empty
+    // hotbar gets the usual blocks (or what they chose before the hotbar was the
+    // inventory's, in hotbar.txt).
+    if (hotbarSeeded || !client->IsWelcomed() || !client->HasInventory()) return;
+    hotbarSeeded = true;
+    if (!client->IsCreative()) return;
+    const auto& slots = client->GetInventory().slots;
+    for (int i = 0; i < kHotbarSlots && i < static_cast<int>(slots.size()); i++)
+        if (!slots[i].Empty()) return;
+    for (int i = 0; i < kHotbarSlots; i++) {
+        const ItemId item = creativeHotbarTools[i] != Tool::None ? Items::OfTool(creativeHotbarTools[i], Items::kTiers - 1) : Items::OfBlock(creativeHotbar[i]);
+        if (Items::Valid(item)) client->SetCreativeSlot(i, item, static_cast<int>(Items::MaxStack(item)));
+    }
 }
 
 void Application::SelectSlot(int slot) {
@@ -2425,10 +2465,10 @@ void Application::LoadHotbar() {
     std::ifstream file(kHotbarFile);
     for (int i = 0, type; i < kHotbarSlots && file >> type; i++)
         if (std::find(std::begin(kInventoryBlocks), std::end(kInventoryBlocks), static_cast<BlockType>(type)) != std::end(kInventoryBlocks))
-            hotbar[i] = static_cast<BlockType>(type);
+            creativeHotbar[i] = static_cast<BlockType>(type);
     // A second line: the tool in each slot (0 none).
     for (int i = 0, tool; i < kHotbarSlots && file >> tool; i++)
-        if (tool > 0 && tool < static_cast<int>(Tool::Count)) hotbarTools[i] = static_cast<Tool>(tool);
+        if (tool > 0 && tool < static_cast<int>(Tool::Count)) creativeHotbarTools[i] = static_cast<Tool>(tool);
 }
 
 void Application::LoadChatHistory() {
@@ -2451,17 +2491,11 @@ void Application::RememberChat(const std::string& line) {
     for (const auto& l : chatHistory) file << l << '\n';
 }
 
-void Application::SaveHotbar() const {
-    std::ofstream file(kHotbarFile, std::ios::trunc);
-    for (BlockType type : hotbar) file << static_cast<int>(type) << ' ';
-    file << "\n";
-    for (Tool tool : hotbarTools) file << static_cast<int>(tool) << ' ';
-    file << "\n";
-}
-
 void Application::SetInventoryOpen(bool open) {
     if (open == inventoryOpen) return;
     inventoryOpen = open;
+    heldStack.reset();
+    draggingStack = false;
     if (!open && chestMode) {
         client->CloseChest();
         chestMode = chestSeenOpen = false;
@@ -2547,112 +2581,65 @@ void Application::DrawInventory() {
     if (signMode) return DrawSignEditor();
     if (signalMode) return DrawSignalEditor();
     if (tradeMode) return DrawTrade();
-    constexpr int kColumns = 7;
-    constexpr float kIcon = 44.0f;
+    constexpr float kIcon = 38.0f;
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.42f),
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
                             ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowBgAlpha(0.85f);
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                                    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize;
     bool open = true;
-    if (ImGui::Begin("Blocks", &open, flags)) {
-        const char key = selectedSlot < 9 ? static_cast<char>('1' + selectedSlot) : '0';
+    hoveredSlot.reset();
+    if (ImGui::Begin("Inventory", &open, flags)) {
         const bool survival = !client->IsCreative();
-        ImGui::Text("Click a tool or block to put it in hotbar slot %c.", key);
-        ImGui::TextDisabled("Pick the slot with 1-9, 0 or by clicking it below. I or Esc closes.");
-        if (survival) ImGui::TextDisabled("Survival: these are the blocks you've collected. Break blocks to get more.");
-        ImGui::Spacing();
         const TextureAtlas& atlas = renderer->GetAtlas();
         const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
-        // Tools first, a row of their own (free for now: there's no crafting yet).
-        for (size_t t = 0; t < std::size(kInventoryTools); t++) {
-            const Tool tool = kInventoryTools[t];
-            if (t > 0) ImGui::SameLine();
-            glm::vec2 uv0, uv1;
-            atlas.GetTileUV(ToolTile(atlas, tool), uv0, uv1);
-            ImGui::PushID(1000 + static_cast<int>(tool));
-            const bool inSlot = hotbarTools[selectedSlot] == tool;
-            if (inSlot) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(1.0f, 1.0f, 1.0f, 0.35f));
-            if (ImGui::ImageButton("tool", texture, ImVec2(kIcon, kIcon), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y))) {
-                hotbarTools[selectedSlot] = tool;
-                SaveHotbar();
-            }
-            if (inSlot) ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered()) {
-                if (client->HasTool(tool)) ImGui::SetTooltip("%s: %s", Mining::ToolName(tool), ToolHint(tool));
-                else ImGui::SetTooltip("%s: %s (not made yet: craft one below)", Mining::ToolName(tool), ToolHint(tool));
-            }
-            if (!client->HasTool(tool)) {
-                // Not made yet: shaded over.
-                ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), IM_COL32(0, 0, 0, 150), 3.0f);
-            }
-            ImGui::PopID();
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 10 * (kIcon + 10.0f));
+        ImGui::TextDisabled("Click a stack to pick it up and a slot to put it down (or drag it there); right-click picks up half, or puts down one. "
+                            "Shift-click moves it across. 1-9 and 0 choose the hotbar slot in hand. I or Esc closes.");
+        ImGui::PopTextWrapPos();
+        // Armour: a slot for each piece (only that piece goes in it), and what they take off.
+        ImGui::SeparatorText("Armour");
+        for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++) {
+            if (p > 0) ImGui::SameLine();
+            DrawSlot(SlotBox::Armour, p, kIcon);
         }
-        // Armour worn (survival): its pieces, shaded over until made, and what they
-        // take off.
-        if (survival) {
-            ImGui::SameLine(0.0f, 24.0f);
-            for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++) {
-                const ArmourPiece piece = static_cast<ArmourPiece>(p);
-                if (p > 0) ImGui::SameLine();
-                glm::vec2 uv0, uv1;
-                atlas.GetTileUV(atlas.GetIndex(Armour::Texture(piece)), uv0, uv1);
-                ImGui::Image(texture, ImVec2(kIcon, kIcon), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
-                const bool worn = client->HasArmour(piece);
-                if (!worn) ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), IM_COL32(0, 0, 0, 150), 3.0f);
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s: %d%% less damage from hits and traps%s", Armour::Name(piece),
-                                      static_cast<int>(std::lround(Armour::Protection(piece) * 100.0f)), worn ? " (worn)" : " (not made yet: craft it from hide below)");
-            }
-            ImGui::SameLine();
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextDisabled("Armour: %d%%", static_cast<int>(std::lround(Armour::Protection(client->GetArmour()) * 100.0f)));
+        ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextDisabled("%d%% less damage from hits and traps", static_cast<int>(std::lround(Armour::Protection(client->GetArmour()) * 100.0f)));
+        DrawPlayerSlots(kIcon);
+        // Offcuts: part blocks left from shaped blocks and recipes, used before whole ones.
+        std::string cuts;
+        const Inventory& inv = client->GetInventory();
+        for (size_t t = 0; t < inv.offcuts.size(); t++)
+            if (inv.offcuts[t]) cuts += (cuts.empty() ? "" : ", ") + FormatBlocks(inv.offcuts[t]) + " " + BlockName(static_cast<BlockType>(t));
+        if (!cuts.empty()) {
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 10 * (kIcon + 10.0f));
+            ImGui::TextDisabled("Offcuts (part blocks, used first): %s", cuts.c_str());
+            ImGui::PopTextWrapPos();
         }
-        ImGui::Separator();
-        int column = 0;
-        for (BlockType type : kInventoryBlocks) {
-            const uint32_t held = client->GetResources(type);
-            // Survival: only what you have (and not what's counted as something else:
-            // pebbles are stone, coal ore is coal).
-            if (survival && (held == 0 || ResourceTypeOf(type) != type)) continue;
-            if (column++ % kColumns != 0) ImGui::SameLine();
-            const ImVec2 corner = ImGui::GetCursorScreenPos();
-            glm::vec2 uv0, uv1;
-            atlas.GetTileUV(IconTile(type), uv0, uv1);
-            ImGui::PushID(static_cast<int>(type));
-            const bool inSlot = hotbarTools[selectedSlot] == Tool::None && hotbar[selectedSlot] == type;
-            if (inSlot) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(1.0f, 1.0f, 1.0f, 0.35f));
-            if (ImGui::ImageButton("block", texture, ImVec2(kIcon, kIcon), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y))) {
-                hotbar[selectedSlot] = type;
-                hotbarTools[selectedSlot] = Tool::None;
-                SaveHotbar();
-            }
-            if (inSlot) ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered()) {
-                if (survival) ImGui::SetTooltip("%s: %s", BlockName(type), FormatBlocks(held).c_str());
-                else ImGui::SetTooltip("%s", BlockName(type));
-            }
-            if (survival) {
-                const std::string count = FormatBlocks(held);
-                ImDrawList* draw = ImGui::GetWindowDrawList();
-                const ImVec2 size = ImGui::CalcTextSize(count.c_str());
-                const ImVec2 at(corner.x + kIcon + 4.0f - size.x, corner.y + kIcon + 4.0f - size.y);
-                draw->AddText(ImVec2(at.x + 1.0f, at.y + 1.0f), IM_COL32(0, 0, 0, 230), count.c_str());
-                draw->AddText(at, IM_COL32_WHITE, count.c_str());
-            }
-            ImGui::PopID();
-        }
-        if (survival && column == 0) ImGui::TextUnformatted("Nothing yet: break some blocks.");
 
-        // Crafting (survival): what each recipe takes, and buttons to make it.
-        if (survival) {
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::TextUnformatted("Crafting");
+        if (!survival) {
+            // Creative: every block and item, to take as many of as you like (put a stack
+            // back here to get rid of it).
+            if (paletteItems.empty()) {
+                for (BlockType t : kInventoryBlocks) paletteItems.push_back(Items::OfBlock(t));
+                for (Tool t : kInventoryTools)
+                    for (int tier = 0; tier < Items::kTiers; tier++) paletteItems.push_back(Items::OfTool(t, tier));
+                for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++) paletteItems.push_back(Items::OfArmour(static_cast<ArmourPiece>(p)));
+            }
+            ImGui::SeparatorText("Every block and item (creative: take a stack; drop one here to get rid of it)");
+            ImGui::BeginChild("palette", ImVec2(10 * (kIcon + 10.0f), 190.0f), true);
+            DrawSlotGrid(SlotBox::Palette, 0, static_cast<int>(paletteItems.size()), 10, kIcon - 6.0f);
+            ImGui::EndChild();
+        }
+        else {
+            // Crafting: what each recipe takes, and buttons to make it (into your slots).
+            ImGui::SeparatorText("Crafting");
             const auto& recipes = Crafting::Recipes();
+            const Tool inHand = SelectedTool();
             // In a scrolling box, so the window stays on screen.
-            ImGui::BeginChild("crafting", ImVec2(0.0f, 260.0f), true);
+            ImGui::BeginChild("crafting", ImVec2(10 * (kIcon + 10.0f), 170.0f), true);
             if (ImGui::BeginTable("recipes", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
                 for (int r = 0; r < static_cast<int>(recipes.size()); r++) {
                     const Recipe& recipe = recipes[r];
@@ -2660,9 +2647,9 @@ void Application::DrawInventory() {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     glm::vec2 uv0, uv1;
-                    const int icon = recipe.ironUpgrade                     ? atlas.GetIndex("iron_ingot")
-                                     : recipe.steelUpgrade                    ? atlas.GetIndex("steel_ingot")
-                                     : recipe.tool != Tool::None              ? ToolTile(atlas, recipe.tool)
+                    const int icon = recipe.ironUpgrade                    ? atlas.GetIndex("iron_ingot")
+                                     : recipe.steelUpgrade                   ? atlas.GetIndex("steel_ingot")
+                                     : recipe.tool != Tool::None             ? ToolTile(atlas, recipe.tool)
                                      : recipe.armour != ArmourPiece::Count ? atlas.GetIndex(Armour::Texture(recipe.armour))
                                                                            : IconTile(recipe.output);
                     atlas.GetTileUV(icon, uv0, uv1);
@@ -2674,19 +2661,18 @@ void Application::DrawInventory() {
                     std::string needs;
                     for (const auto& in : recipe.inputs)
                         needs += (needs.empty() ? "" : " + ") + FormatBlocks(in.units) + " " + BlockName(in.type);
-                    const bool owned = (recipe.ironUpgrade && client->HasIron()) || (recipe.steelUpgrade && client->HasSteel()) || (recipe.tool != Tool::None && client->HasTool(recipe.tool)) ||
-                                       (recipe.armour != ArmourPiece::Count && client->HasArmour(recipe.armour));
-                    if (owned) ImGui::TextDisabled(recipe.armour != ArmourPiece::Count ? "worn" : "made");
-                    else if (client->CanCraft(r)) ImGui::TextUnformatted(needs.c_str());
+                    if (recipe.Upgrade()) needs += recipe.steelUpgrade ? ", an iron tool in hand" : ", a stone tool in hand";
+                    const bool can = client->CanCraft(r, 1, inHand);
+                    if (can) ImGui::TextUnformatted(needs.c_str());
                     else ImGui::TextDisabled("%s", needs.c_str());
                     ImGui::TableNextColumn();
-                    ImGui::BeginDisabled(!client->CanCraft(r));
+                    ImGui::BeginDisabled(!can);
                     if (ImGui::SmallButton("Make")) {
-                        client->Craft(r, 1);
+                        client->Craft(r, 1, inHand);
                         audio->PlayHere("craft", 0.6f);
                     }
                     ImGui::EndDisabled();
-                    if (!recipe.MadeOnce()) {
+                    if (!recipe.Upgrade()) {
                         ImGui::SameLine();
                         ImGui::BeginDisabled(!client->CanCraft(r, 4));
                         if (ImGui::SmallButton("x4")) {
@@ -2703,7 +2689,173 @@ void Application::DrawInventory() {
         }
     }
     ImGui::End();
+    HandleSlotClicks();
+    DrawHeldStack();
     if (!open) SetInventoryOpen(false);
+}
+
+Stack Application::StackIn(SlotBox box, int slot) const {
+    if (slot < 0) return {};
+    switch (box) {
+    case SlotBox::Player: {
+        const auto& slots = client->GetInventory().slots;
+        return slot < static_cast<int>(slots.size()) ? slots[slot] : Stack{};
+    }
+    case SlotBox::Armour:
+        if (slot >= static_cast<int>(ArmourPiece::Count) || !client->HasArmour(static_cast<ArmourPiece>(slot))) return {};
+        return { Items::OfArmour(static_cast<ArmourPiece>(slot)), 1 };
+    case SlotBox::Chest: {
+        const auto& slots = client->GetChest().slots;
+        return slot < static_cast<int>(slots.size()) ? slots[slot] : Stack{};
+    }
+    case SlotBox::Palette:
+        if (slot >= static_cast<int>(paletteItems.size())) return {};
+        return { paletteItems[slot], static_cast<uint8_t>(Items::MaxStack(paletteItems[slot])) };
+    }
+    return {};
+}
+
+void Application::DrawSlot(SlotBox box, int slot, float size, bool selected) {
+    const Stack st = StackIn(box, slot);
+    const TextureAtlas& atlas = renderer->GetAtlas();
+    const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
+    constexpr float kPad = 3.0f;
+    const ImVec2 lo = ImGui::GetCursorScreenPos();
+    const ImVec2 hi(lo.x + size + 2 * kPad, lo.y + size + 2 * kPad);
+    ImGui::PushID(static_cast<int>(box) * 4096 + slot);
+    ImGui::InvisibleButton("slot", ImVec2(hi.x - lo.x, hi.y - lo.y));
+    const bool hovered = ImGui::IsItemHovered();
+    ImGui::PopID();
+    if (hovered) hoveredSlot = std::make_pair(box, slot);
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->AddRectFilled(lo, hi, hovered ? IM_COL32(255, 255, 255, 45) : IM_COL32(0, 0, 0, 90), 3.0f);
+    const bool lifted = heldStack && heldStack->box == box && heldStack->slot == slot && box != SlotBox::Palette;
+    if (!st.Empty()) DrawStackOn(draw, atlas, texture, lo, hi, kPad, st, lifted, box != SlotBox::Palette);
+    else if (box == SlotBox::Armour) {
+        // An empty armour slot shows its piece, faintly.
+        glm::vec2 uv0, uv1;
+        atlas.GetTileUV(atlas.GetIndex(Armour::Texture(static_cast<ArmourPiece>(slot))), uv0, uv1);
+        draw->AddImage(texture, ImVec2(lo.x + kPad, lo.y + kPad), ImVec2(hi.x - kPad, hi.y - kPad), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y), IM_COL32(255, 255, 255, 45));
+    }
+    draw->AddRect(lo, hi, selected ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 255, 255, 50), 3.0f, 0, selected ? 2.5f : 1.0f);
+    if (hovered && !heldStack && (!st.Empty() || box == SlotBox::Armour)) {
+        const ItemId item = st.Empty() ? Items::OfArmour(static_cast<ArmourPiece>(slot)) : st.item;
+        std::string tip = ItemName(item);
+        if (Items::IsTool(item)) tip += std::string(": ") + ToolHint(Items::ToolOf(item));
+        if (Items::IsArmour(item))
+            tip += ": " + std::to_string(static_cast<int>(std::lround(Armour::Protection(Items::ArmourOf(item)) * 100.0f))) + "% less damage" +
+                   (Items::ArmourOf(item) == ArmourPiece::OxygenTank ? " (holds air to breathe instead)" : "") + (st.Empty() ? " (its slot: empty)" : "");
+        if (Items::IsBlock(item) && box != SlotBox::Palette && st.count > 1) tip += " x" + std::to_string(st.count);
+        ImGui::SetTooltip("%s", tip.c_str());
+    }
+}
+
+void Application::DrawSlotGrid(SlotBox box, int first, int count, int columns, float size) {
+    for (int i = 0; i < count; i++) {
+        if (i % columns != 0) ImGui::SameLine();
+        DrawSlot(box, first + i, size, box == SlotBox::Player && first + i == selectedSlot);
+    }
+}
+
+void Application::DrawPlayerSlots(float size) {
+    const int total = static_cast<int>(client->GetInventory().slots.size());
+    ImGui::SeparatorText("Inventory");
+    DrawSlotGrid(SlotBox::Player, kHotbarSlots, total - kHotbarSlots, kHotbarSlots, size);
+    ImGui::SeparatorText("Hotbar");
+    DrawSlotGrid(SlotBox::Player, 0, std::min(total, kHotbarSlots), kHotbarSlots, size);
+}
+
+void Application::HandleSlotClicks() {
+    // A stack picked up that's gone from its slot (moved, used up): let go of it.
+    if (heldStack && heldStack->box != SlotBox::Palette) {
+        const Stack st = StackIn(heldStack->box, heldStack->slot);
+        if (st.Empty() || st.item != heldStack->item) heldStack.reset(), draggingStack = false;
+        else heldStack->count = std::min(heldStack->count, static_cast<int>(st.count));
+    }
+    auto isHeld = [&](const std::pair<SlotBox, int>& h) { return heldStack && heldStack->box == h.first && heldStack->slot == h.second; };
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        if (!hoveredSlot) {
+            if (heldStack && !ImGui::IsAnyItemHovered()) heldStack.reset(); // (clicked off the slots: let go)
+        }
+        else if (heldStack) {
+            if (!isHeld(*hoveredSlot)) MoveStack(*heldStack, hoveredSlot->first, hoveredSlot->second, heldStack->count);
+            heldStack.reset();
+        }
+        else if (const Stack st = StackIn(hoveredSlot->first, hoveredSlot->second); !st.Empty()) {
+            if (ImGui::GetIO().KeyShift) QuickMove(hoveredSlot->first, hoveredSlot->second);
+            else {
+                heldStack = HeldStack{ hoveredSlot->first, hoveredSlot->second, st.item, st.count };
+                draggingStack = true;
+            }
+        }
+    }
+    // Let go of a dragged stack over another slot: it goes there. (Over its own slot, it
+    // stays picked up, to be put down with a click.)
+    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && draggingStack) {
+        draggingStack = false;
+        if (heldStack && hoveredSlot && !isHeld(*hoveredSlot)) {
+            MoveStack(*heldStack, hoveredSlot->first, hoveredSlot->second, heldStack->count);
+            heldStack.reset();
+        }
+    }
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) && hoveredSlot) {
+        if (!heldStack) {
+            if (const Stack st = StackIn(hoveredSlot->first, hoveredSlot->second); !st.Empty()) {
+                const int half = hoveredSlot->first == SlotBox::Palette ? 1 : (st.count + 1) / 2;
+                heldStack = HeldStack{ hoveredSlot->first, hoveredSlot->second, st.item, half };
+                draggingStack = false;
+            }
+        }
+        else if (!isHeld(*hoveredSlot)) {
+            MoveStack(*heldStack, hoveredSlot->first, hoveredSlot->second, 1);
+            if (heldStack->box != SlotBox::Palette && --heldStack->count <= 0) heldStack.reset();
+        }
+    }
+}
+
+void Application::DrawHeldStack() {
+    if (!heldStack) return;
+    const TextureAtlas& atlas = renderer->GetAtlas();
+    const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
+    const ImVec2 mouse = ImGui::GetIO().MousePos;
+    const ImVec2 lo(mouse.x - 18.0f, mouse.y - 18.0f), hi(mouse.x + 18.0f, mouse.y + 18.0f);
+    DrawStackOn(ImGui::GetForegroundDrawList(), atlas, texture, lo, hi, 0.0f, { heldStack->item, static_cast<uint8_t>(std::clamp(heldStack->count, 1, 255)) }, false, true);
+}
+
+void Application::QuickMove(SlotBox box, int slot) {
+    const Stack st = StackIn(box, slot);
+    if (st.Empty()) return;
+    switch (box) {
+    case SlotBox::Player:
+        // Into the open chest; armour onto you; else between the hotbar and the rest.
+        if (chestMode && client->GetOpenChest()) client->MoveItems(net::Box::Player, slot, net::Box::Chest, net::kAnySlot);
+        else if (Items::IsArmour(st.item)) client->MoveItems(net::Box::Player, slot, net::Box::Armour, net::kAnySlot);
+        else client->MoveItems(net::Box::Player, slot, net::Box::Player, net::kAnySlot);
+        break;
+    case SlotBox::Armour: client->MoveItems(net::Box::Armour, slot, net::Box::Player, net::kAnySlot); break;
+    case SlotBox::Chest: client->MoveItems(net::Box::Chest, slot, net::Box::Player, net::kAnySlot); break;
+    case SlotBox::Palette: client->SetCreativeSlot(selectedSlot, st.item, st.count); break; // (into the hotbar slot in hand)
+    }
+    audio->PlayHere("pickup", 0.3f);
+}
+
+void Application::MoveStack(const HeldStack& from, SlotBox box, int slot, int count) {
+    auto netBox = [](SlotBox b) { return b == SlotBox::Armour ? net::Box::Armour : b == SlotBox::Chest ? net::Box::Chest : net::Box::Player; };
+    if (from.box == SlotBox::Palette) {
+        // Creative: a stack of it (onto the same, more of it).
+        if (box != SlotBox::Player) return;
+        const Stack there = StackIn(box, slot);
+        client->SetCreativeSlot(slot, from.item, there.item == from.item ? there.count + count : count);
+        return;
+    }
+    if (box == SlotBox::Palette) {
+        // Put back: gone.
+        if (from.box == SlotBox::Player && client->IsCreative()) client->SetCreativeSlot(from.slot, Items::kNone, 0);
+        return;
+    }
+    const Stack st = StackIn(from.box, from.slot);
+    client->MoveItems(netBox(from.box), from.slot, netBox(box), slot, count >= st.count ? 0 : count);
+    audio->PlayHere("pickup", 0.3f);
 }
 
 std::optional<glm::ivec3> Application::StructureCoreAt(const glm::ivec3& pos) const {
@@ -2791,8 +2943,7 @@ void Application::DrawChest() {
         SetInventoryOpen(false);
         return;
     }
-    constexpr int kColumns = 8;
-    constexpr float kIcon = 40.0f;
+    constexpr float kIcon = 36.0f;
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.42f),
                             ImGuiCond_Always, ImVec2(0.5f, 0.5f));
@@ -2807,45 +2958,22 @@ void Application::DrawChest() {
             title = b.type == BlockType::MULTIBLOCK ? Multiblocks::PatternOf(Multiblocks::KindOf(b)).name : BlockName(b.type);
     }
     title += "###chest";
+    hoveredSlot.reset();
     if (ImGui::Begin(title.c_str(), &keepOpen, flags)) {
-        const TextureAtlas& atlas = renderer->GetAtlas();
-        const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
-        const bool all = ImGui::GetIO().KeyShift;
         if (const auto at = client->GetOpenChest()) DrawMachineInfo(*at); // (a machine: how it's doing)
-        ImGui::TextDisabled("Click to move a block's worth (or one item); Shift-click moves them all. I or Esc closes.");
-        // One grid: every type with some in it, each a button that moves some across.
-        auto grid = [&](const char* id, bool inChest) {
-            int column = 0;
-            for (int t = 1; t < static_cast<int>(BlockType::COUNT); t++) {
-                const BlockType type = static_cast<BlockType>(t);
-                const uint32_t units = inChest ? client->GetChestUnits(type) : client->GetResources(type);
-                if (units == 0) continue;
-                if (column++ % kColumns != 0) ImGui::SameLine();
-                const ImVec2 corner = ImGui::GetCursorScreenPos();
-                glm::vec2 uv0, uv1;
-                atlas.GetTileUV(IconTile(type), uv0, uv1);
-                ImGui::PushID(t + (inChest ? 1000 : 0));
-                if (ImGui::ImageButton(id, texture, ImVec2(kIcon, kIcon), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y))) {
-                    client->MoveChestItems(type, all ? units : std::min<uint32_t>(units, Block::kUnitsPerBlock), !inChest);
-                    audio->PlayHere("pickup", 0.4f);
-                }
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s: %s", BlockName(type), FormatBlocks(units).c_str());
-                const std::string count = FormatBlocks(units);
-                ImDrawList* draw = ImGui::GetWindowDrawList();
-                const ImVec2 size = ImGui::CalcTextSize(count.c_str());
-                const ImVec2 at(corner.x + kIcon + 4.0f - size.x, corner.y + kIcon + 4.0f - size.y);
-                draw->AddText(ImVec2(at.x + 1.0f, at.y + 1.0f), IM_COL32(0, 0, 0, 230), count.c_str());
-                draw->AddText(at, IM_COL32_WHITE, count.c_str());
-                ImGui::PopID();
-            }
-            if (column == 0) ImGui::TextDisabled(inChest ? "Empty." : "Nothing to put in.");
-        };
-        ImGui::SeparatorText("In the chest (click to take)");
-        grid("chest", true);
-        ImGui::SeparatorText("Yours (click to put in)");
-        grid("mine", false);
+        ImGui::TextDisabled("Click or drag stacks between it and your slots; right-click: half, or one. Shift-click moves a stack across. I or Esc closes.");
+        ImGui::SeparatorText("In it");
+        DrawSlotGrid(SlotBox::Chest, 0, static_cast<int>(client->GetChest().slots.size()), 10, kIcon);
+        std::string cuts;
+        const Inventory& chest = client->GetChest();
+        for (size_t t = 0; t < chest.offcuts.size(); t++)
+            if (chest.offcuts[t]) cuts += (cuts.empty() ? "" : ", ") + FormatBlocks(chest.offcuts[t]) + " " + BlockName(static_cast<BlockType>(t));
+        if (!cuts.empty()) ImGui::TextDisabled("Offcuts (part blocks, for its machines): %s", cuts.c_str());
+        DrawPlayerSlots(kIcon);
     }
     ImGui::End();
+    HandleSlotClicks();
+    DrawHeldStack();
     if (!keepOpen) SetInventoryOpen(false);
 }
 
@@ -2903,10 +3031,17 @@ void Application::OnMouseButton(int button, int action) {
             BlockType type = ResourceTypeOf(looked.type) == looked.type || IsItemType(ResourceTypeOf(looked.type)) ? looked.type : ResourceTypeOf(looked.type);
             if (type == BlockType::DOOR_OPEN) type = BlockType::DOOR;
             if (type == BlockType::TNT_LIT) type = BlockType::TNT;
-            if (!IsItemType(type) && (client->IsCreative() || client->GetResources(type) > 0)) {
-                hotbar[selectedSlot] = type;
-                hotbarTools[selectedSlot] = Tool::None;
-                SaveHotbar();
+            const ItemId item = Items::OfBlock(type);
+            if (!IsItemType(type) && client->IsCreative()) client->SetCreativeSlot(selectedSlot, item, static_cast<int>(Items::MaxStack(item)));
+            else if (!IsItemType(type)) {
+                // Survival: a hotbar slot holding it is chosen; else a stack of it from the
+                // rest of the inventory swaps into the slot in hand.
+                const auto& slots = client->GetInventory().slots;
+                bool found = false;
+                for (int i = 0; i < kHotbarSlots && i < static_cast<int>(slots.size()) && !found; i++)
+                    if (!slots[i].Empty() && slots[i].item == item) SelectSlot(i), found = true;
+                for (int i = kHotbarSlots; i < static_cast<int>(slots.size()) && !found; i++)
+                    if (!slots[i].Empty() && slots[i].item == item) client->MoveItems(net::Box::Player, i, net::Box::Player, selectedSlot), found = true;
             }
         }
         return;
@@ -3392,7 +3527,7 @@ void Application::UpdateMining() {
         miningStart = now;
         client->StartMining(miningPos, tool);
     }
-    const double needed = Mining::Seconds(block, tool, client->IsCreative() ? 0 : client->HasSteel() ? 2 : client->HasIron() ? 1 : 0), elapsed = now - miningStart;
+    const double needed = Mining::Seconds(block, tool, std::max(0, client->ToolTier(tool))), elapsed = now - miningStart;
     mineProgress = needed > 0.0 ? static_cast<float>(std::min(1.0, elapsed / needed)) : 1.0f;
     // A tap on the block every so often while mining it.
     if (needed > 0.0 && now >= nextDig) {

@@ -517,17 +517,91 @@ bool Decode(ByteReader& in, GameModeIs& m) {
     return in.AtEnd();
 }
 
-std::vector<uint8_t> Encode(const Resources& m) {
-    ByteWriter w;
-    Begin(w, MsgType::Resources);
-    w.VarU32(static_cast<uint32_t>(m.held.size()));
-    for (const auto& [type, units] : m.held) {
-        w.U8(static_cast<uint8_t>(type));
-        w.VarU32(units);
+void WriteInventory(ByteWriter& w, const ::Inventory& inv) {
+    w.VarU32(static_cast<uint32_t>(inv.slots.size()));
+    for (const Stack& st : inv.slots) {
+        if (st.Empty()) {
+            w.U16(0);
+            continue;
+        }
+        w.U16(st.item);
+        w.U8(st.count);
     }
-    w.U16(m.tools);
+    uint32_t kinds = 0;
+    for (uint8_t o : inv.offcuts) kinds += o > 0;
+    w.VarU32(kinds);
+    for (size_t t = 0; t < inv.offcuts.size(); t++)
+        if (inv.offcuts[t] > 0) {
+            w.U8(static_cast<uint8_t>(t));
+            w.U8(inv.offcuts[t]);
+        }
+}
+
+bool ReadInventory(ByteReader& in, ::Inventory& inv, size_t maxSlots) {
+    uint32_t n;
+    if (!in.VarU32(n) || n > maxSlots) return false;
+    inv.slots.assign(n, Stack{});
+    inv.offcuts.fill(0);
+    for (Stack& st : inv.slots) {
+        uint16_t item;
+        if (!in.U16(item)) return false;
+        if (item == 0) continue;
+        uint8_t count;
+        if (!Items::Valid(item) || !in.U8(count) || count == 0 || count > Items::MaxStack(item)) return false;
+        st = { item, count };
+    }
+    uint32_t kinds;
+    if (!in.VarU32(kinds) || kinds > inv.offcuts.size()) return false;
+    for (uint32_t k = 0; k < kinds; k++) {
+        uint8_t t, units;
+        if (!in.U8(t) || t >= inv.offcuts.size() || !in.U8(units) || units >= Items::kUnits) return false;
+        inv.offcuts[t] = units;
+    }
+    return true;
+}
+
+std::vector<uint8_t> Encode(const InventoryIs& m) {
+    ByteWriter w;
+    Begin(w, MsgType::InventoryIs);
+    WriteInventory(w, m.items);
     w.U8(m.armour);
     return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, InventoryIs& m) {
+    return ReadInventory(in, m.items) && in.U8(m.armour) && in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const InventoryMove& m) {
+    ByteWriter w;
+    Begin(w, MsgType::InventoryMove);
+    w.U8(static_cast<uint8_t>(m.fromBox));
+    w.U8(m.fromSlot);
+    w.U8(static_cast<uint8_t>(m.toBox));
+    w.U8(m.toSlot);
+    w.U8(m.count);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, InventoryMove& m) {
+    uint8_t from, to;
+    if (!in.U8(from) || from > 2 || !in.U8(m.fromSlot) || !in.U8(to) || to > 2 || !in.U8(m.toSlot) || !in.U8(m.count)) return false;
+    m.fromBox = static_cast<Box>(from);
+    m.toBox = static_cast<Box>(to);
+    return in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const CreativeSlot& m) {
+    ByteWriter w;
+    Begin(w, MsgType::CreativeSlot);
+    w.U8(m.slot);
+    w.U16(m.item);
+    w.U8(m.count);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, CreativeSlot& m) {
+    return in.U8(m.slot) && in.U16(m.item) && (m.item == Items::kNone || Items::Valid(m.item)) && in.U8(m.count) && in.AtEnd();
 }
 
 std::vector<uint8_t> Encode(const Craft& m) {
@@ -535,23 +609,15 @@ std::vector<uint8_t> Encode(const Craft& m) {
     Begin(w, MsgType::Craft);
     w.U8(m.recipe);
     w.U8(m.count);
+    w.U8(static_cast<uint8_t>(m.tool));
     return std::move(w.data);
 }
 
-bool Decode(ByteReader& in, Resources& m) {
-    uint32_t n;
-    if (!in.VarU32(n) || n > static_cast<uint32_t>(BlockType::COUNT)) return false;
-    m.held.resize(n);
-    for (auto& [type, units] : m.held) {
-        uint8_t t;
-        if (!in.U8(t) || t >= static_cast<uint8_t>(BlockType::COUNT) || !in.VarU32(units)) return false;
-        type = static_cast<BlockType>(t);
-    }
-    return in.U16(m.tools) && in.U8(m.armour) && in.AtEnd();
-}
-
 bool Decode(ByteReader& in, Craft& m) {
-    return in.U8(m.recipe) && in.U8(m.count) && m.count >= 1 && m.count <= 64 && in.AtEnd();
+    uint8_t tool;
+    if (!in.U8(m.recipe) || !in.U8(m.count) || m.count < 1 || m.count > 64 || !in.U8(tool) || tool >= static_cast<uint8_t>(Tool::Count)) return false;
+    m.tool = static_cast<Tool>(tool);
+    return in.AtEnd();
 }
 
 std::vector<uint8_t> Encode(const Health& m) {
@@ -604,17 +670,15 @@ std::vector<uint8_t> Encode(const ChestMove& m) {
     ByteWriter w;
     Begin(w, MsgType::ChestMove);
     w.IVec3(m.pos);
-    w.U8(static_cast<uint8_t>(m.type));
-    w.VarU32(m.units);
+    w.U16(m.item);
+    w.VarU32(m.count);
     w.U8(m.intoChest);
     return std::move(w.data);
 }
 
 bool Decode(ByteReader& in, ChestMove& m) {
-    uint8_t type;
-    if (!in.IVec3(m.pos) || !in.U8(type) || type >= static_cast<uint8_t>(BlockType::COUNT)) return false;
-    m.type = static_cast<BlockType>(type);
-    return in.VarU32(m.units) && in.U8(m.intoChest) && m.intoChest <= 1 && in.AtEnd();
+    if (!in.IVec3(m.pos) || !in.U16(m.item) || !Items::Valid(m.item)) return false;
+    return in.VarU32(m.count) && in.U8(m.intoChest) && m.intoChest <= 1 && in.AtEnd();
 }
 
 std::vector<uint8_t> Encode(const ChestContents& m) {
@@ -622,24 +686,12 @@ std::vector<uint8_t> Encode(const ChestContents& m) {
     Begin(w, MsgType::ChestContents);
     w.IVec3(m.pos);
     w.U8(m.open);
-    w.VarU32(static_cast<uint32_t>(m.held.size()));
-    for (const auto& [type, units] : m.held) {
-        w.U8(static_cast<uint8_t>(type));
-        w.VarU32(units);
-    }
+    WriteInventory(w, m.items);
     return std::move(w.data);
 }
 
 bool Decode(ByteReader& in, ChestContents& m) {
-    uint32_t n;
-    if (!in.IVec3(m.pos) || !in.U8(m.open) || m.open > 1 || !in.VarU32(n) || n > static_cast<uint32_t>(BlockType::COUNT)) return false;
-    m.held.resize(n);
-    for (auto& [type, units] : m.held) {
-        uint8_t t;
-        if (!in.U8(t) || t >= static_cast<uint8_t>(BlockType::COUNT) || !in.VarU32(units)) return false;
-        type = static_cast<BlockType>(t);
-    }
-    return in.AtEnd();
+    return in.IVec3(m.pos) && in.U8(m.open) && m.open <= 1 && ReadInventory(in, m.items) && in.AtEnd();
 }
 
 bool Decode(ByteReader& in, Eat& m) {

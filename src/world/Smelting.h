@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "world/Crafting.h"
+
 #include "world/Block.h"
 
 struct SmeltRecipe {
@@ -60,11 +62,22 @@ bool WriteDefaults(const std::string& path);
 template <typename Held>
 const SmeltRecipe* FirstAffordable(const Held& held) {
     for (const auto& r : Recipes()) {
-        if (held[static_cast<size_t>(r.input)] < r.inputUnits) continue;
-        if (r.extra != BlockType::AIR && held[static_cast<size_t>(r.extra)] < r.extraUnits) continue;
+        if (Crafting::UnitsOf(held, r.input) < r.inputUnits) continue;
+        if (r.extra != BlockType::AIR && Crafting::UnitsOf(held, r.extra) < r.extraUnits) continue;
         return &r;
     }
     return nullptr;
+}
+
+// Does a recipe in `held` (an Inventory): false, and nothing changed, if what it makes
+// won't fit.
+inline bool Apply(const SmeltRecipe& r, Inventory& held) {
+    Inventory after = held;
+    if (!after.TakeUnits(r.input, r.inputUnits)) return false;
+    if (r.extra != BlockType::AIR && !after.TakeUnits(r.extra, r.extraUnits)) return false;
+    if (after.AddUnits(r.output, r.outputUnits) != 0) return false;
+    held = std::move(after);
+    return true;
 }
 
 } // namespace Smelting

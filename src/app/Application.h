@@ -18,6 +18,7 @@
 #include "app/Settings.h"
 #include "world/Block.h"
 #include "world/Coords.h"
+#include "world/Inventory.h"
 #include "world/Mining.h"
 
 struct GLFWwindow;
@@ -93,8 +94,11 @@ private:
     std::map<uint16_t, CreatureAction> creatureActions;
     std::map<std::string, std::string> dataTimes;
     void DrawHotbar();
-    BlockType SelectedBlock() const;
-    Tool SelectedTool() const { return hotbarTools[selectedSlot]; }
+    // What's in the selected hotbar slot: a block (or item), or a tool (AIR / None: not
+    // that, or an empty slot).
+    ItemId SelectedItem() const;
+    BlockType SelectedBlock() const { return Items::BlockOf(SelectedItem()); }
+    Tool SelectedTool() const { return Items::ToolOf(SelectedItem()); }
     // Survival: holding the left button mines the block in view (world/Mining.h).
     void UpdateMining();
     // Sound effects for this frame: footsteps, others' edits, creatures, rain...
@@ -120,7 +124,6 @@ private:
     void ChiselTarget(bool raise);
     void SetInventoryOpen(bool open);
     void LoadHotbar();
-    void SaveHotbar() const;
     // What was typed in the chat before (oldest first), kept in chat_history.txt: Up and
     // Down in the chat box step through it.
     void LoadChatHistory();
@@ -260,11 +263,14 @@ private:
     static constexpr size_t kChatHistoryMax = 100;
     bool sheltered = false; // something overhead: no rain falls here
     float rainHere = 0.0f;  // rain drawn around the camera, eased toward the weather
-    static constexpr int kHotbarSlots = 10; // keys 1-9 and 0
-    std::array<BlockType, kHotbarSlots> hotbar = { BlockType::DIRT, BlockType::STONE, BlockType::GRASS, BlockType::LAMP, BlockType::LOG,
-                                                   BlockType::LEAVES, BlockType::SAND, BlockType::WATER, BlockType::STONE_BRICK, BlockType::PUMP };
-    // A slot holding a tool (not Tool::None) holds that instead of its block.
-    std::array<Tool, kHotbarSlots> hotbarTools{};
+    static constexpr int kHotbarSlots = static_cast<int>(Inventory::kHotbarSlots); // keys 1-9 and 0
+    // The hotbar is the first slots of the inventory (the server keeps it). A creative
+    // player who joins with it empty gets these (or what hotbar.txt, from before, chose).
+    std::array<BlockType, kHotbarSlots> creativeHotbar = { BlockType::DIRT, BlockType::STONE, BlockType::GRASS, BlockType::LAMP, BlockType::LOG,
+                                                           BlockType::LEAVES, BlockType::SAND, BlockType::WATER, BlockType::STONE_BRICK, BlockType::PUMP };
+    std::array<Tool, kHotbarSlots> creativeHotbarTools{};
+    bool hotbarSeeded = false;
+    void SeedCreativeHotbar();
     int selectedSlot = 0; // index into the hotbar
     // Mining (survival): the block being broken, with what, since when (glfwGetTime).
     bool mining = false;
@@ -312,6 +318,30 @@ private:
     void DrawSigns(const glm::mat4& viewProjection); // the texts, floating over their signs
     double chestAskedAt = 0.0;
     void DrawChest();
+    // Inventory slots (DrawInventory, DrawChest): drawn one at a time, then the clicks on
+    // them handled once they all are. A stack picked up (clicked, or dragged from its
+    // slot) follows the cursor until it's put down in another; right-click picks up half,
+    // or puts down one; Shift-click moves it across (hotbar and the rest, you and the
+    // chest, armour on and off). The palette is creative's: every block and item.
+    enum class SlotBox { Player, Armour, Chest, Palette };
+    struct HeldStack {
+        SlotBox box = SlotBox::Player;
+        int slot = 0;
+        ItemId item = 0;
+        int count = 0;
+    };
+    std::optional<HeldStack> heldStack;
+    bool draggingStack = false;
+    std::optional<std::pair<SlotBox, int>> hoveredSlot;
+    std::vector<ItemId> paletteItems; // (filled the first time it's drawn)
+    Stack StackIn(SlotBox box, int slot) const;
+    void DrawSlot(SlotBox box, int slot, float size, bool selected = false);
+    void DrawSlotGrid(SlotBox box, int first, int count, int columns, float size);
+    void DrawPlayerSlots(float size); // the rest of the inventory, then the hotbar
+    void HandleSlotClicks();
+    void DrawHeldStack();
+    void QuickMove(SlotBox box, int slot);
+    void MoveStack(const HeldStack& from, SlotBox box, int slot, int count);
     double scrollAccumulator = 0.0;
     bool showDebug = false;
     bool showCompass = true; // F4: the compass, coordinates and clock at the top

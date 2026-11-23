@@ -106,13 +106,11 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         if ((ok = net::Decode(in, m))) mode = m.mode;
         break;
     }
-    case net::MsgType::Resources: {
-        net::Resources m;
+    case net::MsgType::InventoryIs: {
+        net::InventoryIs m;
         if (!(ok = net::Decode(in, m))) break;
-        resources.fill(0);
-        for (const auto& [type, units] : m.held)
-            if (static_cast<size_t>(type) < resources.size()) resources[static_cast<size_t>(type)] = units;
-        tools = m.tools;
+        inventory = std::move(m.items);
+        inventoryKnown = true;
         armour = m.armour;
         break;
     }
@@ -212,10 +210,10 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
     case net::MsgType::ChestContents: {
         net::ChestContents m;
         if (!(ok = net::Decode(in, m))) break;
-        chestHeld.fill(0);
+        chestHeld = Inventory(0);
         if (m.open) {
             openChest = m.pos;
-            for (const auto& [type, units] : m.held) chestHeld[static_cast<size_t>(type)] = units;
+            chestHeld = std::move(m.items);
         }
         else openChest.reset();
         break;
@@ -337,36 +335,41 @@ void Client::StartMining(const glm::ivec3& pos, Tool tool) {
 void Client::BreakBlock(const glm::ivec3& pos, Tool tool) {
     if (!welcomed) return;
     Block block;
-    if (world.GetBlock(pos.x, pos.y, pos.z, block)) {
+    // (Not predicted where what it gives won't fit: the server refuses that.)
+    if (world.GetBlock(pos.x, pos.y, pos.z, block) && (IsCreative() || inventory.FitsUnits(block.ResourceType(), static_cast<uint32_t>(block.ResourceUnits())) ||
+                                                        block.ResourceUnits() == 0)) {
         // Breaking a waterlogged block leaves its water behind (as the server does).
         world.SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
-        if (!IsCreative()) resources[static_cast<size_t>(block.ResourceType())] += static_cast<uint32_t>(block.ResourceUnits());
+        if (!IsCreative()) inventory.AddUnits(block.ResourceType(), static_cast<uint32_t>(block.ResourceUnits()));
     }
     net.Send(net::kChannelReliable, net::Encode(net::EditBreak{ pos, tool }));
 }
 
-bool Client::CanCraft(int index, int count) const {
+bool Client::CanCraft(int index, int count, Tool held) const {
     const auto& recipes = Crafting::Recipes();
     if (IsCreative() || index < 0 || index >= static_cast<int>(recipes.size())) return false;
     const Recipe& recipe = recipes[index];
-    if (recipe.tool != Tool::None && HasTool(recipe.tool)) return false;
-    if (recipe.armour != ArmourPiece::Count && HasArmour(recipe.armour)) return false;
-    if (recipe.ironUpgrade && HasIron()) return false;
-    if (recipe.steelUpgrade && (HasSteel() || !HasIron())) return false;
-    return Crafting::TimesAffordable(recipe, resources) >= static_cast<uint32_t>(count);
+    if (recipe.Upgrade() && (count != 1 || held == Tool::None || inventory.Count(Items::OfTool(held, recipe.steelUpgrade ? 1 : 0)) == 0)) return false;
+    return Crafting::TimesAffordable(recipe, inventory) >= static_cast<uint32_t>(count);
 }
 
-void Client::Craft(int index, int count) {
-    if (!welcomed || !CanCraft(index, count)) return;
-    // Predicted like edits; the server's answer (Resources) puts it right.
-    const Recipe& recipe = Crafting::Recipes()[index];
-    for (const auto& in : recipe.inputs) resources[static_cast<size_t>(in.type)] -= in.units * count;
-    if (recipe.ironUpgrade) tools |= Crafting::kIronBit;
-    else if (recipe.steelUpgrade) tools |= Crafting::kSteelBit;
-    else if (recipe.tool != Tool::None) tools |= Crafting::ToolBit(recipe.tool);
-    else if (recipe.armour != ArmourPiece::Count) armour |= Armour::Bit(recipe.armour);
-    else resources[static_cast<size_t>(recipe.output)] += recipe.outputUnits * count;
-    net.Send(net::kChannelReliable, net::Encode(net::Craft{ static_cast<uint8_t>(index), static_cast<uint8_t>(count) }));
+void Client::Craft(int index, int count, Tool held) {
+    if (!welcomed || !CanCraft(index, count, held)) return;
+    // Not predicted (where it goes depends on room): the server's answer brings it.
+    net.Send(net::kChannelReliable, net::Encode(net::Craft{ static_cast<uint8_t>(index), static_cast<uint8_t>(count), held }));
+}
+
+void Client::MoveItems(net::Box fromBox, int fromSlot, net::Box toBox, int toSlot, int count) {
+    if (!welcomed || fromSlot < 0 || fromSlot > 255 || toSlot < 0 || toSlot > 255 || count < 0 || count > 255) return;
+    net.Send(net::kChannelReliable, net::Encode(net::InventoryMove{ fromBox, static_cast<uint8_t>(fromSlot), toBox, static_cast<uint8_t>(toSlot), static_cast<uint8_t>(count) }));
+}
+
+void Client::SetCreativeSlot(int slot, ItemId item, int count) {
+    if (!welcomed || !IsCreative() || slot < 0 || slot >= static_cast<int>(inventory.slots.size())) return;
+    // Shown at once (the server agrees: creative players may).
+    if (item == Items::kNone || count <= 0) inventory.slots[slot] = {};
+    else inventory.slots[slot] = { item, static_cast<uint8_t>(std::min<uint32_t>(static_cast<uint32_t>(count), Items::MaxStack(item))) };
+    net.Send(net::kChannelReliable, net::Encode(net::CreativeSlot{ static_cast<uint8_t>(slot), item, static_cast<uint8_t>(std::clamp(count, 0, 255)) }));
 }
 
 bool Client::CanAfford(BlockType type, int heightEighths) const {
@@ -387,7 +390,7 @@ void Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths
     if (known) {
         world.SetBlock(pos.x, pos.y, pos.z, placed);
         if (type == BlockType::DOOR) world.SetBlock(pos.x, pos.y + 1, pos.z, placed); // its upper half, as the server makes it
-        if (!IsCreative()) resources[static_cast<size_t>(ResourceTypeOf(type))] -= static_cast<uint32_t>(placed.ResourceUnits());
+        if (!IsCreative()) inventory.TakeUnits(ResourceTypeOf(type), static_cast<uint32_t>(placed.ResourceUnits()));
     }
     net.Send(net::kChannelReliable, net::Encode(net::EditPlace{ pos, type, static_cast<uint8_t>(heightEighths), static_cast<uint8_t>(faceAxis) }));
 }
@@ -398,10 +401,10 @@ void Client::Chisel(const glm::ivec3& pos, int edge, bool raise, int dir, int st
     if (!world.GetBlock(pos.x, pos.y, pos.z, block) || !block.CanChisel()) return;
     const Block after = block.ChiselledFrom(dir, edge, raise ? step : -step);
     if (!IsCreative()) {
-        uint32_t& held = resources[static_cast<size_t>(block.type)];
+        const BlockType type = block.ResourceType();
         const int change = after.ResourceUnits() - block.ResourceUnits();
-        if (change > 0 && held < static_cast<uint32_t>(change)) return; // can't afford to build it up
-        held = static_cast<uint32_t>(static_cast<int64_t>(held) - change);
+        if (change > 0 && !inventory.TakeUnits(type, static_cast<uint32_t>(change))) return; // can't afford to build it up
+        if (change < 0 && inventory.AddUnits(type, static_cast<uint32_t>(-change)) != 0) return; // (no room: the server refuses it)
     }
     world.SetBlock(pos.x, pos.y, pos.z, after);
     net.Send(net::kChannelReliable, net::Encode(net::EditChisel{ pos, static_cast<uint8_t>(edge), static_cast<uint8_t>(raise ? 1 : 0), static_cast<uint8_t>(dir),
@@ -528,9 +531,9 @@ void Client::CloseChest() {
     openChest.reset();
 }
 
-void Client::MoveChestItems(BlockType type, uint32_t units, bool intoChest) {
-    if (welcomed && openChest && units > 0)
-        net.Send(net::kChannelReliable, net::Encode(net::ChestMove{ *openChest, type, units, static_cast<uint8_t>(intoChest ? 1 : 0) }));
+void Client::MoveChestItems(ItemId item, uint32_t count, bool intoChest) {
+    if (welcomed && openChest && count > 0 && Items::Valid(item))
+        net.Send(net::kChannelReliable, net::Encode(net::ChestMove{ *openChest, item, count, static_cast<uint8_t>(intoChest ? 1 : 0) }));
 }
 
 void Client::Eat(BlockType item) {

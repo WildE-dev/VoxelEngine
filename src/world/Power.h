@@ -41,8 +41,8 @@
 //       the chests joined to it (touching it, or at the far end of item pipes): the
 //       first thing it finds it can smelt (world/Smelting.h), the result going back
 //       into the same chest. It's lit while it works.
-//     . An extractor (facing; placed, it faces the way you look) takes a block's
-//       worth of something from the chest in front of it every kExtractInterval, for
+//     . An extractor (facing; placed, it faces the way you look) takes one block or
+//       item (whole) from the chest in front of it every kExtractInterval, for
 //       kExtractAir, and sends it out of its back along item pipes to another chest:
 //       one behind a filter pipe set to it if there is one, else one that already
 //       holds some of it (so a row of chests sorts itself by example), else the
@@ -97,7 +97,7 @@ constexpr int kPushLimit = 12;                // blocks a piston can push in a r
 constexpr float kSmeltAir = 6.0f;             // air for each block smelted
 constexpr double kSmeltInterval = 2.0;        // seconds per block smelted
 constexpr int kMaxItemNetwork = 512;          // item pipes a drill or smelter looks through, at most
-constexpr float kExtractAir = 1.0f;           // air for each block's worth an extractor moves
+constexpr float kExtractAir = 1.0f;           // air for each block or item an extractor moves
 constexpr double kExtractInterval = 0.5;      // seconds between its moves
 constexpr float kCraftAir = 4.0f;             // air for each thing a crafter makes
 constexpr double kCraftInterval = 2.0;        // seconds per thing made
@@ -161,7 +161,7 @@ inline float WheelSpeed(float flow) {
 // What a machine is doing (sent to players, and shown when right-clicked). Wheels:
 // Idle (still), Working (turning) or Blocked (jammed). Pumps: Working, NoPressure, or
 // Idle (nothing to pump). Drills: any.
-enum class DrillState : uint8_t { Idle, Working, NoPressure, NoChest, Blocked, Done };
+enum class DrillState : uint8_t { Idle, Working, NoPressure, NoChest, Blocked, Done, Full };
 inline const char* Describe(DrillState s) {
     switch (s) {
     case DrillState::Working: return "drilling";
@@ -169,6 +169,7 @@ inline const char* Describe(DrillState s) {
     case DrillState::NoChest: return "needs a chest beside it";
     case DrillState::Blocked: return "blocked";
     case DrillState::Done: return "finished (reached its depth)";
+    case DrillState::Full: return "its chest is full";
     default: return "idle";
     }
 }

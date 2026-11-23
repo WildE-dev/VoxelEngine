@@ -1,9 +1,9 @@
 // Crafting recipes, in order (a crafter keeps its recipe by its place in this list,
 // so add new ones at the end). Each takes some things and makes one: amounts in blocks
 // (or items; 0.25 is a quarter). Instead of "makes": "tool" (pickaxe, axe, shovel,
-// sword, bow, rod), "armour" (cap, tunic, boots, shield, plate, tank), or "upgrade"
-// (iron, steel), made once and kept. The game reads it again when it changes; a server
-// and its players should share it.
+// sword, bow, rod, chisel: made of stone), "armour" (cap, tunic, boots, shield, plate,
+// tank), or "upgrade" (iron, steel: the tool in your hand). The game reads it again when
+// it changes; a server and its players should share it.
 [
   { "id": "planks", "name": "4 planks", "takes": { "log": 1 }, "makes": { "planks": 4 } },
   { "id": "stone_brick", "name": "Stone bricks", "takes": { "stone": 1 }, "makes": { "stone_brick": 1 } },
@@ -93,8 +93,8 @@
   { "id": "harvester", "name": "Harvester", "takes": { "steel_ingot": 0.5, "planks": 2 }, "makes": { "harvester": 1 } },
   { "id": "drill", "name": "Drill", "takes": { "steel_ingot": 1, "iron_ingot": 1, "stone": 2 }, "makes": { "drill": 1 } },
   { "id": "coal_lamp", "name": "Lamp (with coal)", "takes": { "glass": 0.5, "coal": 0.25 }, "makes": { "lamp": 1 } },
-  { "id": "iron_tools", "name": "Iron upgrade (all tools)", "takes": { "iron_ingot": 3, "planks": 1 }, "upgrade": "iron" },
-  { "id": "steel_tools", "name": "Steel upgrade (all tools)", "takes": { "steel_ingot": 3, "planks": 1 }, "upgrade": "steel" },
+  { "id": "iron_tools", "name": "Iron upgrade (tool in hand)", "takes": { "iron_ingot": 1 }, "upgrade": "iron" },
+  { "id": "steel_tools", "name": "Steel upgrade (tool in hand)", "takes": { "steel_ingot": 1 }, "upgrade": "steel" },
   { "id": "crusher", "name": "Crusher", "takes": { "steel_ingot": 1, "stone_brick": 2 }, "makes": { "crusher": 1 } },
   { "id": "shield", "name": "Shield", "takes": { "planks": 2, "iron_ingot": 1 }, "armour": "shield" },
   { "id": "plate", "name": "Steel plate", "takes": { "steel_ingot": 4, "hide": 2 }, "armour": "plate" },

@@ -133,12 +133,12 @@ int main() {
         both(5.0, [&] { return a.client.GetResources(BlockType::SAND) >= 3 * Crafting::kBlock; });
         a.client.OpenChest({ 21, 1, 19 });
         both(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(21, 1, 19); });
-        a.client.MoveChestItems(BlockType::SAND, 3 * Crafting::kBlock, true);
+        a.client.MoveChestItems(BlockType::SAND, 3, true);
         both(5.0, [&] { return a.client.GetChestUnits(BlockType::SAND) == 3 * Crafting::kBlock; });
         b.client.OpenChest({ 21, 1, 19 });
         Check(both(5.0, [&] { return b.client.GetOpenChest() == glm::ivec3(21, 1, 19) && b.client.GetChestUnits(BlockType::SAND) == 3 * Crafting::kBlock; }),
               "what the builder puts in a chest, the watcher finds there");
-        b.client.MoveChestItems(BlockType::SAND, Crafting::kBlock, false);
+        b.client.MoveChestItems(BlockType::SAND, 1, false);
         Check(both(5.0, [&] { return b.client.GetResources(BlockType::SAND) == Crafting::kBlock && a.client.GetChestUnits(BlockType::SAND) == 2 * Crafting::kBlock; }),
               "and what the watcher takes out is gone for the builder too (both have it open)");
         a.client.CloseChest();
@@ -170,7 +170,7 @@ int main() {
         both(5.0, [&] { return a.client.GetResources(BlockType::BREAD) >= 2 * Crafting::kBlock; });
         a.client.OpenChest(post);
         both(5.0, [&] { return a.client.GetOpenChest() == post; });
-        a.client.MoveChestItems(BlockType::BREAD, 2 * Crafting::kBlock, true);
+        a.client.MoveChestItems(BlockType::BREAD, 2, true);
         a.client.CloseChest();
         Check(both(15.0, [&] { return a.Find(CreatureType::DwarfMiner) && b.Find(CreatureType::DwarfMiner); }), "the miners a post hires turn up for both players");
         Check(both(20.0, [&] { const auto m = b.Find(CreatureType::DwarfMiner); return m && m->action == 2; }), "and the watcher sees them dig (working)");

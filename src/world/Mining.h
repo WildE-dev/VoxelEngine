@@ -20,8 +20,8 @@ enum class Tool : uint8_t { None, Pickaxe, Axe, Shovel, Sword, Bow, Rod, Chisel,
 namespace Mining {
 
 constexpr float kToolSpeed = 4.0f;
-constexpr float kIronToolSpeed = 6.0f; // with the iron upgrade (see world/Crafting.h)
-constexpr float kSteelToolSpeed = 9.0f; // with the steel upgrade
+constexpr float kIronToolSpeed = 6.0f; // an iron tool (see world/Crafting.h)
+constexpr float kSteelToolSpeed = 9.0f; // a steel one
 // A carved block takes time by its volume, but no less than this share of a full one.
 constexpr float kMinVolumeShare = 0.3f;
 // The server lets a break through this much early (network jitter), in seconds plus
@@ -265,7 +265,7 @@ inline Tool BestTool(BlockType type) {
 }
 
 // Seconds it takes to break this block with this tool (in survival).
-// `tier`: what the tools are made of (Crafting::Tier: 0 stone, 1 iron, 2 steel).
+// `tier`: what the tool is made of (Items::TierOf: 0 stone, 1 iron, 2 steel).
 inline float Seconds(const Block& block, Tool tool, int tier = 0) {
     float seconds = Hardness(block.type);
     if (seconds <= 0.0f) return 0.0f;

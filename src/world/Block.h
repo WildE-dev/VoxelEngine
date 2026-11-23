@@ -550,8 +550,8 @@ struct Block {
     // liquids, plants or machines.
     static bool CanShape(BlockType t) { return Block(t).CanChisel(); }
 
-    // Resources (survival mode): a full block is worth kUnitsPerBlock units of its
-    // type; a shaped one is worth its volume (a half slab 32, each eighth of a
+    // Worth (survival mode, see world/Inventory.h): a full block is worth kUnitsPerBlock
+    // units of its type; a shaped one is worth its volume (a half slab 32, each eighth of a
     // quarter 2). Things that can't be shaped (plants, machines) are worth a full block.
     static constexpr int kUnitsPerBlock = 64;
     static constexpr int kPebbleUnits = 16; // a quarter of a block of stone

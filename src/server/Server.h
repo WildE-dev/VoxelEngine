@@ -28,6 +28,7 @@
 #include "world/Signals.h"
 #include "world/Crafting.h"
 #include "world/Coords.h"
+#include "world/Inventory.h"
 #include "world/TerrainGenerator.h"
 
 class ServerWorld;
@@ -62,12 +63,12 @@ class WorldStorage;
 // server's console (QueueConsoleCommand).
 //
 // Game modes: in creative, players build with anything and nothing hurts them; in
-// survival, every block costs resources (units of its type, see Block::ResourceUnits)
+// survival, every block costs its worth (from the player's inventory, world/Inventory.h)
 // that players collect by breaking blocks, and traps hurt. The server keeps everyone's
-// mode and resources (saved with the player) and refuses what they can't afford.
+// mode and inventory (saved with the player) and refuses what they can't afford.
 //
-// Crafting (world/Crafting.h): survival players turn resources into other blocks and
-// make tools, which they need to have to use.
+// Crafting (world/Crafting.h): survival players turn what they have into other blocks,
+// tools and armour, which are items in their inventory like any other.
 //
 // Creatures (server/Creatures.h): deer, wolves, bats and dwarves, run here and sent to the players
 // near them every tick; players hit them with Attack.
@@ -187,9 +188,8 @@ private:
         bool noclip = false;   // allowed to fly through blocks (/noclip)
 
         net::GameMode mode = net::GameMode::Survival;
-        std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> resources{}; // units held (survival)
-        uint16_t tools = 0; // tools made (Crafting::ToolBit each; creative has them all)
-        uint8_t armour = 0; // armour worn (Armour::Bit each)
+        Inventory inventory{ Inventory::kPlayerSlots }; // what they carry (the hotbar first)
+        uint8_t armour = 0; // armour worn: what's in their armour slots (Armour::Bit each)
         std::optional<glm::ivec3> openChest; // the chest they have open
         std::optional<glm::ivec3> bed;       // where they respawn (if it's still a bed)
         double sleptAt = -1000.0;            // when they last got into bed at night
@@ -276,9 +276,19 @@ private:
     void LoadFallenKings();
     void SaveFallenKings();
     size_t fallenKingsSaved = 0;
-    void HandleCraft(ClientState& client, int recipe, int count);
-    // The tool a player really works with: theirs if they have it, a bare hand if not.
+    // `upgrade`: the tool an upgrade recipe works on (the one in their hand).
+    void HandleCraft(ClientState& client, int recipe, int count, Tool upgrade);
+    // The tool a player really works with: theirs if they carry one, a bare hand if not
+    // (creative players have every tool, of steel).
     static Tool Usable(const ClientState& client, Tool tool);
+    // What that tool of theirs is made of (the best they carry): 0 stone, 1 iron, 2 steel.
+    static int ToolTier(const ClientState& client, Tool tool);
+    // Moving items between their slots, their armour slots and the open chest.
+    void HandleInventoryMove(ClientState& client, const net::InventoryMove& m);
+    void HandleCreativeSlot(ClientState& client, const net::CreativeSlot& m);
+    // Gives a player units of a type (survival); what doesn't fit is lost, and they're
+    // told. Returns whether it all fitted. (The caller sends the inventory.)
+    bool Give(ClientState& client, BlockType type, uint32_t units);
     // A tick of the creatures, and telling each player about the ones near them.
     void UpdateCreatures();
     void SendCreatures();
@@ -311,7 +321,7 @@ private:
     void SendAbilities(ClientState& client);
     // Survival bookkeeping: tells the client its mode / what it holds.
     void SendMode(ClientState& client);
-    void SendResources(ClientState& client);
+    void SendInventory(ClientState& client);
     static bool Creative(const ClientState& client) { return client.mode == net::GameMode::Creative; }
     // Just above the ground at the spawn column (respawning, /spawn): mountains may be
     // anywhere, so it's worked out from the terrain.
@@ -324,10 +334,12 @@ private:
     void UpdateBreath(ClientState& client, float dt);
     void UpdateHunger(ClientState& client, float dt);
     void HandleEat(ClientState& client, BlockType food);
-    // Chests: what's in each (units by type), by position; saved with the world.
-    using ChestItems = std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)>;
+    // Chests: what's in each (world/Inventory.h), by position; saved with the world.
+    using ChestItems = Inventory;
     void HandleOpenChest(ClientState& client, const glm::ivec3& pos, bool open);
-    void HandleChestMove(ClientState& client, const glm::ivec3& pos, BlockType type, uint32_t units, bool intoChest);
+    void HandleChestMove(ClientState& client, const glm::ivec3& pos, ItemId item, uint32_t count, bool intoChest);
+    // Their open chest, if it's still there and in reach (nullptr: none).
+    Inventory* OpenChestOf(ClientState& client);
     void SendChest(ClientState& client);         // what's in their open chest (or that it's closed)
     ChestItems& ChestAt(const glm::ivec3& pos);  // its contents (a dungeon chest's loot is rolled the first time)
     void SendChestToViewers(const glm::ivec3& pos);
@@ -440,7 +452,7 @@ private:
         double next = 0.0;
         double last = -1e9;
         Power::DrillState state = Power::DrillState::Idle; // Blocked: a crafter with no recipe
-        size_t cursor = 0;                                 // an extractor's place in its chest
+        ItemId cursor = 0;                                 // an extractor's place in its chest (the last item it moved)
     };
     std::unordered_map<glm::ivec3, Worker, Coords::IVec3Hash> workers;
     // Fluids (world/Fluids.h): what each pipe and tank holds (saved), and the networks

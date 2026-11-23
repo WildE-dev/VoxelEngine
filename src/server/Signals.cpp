@@ -144,10 +144,9 @@ bool Server::Senses(const glm::ivec3& pos, const Signals::Config& c) const {
             if (!world->GetBlock(p.x, p.y, p.z, n)) continue;
             if (watch == Signals::Watch::HasItems || watch == Signals::Watch::Empty) {
                 if (!IsStorageType(n.type)) continue;
-                uint64_t units = 0;
-                if (auto ch = chests.find(p); ch != chests.end())
-                    for (uint32_t u : ch->second) units += u;
-                return (units > 0) == (watch == Signals::Watch::HasItems);
+                auto ch = chests.find(p);
+                const bool some = ch != chests.end() && !ch->second.Empty();
+                return some == (watch == Signals::Watch::HasItems);
             }
             if (watch == Signals::Watch::Level) {
                 if (auto f = fluidNetOf.find(p); f != fluidNetOf.end() && Fluids::IsPart(n.type)) {

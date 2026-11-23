@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "net/Protocol.h"
+#include "world/Crafting.h"
 
 namespace fs = std::filesystem;
 
@@ -19,7 +20,8 @@ constexpr char kWorldMagic[4] = { 'V', 'X', 'W', 'D' };
 constexpr size_t kMaxNameLength = 256;
 // Tagged player fields (format 7 on).
 constexpr uint8_t kFieldHealth = 1, kFieldFood = 2, kFieldArmour = 3, kFieldBed = 4, kFieldAchievements = 5,
-                  kFieldMoreTools = 6; // the tools mask's high byte (the chisel's bit, and after)
+                  kFieldMoreTools = 6, // the tools mask's high byte (the chisel's bit, and after; before format 14)
+                  kFieldInventory = 7; // their slots and offcuts (net::WriteInventory; format 14 on)
 
 int FloorDiv(int a, int b) {
     return a >= 0 ? a / b : -((-a + b - 1) / b);
@@ -132,16 +134,20 @@ bool WorldStorage::ReadWorldFile() {
         }
         p.mode = defaultMode;
         if (version >= 4) {
+            // (Before format 14: units by type and a tools mask, converted below.)
+            std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> oldUnits{};
+            uint16_t oldTools = 0;
+            bool hasInventory = false;
             uint32_t kinds = 0;
-            bool ok = r.U8(p.mode) && p.mode <= 1 && r.VarU32(kinds) && kinds <= p.resources.size();
+            bool ok = r.U8(p.mode) && p.mode <= 1 && r.VarU32(kinds) && kinds <= oldUnits.size();
             for (uint32_t k = 0; ok && k < kinds; k++) {
                 uint8_t type;
                 uint32_t units;
-                ok = r.U8(type) && type < p.resources.size() && r.VarU32(units);
-                if (ok) p.resources[type] = units;
+                ok = r.U8(type) && type < oldUnits.size() && r.VarU32(units);
+                if (ok) oldUnits[type] = units;
             }
             uint8_t lowTools = 0;
-            if (ok && version >= 6) ok = r.U8(lowTools), p.tools = lowTools;
+            if (ok && version >= 6) ok = r.U8(lowTools), oldTools = lowTools;
             // Tagged fields: tag, length, then that many bytes.
             uint32_t fields = 0;
             if (ok && version >= 7) ok = r.VarU32(fields) && fields < 256;
@@ -155,7 +161,12 @@ bool WorldStorage::ReadWorldFile() {
                 else if (tag == kFieldFood && length == 1) ok = r.U8(v), p.food = v;
                 else if (tag == kFieldArmour && length == 1) ok = r.U8(v), p.armour = v;
                 else if (tag == kFieldAchievements && length == 4) ok = r.U32(p.achievements);
-                else if (tag == kFieldMoreTools && length == 1) ok = r.U8(v), p.tools = static_cast<uint16_t>((p.tools & 0xFF) | (v << 8));
+                else if (tag == kFieldMoreTools && length == 1) ok = r.U8(v), oldTools = static_cast<uint16_t>((oldTools & 0xFF) | (v << 8));
+                else if (tag == kFieldInventory) {
+                    const size_t before = r.Remaining();
+                    ok = net::ReadInventory(r, p.inventory) && before - r.Remaining() == length;
+                    hasInventory = true;
+                }
                 else if (tag == kFieldBed && length == 12) {
                     glm::ivec3 bed;
                     ok = r.IVec3(bed);
@@ -167,6 +178,7 @@ bool WorldStorage::ReadWorldFile() {
                 std::cerr << "[storage] " << path.string() << " is truncated" << std::endl;
                 return false;
             }
+            if (!hasInventory) p.inventory = FromOld(oldUnits, oldTools, Inventory::kPlayerSlots);
         }
         if (std::isfinite(p.feet.x) && std::isfinite(p.feet.y) && std::isfinite(p.feet.z) && std::isfinite(p.yaw) && std::isfinite(p.pitch))
             players[name] = p;
@@ -176,14 +188,18 @@ bool WorldStorage::ReadWorldFile() {
     if (version >= 8 && !r.VarU32(chestCount)) chestCount = 0;
     for (uint32_t c = 0; c < chestCount; c++) {
         glm::ivec3 pos;
-        ChestItems held{};
-        uint32_t kinds = 0;
-        bool ok = r.IVec3(pos) && r.VarU32(kinds) && kinds <= held.size();
-        for (uint32_t k = 0; ok && k < kinds; k++) {
-            uint8_t type;
-            uint32_t units;
-            ok = r.U8(type) && type < held.size() && r.VarU32(units);
-            if (ok) held[type] = units;
+        Inventory held(Inventory::kChestSlots);
+        bool ok = r.IVec3(pos);
+        if (ok && version >= 14) ok = net::ReadInventory(r, held);
+        else if (ok) {
+            std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> units{};
+            uint32_t kinds = 0;
+            ok = r.VarU32(kinds) && kinds <= units.size();
+            for (uint32_t k = 0; ok && k < kinds; k++) {
+                uint8_t type;
+                ok = r.U8(type) && type < units.size() && r.VarU32(units[type]);
+            }
+            if (ok) held = FromOld(units, 0, Inventory::kChestSlots);
         }
         if (!ok) {
             std::cerr << "[storage] " << path.string() << " is truncated (chests)" << std::endl;
@@ -378,6 +394,16 @@ void WorldStorage::SetTimeOfDay(float t) {
     playersDirty = true; // world.dat needs writing
 }
 
+Inventory WorldStorage::FromOld(const std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)>& units, uint16_t tools, size_t slots) {
+    Inventory inv(slots);
+    const int tier = (tools & Crafting::kOldSteelBit) ? 2 : (tools & Crafting::kOldIronBit) ? 1 : 0;
+    for (int t = 1; t < static_cast<int>(Tool::Count); t++)
+        if (tools & Crafting::OldToolBit(static_cast<Tool>(t))) inv.Add(Items::OfTool(static_cast<Tool>(t), tier), 1, true);
+    for (size_t t = 1; t < units.size(); t++)
+        if (units[t] > 0) inv.AddUnits(static_cast<BlockType>(t), units[t], true);
+    return inv;
+}
+
 WorldStorage::Chests WorldStorage::GetChests() const {
     std::lock_guard<std::mutex> lock(mutex);
     return chests;
@@ -490,34 +516,22 @@ bool WorldStorage::Flush() {
                 w.F32(p.pitch);
                 w.U8(p.flags);
                 w.U8(p.mode);
-                uint32_t kinds = 0;
-                for (uint32_t units : p.resources) kinds += units > 0;
-                w.VarU32(kinds);
-                for (size_t t = 0; t < p.resources.size(); t++)
-                    if (p.resources[t] > 0) {
-                        w.U8(static_cast<uint8_t>(t));
-                        w.VarU32(p.resources[t]);
-                    }
-                w.U8(static_cast<uint8_t>(p.tools));
-                w.VarU32((p.bed ? 5 : 4) + (p.tools > 0xFF ? 1 : 0));
+                w.VarU32(0); // (units by type, before format 14)
+                w.U8(0);     // (the tools mask, before format 14)
+                w.VarU32(p.bed ? 6 : 5);
                 w.U8(kFieldHealth), w.VarU32(1), w.U8(static_cast<uint8_t>(std::clamp(p.health, 0, 255)));
                 w.U8(kFieldFood), w.VarU32(1), w.U8(static_cast<uint8_t>(std::clamp(p.food, 0, 255)));
                 w.U8(kFieldArmour), w.VarU32(1), w.U8(p.armour);
                 if (p.bed) w.U8(kFieldBed), w.VarU32(12), w.IVec3(*p.bed);
                 w.U8(kFieldAchievements), w.VarU32(4), w.U32(p.achievements);
-                if (p.tools > 0xFF) w.U8(kFieldMoreTools), w.VarU32(1), w.U8(static_cast<uint8_t>(p.tools >> 8));
+                net::ByteWriter items;
+                net::WriteInventory(items, p.inventory);
+                w.U8(kFieldInventory), w.VarU32(static_cast<uint32_t>(items.data.size())), w.Bytes(items.data.data(), items.data.size());
             }
             w.VarU32(static_cast<uint32_t>(chests.size()));
             for (const auto& [pos, held] : chests) {
                 w.IVec3(pos);
-                uint32_t kinds = 0;
-                for (uint32_t units : held) kinds += units > 0;
-                w.VarU32(kinds);
-                for (size_t t = 0; t < held.size(); t++)
-                    if (held[t] > 0) {
-                        w.U8(static_cast<uint8_t>(t));
-                        w.VarU32(held[t]);
-                    }
+                net::WriteInventory(w, held);
             }
             w.VarU32(static_cast<uint32_t>(crops.size()));
             for (const auto& pos : crops) w.IVec3(pos);

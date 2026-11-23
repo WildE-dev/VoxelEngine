@@ -4,7 +4,7 @@
 //   { "id": "planks", "name": "4 planks", "takes": { "log": 1 }, "makes": { "planks": 4 } }
 // with amounts in blocks (or items): 0.25 is a quarter. Instead of "makes" a recipe may
 // make a tool ("tool": "pickaxe"), a piece of armour ("armour": "cap"), or an upgrade
-// ("upgrade": "iron" or "steel"), each made once and kept.
+// ("upgrade": "iron" or "steel": the tool in your hand becomes iron, or steel).
 // smelting.json: a list, in order, of
 //   { "takes": { "iron_ingot": 1, "coal": 0.5 }, "makes": { "steel_ingot": 1 } }
 // (one thing taken, or two).
@@ -102,7 +102,7 @@ bool Load(const std::string& path, std::string& error) {
         }
         const std::string upgrade = v.StringOr("upgrade", "");
         r.ironUpgrade = upgrade == "iron", r.steelUpgrade = upgrade == "steel";
-        if (r.inputs.empty() || (makes.empty() && !r.MadeOnce())) {
+        if (r.inputs.empty() || (makes.empty() && !r.MakesItem())) {
             error = where + ": it needs \"takes\" and something it makes";
             return false;
         }
@@ -129,9 +129,9 @@ bool WriteDefaults(const std::string& path) {
                      "// Crafting recipes, in order (a crafter keeps its recipe by its place in this list,\n"
                      "// so add new ones at the end). Each takes some things and makes one: amounts in blocks\n"
                      "// (or items; 0.25 is a quarter). Instead of \"makes\": \"tool\" (pickaxe, axe, shovel,\n"
-                     "// sword, bow, rod), \"armour\" (cap, tunic, boots, shield, plate, tank), or \"upgrade\"\n"
-                     "// (iron, steel), made once and kept. The game reads it again when it changes; a server\n"
-                     "// and its players should share it.\n",
+                     "// sword, bow, rod, chisel: made of stone), \"armour\" (cap, tunic, boots, shield, plate,\n"
+                     "// tank), or \"upgrade\" (iron, steel: the tool in your hand). The game reads it again when\n"
+                     "// it changes; a server and its players should share it.\n",
                      list);
 }
 
