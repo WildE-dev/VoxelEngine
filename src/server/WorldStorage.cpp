@@ -233,6 +233,17 @@ bool WorldStorage::ReadWorldFile() {
         }
         fluids.push_back(f);
     }
+    // Air (format 13 on).
+    uint32_t airCount = 0;
+    if (version >= 13 && !r.VarU32(airCount)) airCount = 0;
+    for (uint32_t i = 0; i < airCount; i++) {
+        SavedAir a;
+        if (!r.IVec3(a.pos) || !r.F32(a.units)) {
+            std::cerr << "[storage] " << path.string() << " is truncated (air)" << std::endl;
+            return false;
+        }
+        if (std::isfinite(a.units) && a.units > 0.0f) air.push_back(a);
+    }
     return true;
 }
 
@@ -402,6 +413,17 @@ void WorldStorage::SetFluids(std::vector<SavedFluid> f) {
     playersDirty = true;
 }
 
+std::vector<WorldStorage::SavedAir> WorldStorage::GetAir() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return air;
+}
+
+void WorldStorage::SetAir(std::vector<SavedAir> a) {
+    std::lock_guard<std::mutex> lock(mutex);
+    air = std::move(a);
+    playersDirty = true;
+}
+
 void WorldStorage::SetSigns(Signs s) {
     std::lock_guard<std::mutex> lock(mutex);
     signs = std::move(s);
@@ -510,6 +532,11 @@ bool WorldStorage::Flush() {
                 w.IVec3(f.pos);
                 w.U8(f.kind);
                 w.VarU32(f.units);
+            }
+            w.VarU32(static_cast<uint32_t>(air.size()));
+            for (const auto& a : air) {
+                w.IVec3(a.pos);
+                w.F32(a.units);
             }
             files.emplace_back(directory / "world.dat", std::move(w.data));
             writePlayers = true;

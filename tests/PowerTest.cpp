@@ -12,9 +12,11 @@
 //  - the pump runs on the air,
 //  - right-clicking parts describes them,
 //  - cutting the air pipe starves the drill,
-//  - stopping the water brings the wheels to a stop.
+//  - stopping the water brings the wheels to a stop,
+//  - the air a tank holds is saved: after a restart it's all still there.
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <functional>
 #include <iostream>
 #include <string>
@@ -73,10 +75,21 @@ bool Has(const Client& c, const std::string& text) {
     return false;
 }
 
+// What the last "Air tank: holding N of ..." line said (-1 if there's none).
+int TankHeld(const Client& c) {
+    int held = -1;
+    for (const auto& line : c.GetChat())
+        if (const size_t at = line.text.find("Air tank: holding "); at != std::string::npos) held = std::atoi(line.text.c_str() + at + 18);
+    return held;
+}
+
 } // namespace
 
 int main() {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / ("voxel_power_test_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     Server::Options options;
+    options.worldDirectory = dir.string();
     options.bindHost = "127.0.0.1";
     options.port = 0;
     options.viewDistance = kTestViewDistance;
@@ -231,9 +244,37 @@ int main() {
     Check(pump(30.0, [&] { return machine(wheelA, [](auto& m) { return m.speed == 0; }) && machine(wheelB, [](auto& m) { return m.speed == 0; }); }),
           "with the water stopped the wheels stop");
 
+    std::cout << "Saving" << std::endl;
+    // The tank behind the shut valve keeps what it holds, with nothing to fill or drain it.
+    a.client.Inspect(tank);
+    pump(10.0, [&] { return TankHeld(a.client) > 0; });
+    const int held = TankHeld(a.client);
+    Check(held > 0, "the shut-off tank holds air (" + std::to_string(held) + ")");
     a.client.Disconnect();
     Pump(a, 0.3, [] { return false; });
     server.Stop();
+    {
+        // Its chunk isn't loaded again until the player is back, and power updates run
+        // meanwhile: the air must wait for it, not be dropped.
+        Server again;
+        if (!again.Start(options)) return EXIT_FAILURE;
+        again.RunInBackground();
+        TestClient b;
+        b.client.Connect("127.0.0.1", again.GetPort(), "Miller", error, kTestViewDistance);
+        Pump(b, 20.0, [&] {
+            Block t;
+            return b.joined && b.world.GetBlock(tank.x, tank.y, tank.z, t) && t.type == BlockType::AIR_TANK;
+        });
+        Pump(b, 1.0, [] { return false; }); // a few power updates
+        b.client.Inspect(tank);
+        Pump(b, 10.0, [&] { return TankHeld(b.client) >= 0; });
+        Check(TankHeld(b.client) == held, "after a restart the tank still holds it (" + std::to_string(TankHeld(b.client)) + ")");
+        b.client.Disconnect();
+        Pump(b, 0.3, [] { return false; });
+        again.Stop();
+    }
+    std::error_code ignored;
+    fs::remove_all(dir, ignored);
     std::cout << (failures ? "POWER TEST FAILED (" : "ALL POWER CHECKS PASSED (") << failures << " failures)" << std::endl;
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }

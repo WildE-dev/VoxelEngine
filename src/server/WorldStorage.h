@@ -37,7 +37,7 @@ public:
     static constexpr int kRegionSize = 8;      // chunks per region along each axis
     // 2: world type; 3: time of day; 4: game modes and resources; 5: block axes (logs);
     // 6: tools players have made
-    static constexpr uint32_t kFormatVersion = 12;
+    static constexpr uint32_t kFormatVersion = 13;
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
@@ -83,6 +83,14 @@ public:
     };
     std::vector<SavedFluid> GetFluids() const;
     void SetFluids(std::vector<SavedFluid> f);
+    // The air held in air tanks, pipes and machines (world/Power.h), by position
+    // (format 13 on; before that, air networks started empty).
+    struct SavedAir {
+        glm::ivec3 pos{0};
+        float units = 0.0f;
+    };
+    std::vector<SavedAir> GetAir() const;
+    void SetAir(std::vector<SavedAir> a);
 
     // One bit per block column of a chunk (index x * CHUNK_SIZE + z).
     using ColumnMask = std::array<uint64_t, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE / 64>;
@@ -169,4 +177,5 @@ private:
     Signs signs;
     std::vector<SavedSignal> signalBlocks;
     std::vector<SavedFluid> fluids;
+    std::vector<SavedAir> air;
 };

@@ -396,7 +396,13 @@ void Server::UpdatePower() {
         const float fill = net.capacity > 0.0f ? net.air / net.capacity : 0.0f;
         for (const auto& m : members) newAir[m] = fill * Power::CapacityOf(blockAt(m).type);
     }
-    air.swap(newAir); // (parts in no network lose their air)
+    // Parts in chunks that aren't loaded keep their air until they're back, when their
+    // network takes it in again. (Parts gone, or loaded but in no network, lose theirs.)
+    for (const auto& [pos, held] : air) {
+        Block b;
+        if (!networkOf.count(pos) && !world->GetBlock(pos.x, pos.y, pos.z, b)) newAir[pos] = held;
+    }
+    air.swap(newAir);
 
     // Drains and fluid outlets: the water they traded since the last update into or out
     // of their pipes, and what they may trade until the next.
