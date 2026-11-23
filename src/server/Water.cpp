@@ -338,7 +338,12 @@ void WaterSimulation::RandomTicks(ServerWorld& world) {
 
     // Look at random cells without the edit mutex (block reads don't need it)...
     constexpr int S = Chunk::CHUNK_SIZE;
-    std::uniform_int_distribution<int> local(0, S - 1);
+    // Not std::uniform_int_distribution: its algorithm differs between standard
+    // libraries, so the same seed would pick different cells on macOS and Windows and
+    // the tests wouldn't repeat across them. S is a power of two and mt19937 gives 32
+    // bits, so the remainder is exactly uniform.
+    static_assert((S & (S - 1)) == 0, "chunk size must be a power of two");
+    auto local = [](std::mt19937& r) { return static_cast<int>(r() % Chunk::CHUNK_SIZE); };
     const bool rain = IsRaining();
     puddles.clear();
     wet.clear();

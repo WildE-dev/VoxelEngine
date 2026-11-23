@@ -63,6 +63,10 @@ add_library(voxel_common STATIC
 )
 target_include_directories(voxel_common PUBLIC src)
 target_link_libraries(voxel_common PUBLIC glm::glm unofficial::enet::enet Threads::Threads)
+# ENet's Windows backend uses Winsock and the multimedia timer.
+if(WIN32)
+    target_link_libraries(voxel_common PUBLIC ws2_32 winmm)
+endif()
 
 # The authoritative server: world simulation (water, light, generation) and
 # streaming to clients. Headless.

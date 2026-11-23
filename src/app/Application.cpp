@@ -3418,10 +3418,10 @@ void Application::UpdateSounds() {
         if (c.hurt && !s.hurt) audio->Play("hit", c.feet + glm::vec3(0.0f, 0.8f, 0.0f), 0.9f);
         s.hurt = c.hurt;
         if (SpecOf(c.type).hostile) {
-            if (s.nextGroan == 0.0) s.nextGroan = now + wait(rng) * 0.5;
-            else if (now >= s.nextGroan) {
+            if (s.nextGrunt == 0.0) s.nextGrunt = now + wait(rng) * 0.5;
+            else if (now >= s.nextGrunt) {
                 audio->Play("grunt", c.feet + glm::vec3(0.0f, 1.2f, 0.0f), c.type == CreatureType::DwarfChief ? 1.0f : 0.7f, 0.15f);
-                s.nextGroan = now + wait(rng);
+                s.nextGrunt = now + wait(rng);
             }
         }
         s.seen = true;

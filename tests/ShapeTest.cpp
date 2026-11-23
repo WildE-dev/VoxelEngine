@@ -446,7 +446,7 @@ int main() {
         // Which faces of a chunk see each other through it: none through solid stone,
         // all through air, and through a tunnel only its two ends. Glass and slopes
         // don't block the view.
-        constexpr int N = Chunk::CHUNK_SIZE;
+        static constexpr int N = Chunk::CHUNK_SIZE;
         auto connectivityOf = [](const std::function<Block(int, int, int)>& at) {
             ClientChunk chunk({ 0, 0, 0 });
             Chunk::Blocks blocks;

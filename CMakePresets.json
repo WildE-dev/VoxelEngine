@@ -26,6 +26,18 @@
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
       }
+    },
+    {
+      "name": "windows",
+      "displayName": "Windows (Ninja + MSVC)",
+      "description": "Ninja with the MSVC compiler and vcpkg. Run from a Visual Studio Developer shell, or open the folder in Visual Studio.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-windows",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "cl",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
     }
   ]
 }

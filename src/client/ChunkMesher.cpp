@@ -6,7 +6,7 @@
 #include <mutex>
 
 void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours, std::vector<uint32_t>& vertices, std::vector<uint32_t>& waterVertices) {
-    constexpr int CHUNK_SIZE = Chunk::CHUNK_SIZE;
+    static constexpr int CHUNK_SIZE = Chunk::CHUNK_SIZE;
     auto Index = &Chunk::Index;
     vertices.clear();
     waterVertices.clear();
@@ -30,7 +30,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
     // Opacity of this chunk plus a one block border taken from the surrounding
     // chunks, addressed with coordinates in [-1, CHUNK_SIZE]. Unloaded neighbours
     // count as transparent; they trigger a rebuild of this chunk once they load.
-    constexpr int P = CHUNK_SIZE + 2;
+    static constexpr int P = CHUNK_SIZE + 2;
     auto paddedIndex = [](int x, int y, int z) { return (x + 1) + P * ((y + 1) + P * (z + 1)); };
     auto opaque = std::make_unique<std::array<bool, P * P * P>>();
     auto& grid = *opaque;

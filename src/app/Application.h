@@ -206,7 +206,7 @@ private:
     void UpdateParticles(float dt);
     struct Walker { glm::vec3 feet{ 0.0f }; float distance = 0.0f; bool seen = false; bool hurt = false; };
     std::unordered_map<uint16_t, Walker> walkers;
-    struct CreatureSound { bool hurt = false; double nextGroan = 0.0; bool seen = false; };
+    struct CreatureSound { bool hurt = false; double nextGrunt = 0.0; bool seen = false; };
     std::unordered_map<uint16_t, CreatureSound> creatureSounds;
     bool mute = false; // VOXEL_MUTE
     std::string serverLabel;

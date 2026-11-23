@@ -72,8 +72,8 @@ int main() {
     long counts[kBiomes] = {}, land = 0;
     glm::ivec2 inside[kBiomes];
     bool found[kBiomes] = {};
-    long bestDist[kBiomes];
-    std::fill(std::begin(bestDist), std::end(bestDist), 1L << 40);
+    long long bestDist[kBiomes];
+    std::fill(std::begin(bestDist), std::end(bestDist), 1LL << 40);
     for (int x = -3000; x <= 3000; x += 32)
         for (int z = -3000; z <= 3000; z += 32) {
             const auto c = t.ColumnAt(x, z);
@@ -82,7 +82,7 @@ int main() {
             const Biome b = t.BiomeAt(x, z, c.surfaceRow);
             counts[static_cast<int>(b)]++;
             if (c.surfaceRow > 30) continue; // not up a mountain
-            const long d = static_cast<long>(x) * x + static_cast<long>(z) * z;
+            const long long d = static_cast<long long>(x) * x + static_cast<long long>(z) * z;
             if (d >= bestDist[static_cast<int>(b)]) continue;
             bool uniform = true;
             for (int dx = -24; dx <= 24 && uniform; dx += 12)

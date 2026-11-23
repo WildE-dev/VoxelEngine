@@ -17,6 +17,18 @@ cmake --build build
 cd build && ./VoxelEngine
 ```
 
+On Windows, use the `windows` preset (Ninja and MSVC) from a Visual Studio
+Developer PowerShell, or open the folder in Visual Studio, which picks up the presets:
+
+```powershell
+cmake --preset windows
+cmake --build build-windows
+cd build-windows; .\VoxelEngine.exe
+```
+
+(Windows has no system OpenAL, so the game is silent there unless openal-soft is
+installed.)
+
 The executable loads `Resources/` relative to the working directory, and the
 build copies it next to the binary. Run with no options, it opens at the title
 screen (see [Menus and settings](#menus-and-settings)). With options, such as
@@ -1901,7 +1913,7 @@ they happen and fade with distance.
   collapse or the laser isn't a din). The server's block changes are compared with
   what was there.
 - **Hurt** grunts, splashes into water, a **thump** when a creature is hit, a dwarf's
-  groan now and then, a chime when crafting, and **rain** while it rains where you
+  grunt now and then, a chime when crafting, and **rain** while it rains where you
   are. Under a roof it's quiet.
 
 Every sound is made by `tools/make_sounds.py` from noise and tones, so there are no
