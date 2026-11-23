@@ -60,6 +60,19 @@ struct ParticleModel {
     glm::vec4 uv{ 0.0f }; // the atlas tile region it shows (top-left, bottom-right)
     glm::vec2 light{ 15.0f, 0.0f };
     float soft = 0.0f; // 1: lit evenly all round (spray), not shaded away from the sun
+    bool billboard = false; // a flat square always facing the camera (clouds of smoke and spray, the bobber), not a cube
+};
+
+// An item lying on the ground (server/DroppedItems.h): a little textured cube for a
+// block, a flat card of its icon for anything else, turning slowly and bobbing; a few
+// of them for a bigger stack.
+struct ItemModel {
+    glm::vec3 position{0.0f}; // the middle of its box
+    bool cube = true;
+    glm::vec4 uv{ 0.0f };     // the atlas tile (top-left, bottom-right)
+    int copies = 1;           // 1 to 3
+    float phase = 0.0f;       // its own offset in the turning and bobbing
+    glm::vec2 light{ 15.0f, 0.0f };
 };
 
 // An arrow: where it is and which way it points.
@@ -109,6 +122,15 @@ struct DoorModel {
     glm::vec2 light{ 15.0f, 0.0f };
 };
 
+// A lever: a stone base on the block it's fixed to (behind it), and a wooden handle with
+// a red knob, tipped one way off and the other on (`on`: 0..1, easing between).
+struct LeverModel {
+    glm::vec3 centre{ 0.0f };     // its cell's middle
+    glm::ivec3 facing{ 0, 1, 0 }; // the way it points (out of the face it's on)
+    float on = 0.0f;
+    glm::vec2 light{ 15.0f, 0.0f };
+};
+
 struct BoltModel {
     std::vector<glm::vec3> points;
     float brightness = 1.0f;
@@ -128,10 +150,12 @@ public:
     void Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<PlayerModel>& players);
     // Creatures, from boxes too: deer, wolves, bats and dwarves. `time` swings their legs.
     void DrawArrows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ArrowModel>& arrows);
+    void DrawItems(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ItemModel>& items, float time);
     void DrawGlows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GlowModel>& glows);
     void DrawWheels(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<WheelModel>& wheels);
     void DrawGauges(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GaugeModel>& gauges);
     void DrawDoors(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<DoorModel>& doors);
+    void DrawLevers(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<LeverModel>& levers);
     void DrawBolts(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<BoltModel>& bolts);
     // Bits of broken blocks (tiny textured cubes).
     void DrawParticles(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ParticleModel>& particles);

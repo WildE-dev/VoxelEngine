@@ -86,7 +86,10 @@ private:
     void MoveHorizontal(const BlockAccess& world, int axis, float distance);
     void MoveVertical(const BlockAccess& world, float distance, bool wasOnGround);
     bool InWater(const BlockAccess& world) const;
+    // Wading in lava (any of the body in it): like swimming, but thick and slow.
+    bool InLava(const BlockAccess& world) const;
     bool OnLadder(const BlockAccess& world) const; // any cell the body is in is a ladder
+    bool OnIce(const BlockAccess& world) const;    // standing on ice (slippery)
 
     glm::vec3 feet;
     glm::vec3 velocity{0.0f};
@@ -96,6 +99,7 @@ private:
     bool spawned = false;
     bool resumeHere = false;
     bool inWater = false;
+    bool inLava = false;
     bool onLadder = false;
     bool boating = false;
     void StepBoat(const BlockAccess& world, const PlayerInput& input, float dt);

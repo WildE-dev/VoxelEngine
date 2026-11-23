@@ -22,6 +22,7 @@ struct Settings {
     std::string lastServer = "localhost";
     std::array<int, kActionCount> keys = Bindings::Defaults(); // (GLFW key codes)
     float padLook = 160.0f;   // a gamepad's right stick: degrees a second, full over
+    int bindingsVersion = 2;  // (as read: older files get the newer defaults, see Load)
 
     static constexpr int kMinRenderDistance = 2, kMaxRenderDistance = 12;
     static constexpr float kMinFov = 30.0f, kMaxFov = 100.0f;
@@ -56,10 +57,16 @@ struct Settings {
             else if (key == "last_server") lastServer = rest;
             else if (key == "view_bobbing") viewBobbing = rest != "0";
             else if (key == "pad_look") padLook = static_cast<float>(std::atof(rest.c_str()));
+            else if (key == "bindings_version") bindingsVersion = std::atoi(rest.c_str());
             else if (key.rfind("key_", 0) == 0)
                 for (int i = 0; i < kActionCount; i++)
                     if (key.substr(4) == Bindings::Id(static_cast<Action>(i))) keys[static_cast<size_t>(i)] = std::atoi(rest.c_str());
         }
+        // The inventory moved from I to Tab (bindings version 2): a file from before
+        // that still holding I gets Tab.
+        if (bindingsVersion < 2 && keys[static_cast<size_t>(Action::Inventory)] == GLFW_KEY_I)
+            keys[static_cast<size_t>(Action::Inventory)] = GLFW_KEY_TAB;
+        bindingsVersion = 2;
         Clamp();
         return true;
     }
@@ -74,7 +81,8 @@ struct Settings {
              << "volume " << volume << "\n"
              << "last_server " << lastServer << "\n"
              << "view_bobbing " << (viewBobbing ? 1 : 0) << "\n"
-             << "pad_look " << padLook << "\n";
+             << "pad_look " << padLook << "\n"
+             << "bindings_version 2\n";
         for (int i = 0; i < kActionCount; i++) file << "key_" << Bindings::Id(static_cast<Action>(i)) << " " << keys[static_cast<size_t>(i)] << "\n";
     }
 };

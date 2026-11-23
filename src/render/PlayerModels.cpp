@@ -214,6 +214,35 @@ void PlayerModels::DrawArrows(Shader& shader, const glm::mat4& view, const glm::
     }
 }
 
+void PlayerModels::DrawItems(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<ItemModel>& items, float time) {
+    if (items.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 0.0f);
+    shader.SetUniform("textured", 1.0f);
+    shader.SetUniform("boxRepeat", glm::vec3(0.0f));
+    shader.SetUniform("color", glm::vec3(1.0f));
+    glBindVertexArray(vao);
+    const glm::vec3 eye = glm::vec3(glm::inverse(view)[3]);
+    // Where each copy of a stack sits, beside the first.
+    static const glm::vec3 kOffsets[3] = { { 0.0f, 0.0f, 0.0f }, { 0.07f, 0.05f, 0.06f }, { -0.06f, 0.1f, -0.05f } };
+    for (const auto& item : items) {
+        if (glm::distance(eye, item.position) > 48.0f) continue;
+        shader.SetUniform("lightLevels", item.light);
+        shader.SetUniform("tileRect", item.uv);
+        const float t = time + item.phase;
+        const glm::vec3 middle = item.position + glm::vec3(0.0f, 0.06f + 0.05f * std::sin(t * 2.0f), 0.0f);
+        const glm::mat4 base = glm::rotate(glm::translate(glm::mat4(1.0f), middle), t * 1.2f, glm::vec3(0, 1, 0));
+        for (int c = 0; c < std::clamp(item.copies, 1, 3); c++) {
+            const glm::mat4 at = glm::translate(base, kOffsets[c]);
+            shader.SetUniform("model", item.cube ? glm::scale(at, glm::vec3(0.25f)) : glm::scale(at, glm::vec3(0.4f, 0.4f, 0.03f)));
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
+    }
+    shader.SetUniform("textured", 0.0f);
+}
+
 void PlayerModels::DrawWheels(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<WheelModel>& wheels) {
     if (wheels.empty()) return;
     shader.Use();
@@ -336,6 +365,43 @@ void PlayerModels::DrawDoors(Shader& shader, const glm::mat4& view, const glm::m
     shader.SetUniform("textured", 0.0f);
 }
 
+void PlayerModels::DrawLevers(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<LeverModel>& levers) {
+    if (levers.empty()) return;
+    shader.Use();
+    shader.SetUniform("view", view);
+    shader.SetUniform("projection", projection);
+    shader.SetUniform("glow", 0.0f);
+    shader.SetUniform("textured", 0.0f);
+    glBindVertexArray(vao);
+    const glm::vec3 eye = glm::vec3(glm::inverse(view)[3]);
+    const glm::vec3 kStone(0.5f, 0.5f, 0.52f), kWood(0.55f, 0.38f, 0.2f), kKnob(0.75f, 0.12f, 0.1f);
+    for (const auto& l : levers) {
+        if (glm::distance(eye, l.centre) > 64.0f) continue;
+        shader.SetUniform("lightLevels", l.light);
+        // Local frame: +z out of the face it's on, +y along the way the handle tips (for a
+        // floor lever, toward +z of the world; for a wall one, up).
+        const glm::vec3 z(l.facing);
+        const glm::vec3 y = l.facing.y != 0 ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+        const glm::vec3 x = glm::cross(y, z);
+        glm::mat4 frame(1.0f);
+        frame[0] = glm::vec4(x, 0.0f);
+        frame[1] = glm::vec4(y, 0.0f);
+        frame[2] = glm::vec4(z, 0.0f);
+        frame[3] = glm::vec4(l.centre - z * 0.5f, 1.0f); // (on the face of the block behind)
+        auto part = [&](const glm::mat4& f, const glm::vec3& centre, const glm::vec3& size, const glm::vec3& color) {
+            shader.SetUniform("model", glm::scale(glm::translate(f, centre), size));
+            shader.SetUniform("color", color);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        };
+        part(frame, { 0.0f, 0.0f, 0.0625f }, { 0.3f, 0.45f, 0.125f }, kStone); // the base
+        // The handle, hinged at the base's middle, tipped 40 degrees off (toward -y) or on (+y).
+        const float tilt = glm::radians(-40.0f + 80.0f * std::clamp(l.on, 0.0f, 1.0f));
+        const glm::mat4 hinge = glm::rotate(glm::translate(frame, glm::vec3(0.0f, 0.0f, 0.1f)), tilt, glm::vec3(-1, 0, 0));
+        part(hinge, { 0.0f, 0.0f, 0.24f }, { 0.07f, 0.07f, 0.48f }, kWood);
+        part(hinge, { 0.0f, 0.0f, 0.5f }, { 0.13f, 0.13f, 0.13f }, kKnob);
+    }
+}
+
 void PlayerModels::DrawGlows(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<GlowModel>& glows) {
     if (glows.empty()) return;
     shader.Use();
@@ -391,11 +457,23 @@ void PlayerModels::DrawParticles(Shader& shader, const glm::mat4& view, const gl
     shader.SetUniform("textured", 1.0f);
     shader.SetUniform("color", glm::vec3(1.0f));
     glBindVertexArray(vao);
+    // The camera's right, up and back, for billboards.
+    const glm::vec3 right(view[0][0], view[1][0], view[2][0]), up(view[0][1], view[1][1], view[2][1]), back(view[0][2], view[1][2], view[2][2]);
     for (const auto& p : particles) {
         shader.SetUniform("lightLevels", p.light);
         shader.SetUniform("tileRect", p.uv);
-        shader.SetUniform("soft", p.soft);
-        shader.SetUniform("model", glm::scale(glm::translate(glm::mat4(1.0f), p.position), glm::vec3(p.size)));
+        // (A billboard faces the camera whatever the sun does: lit evenly.)
+        shader.SetUniform("soft", p.billboard ? 1.0f : p.soft);
+        if (p.billboard) {
+            // The unit cube flattened to a square in the camera's plane.
+            glm::mat4 model(1.0f);
+            model[0] = glm::vec4(right * p.size, 0.0f);
+            model[1] = glm::vec4(up * p.size, 0.0f);
+            model[2] = glm::vec4(back * (p.size * 0.01f), 0.0f);
+            model[3] = glm::vec4(p.position, 1.0f);
+            shader.SetUniform("model", model);
+        }
+        else shader.SetUniform("model", glm::scale(glm::translate(glm::mat4(1.0f), p.position), glm::vec3(p.size)));
         glDrawArrays(GL_TRIANGLES, 0, 36);
     }
     shader.SetUniform("textured", 0.0f);

@@ -75,11 +75,12 @@ public:
 
     // Light, 0..kMaxLight per channel. Server worker thread only.
     uint8_t GetLight(LightChannel channel, int x, int y, int z) const {
-        uint8_t v = light[Index(x, y, z)];
+        if (!data) return 0;
+        uint8_t v = data->light[Index(x, y, z)];
         return channel == LightChannel::Block ? (v & 0x0F) : (v >> 4);
     }
     void SetLight(LightChannel channel, int x, int y, int z, uint8_t value) {
-        uint8_t& v = light[Index(x, y, z)];
+        uint8_t& v = Data().light[Index(x, y, z)];
         v = channel == LightChannel::Block ? static_cast<uint8_t>((v & 0xF0) | value)
                                            : static_cast<uint8_t>((v & 0x0F) | (value << 4));
     }
@@ -119,9 +120,28 @@ private:
     const glm::ivec3 coords;
 
     mutable std::mutex blockMutex;
-    Blocks blocks{};
-    Light light{}; // server: worker thread only; client: guarded by blockMutex
-    Light publishedLight{}; // server: guarded by blockMutex
+    // Its blocks and light, made when it first gets any (generated, received, lit), so
+    // a placeholder waiting its turn costs next to nothing: a player who teleports far
+    // away makes thousands of them at once. Until then it's all air, and dark.
+    struct Contents {
+        Blocks blocks{};
+        Light light{};          // server: worker thread only; client: guarded by blockMutex
+        Light publishedLight{}; // server: guarded by blockMutex
+    };
+    std::unique_ptr<Contents> data;
+    // (Made if need be, under blockMutex.)
+    Contents& Data() {
+        if (!data) {
+            std::lock_guard<std::mutex> lock(blockMutex);
+            if (!data) data = std::make_unique<Contents>();
+        }
+        return *data;
+    }
+    // (The same, for callers already holding blockMutex.)
+    Contents& DataLocked() {
+        if (!data) data = std::make_unique<Contents>();
+        return *data;
+    }
     std::array<uint8_t, CHUNK_SIZE * CHUNK_SIZE> skyFromAbove = MakeFullSky(); // worker thread only
     static std::array<uint8_t, CHUNK_SIZE * CHUNK_SIZE> MakeFullSky() { std::array<uint8_t, CHUNK_SIZE * CHUNK_SIZE> a; a.fill(kMaxLight); return a; }
 

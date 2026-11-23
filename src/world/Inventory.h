@@ -76,7 +76,7 @@ inline ItemId FromId(const std::string& id) {
     else if (rest.rfind("iron_", 0) == 0) tier = 1, rest = rest.substr(5);
     if (const Tool t = Mining::ToolFromId(rest); t != Tool::None) return OfTool(t, tier);
     if (const ArmourPiece p = Armour::FromId(id); p != ArmourPiece::Count) return OfArmour(p);
-    const BlockType b = BlockFromId(id);
+    const BlockType b = Current(BlockFromId(id)); // ("pipe": a fluid pipe now)
     return b == BlockType::COUNT || b == BlockType::AIR ? kNone : OfBlock(b);
 }
 // For people: "Iron pickaxe", "Hide cap"; a block's is its id made readable.

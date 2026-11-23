@@ -1,4 +1,7 @@
 #include "server/Server.h"
+#include "world/Lava.h"
+#include "world/Trees.h"
+#include "world/ModelBoxes.h"
 #include <unordered_set>
 #include <fstream>
 #include "world/Trades.h"
@@ -107,7 +110,14 @@ bool InsideSolid(const ServerWorld& world, const Collision::AABB& box) {
         for (int y = lo.y; y <= hi.y; y++)
             for (int z = lo.z; z <= hi.z; z++) {
                 Block block;
-                if (world.GetBlock(x, y, z, block) && block.IsFullBlock()) return true;
+                if (!world.GetBlock(x, y, z, block) || !block.IsFullBlock()) continue;
+                // A pipe, a shaft or a gauge fills only its boxes (as players collide with it).
+                glm::vec3 lo[Block::kMaxModelBoxes], hi[Block::kMaxModelBoxes];
+                const int count = block.ModelBoxes(ModelBoxes::Joins(world, glm::ivec3(x, y, z), block), lo, hi);
+                if (count < 0) return true;
+                const glm::vec3 cell(x, y, z);
+                for (int i = 0; i < count; i++)
+                    if (glm::all(glm::lessThan(box.min, hi[i] + cell)) && glm::all(glm::greaterThan(box.max, lo[i] + cell))) return true;
             }
     return false;
 }
@@ -193,6 +203,10 @@ bool Server::Start(const Options& opts) {
             fluidKind[f.pos] = static_cast<Fluids::Kind>(f.kind);
         }
         for (const auto& a : storage->GetAir()) air[a.pos] = a.units;
+        for (const auto& i : storage->GetItems())
+            if (const uint32_t id = dropped.Drop(i.item, i.count, i.units, i.position, glm::vec3(0.0f), 0.0f))
+                for (auto& d : dropped.All())
+                    if (d.id == id) d.age = i.age;
     }
     weatherSeed ^= static_cast<uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
     weatherMode = options.weather;
@@ -301,6 +315,9 @@ void Server::Save(bool shuttingDown) {
     for (const auto& [pos, units] : air)
         if (units > 0.0f) savedAir.push_back({ pos, units });
     storage->SetAir(std::move(savedAir));
+    std::vector<WorldStorage::SavedItem> savedItems;
+    for (const auto& d : dropped.All()) savedItems.push_back({ d.item, d.count, d.units, d.position, d.age });
+    storage->SetItems(std::move(savedItems));
     const size_t saved = world->SaveAll();
     const bool ok = storage->Flush();
     lastSaveTime = Now();
@@ -431,6 +448,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     case net::MsgType::CreativeSlot: {
         net::CreativeSlot m;
         if ((ok = net::Decode(in, m))) HandleCreativeSlot(client, m);
+        break;
+    }
+    case net::MsgType::DropItem: {
+        net::DropItem m;
+        if ((ok = net::Decode(in, m))) HandleDropItem(client, m);
         break;
     }
     case net::MsgType::Eat: {
@@ -620,8 +642,14 @@ void Server::UpdateFall(ClientState& client, const net::PlayerState& state, bool
     Block at;
     const glm::ivec3 cell(glm::floor(state.feet + glm::vec3(0.0f, 0.1f, 0.0f)));
     Block above;
-    const bool swimming = (state.flags & (net::kFlagSwimming | net::kFlagBoat)) != 0 || (world->GetBlock(cell.x, cell.y, cell.z, at) && (at.HasWater() || at.type == BlockType::LADDER)) ||
-                          (world->GetBlock(cell.x, cell.y + 1, cell.z, above) && above.type == BlockType::LADDER); // (a ladder ends a fall too)
+    // Water (or lava) or a ladder where they are ends a fall; so does a boat, if they have
+    // one and there's water under it (what the client says isn't taken on trust).
+    Block under;
+    const bool wetBelow = world->GetBlock(cell.x, cell.y - 1, cell.z, under) && under.HasWater();
+    const bool boat = (state.flags & net::kFlagBoat) && (Creative(client) || client.inventory.Units(BlockType::BOAT) > 0) &&
+                      (wetBelow || (world->GetBlock(cell.x, cell.y, cell.z, at) && at.HasWater()));
+    const bool swimming = boat || (world->GetBlock(cell.x, cell.y, cell.z, at) && (at.HasWater() || at.IsLava() || at.type == BlockType::LADDER)) ||
+                          (world->GetBlock(cell.x, cell.y + 1, cell.z, above) && (above.type == BlockType::LADDER || above.HasWater())); // (a ladder ends a fall too)
     if (reset || swimming || Creative(client)) {
         client.fallPeak = state.feet.y;
         client.falling = false;
@@ -693,7 +721,12 @@ int Server::ToolTier(const ClientState& client, Tool tool) {
 bool Server::Give(ClientState& client, BlockType type, uint32_t units) {
     const uint32_t lost = client.inventory.AddUnits(type, units);
     if (lost == 0) return true;
-    SendChat(client, net::ChatMessage::Kind::Error, "Your inventory is full: " + std::to_string(lost / Items::kUnits) + " " + Items::Name(Items::OfBlock(type)) + " lost");
+    for (uint32_t left = lost / Items::kUnits; left > 0;) {
+        const uint32_t n = std::min(left, Items::kMaxStack);
+        left -= n;
+        dropped.Drop(Items::OfBlock(type), n, 0, client.feet + glm::vec3(0.0f, 0.5f, 0.0f), dropped.Pop() * 0.5f, DroppedItems::kBlockDelay);
+    }
+    SendChat(client, net::ChatMessage::Kind::Error, "Your inventory is full: " + std::to_string(lost / Items::kUnits) + " " + Items::Name(Items::OfBlock(type)) + " dropped on the ground");
     return false;
 }
 
@@ -1078,28 +1111,6 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
             return Echo(client, pos);
         }
         client.mining = false;
-        // Somewhere to put it: refused (and kept mining) if what it gives won't fit.
-        const Block whole = (block.type == BlockType::MULTIBLOCK || block.type == BlockType::MULTIBLOCK_PART) ? Block() : block;
-        if (!whole.IsAir() && !client.inventory.FitsUnits(whole.ResourceType(), static_cast<uint32_t>(whole.ResourceUnits()))) {
-            client.mining = true;
-            SendChat(client, net::ChatMessage::Kind::Error, "Your inventory is full");
-            return Echo(client, pos);
-        }
-        // A chest's contents go to whoever breaks it: they must fit too.
-        if (IsStorageType(block.type)) {
-            Inventory after = client.inventory;
-            after.AddUnits(block.ResourceType(), static_cast<uint32_t>(block.ResourceUnits()));
-            const Inventory& held = ChestAt(pos);
-            bool fit = true;
-            for (const Stack& st : held.slots)
-                if (!st.Empty()) fit &= after.Add(st.item, st.count) == 0;
-            for (size_t t = 0; t < held.offcuts.size(); t++) fit &= after.AddUnits(static_cast<BlockType>(t), held.offcuts[t]) == 0;
-            if (!fit) {
-                client.mining = true;
-                SendChat(client, net::ChatMessage::Kind::Error, "What's in it won't fit in your inventory: empty it first");
-                return Echo(client, pos);
-            }
-        }
     }
     // Part of a formed structure: it comes apart, and the block broken is what it was.
     if (block.type == BlockType::MULTIBLOCK || block.type == BlockType::MULTIBLOCK_PART) block = TakeApart(pos);
@@ -1108,6 +1119,20 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
     if (IsStorageType(block.type)) RemoveChest(pos, &client);
     if (block.type == BlockType::CROP) crops.erase(pos);
     if (block.type == BlockType::SIGN && signs.erase(pos)) BroadcastSign(pos);
+    // A log: with an axe, the logs straight above come down with it (each giving its
+    // worth); and leaves that nothing holds up any more start to fall away.
+    if (Trees::IsLog(block)) {
+        std::vector<glm::ivec3> gone{ pos };
+        if (tool == Tool::Axe)
+            for (const auto& p : Trees::LogsAbove(*world, pos)) {
+                Block log;
+                if (!world->GetBlock(p.x, p.y, p.z, log)) break;
+                world->SetBlock(p.x, p.y, p.z, log.HasWater() ? Block::Water(log.WaterVolume()) : Block());
+                if (!Creative(client)) dropped.DropUnits(log.ResourceType(), static_cast<uint32_t>(log.ResourceUnits()), p, client.id);
+                gone.push_back(p);
+            }
+        LoosenLeaves(gone);
+    }
     // A door goes as a whole: the other half too (its worth is counted once, below).
     if (block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN)
         for (const int dy : { 1, -1 }) {
@@ -1123,18 +1148,18 @@ void Server::HandleBreak(ClientState& client, const glm::ivec3& pos, Tool tool) 
         uint32_t seeds = 0;
         if (block.type == BlockType::RIPE_WHEAT) seeds = roll < 0.5f ? 1 : 2;
         if (block.type == BlockType::TALL_GRASS && roll < 0.3f) seeds = 1;
-        if (seeds) Give(client, BlockType::SEEDS, seeds * Block::kUnitsPerBlock);
+        if (seeds) dropped.DropUnits(BlockType::SEEDS, seeds * Block::kUnitsPerBlock, pos, client.id);
         // Leaves now and then drop a sapling (a pine's, from pine needles).
         if (IsLeavesType(block.type) && roll > 0.88f)
-            Give(client, block.type == BlockType::PINE_LEAVES ? BlockType::PINE_SAPLING : BlockType::SAPLING, Block::kUnitsPerBlock);
+            dropped.DropUnits(block.type == BlockType::PINE_LEAVES ? BlockType::PINE_SAPLING : BlockType::SAPLING, Block::kUnitsPerBlock, pos, client.id);
     }
-    // Survival: the block's worth goes to the player.
+    // Survival: the block's worth drops where it was (and flies to them).
     if (!Creative(client)) {
         Award(client, Achievement::FirstBlock);
         if (block.type == BlockType::IRON_ORE) Award(client, Achievement::Miner);
         if (block.type == BlockType::RIPE_WHEAT) Award(client, Achievement::Farmer);
-        Give(client, block.ResourceType(), static_cast<uint32_t>(block.ResourceUnits())); // (pebbles are stone)
-        SendInventory(client);
+        if (!IsCreativeOnlyType(block.type))
+            dropped.DropUnits(block.ResourceType(), static_cast<uint32_t>(block.ResourceUnits()), pos, client.id); // (pebbles are stone)
     }
 }
 
@@ -1149,7 +1174,9 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
     // Room for it (a door's upper half too; seeds on dirt or grass): BlockAccess::CanPlace,
     // which the client checks too before predicting it.
     if (type == BlockType::AIR || IsItemType(type) || !InReach(client, pos, EditReach(client)) || !world->CanPlace(pos, type)) return refuse();
+    if (IsCreativeOnlyType(type) && !Creative(client)) return refuse();
     const Block placed = Block::Placed(type, height, faceAxis);
+    if (IsLeverType(type) && !world->LeverHeld(pos, placed)) return refuse(); // (only on a solid block)
     // Survival: it costs its worth, which the player must have. Water can't be
     // collected (only moved, with pumps), so it can't be placed either.
     const uint32_t cost = static_cast<uint32_t>(placed.ResourceUnits());
@@ -1451,12 +1478,12 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
         world->SetBlock(pos.x, pos.y, pos.z, set);
         return;
     }
-    if (block.type == BlockType::VALVE || block.type == BlockType::VALVE_OPEN) {
+    if (IsValveType(block.type)) {
         auto sig = signalBlocks.find(pos);
         if (sig != signalBlocks.end() && sig->second.config.a != 0) {
             return SendChat(client, net::ChatMessage::Kind::Info, "This valve answers to channel " + std::to_string(sig->second.config.a));
         }
-        world->SetBlock(pos.x, pos.y, pos.z, Block(block.type == BlockType::VALVE ? BlockType::VALVE_OPEN : BlockType::VALVE));
+        world->SetBlock(pos.x, pos.y, pos.z, Block(ValveSetTo(block.type, !IsOpenValve(block.type))));
         return;
     }
     if (block.type == BlockType::CAMPFIRE) {
@@ -1711,14 +1738,13 @@ void Server::RemoveChest(const glm::ivec3& pos, ClientState* breaker) {
     if (breaker) ChestAt(pos); // (an unopened dungeon chest still holds its loot)
     auto it = chests.find(pos);
     if (it == chests.end()) return;
-    // What was in it goes to whoever broke it.
+    // What was in it spills out where it was.
     if (breaker) {
-        // (HandleBreak made sure it fits; a creative player's grows if need be.)
         const Inventory& held = it->second;
         for (const Stack& st : held.slots)
-            if (!st.Empty()) breaker->inventory.Add(st.item, st.count, true);
-        for (size_t t = 0; t < held.offcuts.size(); t++) breaker->inventory.AddUnits(static_cast<BlockType>(t), held.offcuts[t], true);
-        SendInventory(*breaker);
+            if (!st.Empty()) dropped.DropItems(st.item, st.count, pos);
+        for (size_t t = 0; t < held.offcuts.size(); t++)
+            if (held.offcuts[t]) dropped.DropUnits(static_cast<BlockType>(t), held.offcuts[t], pos);
     }
     chests.erase(it);
     for (auto& [peer, client] : clients)
@@ -1957,6 +1983,212 @@ void Server::SendArrows() {
     }
 }
 
+void Server::HandleDropItem(ClientState& client, const net::DropItem& m) {
+    if (client.health <= 0 || !client.hasState) return;
+    // The armour slots as a little inventory of their own (as in HandleInventoryMove).
+    Inventory armourBox(static_cast<size_t>(ArmourPiece::Count));
+    for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++)
+        if (client.armour & Armour::Bit(static_cast<ArmourPiece>(p))) armourBox.slots[p] = { Items::OfArmour(static_cast<ArmourPiece>(p)), 1 };
+    const net::Box boxKind = static_cast<net::Box>(m.box);
+    Inventory* box = boxKind == net::Box::Player ? &client.inventory : boxKind == net::Box::Armour ? &armourBox : OpenChestOf(client);
+    if (!box || m.slot >= box->slots.size() || box->slots[m.slot].Empty()) return SendInventory(client), SendChest(client);
+    Stack& st = box->slots[m.slot];
+    const uint32_t n = m.count == 0 ? st.count : std::min<uint32_t>(m.count, st.count);
+    const ItemId item = st.item;
+    st.count = static_cast<uint8_t>(st.count - n);
+    if (st.count == 0) st = {};
+    if (boxKind == net::Box::Armour) {
+        client.armour = 0;
+        for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++)
+            if (!armourBox.slots[p].Empty()) client.armour |= Armour::Bit(static_cast<ArmourPiece>(p));
+    }
+    // Thrown from the eye, the way they're looking, a little up.
+    const glm::vec3 dir = glm::length(m.direction) > 1e-3f ? glm::normalize(m.direction) : glm::vec3(0.0f, 0.0f, -1.0f);
+    const bool crouching = (client.flags & net::kFlagCrouching) != 0;
+    const glm::vec3 eye = client.feet + glm::vec3(0.0f, crouching ? kCrouchHeight - 0.2f : kPlayerHeight - 0.2f, 0.0f);
+    dropped.Drop(item, n, 0, eye + dir * 0.3f - glm::vec3(0.0f, 0.3f, 0.0f), dir * 5.0f + glm::vec3(0.0f, 1.5f, 0.0f), DroppedItems::kThrowDelay);
+    SendInventory(client);
+    if (boxKind == net::Box::Chest) SendChestToViewers(*client.openChest);
+}
+
+void Server::UpdateDroppedItems() {
+    constexpr float dt = 1.0f / kTickRate;
+    // Levers that fell off what held them drop where they were.
+    {
+        std::vector<std::pair<glm::ivec3, Block>> fallen;
+        world->TakeFallenLevers(fallen);
+        for (const auto& [pos, lever] : fallen) dropped.DropUnits(lever.ResourceType(), static_cast<uint32_t>(lever.ResourceUnits()), pos);
+    }
+    // Who could take what: in the world, alive, and (flying through blocks) not in no-clip flight.
+    struct Taker {
+        ClientState* client;
+        Collision::AABB body;
+        glm::vec3 chest;
+    };
+    std::vector<Taker> takers;
+    for (auto& [peer, client] : clients) {
+        if (!client.welcomed || !client.hasState || client.health <= 0) continue;
+        const Collision::AABB body = BodyAt(client.feet, 0.0f, (client.flags & net::kFlagCrouching) != 0);
+        takers.push_back({ &client, body, (body.min + body.max) * 0.5f });
+    }
+    // Whether any of it would fit.
+    auto room = [](const Inventory& inv, const DroppedItems::Item& d) {
+        if (d.count > 0) return inv.Room(d.item) > 0;
+        return inv.FitsUnits(Items::BlockOf(d.item), d.units);
+    };
+    for (auto& d : dropped.All()) {
+        if (d.age < d.pickupDelay) continue;
+        // What a block left flies to whoever broke it, if they're near and have room.
+        if (d.owner && d.age < d.ownerFor)
+            for (const Taker& t : takers)
+                if (t.client->id == d.owner && glm::distance(d.position, t.chest) < 8.0f && room(t.client->inventory, d)) DroppedItems::FlyTo(d, t.chest, dt);
+        // Anything else close by drifts in to whoever's nearest.
+        if (!d.flying) {
+            const Taker* nearest = nullptr;
+            float best = 1.6f;
+            for (const Taker& t : takers) {
+                const glm::vec3 c = glm::clamp(d.position, t.body.min, t.body.max);
+                const float dist = glm::distance(c, d.position);
+                if (dist < best && room(t.client->inventory, d)) best = dist, nearest = &t;
+            }
+            if (nearest) DroppedItems::FlyTo(d, nearest->chest, dt);
+        }
+    }
+    dropped.Update(*world, dt);
+    // Picked up: touching them (into their inventory, as much as fits).
+    std::vector<uint32_t> taken;
+    for (auto& d : dropped.All()) {
+        if (d.age < d.pickupDelay) continue;
+        for (const Taker& t : takers) {
+            const Collision::AABB grab{ t.body.min - glm::vec3(0.3f), t.body.max + glm::vec3(0.3f) };
+            if (glm::any(glm::lessThan(d.position, grab.min)) || glm::any(glm::greaterThan(d.position, grab.max))) continue;
+            Inventory& inv = t.client->inventory;
+            bool changed = false;
+            if (d.count > 0) {
+                const uint32_t left = inv.Add(d.item, d.count);
+                changed = left < d.count;
+                d.count = static_cast<uint8_t>(left);
+            }
+            if (d.units > 0 && d.count == 0 && inv.FitsUnits(Items::BlockOf(d.item), d.units)) {
+                inv.AddUnits(Items::BlockOf(d.item), d.units);
+                d.units = 0, changed = true;
+            }
+            if (changed) SendInventory(*t.client);
+            if (d.count == 0 && d.units == 0) {
+                taken.push_back(d.id);
+                break;
+            }
+        }
+    }
+    for (const uint32_t id : taken) dropped.Remove(id);
+}
+
+void Server::SendDroppedItems() {
+    constexpr float kSendRange = 48.0f;
+    for (auto& [peer, client] : clients) {
+        if (!client.welcomed) continue;
+        net::ItemsNear m;
+        bool moving = false;
+        uint64_t hash = 0;
+        for (const auto& d : dropped.All()) {
+            if (glm::distance(d.position, client.feet) >= kSendRange) continue;
+            m.items.push_back({ d.id, d.item, d.count, d.position, d.velocity });
+            moving |= d.flying || !d.onGround || glm::length(d.velocity) > 1e-3f;
+            hash = (hash ^ (static_cast<uint64_t>(d.id) * 0x9E3779B97F4A7C15ull + d.count)) * 0x100000001B3ull;
+        }
+        if (m.items.size() > net::kMaxItemsSent) {
+            // The nearest.
+            std::partial_sort(m.items.begin(), m.items.begin() + net::kMaxItemsSent, m.items.end(), [&](const net::ItemInfo& a, const net::ItemInfo& b) {
+                return glm::distance(a.position, client.feet) < glm::distance(b.position, client.feet);
+            });
+            m.items.resize(net::kMaxItemsSent);
+        }
+        // Every tick while anything's moving or it's changed; now and then otherwise (it
+        // goes unreliably).
+        client.itemsQuiet++;
+        if (!moving && hash == client.sentItems && client.itemsQuiet < kTickRate) continue;
+        if (m.items.empty() && client.sentItems == 0) continue; // (nothing, and they know it)
+        client.sentItems = m.items.empty() ? 0 : (hash ? hash : 1);
+        client.itemsQuiet = 0;
+        net.Send(peer, net::kChannelUnreliable, net::Encode(m));
+    }
+}
+
+void Server::LoosenLeaves(const std::vector<glm::ivec3>& logsGone) {
+    const double now = Now();
+    for (const auto& leaf : Trees::LooseLeaves(*world, logsGone)) {
+        if (leafFalls.count(leaf)) continue;
+        const float r = Noise::Random01(leaf.x, leaf.y, leaf.z, static_cast<uint32_t>(tickCount));
+        leafFalls[leaf] = now + Trees::kLeafFallMin + (Trees::kLeafFallMax - Trees::kLeafFallMin) * r;
+    }
+}
+
+void Server::UpdateLeaves() {
+    if (leafFalls.empty()) return;
+    const double now = Now();
+    std::vector<glm::ivec3> due;
+    for (const auto& [pos, when] : leafFalls)
+        if (now >= when) due.push_back(pos);
+    for (const auto& pos : due) {
+        leafFalls.erase(pos);
+        Block b;
+        // (Still leaves, and still nothing holding them up: a log may have been put back.)
+        if (!world->GetBlock(pos.x, pos.y, pos.z, b) || !IsLeavesType(b.type) || Trees::LogNear(*world, pos)) continue;
+        world->SetBlock(pos.x, pos.y, pos.z, b.HasWater() ? Block::Water(b.WaterVolume()) : Block());
+        if (Noise::Random01(pos.x, pos.y, pos.z, 0x5A7u) < Trees::kSaplingChance)
+            dropped.DropUnits(b.type == BlockType::PINE_LEAVES ? BlockType::PINE_SAPLING : BlockType::SAPLING, Block::kUnitsPerBlock, pos);
+    }
+}
+
+void Server::UpdateLava() {
+    const double now = Now();
+    if (now < nextLava) return;
+    nextLava = now + Lava::kInterval;
+    std::vector<glm::ivec3> woken;
+    world->TakeLavaWake(woken);
+    if (woken.empty()) return;
+    std::vector<Lava::Change> changes;
+    std::vector<Lava::Boil> boils;
+    Lava::Step(*world, woken, changes, boils);
+    for (const auto& c : changes) world->SetBlock(c.pos.x, c.pos.y, c.pos.z, c.block);
+    // Water touching lava boils away into a cloud of steam, with a hiss.
+    for (const auto& b : boils) steam.Add(b.pos, b.steam);
+}
+
+void Server::UpdateSteam() {
+    const double now = Now();
+    if (now < nextSteam) return;
+    nextSteam = now + SteamCloud::kInterval;
+    steam.Update(*world);
+}
+
+void Server::SendSteam() {
+    const double now = Now();
+    if (now < nextSteamSend) return;
+    nextSteamSend = now + 0.2;
+    constexpr int kRange = 64;
+    for (auto& [peer, client] : clients) {
+        if (!client.welcomed) continue;
+        net::SteamNear m;
+        m.base = glm::ivec3(glm::floor(client.feet));
+        for (const auto& [cell, units] : steam.All()) {
+            const glm::ivec3 d = cell - m.base;
+            if (std::abs(d.x) > kRange || std::abs(d.y) > kRange || std::abs(d.z) > kRange) continue;
+            m.cells.push_back({ static_cast<int16_t>(d.x), static_cast<int16_t>(d.y), static_cast<int16_t>(d.z), static_cast<uint8_t>(std::min<int>(255, units)) });
+        }
+        if (m.cells.size() > net::kMaxSteamSent) {
+            // The nearest.
+            auto far = [](const net::SteamCell& c) { return c.dx * c.dx + c.dy * c.dy + c.dz * c.dz; };
+            std::nth_element(m.cells.begin(), m.cells.begin() + net::kMaxSteamSent, m.cells.end(),
+                             [&](const net::SteamCell& a, const net::SteamCell& b) { return far(a) < far(b); });
+            m.cells.resize(net::kMaxSteamSent);
+        }
+        if (m.cells.empty() && !client.sentSteam) continue; // (none, and they know it)
+        client.sentSteam = !m.cells.empty();
+        net.Send(peer, net::kChannelUnreliable, net::Encode(m));
+    }
+}
+
 void Server::Award(ClientState& client, Achievement a) {
     if (Creative(client) || (client.achievements & Achievements::Bit(a))) return;
     client.achievements |= Achievements::Bit(a);
@@ -2083,6 +2315,28 @@ void Server::UpdateTraps() {
             const glm::ivec3& u = underCells[i];
             if (world->GetBlock(u.x, u.y, u.z, b) && b.type == BlockType::CRUMBLING_BRICK && !crumbling.count(u)) crumbling[u] = now + kCrumbleDelay;
             if (world->GetBlock(u.x, u.y, u.z, b) && b.type == BlockType::MAGMA) scorched = true;
+        }
+        // Wading in lava burns, hard.
+        {
+            const Collision::AABB body = BodyAt(client.feet, 0.05f, (client.flags & net::kFlagCrouching) != 0);
+            bool inLava = false;
+            int steamIn = 0; // the thickest steam the body's in
+            for (int x = static_cast<int>(std::floor(body.min.x)); x <= static_cast<int>(std::floor(body.max.x)) && !inLava; x++)
+                for (int y = static_cast<int>(std::floor(body.min.y)); y <= static_cast<int>(std::floor(body.max.y)) && !inLava; y++)
+                    for (int z = static_cast<int>(std::floor(body.min.z)); z <= static_cast<int>(std::floor(body.max.z)) && !inLava; z++) {
+                        Block b;
+                        inLava = world->GetBlock(x, y, z, b) && b.IsLava();
+                        steamIn = std::max(steamIn, steam.At({ x, y, z }));
+                    }
+            // Thick steam scalds (armour doesn't keep it out).
+            if (steamIn >= SteamCloud::kScaldUnits && now >= client.nextScald) {
+                client.nextScald = now + SteamCloud::kScaldInterval;
+                Hurt(client, SteamCloud::kScaldDamage, "was scalded by steam", false);
+            }
+            if (inLava && now >= client.nextLavaBurn) {
+                client.nextLavaBurn = now + 0.5;
+                Hurt(client, 3, "tried to swim in lava");
+            }
         }
         if (scorched && now >= client.nextSpikeHit) {
             client.nextSpikeHit = now + 0.75;
@@ -2217,6 +2471,10 @@ void Server::Tick() {
     section(1);
     UpdateCrops();
     UpdateArrows();
+    UpdateDroppedItems();
+    UpdateLava();
+    UpdateSteam();
+    UpdateLeaves();
     UpdateFishing();
     UpdateTnt();
     section(2);
@@ -2242,6 +2500,8 @@ void Server::Tick() {
     BroadcastPlayers();
     SendCreatures();
     SendArrows();
+    SendDroppedItems();
+    SendSteam();
     net.Flush();
     section(5);
     if (bench) {
@@ -2296,8 +2556,6 @@ size_t Server::SendChunk(ClientState& client, const glm::ivec3& coords) {
 }
 
 void Server::StreamWorld(ClientState& client) {
-    if (net.GetStats(client.peer).queuedReliableBytes > kMaxQueuedBytes) return; // let the link catch up
-
     const glm::ivec3 center = Coords::ChunkOf(glm::ivec3(glm::floor(client.feet)));
     const int r = client.viewDistance, v = client.verticalViewDistance;
     auto unload = [&](const glm::ivec3& coords) {
@@ -2324,6 +2582,9 @@ void Server::StreamWorld(ClientState& client) {
             }
         }
     }
+    // (Dropping chunks goes out even while the link is busy: after a teleport, the old
+    // place must be forgotten at once, not once the new one has streamed in.)
+    if (net.GetStats(client.peer).queuedReliableBytes > kMaxQueuedBytes) return; // let the link catch up
 
     size_t budget = kBytesPerTick;
     auto spend = [&](size_t bytes) { budget = bytes >= budget ? 0 : budget - bytes; };

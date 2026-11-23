@@ -5,6 +5,9 @@
 #include <cmath>
 
 #include "world/BlockAccess.h"
+#include "world/Coords.h"
+#include "world/ModelBoxes.h"
+#include "world/SpriteMasks.h"
 
 namespace {
 
@@ -72,7 +75,8 @@ bool SpriteArea(BlockType type, float& u0, float& u1, float& height) {
 }
 
 // Whether the ray, inside the cell, passes through the picture of a grass-like plant
-// (rather than the empty space around it).
+// (rather than the empty space around it): its texture's solid pixels where the
+// textures are known, else the rough area SpriteArea gives.
 bool HitsSprite(const Block& block, const glm::ivec3& cell, const glm::vec3& origin, const glm::vec3& direction, float tEnter, float tExit, float u0,
                 float u1, float height) {
     const glm::vec3 o = origin - glm::vec3(cell);
@@ -86,14 +90,40 @@ bool HitsSprite(const Block& block, const glm::ivec3& cell, const glm::vec3& ori
         const glm::vec3 p = o + direction * t;
         const float u = d == 0 ? p.x : 1.0f - p.x;
         const float up = p.y - bottom;
-        if (u >= u0 && u <= u1 && up >= 0.0f && up <= height) return true;
+        if (up < 0.0f || up > 1.0f || u < 0.0f || u > 1.0f) continue;
+        if (const auto solid = SpriteMasks::Solid(GetTextureData(block.type).top, u, 1.0f - up)) {
+            if (*solid) return true;
+            continue;
+        }
+        if (u >= u0 && u <= u1 && up <= height) return true;
     }
     return false;
 }
 
 bool HitsShape(const Block& block, const glm::ivec3& cell, const glm::vec3& origin, const glm::vec3& direction, float tEnter, float tExit,
-               bool& onTop) {
+               bool& onTop, unsigned joined = 0) {
     onTop = false;
+    {
+        // Drawn smaller than the cell (a pipe, a shaft, a gauge): its boxes.
+        glm::vec3 lo[Block::kMaxModelBoxes], hi[Block::kMaxModelBoxes];
+        const int count = block.ModelBoxes(joined, lo, hi);
+        for (int i = 0; i < count; i++) {
+            float t0 = tEnter, t1 = tExit;
+            for (int a = 0; a < 3 && t0 <= t1; a++) {
+                const float l = cell[a] + lo[i][a], h = cell[a] + hi[i][a];
+                if (std::abs(direction[a]) < 1e-8f) {
+                    if (origin[a] < l || origin[a] > h) t0 = t1 + 1.0f;
+                    continue;
+                }
+                float ta = (l - origin[a]) / direction[a], tb = (h - origin[a]) / direction[a];
+                if (ta > tb) std::swap(ta, tb);
+                t0 = std::max(t0, ta);
+                t1 = std::min(t1, tb);
+            }
+            if (t0 <= t1) return true;
+        }
+        if (count >= 0) return false;
+    }
     if (block.IsFullBlock()) return true;
     if (const int dir = block.ShapeDir(); dir != 0 && block.IsPartial()) {
         // Turned (Block::ShapeDir): the ray into the shape's own upright frame, and tested
@@ -102,6 +132,28 @@ bool HitsShape(const Block& block, const glm::ivec3& cell, const glm::vec3& orig
         Block upright = block;
         upright.axis = 0;
         return HitsShape(upright, cell, Block::CellToShape(dir, origin - base) + base, Block::CellVectorToShape(dir, direction), tEnter, tExit, onTop);
+    }
+    if (block.type == BlockType::PEBBLES) {
+        // Its little stones (where they're drawn: by the cell's place in its chunk).
+        const glm::ivec3 local = Coords::LocalOf(cell);
+        glm::vec3 lo[5], hi[5];
+        const int count = block.PebbleStones(local.x, local.y, local.z, lo, hi);
+        for (int i = 0; i < count; i++) {
+            float t0 = tEnter, t1 = tExit;
+            for (int a = 0; a < 3 && t0 <= t1; a++) {
+                const float l = cell[a] + lo[i][a], h = cell[a] + hi[i][a];
+                if (std::abs(direction[a]) < 1e-8f) {
+                    if (origin[a] < l || origin[a] > h) t0 = t1 + 1.0f;
+                    continue;
+                }
+                float ta = (l - origin[a]) / direction[a], tb = (h - origin[a]) / direction[a];
+                if (ta > tb) std::swap(ta, tb);
+                t0 = std::max(t0, ta);
+                t1 = std::min(t1, tb);
+            }
+            if (t0 <= t1) return true;
+        }
+        return false;
     }
     if (block.IsPlant()) {
         float u0, u1, height;
@@ -155,8 +207,8 @@ std::optional<RaycastHit> Raycast(const BlockAccess& world, const glm::vec3& ori
         // Rays pass through water (you click the sea floor, not the surface), and
         // through the open part of a partial block (aiming past a slope or a step).
         bool onTop = false;
-        if (world.GetBlock(pos.x, pos.y, pos.z, block) && !block.IsAir() && !block.IsLiquid() &&
-            HitsShape(block, pos, origin, direction, tEnter, tExit, onTop)) {
+        if (world.GetBlock(pos.x, pos.y, pos.z, block) && !block.IsAir() && !block.IsLiquid() && !block.IsLava() &&
+            HitsShape(block, pos, origin, direction, tEnter, tExit, onTop, ModelBoxes::Joins(world, pos, block))) {
             // Met the shape inside the cell (over a slope, onto a quarter): its top.
             // (A turned shape's top faces the way it's turned.)
             hit = RaycastHit{ pos, onTop ? glm::ivec3(glm::round(Block::ShapeVectorToCell(block.ShapeDir(), glm::vec3(0.0f, 1.0f, 0.0f)))) : normal };
@@ -173,7 +225,7 @@ std::vector<glm::ivec3> TraceBlocks(const BlockAccess& world, const glm::vec3& o
     WalkVoxels(origin, direction, maxDistance, [&](const glm::ivec3& pos, const glm::ivec3&, float, float) {
         Block block;
         if (world.GetBlock(pos.x, pos.y, pos.z, block)) {
-            hitSolid |= !block.IsAir() && !block.IsLiquid();
+            hitSolid |= !block.IsAir() && !block.IsLiquid() && !block.IsLava();
             blocks.push_back(pos);
         }
         return true;

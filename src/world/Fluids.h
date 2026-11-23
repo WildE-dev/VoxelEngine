@@ -1,7 +1,8 @@
 #pragma once
 // Fluids in pipes: water, crude oil, fuel and steam.
 //
-//  - Fluid pipes join face to face, and to fluid tanks; everything joined is one
+//  - Fluid pipes join face to face, and to fluid tanks and open fluid valves (a shut
+//    one keeps the two sides apart, and closes the pipes' ends); everything joined is one
 //    network holding one fluid at a time (it takes the kind of the first fluid put in,
 //    and nothing else until it's empty again). Each pipe holds kPerPipe units and each
 //    tank kPerTank (units as water's: kUnitsPerBlock... a block is 128).
@@ -21,13 +22,19 @@
 //       network beside it, only as much as it has room for (none is lost); a sinkhole
 //       (the natural drain) takes it out of the world.
 //     . a fluid outlet (facing) lets water from a network beside it out into the cell
-//       in front of it, as much as there's room for.
+//       in front of it, as much as there's room for; and steam out into the air there
+//       (as below).
 //     . a boiler boils water from the network under it into steam in the network over
 //       it, up to kBoilRate units a second, while it has fire: it burns a coal from the
 //       chests joined to it every kCoalBurn seconds (a coke lasts kCokeBurn).
 //     . a steam turbine (part of an air network, like an engine) uses kTurbineSteam
 //       units of steam a second from a network beside it, adding kTurbineAir a second
 //       to its air network. (Making one takes a forge golem's core.)
+//  - Steam lets itself out into the air (server/Steam.h): out of every open end of its
+//    pipes (a pipe joined to just one thing, out of its end face, the side away from
+//    what it's joined to), up to kVentRate units a second each, and every fluid outlet
+//    on its network, up to kOutletVentRate, into the cell there if it's open. Each unit becomes kSteamGas units
+//    of steam in the air. Pipes meant to carry steam to a turbine want their ends closed.
 // The server runs it with the air (Server::UpdatePower), and saves what each pipe and
 // tank holds with the world.
 #include <cstdint>
@@ -53,16 +60,19 @@ constexpr float kBoilRate = 32.0f;
 constexpr double kCoalBurn = 8.0, kCokeBurn = 16.0;
 constexpr float kTurbineSteam = 32.0f;
 constexpr float kTurbineAir = 40.0f;
+constexpr float kVentRate = 32.0f;       // steam out of each open pipe end, a second
+constexpr float kOutletVentRate = 64.0f; // and out of each fluid outlet (the way to let it out on purpose)
+constexpr int kSteamGas = 10;      // steam in the air from each unit let out
 
-inline bool IsPart(BlockType t) { return t == BlockType::FLUID_PIPE || t == BlockType::FLUID_TANK; }
-inline int CapacityOf(BlockType t) { return t == BlockType::FLUID_TANK ? kPerTank : t == BlockType::FLUID_PIPE ? kPerPipe : 0; }
+inline bool IsPart(BlockType t) { return t == BlockType::FLUID_PIPE || t == BlockType::FLUID_TANK || t == BlockType::FLUID_VALVE_OPEN; }
+inline int CapacityOf(BlockType t) { return t == BlockType::FLUID_TANK ? kPerTank : t == BlockType::FLUID_PIPE || t == BlockType::FLUID_VALVE_OPEN ? kPerPipe : 0; }
 // Machines that join fluid networks from beside them.
 inline bool IsMachine(BlockType t) {
     return t == BlockType::OIL_DERRICK || t == BlockType::REFINERY || t == BlockType::ENGINE || t == BlockType::DRAIN || t == BlockType::FLUID_OUTLET ||
            t == BlockType::BOILER || t == BlockType::TURBINE;
 }
 // What a fluid pipe draws a tube to.
-inline bool PipeJoins(BlockType other) { return IsPart(other) || IsMachine(other); }
+inline bool PipeJoins(BlockType other) { return IsPart(other) || IsMachine(other) || other == BlockType::FLUID_VALVE; } // (a shut valve too: it closes the pipe)
 
 inline const char* Name(Kind k) {
     switch (k) {

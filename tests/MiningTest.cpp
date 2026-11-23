@@ -7,8 +7,12 @@
 //  - holds the tool to what it was started with,
 //  - picks pebbles up at once, as a quarter block of stone,
 //  - and in creative breaks at once.
+// And dropped items (server/DroppedItems.h): they fall and land, slide farther on ice,
+// join up lying together; what a block leaves flies to whoever broke it; a thrown
+// stack lies where it lands until someone walks over it.
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
@@ -17,6 +21,7 @@
 
 #include "client/Client.h"
 #include "client/ClientWorld.h"
+#include "server/DroppedItems.h"
 #include "server/Server.h"
 #include "world/Crafting.h"
 #include "world/Creatures.h"
@@ -72,6 +77,43 @@ bool Near(double a, double b) { return std::abs(a - b) < 1e-4; }
 
 int main() {
     using namespace Mining;
+    std::cout << "Dropped items" << std::endl;
+    {
+        struct Floor : BlockAccess {
+            BlockType floor = BlockType::STONE;
+            bool GetBlock(int, int y, int, Block& block) const override {
+                block = y < 0 ? Block(floor) : Block();
+                return true;
+            }
+        };
+        Floor stone;
+        DroppedItems items;
+        const uint32_t id = items.Drop(Items::OfBlock(BlockType::DIRT), 3, 0, { 0.5f, 3.0f, 0.5f }, glm::vec3(0.0f), 0.0f);
+        for (int i = 0; i < 60; i++) items.Update(stone, 0.05f);
+        Check(id && items.Count() == 1 && items.All()[0].onGround && std::abs(items.All()[0].position.y - DroppedItems::kHalf) < 1e-3f,
+              "an item falls and lies on the ground");
+        items.Drop(Items::OfBlock(BlockType::DIRT), 2, 32, { 0.8f, 0.5f, 0.6f }, glm::vec3(0.0f), 0.0f);
+        items.Drop(Items::OfBlock(BlockType::SAND), 1, 0, { 0.6f, 0.5f, 0.4f }, glm::vec3(0.0f), 0.0f);
+        for (int i = 0; i < 30; i++) items.Update(stone, 0.05f);
+        uint32_t dirt = 0, dirtUnits = 0;
+        for (const auto& d : items.All())
+            if (d.item == Items::OfBlock(BlockType::DIRT)) dirt += d.count, dirtUnits += d.units;
+        Check(items.Count() == 2 && dirt == 5 && dirtUnits == 32, "stacks of the same thing lying together join up (and others don't)");
+        auto slide = [](BlockType floor) {
+            Floor f;
+            f.floor = floor;
+            DroppedItems one;
+            one.Drop(Items::OfBlock(BlockType::DIRT), 1, 0, { 0.5f, DroppedItems::kHalf, 0.5f }, { 4.0f, 0.0f, 0.0f }, 0.0f);
+            for (int i = 0; i < 100; i++) one.Update(f, 0.05f);
+            return one.All()[0].position.x - 0.5f;
+        };
+        const float onStone = slide(BlockType::STONE), onIce = slide(BlockType::ICE);
+        Check(onStone < 1.0f && onIce > 3.0f, "it slides farther on ice (" + std::to_string(onIce) + " blocks, on stone " + std::to_string(onStone) + ")");
+        DroppedItems old;
+        old.Drop(Items::OfBlock(BlockType::DIRT), 1, 0, { 0.5f, DroppedItems::kHalf, 0.5f }, glm::vec3(0.0f), 0.0f);
+        for (int i = 0; i < 6100; i++) old.Update(stone, 0.05f);
+        Check(old.Count() == 0, "and it's gone after five minutes");
+    }
     std::cout << "Ores and iron" << std::endl;
     {
         // Ores in the stone under a normal world: coal from 8 blocks down, iron (rarer)
@@ -127,7 +169,7 @@ int main() {
     bool everyType = true;
     for (int t = 1; t < static_cast<int>(BlockType::COUNT); t++) {
         const BlockType type = static_cast<BlockType>(t);
-        if (type == BlockType::WATER || IsPlantType(type)) continue;
+        if (type == BlockType::WATER || type == BlockType::LAVA || IsPlantType(type)) continue; // (liquids aren't mined)
         everyType &= Hardness(type) > 0.0f;
     }
     Check(everyType, "every solid block takes some time");
@@ -198,8 +240,9 @@ int main() {
     a.client.StartMining({ 8, -1, 8 }, Tool::Shovel);
     wait(0.3);
     a.client.BreakBlock({ 8, -1, 8 }, Tool::Shovel);
-    Check(both(20.0, [&] { return TypeAt(builder, { 8, -1, 8 }) == BlockType::AIR; }) && a.client.GetResources(BlockType::GRASS) == 64,
-          "a shovel takes grass in a moment, and the block's worth is collected");
+    Check(both(20.0, [&] { return TypeAt(builder, { 8, -1, 8 }) == BlockType::AIR; }) &&
+              both(20.0, [&] { return a.client.GetResources(BlockType::GRASS) == 64; }),
+          "a shovel takes grass in a moment, and the block's worth flies to the miner");
 
     std::cout << "Pebbles" << std::endl;
     Check(Seconds(Block::Placed(BlockType::PEBBLES), Tool::None) == 0.0f && Block::Placed(BlockType::PEBBLES).ResourceUnits() == 16 &&
@@ -228,6 +271,68 @@ int main() {
     std::cout << "Creative" << std::endl;
     builder.client.BreakBlock({ 13, 0, 12 });
     Check(both(20.0, [&] { return TypeAt(a, { 13, 0, 12 }) == BlockType::AIR; }), "in creative a block breaks at once");
+
+    std::cout << "Felling trees" << std::endl;
+    {
+        // Two trunks five high with a crown of leaves on each; and a third tree off to the
+        // side whose leaves must stay.
+        for (const int x : { 30, 38 }) {
+            server.QueueConsoleCommand("fill " + std::to_string(x - 2) + " 3 28 " + std::to_string(x + 2) + " 5 32 leaves");
+            server.QueueConsoleCommand("fill " + std::to_string(x) + " 0 30 " + std::to_string(x) + " 4 30 log");
+        }
+        server.QueueConsoleCommand("fill 46 3 28 50 5 32 leaves");
+        server.QueueConsoleCommand("fill 48 0 30 48 4 30 log");
+        Check(both(20.0, [&] { return TypeAt(builder, { 48, 4, 30 }) == BlockType::LOG && TypeAt(builder, { 30, 5, 30 }) == BlockType::LEAVES; }), "three trees stand");
+        builder.client.BreakBlock({ 30, 0, 30 }, Tool::Axe);
+        bool felled = both(20.0, [&] {
+            for (int y = 0; y <= 4; y++)
+                if (TypeAt(a, { 30, y, 30 }) != BlockType::AIR) return false;
+            return true;
+        });
+        Check(felled, "breaking the bottom log with an axe fells the whole trunk");
+        builder.client.BreakBlock({ 38, 0, 30 }, Tool::Pickaxe);
+        Check(both(20.0, [&] { return TypeAt(a, { 38, 0, 30 }) == BlockType::AIR; }) && TypeAt(a, { 38, 1, 30 }) == BlockType::LOG,
+              "with any other tool, only the one log goes");
+        auto leavesLeft = [&](int x0) {
+            int n = 0;
+            for (int x = x0 - 2; x <= x0 + 2; x++)
+                for (int y = 3; y <= 5; y++)
+                    for (int z = 28; z <= 32; z++) n += TypeAt(a, { x, y, z }) == BlockType::LEAVES ? 1 : 0;
+            return n;
+        };
+        wait(1.0);
+        Check(leavesLeft(30) > 20, "the felled tree's leaves don't all go at once");
+        Check(both(15.0, [&] { return leavesLeft(30) == 0; }), "but they all fall away within a few seconds");
+        Check(leavesLeft(38) == 73 && leavesLeft(48) == 73, "leaves a log still holds up stay");
+    }
+
+    std::cout << "Throwing items away" << std::endl;
+    {
+        int slot = -1;
+        const auto& slots = a.client.GetInventory().slots;
+        for (size_t i = 0; i < slots.size(); i++)
+            if (!slots[i].Empty() && slots[i].item == Items::OfBlock(BlockType::GRASS)) slot = static_cast<int>(i);
+        a.client.DropItem(net::Box::Player, slot, 1, glm::vec3(1.0f, 0.0f, 0.0f));
+        Check(slot >= 0 && both(20.0, [&] { return a.client.GetResources(BlockType::GRASS) == 0; }), "the miner throws their grass away");
+        // (Only the grass: the felled tree's leaves may have dropped a sapling or two.)
+        auto grassOn = [](const Client& c) {
+            std::vector<net::ItemInfo> out;
+            for (const auto& i : c.GetItems())
+                if (i.item == Items::OfBlock(BlockType::GRASS)) out.push_back(i);
+            return out;
+        };
+        Check(both(20.0, [&] { return grassOn(a.client).size() == 1 && grassOn(builder.client).size() == 1; }), "and everyone sees it lying there");
+        wait(2.5);
+        const auto lying = grassOn(a.client);
+        Check(lying.size() == 1 && a.client.GetResources(BlockType::GRASS) == 0 && lying[0].position.x > 12.5f && std::abs(lying[0].position.y - DroppedItems::kHalf) < 0.05f,
+              "it flies off ahead and lands on the ground (not straight back to them)");
+        if (!lying.empty()) {
+            char tp[96];
+            std::snprintf(tp, sizeof tp, "tp Miner %.2f 0 %.2f", lying[0].position.x, lying[0].position.z);
+            server.QueueConsoleCommand(tp);
+        }
+        Check(both(20.0, [&] { return a.client.GetResources(BlockType::GRASS) == 64 && grassOn(a.client).empty(); }), "walking over it picks it up again");
+    }
 
     a.client.Disconnect();
     builder.client.Disconnect();

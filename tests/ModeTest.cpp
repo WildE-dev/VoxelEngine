@@ -191,7 +191,7 @@ int main() {
         }
         Check(less && back, "a chiselled slope is worth less, and as much again once filled back in");
     }
-    Check(Block::Placed(BlockType::PIPE, 4).ResourceUnits() == 64 && Block::Placed(BlockType::FLOWER_RED).ResourceUnits() == 64 &&
+    Check(Block::Placed(BlockType::FLUID_PIPE, 4).ResourceUnits() == 64 && Block::Placed(BlockType::FLOWER_RED).ResourceUnits() == 64 &&
               Block::Placed(BlockType::PUMP, 4).ResourceUnits() == 64,
           "pipes, plants and pumps can't be shaped: always a full block's worth");
     Check(Block::Placed(BlockType::WATER).ResourceUnits() == 0 && Block().ResourceUnits() == 0, "water and air are worth nothing");

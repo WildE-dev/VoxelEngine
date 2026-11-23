@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <climits>
 #include <cstdint>
 #include <functional>
 #include <filesystem>
@@ -118,7 +119,7 @@ private:
     // How far you can break and build (by game mode).
     float Reach() const;
     void SelectSlot(int slot);
-    // Inventory (I): pick which block goes in each hotbar slot; kept in hotbar.txt.
+    // Inventory (Tab): pick which block goes in each hotbar slot; kept in hotbar.txt.
     void DrawInventory();
     // C / Shift+C: lower / raise the quarter of the block in view.
     void ChiselTarget(bool raise);
@@ -188,6 +189,10 @@ private:
         bool mist = false; // spray: a cloud that drifts and slows, lifting a little, growing as it fades
     };
     std::vector<Particle> particles;
+    // Steam (server/Steam.h): the update last looked at, and how much was near then
+    // (a sudden lot more is a burst: it hisses).
+    uint32_t steamSeen = 0;
+    long long steamNear = 0;
     std::vector<glm::ivec3> campfires; // near the player, for smoke
     // Shallow water running downhill near the player, for spray (found by the same
     // look round as the campfires): the cell, where its surface is, which way it runs
@@ -202,6 +207,7 @@ private:
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> wheelAngles;
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> gaugeNeedles; // pressure gauges' needles, as drawn (0..1)
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> doorSwings;   // doors' halves, how far open as drawn (0..1)
+    std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> leverSwings;  // levers, how far on as drawn (0..1)
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> drillDust;
     double lastMachinesTime = 0.0;
     void UpdateMachines(FrameParams& params, const std::function<glm::vec2(const glm::vec3&)>& lightAt);
@@ -263,6 +269,13 @@ private:
     static constexpr size_t kChatHistoryMax = 100;
     bool sheltered = false; // something overhead: no rain falls here
     float rainHere = 0.0f;  // rain drawn around the camera, eased toward the weather
+    // Where the rain stops in each column round the camera (Rain::kCoverSize a side, by
+    // world x and z modulo it), refreshed a few rows a frame; and how open the sky is just
+    // round us (0..1, eased), which is how loud the rain sounds.
+    std::vector<float> rainCover;
+    int rainCoverRow = 0;
+    glm::ivec3 rainCoverAt{ INT_MIN };
+    float rainOpen = 1.0f;
     static constexpr int kHotbarSlots = static_cast<int>(Inventory::kHotbarSlots); // keys 1-9 and 0
     // The hotbar is the first slots of the inventory (the server keeps it). A creative
     // player who joins with it empty gets these (or what hotbar.txt, from before, chose).
@@ -391,6 +404,7 @@ private:
     bool bench = false;
     bool ignoreMouse = false; // VOXEL_NO_MOUSE
     bool holdMine = false;    // VOXEL_HOLD_MINE: mine as if the left button were held
+    bool autoFly = false;     // VOXEL_AUTO_FLY: fly forward at full speed (creative), for streaming benchmarks
     // Rebinding a key in the settings: the action waiting for its new key (-1: none).
     int rebinding = -1;
     // A gamepad (the first one GLFW maps): what its buttons were last frame (for
@@ -406,6 +420,9 @@ private:
     std::string startCommands; // VOXEL_RUN: chat lines sent once joined, ';' between them
     double landedAt = 0.0;     // when we first stood on the ground (glfwGetTime)
     double benchSections[7] = {};
+    double benchFrame[7] = {};   // this frame's, for the worst one
+    double benchWorst = 0.0;     // the worst frame this second, and where it went
+    double benchWorstSections[7] = {};
     double benchLast = 0.0;
     int benchFrames = 0;
     bool screenshotRequested = false;

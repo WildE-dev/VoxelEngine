@@ -106,6 +106,19 @@ public:
     // thread; takes the edit mutex.
     void TakePower(std::vector<glm::ivec3>& machinesOut, std::unordered_map<glm::ivec3, glm::vec2, Coords::IVec3Hash>& flow);
 
+    // Lava (world/Lava.h): the lava cells woken since the last call, by a change in
+    // them or beside them (or by loading), for the server to step. Any thread; takes
+    // the edit mutex.
+    void TakeLavaWake(std::vector<glm::ivec3>& out);
+
+    // Levers that fell off the blocks holding them since the last call (where, and what
+    // they were), for the server to drop as items. Any thread.
+    void TakeFallenLevers(std::vector<std::pair<glm::ivec3, Block>>& out) {
+        std::lock_guard<std::mutex> lock(logMutex);
+        out.swap(fallenLevers);
+        fallenLevers.clear();
+    }
+
     // Server thread: hands every loaded chunk edited since it was last saved to the
     // storage (call WorldStorage::Flush afterwards to write it out). Takes the edit
     // mutex while copying, so the snapshot never catches flowing water halfway between
@@ -170,5 +183,8 @@ private:
     std::unordered_map<glm::ivec3, std::vector<std::pair<glm::ivec3, int>>, Coords::IVec3Hash> wheelWatch;
     void WatchWheel(const glm::ivec3& pos, const Block& wheel, bool watch); // edit mutex held
     void NoteWaterMoved(const glm::ivec3& pos, int units);                 // edit mutex held
+    // Lava, guarded by the edit mutex: every loaded lava cell, and those woken.
+    std::unordered_set<glm::ivec3, Coords::IVec3Hash> lavaCells, lavaWake;
+    std::vector<std::pair<glm::ivec3, Block>> fallenLevers; // (guarded by logMutex)
     std::thread worker;
 };

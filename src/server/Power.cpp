@@ -195,6 +195,7 @@ void Server::UpdatePower() {
             switch (blockAt(m).type) {
             case BlockType::AIR_PIPE: net.pipes++; break;
             case BlockType::AIR_TANK: net.tanks++; break;
+            case BlockType::CREATIVE_AIR_TANK: net.tanks++, net.endless = true; break;
             case BlockType::COMPRESSOR:
                 net.compressors++;
                 net.supply += compressors[m].power * Power::kWheelMaxAir;
@@ -248,6 +249,7 @@ void Server::UpdatePower() {
         }
         for (const auto& m : members) net.capacity += Power::CapacityOf(blockAt(m).type);
         net.air = std::min(net.capacity, net.air + net.supply * static_cast<float>(Power::kInterval));
+        if (net.endless) net.air = net.capacity;
 
         // Air diffusers breathe out fresh air while the network has the pressure for it.
         for (const auto& d : netDiffusers) {
@@ -388,11 +390,13 @@ void Server::UpdatePower() {
         // come first), shared between them (none below it).
         const float reserve = Power::kMinPressure * net.capacity + Power::kDrillAir * static_cast<float>(netDrills.size()) +
                               Power::kSmeltAir * static_cast<float>(netSmelters.size());
-        const float spare = std::max(0.0f, net.air - reserve);
+        const float spare = net.endless ? 1e6f : std::max(0.0f, net.air - reserve);
         for (const auto& p : netPumps)
             water.SetPumpBudget(p, net.Pressure() >= Power::kMinPressure ? spare / static_cast<float>(netPumps.size()) / Power::kPumpAir : 0.0f);
 
-        // Everything at the same pressure: each part holds its share by size.
+        // Everything at the same pressure: each part holds its share by size (and a
+        // creative tank fills it all again).
+        if (net.endless) net.air = net.capacity;
         const float fill = net.capacity > 0.0f ? net.air / net.capacity : 0.0f;
         for (const auto& m : members) newAir[m] = fill * Power::CapacityOf(blockAt(m).type);
     }
@@ -408,7 +412,20 @@ void Server::UpdatePower() {
     // of their pipes, and what they may trade until the next.
     for (const auto& pos : machineList) {
         const BlockType t = blockAt(pos).type;
-        if (t == BlockType::DRAIN) {
+        if (t == BlockType::PUMP) {
+            // A pump whose pipes reach a tank or machine fills them (server/Water.h); one
+            // whose pipes just end lets its water out there, and puts none in.
+            if (FluidNet* in = FluidNetBeside(pos, Fluids::Kind::Water, false)) {
+                in->amount = std::min(in->capacity, in->amount + water.TakeDrainUse(pos));
+                if (in->amount > 0) in->kind = Fluids::Kind::Water;
+                water.SetDrainBudget(pos, in->Room());
+            }
+            else {
+                water.TakeDrainUse(pos);
+                water.SetDrainBudget(pos, 0);
+            }
+        }
+        else if (t == BlockType::DRAIN) {
             if (FluidNet* in = FluidNetBeside(pos, Fluids::Kind::Water, false)) {
                 in->amount = std::min(in->capacity, in->amount + water.TakeDrainUse(pos));
                 if (in->amount > 0) in->kind = Fluids::Kind::Water;
@@ -460,6 +477,34 @@ void Server::UpdatePower() {
                 water.TakeDrainUse(pos);
                 water.SetDrainBudget(pos, 0);
             }
+        }
+    }
+    // Steam lets itself out into the air: out of the end face of every open end of its
+    // pipes, and out of the fluid outlets on its network (world/Fluids.h).
+    {
+        const int perEnd = static_cast<int>(Fluids::kVentRate * Power::kInterval);
+        const int perOutlet = static_cast<int>(Fluids::kOutletVentRate * Power::kInterval);
+        auto vent = [&](FluidNet& fn, const glm::ivec3& out, int most) {
+            if (fn.amount <= 0 || !SteamCloud::Open(*world, out)) return;
+            const int take = std::min(most, fn.amount);
+            fn.amount -= take;
+            steam.Add(out, take * Fluids::kSteamGas);
+        };
+        for (FluidNet& fn : fluidNets) {
+            if (fn.kind != Fluids::Kind::Steam || fn.amount <= 0) continue;
+            for (const auto& m : fn.members) {
+                if (blockAt(m).type != BlockType::FLUID_PIPE && blockAt(m).type != BlockType::FLUID_VALVE_OPEN) continue;
+                int joins = 0;
+                glm::ivec3 joinedAt(0);
+                for (const auto& d : kFaces)
+                    if (Power::PipeJoins(BlockType::FLUID_PIPE, blockAt(m + d).type)) joins++, joinedAt = d;
+                if (joins == 1) vent(fn, m - joinedAt, perEnd);
+            }
+        }
+        for (const auto& pos : machineList) {
+            const Block outlet = blockAt(pos);
+            if (outlet.type != BlockType::FLUID_OUTLET) continue;
+            if (FluidNet* from = FluidNetBeside(pos, Fluids::Kind::Steam, true)) vent(*from, pos + outlet.Facing(), perOutlet);
         }
     }
     StoreFluids();
@@ -761,6 +806,10 @@ void Server::BuildFluidNets() {
                 if (Multiblocks::PortOf(pos, b, role, port)) trace(port);
             }
     }
+    // And pipes holding something with nothing else on them (steam left in a pipe run
+    // still lets itself out of its ends).
+    for (const auto& [pos, held] : fluidHeld)
+        if (held > 0) trace(pos);
 }
 
 Server::FluidNet* Server::FluidNetAt(const glm::ivec3& pos) {
@@ -998,8 +1047,8 @@ void Server::SendMachines() {
                 info.type = static_cast<uint8_t>(eb.type == BlockType::TURBINE ? BlockType::TURBINE : BlockType::ENGINE);
                 info.state = static_cast<uint8_t>(e->second ? Power::DrillState::Working : Power::DrillState::Idle);
             }
-            else if (Block t; world->GetBlock(pos.x, pos.y, pos.z, t) && t.type == BlockType::AIR_TANK) {
-                info.type = static_cast<uint8_t>(BlockType::AIR_TANK);
+            else if (Block t; world->GetBlock(pos.x, pos.y, pos.z, t) && (t.type == BlockType::AIR_TANK || t.type == BlockType::CREATIVE_AIR_TANK)) {
+                info.type = static_cast<uint8_t>(t.type);
             }
             else if (auto p = pumpStates.find(pos); p != pumpStates.end()) {
                 info.type = static_cast<uint8_t>(BlockType::PUMP);
@@ -1085,6 +1134,13 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
             const float held = air.count(pos) ? air[pos] : 0.0f;
             std::snprintf(line, sizeof line, "Air tank: holding %.0f of %.0f. ", held, Power::kAirPerTank);
             text += line;
+        }
+        else if (b.type == BlockType::CREATIVE_AIR_TANK) {
+            text += "Creative air tank: keeps this network full, however much air it uses. ";
+        }
+        else if (b.type == BlockType::FLUID_VALVE || b.type == BlockType::FLUID_VALVE_OPEN) {
+            return SendChat(client, net::ChatMessage::Kind::Inspect,
+                            b.type == BlockType::FLUID_VALVE_OPEN ? "Fluid valve: open." : "Fluid valve: shut (the fluid pipes either side are kept apart).");
         }
         else if (b.type == BlockType::VALVE || b.type == BlockType::VALVE_OPEN) {
             text += b.type == BlockType::VALVE_OPEN ? "Valve: open. " : "Valve: shut (the pipes either side are kept apart). ";

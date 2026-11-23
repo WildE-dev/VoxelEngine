@@ -56,7 +56,6 @@ inline std::vector<Recipe> Defaults() {
         { "glass", "Glass", { { BlockType::SAND, kBlock } }, BlockType::GLASS, kBlock },
         { "mossy_brick", "Mossy bricks", { { BlockType::STONE_BRICK, kBlock }, { BlockType::LEAVES, kBlock } }, BlockType::MOSSY_BRICK, kBlock },
         { "lamp", "Lamp", { { BlockType::GLASS, kBlock }, { BlockType::PLANKS, kBlock / 2 } }, BlockType::LAMP, kBlock },
-        { "pipe", "2 pipes", { { BlockType::STONE, kBlock } }, BlockType::PIPE, 2 * kBlock },
         { "drain", "Drain", { { BlockType::IRON_INGOT, kBlock / 2 }, { BlockType::STONE, kBlock } }, BlockType::DRAIN, kBlock },
         { "pump", "Pump", { { BlockType::STONE, 2 * kBlock }, { BlockType::GLASS, kBlock } }, BlockType::PUMP, kBlock },
         { "sluice", "Sluice gate", { { BlockType::STONE_BRICK, kBlock }, { BlockType::PLANKS, kBlock } }, BlockType::SLUICE, kBlock },
@@ -95,6 +94,7 @@ inline std::vector<Recipe> Defaults() {
         { "air_tank", "Air tank", { { BlockType::IRON_INGOT, 2 * kBlock }, { BlockType::GLASS, kBlock / 2 } }, BlockType::AIR_TANK, kBlock },
         { "pressure_gauge", "Pressure gauge", { { BlockType::GLASS, kBlock / 4 }, { BlockType::IRON_INGOT, kBlock / 4 } }, BlockType::PRESSURE_GAUGE, kBlock },
         { "valve", "Valve", { { BlockType::IRON_INGOT, kBlock / 2 }, { BlockType::STONE, kBlock } }, BlockType::VALVE, kBlock },
+        { "fluid_valve", "Fluid valve", { { BlockType::IRON_INGOT, kBlock / 2 }, { BlockType::FLUID_PIPE, kBlock } }, BlockType::FLUID_VALVE, kBlock },
         // Signals (world/Signals.h).
         { "lever", "2 levers", { { BlockType::PLANKS, kBlock / 4 }, { BlockType::STONE, kBlock / 4 }, { BlockType::COPPER_INGOT, kBlock / 4 } }, BlockType::LEVER, 2 * kBlock },
         { "logic_gate", "Logic gate", { { BlockType::STONE, kBlock }, { BlockType::COPPER_INGOT, kBlock / 2 }, { BlockType::GLASS, kBlock / 4 } }, BlockType::LOGIC_GATE, kBlock },

@@ -31,6 +31,13 @@ public:
     // and saplings go on dirt or grass. The server decides by this, and the client checks
     // it before showing a placement it predicts, so one the server will refuse isn't
     // shown for a moment and then taken back.
+    // Whether a lever here (as placed) is fixed to a solid block: the one behind it.
+    bool LeverHeld(const glm::ivec3& pos, const Block& lever) const {
+        const glm::ivec3 s = pos - lever.LeverFacing();
+        Block support;
+        return GetBlock(s.x, s.y, s.z, support) && Block::HoldsLever(support);
+    }
+
     bool CanPlace(const glm::ivec3& pos, BlockType type) const {
         Block existing;
         if (!GetBlock(pos.x, pos.y, pos.z, existing) || !existing.IsPassable()) return false;

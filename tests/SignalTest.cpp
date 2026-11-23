@@ -144,6 +144,29 @@ int main() {
         fill(otherLamp, "signal_lamp");
         Check(pump(10.0, [&] { return blockAt(lever1) == BlockType::LEVER && blockAt(lamp) == BlockType::SIGNAL_LAMP && blockAt(otherLamp) == BlockType::SIGNAL_LAMP; }),
               "levers and lamps placed");
+        {
+            // A lever goes on the face of a solid block, pointing out of it, and only there; it
+            // falls off when that block goes.
+            const glm::ivec3 wall{ 16, 1, 14 }, onWall{ 17, 1, 14 }, inAir{ 17, 3, 14 };
+            fill(wall, "stone");
+            pump(10.0, [&] { return blockAt(wall) == BlockType::STONE; });
+            Check(!a.client.PlaceBlock(inAir, BlockType::LEVER, 8, 0), "a lever can't go where nothing solid is behind it");
+            Check(a.client.PlaceBlock(onWall, BlockType::LEVER, 8, 0) && pump(10.0, [&] {
+                      Block b;
+                      return a.world.GetBlock(onWall.x, onWall.y, onWall.z, b) && b.type == BlockType::LEVER && b.LeverFacing() == glm::ivec3(1, 0, 0);
+                  }),
+                  "it goes on the side of a block, pointing out of it");
+            wait(0.5);
+            Check(blockAt(inAir) == BlockType::AIR && blockAt(onWall) == BlockType::LEVER, "(the server agrees on both)");
+            fill(wall, "air");
+            Check(pump(10.0, [&] { return blockAt(onWall) == BlockType::AIR; }), "and falls off when the block it's on goes");
+            Check(pump(5.0, [&] {
+                      for (const auto& i : a.client.GetItems())
+                          if (i.item == Items::OfBlock(BlockType::LEVER)) return true;
+                      return false;
+                  }),
+                  "dropping the lever as an item");
+        }
         Check(configure(lever1, Signals::Kind::Lever, 0, 0, 5) && configure(lamp, Signals::Kind::Lamp, 5, 0, 0) && configure(otherLamp, Signals::Kind::Lamp, 6, 0, 0),
               "a lever sends on 5, one lamp listens to 5 and another to 6");
         wait(0.5);

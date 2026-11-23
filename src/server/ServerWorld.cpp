@@ -99,6 +99,15 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
     if (isPump) water.AddPump({ x, y, z });
     if (Power::IsMachine(previous.type) && previous.type != block.type) machines.erase({ x, y, z });
     if (Power::IsMachine(block.type)) machines.insert({ x, y, z });
+    // Lava: track it, and wake it (and lava beside it) when anything here changes, so
+    // it runs on, drains away, or boils water that came up to it.
+    if (previous.IsLava() && !block.IsLava()) lavaCells.erase({ x, y, z });
+    if (block.IsLava()) lavaCells.insert({ x, y, z }), lavaWake.insert({ x, y, z });
+    if (!lavaCells.empty())
+        for (int f = 0; f < kFaceCount; f++) {
+            const glm::ivec3 n(x + kFaceOffsets[f][0], y + kFaceOffsets[f][1], z + kFaceOffsets[f][2]);
+            if (lavaCells.count(n)) lavaWake.insert(n);
+        }
     const bool wasWheel = previous.type == BlockType::WATER_WHEEL, isWheel = block.type == BlockType::WATER_WHEEL;
     if (wasWheel && (!isWheel || previous.axis != block.axis)) WatchWheel({ x, y, z }, previous, false);
     if (isWheel && (!wasWheel || previous.axis != block.axis)) WatchWheel({ x, y, z }, block, true);
@@ -129,7 +138,17 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
     // it (opening or closing a door changes the halves one at a time).
     Block above;
     const bool doorBelow = block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN;
-    if (GetBlock(x, y + 1, z, above) && above.IsPlant() && !(above.type == BlockType::DOOR_OPEN && doorBelow)) SetBlock(x, y + 1, z, Block());
+    if (GetBlock(x, y + 1, z, above) && above.IsPlant() && !IsLeverType(above.type) && !(above.type == BlockType::DOOR_OPEN && doorBelow)) SetBlock(x, y + 1, z, Block());
+    // Levers fixed to this block fall off if it no longer holds them.
+    if (Block::HoldsLever(previous) && !Block::HoldsLever(block))
+        for (int f = 0; f < kFaceCount; f++) {
+            const glm::ivec3 n(x + kFaceOffsets[f][0], y + kFaceOffsets[f][1], z + kFaceOffsets[f][2]);
+            Block lever;
+            if (!GetBlock(n.x, n.y, n.z, lever) || !IsLeverType(lever.type) || n - lever.LeverFacing() != glm::ivec3(x, y, z)) continue;
+            SetBlock(n.x, n.y, n.z, Block());
+            std::lock_guard<std::mutex> lock(logMutex);
+            fallenLevers.emplace_back(n, lever); // (dropped as an item: Server)
+        }
 
     // Light depends on the new block, so let the worker update it.
     if (!waterVolumeOnly) {
@@ -156,6 +175,9 @@ void ServerWorld::SetWaterSimulationDistance(int chunks) {
 void ServerWorld::Update(const std::vector<glm::ivec3>& centers) {
     if (centers == lastCenters) return;
     lastCenters = centers;
+    // Chunks dropped: freed on a thread of their own once the locks are let go (a player
+    // teleporting far drops thousands at once, and freeing them all takes a while).
+    std::vector<std::shared_ptr<Chunk>> dropped;
 
     auto inRange = [&](const glm::ivec3& coords, int slack) {
         for (const auto& center : centers) {
@@ -189,6 +211,7 @@ void ServerWorld::Update(const std::vector<glm::ivec3>& centers) {
                     storage->StoreChunk(it->first, *saveBuffer);
                 }
                 it->second->MarkRemoved();
+                dropped.push_back(std::move(it->second));
                 it = chunks.erase(it);
             }
             else {
@@ -210,14 +233,15 @@ void ServerWorld::Update(const std::vector<glm::ivec3>& centers) {
     {
         std::lock_guard<std::mutex> lock(queueMutex);
         generateQueue.clear();
-        std::unordered_set<glm::ivec3, Coords::IVec3Hash> queued;
+        std::unordered_set<glm::ivec3, Coords::IVec3Hash> queued; // (players near each other share chunks)
         for (const auto& offset : loadOffsets)
             for (const auto& center : centers) {
                 const auto& chunk = chunks.at(center + offset);
-                if (chunk->GetState() == Chunk::State::Pending && queued.insert(center + offset).second) generateQueue.push_back(chunk);
+                if (chunk->GetState() == Chunk::State::Pending && (centers.size() == 1 || queued.insert(center + offset).second)) generateQueue.push_back(chunk);
             }
     }
     queueCv.notify_one();
+    if (!dropped.empty()) std::thread([gone = std::move(dropped)]() mutable { gone.clear(); }).detach();
 }
 
 const TerrainGenerator::ColumnHeights& ServerWorld::GetColumnHeights(int chunkX, int chunkZ) {
@@ -282,7 +306,7 @@ void ServerWorld::PropagateLight(const std::vector<ChunkPtr>& loadedChunks, cons
 void ServerWorld::WorkerLoop() {
     std::vector<ChunkPtr> batch, generated;
     auto generatedBlocks = std::make_unique<TerrainGenerator::Blocks>(); // reused generation buffer
-    std::vector<glm::ivec3> edits, savedWater, savedPumps, savedMachines;
+    std::vector<glm::ivec3> edits, savedWater, savedPumps, savedMachines, savedLava;
     batch.reserve(kGenerateBatchSize);
 
     while (true) {
@@ -303,6 +327,7 @@ void ServerWorld::WorkerLoop() {
         generated.clear();
         savedWater.clear();
         savedPumps.clear();
+        savedLava.clear();
         savedMachines.clear();
         for (auto& chunk : batch) {
             if (chunk->IsRemoved() || !chunk->TryBeginGenerate()) continue;
@@ -310,6 +335,8 @@ void ServerWorld::WorkerLoop() {
             const glm::ivec3 c = chunk->GetCoords();
             constexpr int S = Chunk::CHUNK_SIZE;
             const bool saved = storage && storage->LoadChunk(c, *generatedBlocks);
+            if (saved)
+                for (Block& b : *generatedBlocks) b.type = Current(b.type); // (old water pipes are fluid pipes now)
             if (!saved) terrain.GenerateChunk(c, GetColumnHeights(c.x, c.z), *generatedBlocks);
             // Pumps (saved, or in a dungeon's pump room) start working; water in a saved
             // chunk may have been moving when it was saved. Generated water is at rest.
@@ -317,6 +344,7 @@ void ServerWorld::WorkerLoop() {
                 const Block& b = (*generatedBlocks)[i];
                 const bool pump = b.type == BlockType::PUMP || b.type == BlockType::SPRING || IsDrainType(b.type) || b.type == BlockType::FLUID_OUTLET;
                 const bool machine = Power::IsMachine(b.type);
+                if (b.IsLava()) savedLava.push_back(c * S + glm::ivec3(i % S, (i / S) % S, i / (S * S)));
                 if (!pump && !machine && !(saved && b.HasWater())) continue;
                 const glm::ivec3 pos = c * S + glm::ivec3(i % S, (i / S) % S, i / (S * S));
                 (pump ? savedPumps : machine ? savedMachines : savedWater).push_back(pos);
@@ -328,8 +356,9 @@ void ServerWorld::WorkerLoop() {
         if (!generated.empty() || !edits.empty()) PropagateLight(generated, edits);
 
         // Let it carry on flowing (settled water just stays put after one look).
-        if (!savedWater.empty() || !savedPumps.empty() || !savedMachines.empty()) {
+        if (!savedWater.empty() || !savedPumps.empty() || !savedMachines.empty() || !savedLava.empty()) {
             std::lock_guard<std::recursive_mutex> edit(editMutex);
+            for (const auto& pos : savedLava) lavaCells.insert(pos), lavaWake.insert(pos);
             for (const auto& pos : savedWater) water.Activate(pos);
             for (const auto& pos : savedPumps) {
                 water.AddPump(pos);
@@ -367,6 +396,19 @@ void ServerWorld::NoteWaterMoved(const glm::ivec3& pos, int units) {
         auto f = wheelFlow.find(wheel);
         if (f != wheelFlow.end()) f->second[side] += static_cast<float>(units);
     }
+}
+
+void ServerWorld::TakeLavaWake(std::vector<glm::ivec3>& out) {
+    std::lock_guard<std::recursive_mutex> edit(editMutex);
+    out.assign(lavaWake.begin(), lavaWake.end());
+    lavaWake.clear();
+    // Lava in chunks that unloaded is forgotten (it comes back when they load).
+    if (!out.empty() || lavaCells.size() > 0)
+        for (auto it = lavaCells.begin(); it != lavaCells.end();) {
+            Block b;
+            if (!GetBlock(it->x, it->y, it->z, b) || !b.IsLava()) it = lavaCells.erase(it);
+            else ++it;
+        }
 }
 
 void ServerWorld::TakePower(std::vector<glm::ivec3>& machinesOut, std::unordered_map<glm::ivec3, glm::vec2, Coords::IVec3Hash>& flow) {

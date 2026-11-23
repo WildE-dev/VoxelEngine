@@ -196,7 +196,7 @@ that damaged files are refused, and that a rejoining player is put back in place
 These are the default keys. **Settings > Controls** rebinds them: click an action, then
 press its new key (Esc keeps the old one); a key bound to two actions shows in red, and
 "Reset to the defaults" puts them back. They're kept in `settings.txt` (`key_jump 32`
-and so on). The number keys, Tab, Esc, F1-F4, F12 and the mouse buttons stay fixed.
+and so on). The number keys, Esc, F1-F4, F12 and the mouse buttons stay fixed.
 
 **Gamepads** (any GLFW knows) work too: the left stick walks and the right stick looks
 (its speed is in the settings), A jumps, B crouches, pressing the left stick sprints,
@@ -213,15 +213,14 @@ pauses. The menus can be driven with the pad as well.
 | Q / E | In no-clip (`/noclip`, operators): fly down / up |
 | Mouse | Look (a crosshair marks the middle of the screen) |
 | Left click | Break block (survival: hold to mine it), or hit the creature in front of you |
-| Right click | Place the selected block; eat food in hand; open a chest; use a bed (Shift: place against a chest or bed instead) |
+| Right click | Place the selected block; eat food in hand; open a chest, a machine's menu or a structure's, whatever's in hand; use a bed (Shift: place against it instead). With a block in hand, pipes, shafts, wheels and valves are built onto |
 | Middle click | Pick the block you're looking at: creative puts a stack of it in the selected hotbar slot; survival selects the hotbar slot holding it, or swaps a stack of it from the rest of the inventory into the selected slot |
 | V / Shift+V | Placement height for building blocks: full, 3/4, 1/2, 1/4 (and back); with the chisel in hand, how fine it cuts: 1/8, 1/4, 1/2 |
-| 1-9, 0 / mouse wheel | Select the hotbar slot to place from (with Tab you can also click a slot) |
-| I | Inventory: move stacks between slots, the hotbar and your armour; craft (survival), or take any block or item (creative) |
-| C / Shift+C | With the chisel in hand (or right-click / Shift+right-click): lower / raise the quarter of the block you're looking at |
+| 1-9, 0 / mouse wheel | Select the hotbar slot to place from |
+| Tab | Inventory: move stacks between slots, the hotbar and your armour; craft (survival), or take any block or item (creative). Let go of a stack outside the window to throw it away |
+| G / Crouch+G | Throw one of the item in hand onto the ground / the whole stack |
 | L (hold) | Laser, operators only: carve a tunnel along the view ray |
 | R | Reload shaders, block textures and the data files (blocks, creature models), rebuild all chunk meshes |
-| Tab | Toggle mouse capture |
 | F1 | Toggle wireframe |
 | F2 | Toggle debug window |
 | F3 | Toggle ambient occlusion |
@@ -377,7 +376,7 @@ repeats one once it has used them all:
 | Vault | clean bricks, lamps set into the floor around a lit pedestal (ringed by a trap) |
 | Collapsed room | heaps of stone, dirt and sand |
 | Cistern | a deep pit of water with pillars, a ledge all round |
-| Pump room | a pump in a sunken basin with a pipe up into a raised tub (it stands idle until someone brings it air) |
+| Pump room | a pump in a sunken basin with a fluid pipe up into a raised tub (it stands idle until someone brings it air) |
 | Shrine | a lamp on a plinth, pews facing it |
 | Flood chamber | a pressure plate in the floor sets a latch gate in the ceiling, which opens the sluice gates beside it and keeps them open: the reservoir above pours in, and goes on pouring after you step off. A lever hidden in a wall by a corner resets the latch (and, left on, disarms the trap) |
 | Lever vault | four levers in a row by one wall, with a lamp in the wall over some of them; set the ones under lamps on and the rest off, and a gate in the middle of the floor opens over a pit with a chest of vault loot in it. Logic gates in the ceiling do the sums (NOT for the levers that should be off, AND for all four), and the gate closes again if you change them |
@@ -455,17 +454,24 @@ tick leaves room for big floods), and only near something that changed. It holds
 lock in short slices and steps aside for waiting edits, so player edits never
 wait more than a couple of milliseconds. Place a full block of water with 8.
 
-**Pumps and pipes** (hotbar 9 and 0) move water anywhere, including uphill, but
+**Pumps and fluid pipes** move water anywhere, including uphill, but
 pumps run on compressed air (see [Air power](#air-power)): without air pressure a
 pump stands still. Each tick a powered pump takes up to 5/8 of a block of water (2.5
-blocks a second) from the cells touching it and sends it through the pipes joined to it, face to face, out of the
-network's open ends: the open cells beside any pipe that joins only one other pipe
-or the pump. The ends share the water equally, and the pump only takes what they
-have room for, so water is still never created or lost. A pump draws only from the
+blocks a second) from the cells touching it and sends it through the fluid pipes joined to it, face to face, out of the
+network's open ends. An open end is a pipe joined to just one thing, and its water comes
+out of its end face only (the side away from what it's joined to), into the cell there.
+An end against a block is closed. The ends share the water equally, and the pump only takes what they
+have room for, so water is still never created or lost. If the pipes also reach a fluid
+tank or a fluid machine (an outlet, a boiler, a refinery...), that fluid network takes
+an equal share, as far as it has room. Open ends still spill, whatever the other ends
+are joined to. A pump draws only from the
 cells it touches, so put it at the bottom of a pool to empty it. Pumps run within
 the water simulation distance, like flowing water, and keep running after a save
-and reload. Pipes are drawn as thin tubes, with an arm out to each pipe or pump they
-join (they still stop you like a whole block). `PumpTest` checks that a pump without
+and reload. Fluid pipes are the one pipe for liquids: the same pipe carries a pump's
+water and the fluids of [Oil and fluids](#oil-and-fluids). The old stone water pipe is
+gone: any left in a saved world, an inventory or a chest becomes a fluid pipe. Pipes are
+drawn as thin tubes, with an arm out to each pipe, pump, machine or gauge they join, and
+you bump into the tube, not the whole cell. `PumpTest` checks that a pump without
 air moves nothing and a little air lifts a little, the rate, that water is conserved,
 that pumps stop when the pipe is cut or the outlet is full, and that saved pumps
 carry on.
@@ -521,12 +527,63 @@ range. `--water-distance N` changes it on `VoxelEngine` (singleplayer or
 needs loaded chunks around it to flow into. `WaterAreaTest` checks that water
 pauses out of range, keeps its volume, and resumes.
 
+## Lava and steam
+
+**Lava** (creative only, in the inventory next to water) is a glowing liquid that
+creeps along far more slowly than water: a step every half second. A source stays put.
+On the level, lava runs three blocks out from it, thinner each block. Over an edge, it
+pours down as a falling column and runs on from where it lands. Flowing lava with
+nothing feeding it drains away. It lights its surroundings as brightly as a lamp. You
+can wade in it slowly (like swimming, at half the speed), and it burns for a heart
+and a half every half second. It can't be aimed at or broken, but a block put where
+it is replaces it.
+
+**Water touching lava** boils away at once into a big cloud of steam, with a hiss.
+That happens whether the water flows up to the lava or the lava runs into the water,
+and the lava stays. A block of water makes 5,120 units of steam. Ordinary
+evaporation doesn't make steam: puddles just dry up.
+
+**Steam** is a gas in the open air, kept by the server cell by cell (not in the
+blocks). Four times a second each cell shares its steam with the open cells around it
+that have less. Most goes up (thick steam rises hard, thin steam hardly at all), some
+goes to each side, and a little goes down. So a burst billows up, spreads out under
+anything above it and hangs there, thinning as it grows. It also fades by about 2% a
+step, so a block's worth of steam is a cloud of a hundred or so cells that's gone in
+about twenty seconds. It never goes into solid blocks, water or lava, and a block put
+where it is pushes it up. The server sends the steam within 64 blocks of each player
+five times a second, and the game draws it as a translucent cloud filling the cells
+it's in. Each face between a cell of steam and its neighbours is a see-through square,
+as misty as the steam beside it is thick, so looking through more steam looks through
+more of them: a thick cloud is near white and its thin edges barely there. Each face
+takes its mist from its corners, each the mean of the eight cells round it, so it
+fades smoothly across the cells and to nothing at the cloud's edge, blending them into
+one cloud rather than a stack of boxes. Drifting noise in the shader breaks it up, so
+it reads as cloud, not glass.
+
+**Thick steam scalds.** A player with 200 units or more of steam in a cell their body is
+in loses half a heart every 0.75 seconds (armour doesn't help), so stand back from
+lava when you pour water on it. Thin steam at a cloud's edge is harmless.
+
+`SteamTest` covers both rules on their own:
+- steam rises and spreads, stays under a roof, keeps out of water and fades away;
+- lava runs three blocks out, pours over an edge, and drains once its source is gone;
+- water beside lava boils into steam.
+
+It also runs the whole path over a real connection: a creative player pours water
+next to their lava, the steam reaches the game and fades, and a survival player can't
+place lava.
+
 ## Player
 
 You walk on the terrain with gravity and collision. The body is a 0.6 x 1.8
-box. Full blocks collide as boxes. Sloped terrain blocks collide as a height
-field that matches their rendered triangles, so you stand on the visible
-surface and walk up and down hills smoothly. You can step up ledges up to 0.6
+box. Full blocks collide as boxes, and chiselled quarters and turned shapes as
+exactly what they fill, so you walk right up against a raised quarter. Sloped
+terrain blocks collide as a height field that matches their rendered triangles:
+you stand on the highest point of the visible surface under you and walk up and
+down hills smoothly. A slope higher than a step above your feet is ground over you
+instead: jumping or flying up into it, your head stops at its underside, and you
+can't walk into it at head height. Creative flight treats slopes as solid all round. Ice has hardly any grip, so speeding up, stopping and
+turning on it all slide. You can step up ledges up to 0.6
 blocks; anything taller needs a jump (about 1.25 blocks high). Physics runs at
 a fixed 120 Hz. Until the chunks under you have loaded, you wait in place. Fly
 mode (F) moves freely through blocks like the old free camera.
@@ -540,10 +597,17 @@ four corners, while anything built (bricks, logs, lamps and the rest) is four
 quarter-columns, each as high as its corner, like small steps.
 
 Shape blocks yourself with the chisel, a tool (in survival, made from a little wood
-and stone). With it in hand, **C** or right-click lowers the quarter you're looking
-at, **Shift+C** or Shift+right-click raises it again. **V** sets how far each stroke
+and stone). With it in hand, right-click lowers the quarter you're looking
+at, and Shift+right-click raises it again. **V** sets how far each stroke
 goes: an eighth of a block (as fine as natural slopes), a quarter, or a half. Raising every quarter to the top
-makes the block whole; lowering them all removes it. Machines (pumps, pipes, sluice
+makes the block whole; lowering them all removes it.
+
+Chiselling a whole block on a side, or underneath, turns it that way first: that side
+becomes its top, and the shape is cut down from there. A log keeps its grain running
+the way it did. Turned shapes are drawn, shaded (corner shadows and all), aimed at
+and collided with as what they are, and hold water above what they fill of each
+quarter. Building one back up whole makes it an ordinary block again.
+ Machines (pumps, pipes, sluice
 gates, pressure plates), water and plants can't be chiselled. Shaped blocks hold
 water above their quarters like the terrain's slopes do, and fill their lowest parts
 first. The water treats a cell as four columns: a stepped block's quarters, or a
@@ -562,10 +626,13 @@ in the row above. The top of a slope or slab with a block sitting on it is shade
 in that block's shadow, lit by the open space in its own cell.
 
 The outline around the block you're looking at follows its shape (a slope's corners
-and fold, a stepped block's quarters, a pressure plate's slab), and blocks in front of
-it hide it. Aiming follows shapes too: looking over a slope or past a quarter-column
-targets the block behind it, so you can break and build through the open part of a
-partial block.
+and fold, a stepped block's quarters, a pressure plate's slab, each of a pebbles
+block's stones, the part of a plant's picture with anything in it), and blocks in
+front of it hide it. Aiming follows shapes too: looking over a slope or past a
+quarter-column targets the block behind it, so you can break and build through the
+open part of a partial block. Grass, flowers, saplings and crops are aimed at by the
+solid pixels of their pictures, and pebbles by their stones, so you can click
+through the gaps to the ground behind.
 
 `ShapeTest` checks standing heights and water for both styles, aiming past and into
 partial blocks, the outlines' shapes, chiselling (down to
@@ -633,7 +700,7 @@ player or chest with more than fits gets extra slots, which go again once emptie
 There are two, and each player is in one:
 
 - **Survival** (the default): you build with what you collect. Breaking a block
-  gives you its worth in that block type, and placing one costs it. Traps hurt, and
+  drops its worth in that block type, and placing one costs it. Traps hurt, and
   you have hearts. You can break and build up to 6 blocks away.
 - **Creative**: every block, as many as you like, and nothing hurts you. You can
   break and build up to 50 blocks away. **Double-tap jump to fly** (and again to stop):
@@ -641,6 +708,19 @@ There are two, and each player is in one:
   (blocks stop you), and coming down onto the ground lands you.
 
 The server checks the reach too (with a little slack for movement).
+
+**Items on the ground.** What a broken block gives pops out of it as an item: a
+little turning cube for a block, a card of its icon for anything else. If you broke
+it and are within 8 blocks with room for it, it flies to you. Otherwise it lies
+there until someone walks over it (within about a block and a half, it drifts in).
+A broken chest spills what was in it. G throws one of what's in your hand (Crouch+G
+the stack), and in the inventory you can let go of a stack outside the window to
+throw it. What you throw lands a few blocks ahead, where you can't pick it up for
+a moment, and it doesn't come back on its own. What won't fit in a full inventory
+(a kill's spoils, a catch) drops at your feet instead of being lost. Items fall,
+land on blocks and slopes, slide (far on ice), float up in water, rise out of a
+block placed over them, and join up when the same items lie together. They're gone
+after five minutes, and are saved with the world.
 
 A full block is worth 64 units. Shaped blocks are worth their volume: a half slab is
 32, a quarter slab 16, and a chiselled block whatever's left of it (a slope its mean
@@ -759,6 +839,14 @@ A carved block takes time in proportion to what's left of it, but never less tha
 survival you make the pickaxe, axe and shovel (see [Crafting](#crafting)); in creative
 take them from the inventory. Put one in a hotbar slot to hold it. A tool places
 nothing on a right click. In creative everything breaks at once, as before.
+
+**Felling trees.** Breaking a log with an axe fells it: every log straight above it,
+as far as the trunk goes, comes down too, each giving its worth. Leaves need a log
+near them, within 4 blocks. When a log goes, leaves around it that no log holds up
+any more fall away one by one over the next few seconds, now and then dropping a
+sapling. That includes leaves you placed, if they're near a log you break and no
+other log is close. `MiningTest` checks that an axe fells a trunk, any other tool
+takes one log, a felled tree's leaves fall away, and leaves still held up stay.
 
 The server times every break, so a modified client can't mine faster. The client
 says when it starts on a block and with which tool. The server lets the break through
@@ -1204,10 +1292,15 @@ wheels** through **shafts**:
 - An **air tank** holds 256 units: a store of pressure, filling while the wheels make
   more air than the machines use and keeping them going when the water stops. (It's
   more to fill, too: a network with a tank takes longer to reach running pressure.)
+- A **creative air tank** (magenta; creative only) keeps its whole network full,
+  however much air the machines use, with no wheels or compressor needed. It has no
+  recipe, survival players can't place one, and breaking one in survival gives nothing.
 - A **valve** joins the pipes either side of it only while it's open; shut, the two
   sides are separate networks, each keeping its own air. Right-click (with an empty
   hand or a tool) opens and shuts
-  it, or give it a channel (see [Signals](#signals)) and it opens while that's on. Breaking a pipe lets
+  it, or give it a channel (see [Signals](#signals)) and it opens while that's on. It's
+  drawn as a length of air pipe with a red handle on top, turned along the pipe when
+  open and across it when shut. Breaking a pipe lets
   out what it held, and the two halves of a network keep their pressure. Pipes are
   drawn as thin tubes, joined to what they connect to (they still stop you like a
   whole block). Machines run above 25% pressure.
@@ -1354,7 +1447,12 @@ it; they aren't part of it, so they don't join what's on either side of them:
   (a natural sinkhole, where a river ends, still takes it out of the world).
 - A **fluid outlet** faces out from what you place it on, and lets water from the pipes
   beside it out into the cell in front of it, as much as there's room for. So a drain,
-  pipes and an outlet move water anywhere, uphill or down.
+  pipes and an outlet move water anywhere, uphill or down. To turn one on and off, put
+  a fluid valve in the pipe before it.
+- A **fluid valve** (half an iron ingot and a fluid pipe) joins the fluid pipes either
+  side of it only while it's open. Shut, it keeps the two sides apart and closes the
+  pipes' ends there, so nothing spills or vents. It opens and shuts by hand or by a
+  channel, like the air valve, and looks like a length of fluid pipe with a red handle.
 
 A pressure gauge fixed to a fluid pipe or tank shows how full its network is, and
 looking at a tank or a gauge says of what. Right-clicking any of them (empty-handed)
@@ -1400,6 +1498,15 @@ network, like an engine: it uses 32 steam a second from fluid pipes beside it an
 puts 40 air a second into its network. A drain or a pump feeds the boiler its water.
 `FactoryTest` checks a boiler with no coal says so, boils with it, and drives a
 turbine that fills its air pipes.
+
+Steam escapes into the air (see [Lava and steam](#lava-and-steam)), the way a pump's
+water spills. It comes out of every open end of its pipes (a pipe joined to just one
+thing), from the end face only, and out of the front of every fluid outlet on its
+network. An open end vents up to 32 units a second and an outlet twice that, 64 (the
+way to let steam out on purpose), and each unit becomes 10 units of steam in the air. An end with a block in front of it is closed, so close every end of the
+pipes that carry steam to a turbine, or it goes up in a cloud. `/fluid x y z steam`
+(operators) fills a pipe with steam. `SteamTest` checks steam venting from both ends
+of an open pipe, and from an outlet once the ends are closed.
 
 ## Multiblock structures
 
@@ -1460,7 +1567,7 @@ channel is heard by everything listening to it within **64 blocks**.
 
 | Block | What it does |
 |---|---|
-| **Lever** | sends on its channel while it's on; right-click flips it |
+| **Lever** | sends on its channel while it's on; right-click flips it. It goes only on the face of a solid block (floor, wall or ceiling), pointing out of it: a stone base with a wooden handle that tips over when flipped. If that block goes, it falls off and drops as an item |
 | **Pressure plate** | sends while it's stood on, and for a second after |
 | **Logic gate** | listens to one or two channels (A, B) and sends its answer on another: AND, OR, XOR, NOT (of A), RELAY (A again: to carry a signal further than 64 blocks), CLOCK (on and off each second while A is on, or always with no A) or LATCH (A turns it on and it stays on until B turns it off; while B is on, A can't turn it on) |
 | **Signal lamp** | lights while its channel is on |
@@ -1590,7 +1697,6 @@ Tools are made of stone; crafted armour goes straight on if its slot is free.
 | Glass | 1 sand |
 | Mossy bricks | 1 stone brick + 1 leaves |
 | Lamp | 1 glass + 0.5 planks |
-| 2 pipes | 1 stone |
 | Pump | 2 stone + 1 glass |
 | Drain | 0.5 iron ingot + 1 stone |
 | Sluice gate | 1 stone brick + 1 planks |
@@ -1775,8 +1881,11 @@ you (up to 40 at a time), and go at dawn.
 
 Now and then it rains: clear spells last 10 to 25 minutes and showers 2 to 5, fading
 in and out over ten seconds. Rain greys and dims the sky, falls as streaks around
-the player (not under a roof or underwater), and tops up lakes and pools (see
-[Water](#water)).
+the player, and tops up lakes and pools (see [Water](#water)). It doesn't fall under
+cover: the game keeps, for each column round the camera, the top of the highest solid
+block over it, refreshed a few rows a frame, and the rain shader leaves out drops
+below it. So under a roof or a tree you see it falling just beyond the edge.
+Underwater there's none.
 
 While a daytime shower is light (starting or clearing), a **rainbow** stands in the
 sky opposite the sun, highest when the sun is low.
@@ -1978,7 +2087,7 @@ they happen and fade with distance.
   what was there.
 - **Hurt** grunts, splashes into water, a **thump** when a creature is hit, a dwarf's
   grunt now and then, a chime when crafting, and **rain** while it rains where you
-  are. Under a roof it's quiet.
+  are, muffled under cover (down to a quarter as loud with no open sky round you).
 - **Machines** at work hum where they stand: water wheels creak and splash (louder the
   faster they turn), compressors chug, drills grind, pumps gurgle, engines putter,
   turbines whoosh, smelters and furnaces roar, crushers crunch, boilers bubble, air
@@ -2033,7 +2142,10 @@ For unattended screenshots there are a few environment variables:
 - `VOXEL_MENU_PAGE=worlds|new|multiplayer|settings` opens that page;
 - `VOXEL_PAUSE=1` opens the pause menu;
 - `VOXEL_RUN="/time noon;/summon deer"` sends those chat lines a second after landing;
-- `VOXEL_HOLD_MINE=1` mines whatever's in view.
+- `VOXEL_HOLD_MINE=1` mines whatever's in view;
+- `VOXEL_AUTO_FLY=1` flies straight ahead, sprinting (creative): with `VOXEL_BENCH=1`,
+  a way to watch the world stream in as you travel. The bench output then also names
+  the worst frame of each second over 25 ms, and where its time went.
 
 These go with the existing `VOXEL_AUTO_SCREENSHOT`, `VOXEL_NO_MOUSE` and
 `VOXEL_OPEN_INVENTORY`.

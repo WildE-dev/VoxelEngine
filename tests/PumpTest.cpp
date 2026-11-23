@@ -82,8 +82,8 @@ void Build(ServerWorld& world, bool withPipe) {
         Set(world, kPipeEnd + d, Block(BlockType::STONE));
     Cup(world, kDest, kPipeEnd);
     if (!withPipe) return;
-    for (int y = kPump.y + 1; y <= kPipeTop; y++) Set(world, { kPump.x, y, kPump.z }, Block(BlockType::PIPE));
-    Set(world, kPipeEnd, Block(BlockType::PIPE));
+    for (int y = kPump.y + 1; y <= kPipeTop; y++) Set(world, { kPump.x, y, kPump.z }, Block(BlockType::FLUID_PIPE));
+    Set(world, kPipeEnd, Block(BlockType::FLUID_PIPE));
 }
 
 // Pumps run on air (world/Power.h); the server grants it. Here every tick gives the
@@ -117,8 +117,8 @@ int main() {
         Tick(world, 5);
         Check(WaterAt(world, kSource) == kFull, "a pump without pipes moves nothing");
 
-        for (int y = kPump.y + 1; y <= kPipeTop; y++) Set(world, { kPump.x, y, kPump.z }, Block(BlockType::PIPE));
-        Set(world, kPipeEnd, Block(BlockType::PIPE));
+        for (int y = kPump.y + 1; y <= kPipeTop; y++) Set(world, { kPump.x, y, kPump.z }, Block(BlockType::FLUID_PIPE));
+        Set(world, kPipeEnd, Block(BlockType::FLUID_PIPE));
         powered = false;
         Tick(world, 3);
         WaterSimulation::PumpUse use;
@@ -154,7 +154,7 @@ int main() {
         Set(world, firstPipe, Block(BlockType::STONE));
         Tick(world, 2);
         Check(WaterAt(world, kSource) == kFull - kRate, "disconnecting the pipe stops it");
-        Set(world, firstPipe, Block(BlockType::PIPE));
+        Set(world, firstPipe, Block(BlockType::FLUID_PIPE));
 
         Tick(world, 10);
         Check(WaterAt(world, kSource) == 0 && WaterAt(world, kDest) == kFull, "the source drains into the destination, nothing lost");
@@ -271,6 +271,49 @@ int main() {
             Check(WaterAt(world, kDest) == std::min(2 * kRate, kFull), "and carries on pumping (as far as the source and the room allow)");
         }
         std::filesystem::remove_all(dir);
+    }
+
+    std::cout << "Into a tank" << std::endl;
+    {
+        // The same pipe, with a fluid tank joined to it partway up: the open end still lets
+        // water out (out of its end face), and the tank's network takes an equal share.
+        ServerWorld world(terrain);
+        world.Update({ glm::ivec3(0) });
+        Check(WaitLoaded(world), "chunks load");
+        Build(world, true);
+        Set(world, { kPump.x - 1, kPipeTop, kPump.z }, Block(BlockType::FLUID_TANK));
+        auto pumpInto = [&](int ticks, int room) {
+            int went = 0;
+            for (int i = 0; i < ticks; i++) {
+                {
+                    std::lock_guard<std::recursive_mutex> lock(world.GetEditMutex());
+                    world.GetWater().SetDrainBudget(kPump, room);
+                }
+                Tick(world, 1);
+                std::lock_guard<std::recursive_mutex> lock(world.GetEditMutex());
+                went += world.GetWater().TakeDrainUse(kPump);
+            }
+            return went;
+        };
+        const int went = pumpInto(1, 1000);
+        Check(went == kRate / 2 && WaterAt(world, kDest) == kRate / 2 && WaterAt(world, kSource) == kFull - kRate,
+              "an open end spills even with a tank joined elsewhere (" + std::to_string(WaterAt(world, kDest)) + " out of the end, " + std::to_string(went) +
+                  " into the tank)");
+        // With the end stopped up (stone in front of it), it all goes into the tank; and
+        // with the tank full, the pump stops.
+        Set(world, kDest, Block(BlockType::STONE));
+        Set(world, kSource, Block::Water(Block::kMaxWaterVolume));
+        const int before = WaterAt(world, kSource);
+        const int more = pumpInto(1, 1000);
+        Check(more == kRate && WaterAt(world, kSource) == before - kRate, "an end against a block is closed: it all goes into the tank");
+        const int full = pumpInto(2, 0);
+        Check(full == 0 && WaterAt(world, kSource) == before - kRate, "and once the tank is full, the pump stops");
+        // Out of the end face only: a cup beside the end (not in front of it) gets nothing.
+        Set(world, kDest, Block());
+        Set(world, kPipeEnd + glm::ivec3(0, 0, 1), Block());
+        Set(world, kSource, Block::Water(Block::kMaxWaterVolume));
+        pumpInto(1, 0);
+        Check(WaterAt(world, kDest) > 0 && WaterAt(world, kPipeEnd + glm::ivec3(0, 0, 1)) == 0, "water comes out of the end face only, not the sides");
     }
 
     std::cout << (failures ? "PUMP TEST FAILED (" : "ALL PUMP CHECKS PASSED (") << failures << " failures)" << std::endl;

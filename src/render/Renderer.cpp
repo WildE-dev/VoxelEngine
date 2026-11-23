@@ -78,7 +78,8 @@ Renderer::Renderer()
       waterShader("Resources/Shaders/water.vert", "Resources/Shaders/water.frag"),
       rainShader("Resources/Shaders/rain.vert", "Resources/Shaders/rain.frag"),
       playerShader("Resources/Shaders/player.vert", "Resources/Shaders/player.frag"),
-      crackShader("Resources/Shaders/crack.vert", "Resources/Shaders/crack.frag") {
+      crackShader("Resources/Shaders/crack.vert", "Resources/Shaders/crack.frag"),
+      steamShader("Resources/Shaders/steam.vert", "Resources/Shaders/steam.frag") {
 }
 
 Renderer::~Renderer() {
@@ -207,6 +208,7 @@ void Renderer::ReloadShaders() {
     holeShader.Reload();
     waterShader.Reload();
     rainShader.Reload();
+    steamShader.Reload();
     playerShader.Reload();
     crackShader.Reload();
 }
@@ -261,9 +263,11 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
     playerModels.DrawParticles(playerShader, params.view, params.projection, params.particles);
     playerModels.DrawBolts(playerShader, params.view, params.projection, params.bolts);
     playerModels.DrawArrows(playerShader, params.view, params.projection, params.arrows);
+    playerModels.DrawItems(playerShader, params.view, params.projection, params.items, params.time);
     playerModels.DrawWheels(playerShader, params.view, params.projection, params.wheels);
     playerModels.DrawGauges(playerShader, params.view, params.projection, params.gauges);
     playerModels.DrawDoors(playerShader, params.view, params.projection, params.doors);
+    playerModels.DrawLevers(playerShader, params.view, params.projection, params.levers);
     playerModels.DrawGlows(playerShader, params.view, params.projection, params.glows);
 
     DrawSkybox(params);
@@ -278,7 +282,13 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
 
     DrawWater(world, params);
 
-    rain.Draw(rainShader, params.view, params.projection, params.cameraPosition, params.time, params.snow, params.rain, 0.25f + 0.75f * params.sunBrightness);
+    // Steam: a translucent cloud in the cells it fills (after the water, so the water
+    // shows through it).
+    steam.Update(params.steamCells, params.steamVersion);
+    steam.Draw(steamShader, params.view, params.projection, params.time, 0.25f + 0.75f * params.sunBrightness);
+
+    rain.Draw(rainShader, params.view, params.projection, params.cameraPosition, params.time, params.snow, params.rain, 0.25f + 0.75f * params.sunBrightness,
+              params.rainCover);
 
     // --- Composite to the default framebuffer ---
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

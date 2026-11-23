@@ -17,7 +17,8 @@
 //  - Air pipes join face to face, and to compressors, machines, air tanks and valves.
 //    Everything joined is one network sharing one store of air: each pipe, compressor
 //    and machine holds up to kAirPerCell and each air tank kAirPerTank, and the
-//    network's pressure is how full it is (0..1). A valve joins what's either side of
+//    network's pressure is how full it is (0..1). A creative air tank (creative only)
+//    keeps its whole network full, however much air is used. A valve joins what's either side of
 //    it only while it's open; shut, the two sides are separate networks, each keeping
 //    its own air.
 //    Compressors stop adding air once it's full; longer networks store more but take
@@ -111,7 +112,7 @@ constexpr double kCrushInterval = 2.0;        // seconds per block ground
 // (A valve is part of the network only while it's open: shut, it divides it.)
 inline bool IsAirPart(BlockType t) {
     return t == BlockType::AIR_PIPE || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
-           t == BlockType::VALVE_OPEN || t == BlockType::PISTON || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
+           t == BlockType::CREATIVE_AIR_TANK || t == BlockType::VALVE_OPEN || t == BlockType::PISTON || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
            t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::ENGINE || t == BlockType::OIL_DERRICK ||
            t == BlockType::REFINERY || t == BlockType::CRUSHER || t == BlockType::TURBINE || t == BlockType::AIR_DIFFUSER;
 }
@@ -121,7 +122,7 @@ inline bool IsItemPart(BlockType t) {
            t == BlockType::SMELTER_LIT || t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::CRUSHER || t == BlockType::BOILER;
 }
 // How much air a part holds when full.
-inline float CapacityOf(BlockType t) { return t == BlockType::AIR_TANK ? kAirPerTank : kAirPerCell; }
+inline float CapacityOf(BlockType t) { return t == BlockType::AIR_TANK || t == BlockType::CREATIVE_AIR_TANK ? kAirPerTank : kAirPerCell; }
 // Everything to do with air power (what right-clicking describes).
 inline bool IsPart(BlockType t) {
     return IsAirPart(t) || t == BlockType::WATER_WHEEL || t == BlockType::SHAFT || t == BlockType::VALVE || t == BlockType::PRESSURE_GAUGE || Fluids::IsPart(t) ||
@@ -131,7 +132,7 @@ inline bool IsPart(BlockType t) {
 // shafts, which it finds from them).
 inline bool IsMachine(BlockType t) {
     return t == BlockType::WATER_WHEEL || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
-           t == BlockType::PISTON || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
+           t == BlockType::CREATIVE_AIR_TANK || t == BlockType::PISTON || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
            t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::PRESSURE_GAUGE ||
            t == BlockType::FLUID_TANK || Fluids::IsMachine(t) || t == BlockType::MINING_POST || t == BlockType::MULTIBLOCK ||
            t == BlockType::CRUSHER || t == BlockType::AIR_DIFFUSER;
@@ -143,7 +144,7 @@ inline bool PipeJoins(BlockType pipe, BlockType other) {
     if (pipe == BlockType::PIPE) return other == BlockType::PIPE || other == BlockType::PUMP;
     if (pipe == BlockType::AIR_PIPE) return IsAirPart(other) || other == BlockType::VALVE;
     if (pipe == BlockType::ITEM_PIPE || pipe == BlockType::FILTER_PIPE) return IsItemPart(other);
-    if (pipe == BlockType::FLUID_PIPE) return Fluids::PipeJoins(other);
+    if (pipe == BlockType::FLUID_PIPE) return Fluids::PipeJoins(other) || other == BlockType::PUMP; // (a pump sends its water up fluid pipes)
     return false;
 }
 

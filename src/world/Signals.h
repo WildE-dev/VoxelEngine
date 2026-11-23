@@ -17,8 +17,8 @@
 //    pipe, or an air network, at least b percent full.
 // Listeners:
 //  - a signal lamp lights while its channel is on;
-//  - a valve opens while its channel is on (a valve with no channel is opened and
-//    shut by hand);
+//  - a valve (air or fluid) opens while its channel is on (a valve with no channel is
+//    opened and shut by hand);
 //  - a sluice gate with a channel opens (out of the way, letting water through) while
 //    its channel is on and closes again when it's off, pushing any water in its cell
 //    up or aside (it waits if there's nowhere for the water to go). Without a channel
@@ -74,7 +74,9 @@ inline Kind KindOf(BlockType t) {
     case BlockType::SIGNAL_LAMP:
     case BlockType::SIGNAL_LAMP_ON: return Kind::Lamp;
     case BlockType::VALVE:
-    case BlockType::VALVE_OPEN: return Kind::Valve;
+    case BlockType::VALVE_OPEN:
+    case BlockType::FLUID_VALVE:
+    case BlockType::FLUID_VALVE_OPEN: return Kind::Valve;
     case BlockType::SLUICE: return Kind::Sluice;
     case BlockType::PISTON: return Kind::Piston;
     case BlockType::WATER_SENSOR: return Kind::WaterSensor;

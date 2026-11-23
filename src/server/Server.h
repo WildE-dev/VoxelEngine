@@ -21,6 +21,8 @@
 #include "net/Protocol.h"
 #include "net/Transport.h"
 #include "server/Creatures.h"
+#include "server/DroppedItems.h"
+#include "server/Steam.h"
 #include "world/Breathing.h"
 #include "world/Achievements.h"
 #include "world/Hunger.h"
@@ -234,6 +236,11 @@ private:
         glm::ivec2 sitesRegion{ INT_MIN, INT_MIN }; // where they were when last told the sites round them
         size_t sitesFallen = 0;                     // (and how many kings had fallen then)
         bool sentArrows = false; // the last Arrows they were sent had some in it
+        uint64_t sentItems = 0;  // what the last ItemsNear they were sent held (a hash; 0: nothing)
+        int itemsQuiet = 0;      // ticks since then
+        bool sentSteam = false;  // the last SteamNear they were sent had some in it
+        double nextLavaBurn = 0.0; // standing in lava burns at most this often
+        double nextScald = 0.0;    // thick steam scalds at most this often
         bool sentMachines = false; // the last Machines they were sent had some in it
         // Fishing: where their bobber floats (if it's out), where they cast from, and
         // when a fish will bite.
@@ -286,6 +293,7 @@ private:
     // Moving items between their slots, their armour slots and the open chest.
     void HandleInventoryMove(ClientState& client, const net::InventoryMove& m);
     void HandleCreativeSlot(ClientState& client, const net::CreativeSlot& m);
+    void HandleDropItem(ClientState& client, const net::DropItem& m);
     // Gives a player units of a type (survival); what doesn't fit is lost, and they're
     // told. Returns whether it all fitted. (The caller sends the inventory.)
     bool Give(ClientState& client, BlockType type, uint32_t units);
@@ -343,7 +351,7 @@ private:
     void SendChest(ClientState& client);         // what's in their open chest (or that it's closed)
     ChestItems& ChestAt(const glm::ivec3& pos);  // its contents (a dungeon chest's loot is rolled the first time)
     void SendChestToViewers(const glm::ivec3& pos);
-    void RemoveChest(const glm::ivec3& pos, ClientState* breaker); // gone: contents to whoever broke it
+    void RemoveChest(const glm::ivec3& pos, ClientState* breaker); // gone: its contents spill out where it was if someone broke it
     void DropOnDeath(ClientState& client); // half of what they carry, into a chest where they died
     // Right-clicked a block that does something: a bed (respawn, sleep) or a door.
     void HandleUseBed(ClientState& client, const glm::ivec3& pos);
@@ -401,6 +409,22 @@ private:
         int damage = 5;              // (a crossbow's bolt hits harder)
     };
     std::vector<Arrow> arrows;
+    // Items lying about (saved with the world): picked up by players who touch them,
+    // and what a block left flies to whoever broke it.
+    DroppedItems dropped;
+    // Lava (world/Lava.h), stepped every Lava::kInterval, and steam in the air
+    // (server/Steam.h), every SteamCloud::kInterval and sent out a few times a second.
+    SteamCloud steam;
+    double nextLava = 0.0, nextSteam = 0.0, nextSteamSend = 0.0;
+    void UpdateLava();
+    // Leaves no log holds up any more (world/Trees.h), and when each falls away.
+    std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> leafFalls;
+    void LoosenLeaves(const std::vector<glm::ivec3>& logsGone);
+    void UpdateLeaves();
+    void UpdateSteam();
+    void SendSteam();
+    void UpdateDroppedItems();
+    void SendDroppedItems();
     void HandleShoot(ClientState& client, const glm::vec3& direction);
     void UpdateArrows();
     void SendArrows();
@@ -441,6 +465,7 @@ private:
     };
     struct AirNetwork {
         int pipes = 0, tanks = 0, compressors = 0, drills = 0, working = 0, pumps = 0, pumping = 0;
+        bool endless = false; // a creative air tank keeps it full
         float air = 0.0f, capacity = 0.0f, supply = 0.0f; // supply: air a second from its compressors
         float Pressure() const { return capacity > 0.0f ? air / capacity : 0.0f; }
     };

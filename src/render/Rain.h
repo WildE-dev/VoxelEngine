@@ -8,7 +8,9 @@ class Shader;
 // Falling rain streaks in a box around the camera. The drops are a fixed set of
 // random points; the vertex shader moves them down over time and wraps them around
 // the camera, so the box follows the player without the drops sliding with them.
-// Intensity (0..1) decides how many of them show.
+// Intensity (0..1) decides how many of them show. Drops under cover don't show: `cover`
+// holds, for each column round the camera, where the highest solid block over it
+// stops the rain (kCoverSize a side, indexed by world x and z modulo it).
 class Rain
 {
 public:
@@ -20,10 +22,12 @@ public:
 
     // Into the current framebuffer, depth tested against the scene, blended.
     // `snow`: slow drifting flakes instead of streaks.
+    static constexpr int kCoverSize = 33; // (the box's width, and one)
     void Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPosition, float time, bool snow,
-              float intensity, float brightness);
+              float intensity, float brightness, const float* cover);
 
 private:
     static constexpr int kDrops = 9000;
     GLuint vao = 0, vbo = 0;
+    GLuint coverTexture = 0;
 };

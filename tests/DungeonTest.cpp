@@ -282,7 +282,7 @@ int main() {
                     if (b.type == BlockType::PUMP) {
                         pumpRooms++;
                         const bool wet = world.Get({ x, y + 1, z }).IsLiquid();
-                        const bool piped = world.Get({ x + 1, y, z }).type == BlockType::PIPE || world.Get({ x - 1, y, z }).type == BlockType::PIPE;
+                        const bool piped = world.Get({ x + 1, y, z }).type == BlockType::FLUID_PIPE || world.Get({ x - 1, y, z }).type == BlockType::FLUID_PIPE;
                         if (!wet || !piped) pumps = false;
                     }
                     if (!b.HasWater()) continue;

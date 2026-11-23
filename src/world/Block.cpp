@@ -1,5 +1,7 @@
 #include "world/Block.h"
 #include "world/BlockData.h"
+#include "world/Coords.h"
+#include "world/SpriteMasks.h"
 
 #include <algorithm>
 #include <array>
@@ -296,8 +298,8 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* SIGNAL_LAMP */ {{ "signal_lamp", "signal_lamp", "signal_lamp", "signal_lamp", "signal_lamp", "signal_lamp" }},
     /* SIGNAL_LAMP_ON */ {{ "signal_lamp_on", "signal_lamp_on", "signal_lamp_on", "signal_lamp_on", "signal_lamp_on", "signal_lamp_on" }},
     /* AIR_TANK    */ {{ "air_tank_top", "air_tank_top", "air_tank_side", "air_tank_side", "air_tank_side", "air_tank_side" }},
-    /* VALVE       */ {{ "valve", "valve", "valve", "valve", "valve", "valve" }},
-    /* VALVE_OPEN  */ {{ "valve_open", "valve_open", "valve_open", "valve_open", "valve_open", "valve_open" }},
+    /* VALVE       */ {{ "valve_handle", "valve_handle", "valve_icon", "valve_icon", "valve_icon", "valve_icon" }},
+    /* VALVE_OPEN  */ {{ "valve_handle", "valve_handle", "valve_icon", "valve_icon", "valve_icon", "valve_icon" }},
     // (Facing blocks: "top" is the face they point to, "bottom" the back, "front" the sides.)
     /* PISTON      */ {{ "piston_face", "piston_back", "piston_side", "piston_side", "piston_side", "piston_side" }},
     /* PISTON_HEAD */ {{ "piston_face", "piston_face", "piston_rod", "piston_rod", "piston_rod", "piston_rod" }},
@@ -347,6 +349,10 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* AIR_DIFFUSER */ {{ "air_diffuser_top", "machine_casing", "air_diffuser_side", "air_diffuser_side", "air_diffuser_side", "air_diffuser_side" }},
     /* COPPER_ORE  */ {{ "copper_ore", "copper_ore", "copper_ore", "copper_ore", "copper_ore", "copper_ore" }},
     /* COPPER_INGOT */ {{ "copper_ingot", "copper_ingot", "copper_ingot", "copper_ingot", "copper_ingot", "copper_ingot" }},
+    /* CREATIVE_AIR_TANK */ {{ "creative_air_tank_top", "creative_air_tank_top", "creative_air_tank_side", "creative_air_tank_side", "creative_air_tank_side", "creative_air_tank_side" }},
+    /* LAVA        */ {{ "lava", "lava", "lava", "lava", "lava", "lava" }},
+    /* FLUID_VALVE */ {{ "valve_handle", "valve_handle", "fluid_valve_icon", "fluid_valve_icon", "fluid_valve_icon", "fluid_valve_icon" }},
+    /* FLUID_VALVE_OPEN */ {{ "valve_handle", "valve_handle", "fluid_valve_icon", "fluid_valve_icon", "fluid_valve_icon", "fluid_valve_icon" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -390,7 +396,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "extractor", "filter_pipe", "crafter", "harvester", "drain", "sinkhole", "pressure_gauge",
     "oil_shale", "tar", "fluid_pipe", "fluid_tank", "oil_derrick", "refinery", "engine", "fluid_outlet", "mining_post",
     "steel_frame", "machine_casing", "fire_brick", "hammer", "multiblock", "multiblock_part",
-    "crusher", "crushed_iron", "coke", "glow_fungus", "magma", "gold_ore", "gold_ingot", "crossbow", "forge_core", "machine_sensor", "boiler", "turbine", "air_diffuser", "copper_ore", "copper_ingot",
+    "crusher", "crushed_iron", "coke", "glow_fungus", "magma", "gold_ore", "gold_ingot", "crossbow", "forge_core", "machine_sensor", "boiler", "turbine", "air_diffuser", "copper_ore", "copper_ingot", "creative_air_tank", "lava", "fluid_valve", "fluid_valve_open",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");
@@ -497,7 +503,7 @@ void Block::AddSteppedFaces(std::vector<uint32_t>& vertices, Face face, int x, i
             v[i].sky = shading.sky[ia][ib];
         }
         const int inside = carved ? carvedTexture : -1;
-        if ((axis != kUpright && IsOrientable(type)) || inside >= 0) OrientGrain(v, 4, face, GrainAxis(), textures, inside);
+        if (((axis & 7) != kUpright && IsOrientable(type)) || inside >= 0) OrientGrain(v, 4, face, GrainAxis(), textures, inside);
         // (The engine's front faces wind clockwise as seen from outside.)
         for (const VertexData& p : { v[0], v[2], v[1], v[1], v[2], v[3] }) {
             vertices.push_back(p.PackPosition());
@@ -588,7 +594,7 @@ void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, i
         const int texture = f == towards ? t.top : f == (towards ^ 1) ? t.bottom : t.front;
         for (auto& vertex : v) vertex.textureIndex = texture;
     }
-    else if (axis != kUpright && IsOrientable(type)) OrientGrain(v.data(), static_cast<int>(v.size()), face, GrainAxis(), GetTextureData(type));
+    else if ((axis & 7) != kUpright && IsOrientable(type)) OrientGrain(v.data(), static_cast<int>(v.size()), face, GrainAxis(), GetTextureData(type));
 
     // Work out which face corner each vertex sits on. Horizontal coordinates are
     // always 0 or 1 within the block; vertical ones may be partial heights, so any
@@ -633,15 +639,16 @@ struct WaterColumns {
 WaterColumns ColumnsOf(const Block& b) {
     constexpr int unitsPerEighth = Block::kMaxWaterVolume / 8;
     WaterColumns c;
-    if (b.IsStepped()) {
-        for (int e = 0; e < 4; e++) c.height[e] = b.edgeData.GetTopY(e) * unitsPerEighth, c.weight[e] = 1;
+    const EdgeData edges = b.WaterEdges();
+    if (b.WaterStepped()) {
+        for (int e = 0; e < 4; e++) c.height[e] = edges.GetTopY(e) * unitsPerEighth, c.weight[e] = 1;
         c.total = 4;
         return c;
     }
     // Corners (edge 2 is (0,0), 1 is (1,0), 0 is (0,1), 3 is (1,1)); the surface is
     // split along the (0,1)-(1,0) diagonal, so those two corners count twice.
     const int weights[4] = { 2, 2, 1, 1 }; // edges 0, 1, 2, 3
-    for (int e = 0; e < 4; e++) c.height[e] = b.edgeData.GetTopY(e) * unitsPerEighth, c.weight[e] = weights[e];
+    for (int e = 0; e < 4; e++) c.height[e] = edges.GetTopY(e) * unitsPerEighth, c.weight[e] = weights[e];
     c.total = 6;
     return c;
 }
@@ -677,10 +684,11 @@ int Block::WaterLevelFor(int volume) const {
 uint8_t Block::WaterFloor() const {
     if (!IsPartial()) return 0;
     constexpr int unitsPerEighth = kMaxWaterVolume / 8;
-    if (IsStepped()) {
+    if (WaterStepped()) {
         // Four quarters: their mean height.
+        const EdgeData edges = WaterEdges();
         int sum = 0;
-        for (int e = 0; e < 4; e++) sum += edgeData.GetTopY(e);
+        for (int e = 0; e < 4; e++) sum += edges.GetTopY(e);
         return static_cast<uint8_t>((sum * unitsPerEighth + 2) / 4);
     }
     // Mean height of the two top triangles (see SurfaceHeight), in units.
@@ -703,6 +711,151 @@ float Block::SurfaceHeight(float fx, float fz) const {
 
     if (fx + fz <= 1.0f) return c00 + (c10 - c00) * fx + (c01 - c00) * fz;
     return c11 + (c01 - c11) * (1.0f - fx) + (c10 - c11) * (1.0f - fz);
+}
+
+int Block::PebbleStones(int x, int y, int z, glm::vec3 lo[5], glm::vec3 hi[5]) const {
+    // Four or five little stones, an eighth high, one or two eighths across.
+    const float bottom = -PlantDrop();
+    uint32_t h = static_cast<uint32_t>(x) * 73856093u ^ static_cast<uint32_t>(z) * 19349663u ^ static_cast<uint32_t>(y) * 83492791u;
+    auto next = [&](uint32_t range) {
+        h ^= h << 13;
+        h ^= h >> 17;
+        h ^= h << 5;
+        return h % range;
+    };
+    const int count = 4 + static_cast<int>(next(2));
+    for (int i = 0; i < count; i++) {
+        const int w = 1 + static_cast<int>(next(2)), d = 1 + static_cast<int>(next(2)); // eighths
+        const int px = 1 + static_cast<int>(next(static_cast<uint32_t>(7 - w))), pz = 1 + static_cast<int>(next(static_cast<uint32_t>(7 - d)));
+        lo[i] = glm::vec3(px / 8.0f, bottom, pz / 8.0f);
+        hi[i] = glm::vec3(lo[i].x + w / 8.0f, bottom + 1.0f / 8.0f, lo[i].z + d / 8.0f);
+    }
+    return count;
+}
+
+namespace {
+constexpr float kShapeEpsilon = 1e-4f;
+
+// Whether (lo, hi) overlaps the block's shape as if it were upright (lo, hi in that
+// frame), and the highest point of that upright shape over a footprint.
+bool UprightOverlaps(const Block& b, glm::vec3 lo, glm::vec3 hi) {
+    lo = glm::max(lo, glm::vec3(0.0f));
+    hi = glm::min(hi, glm::vec3(1.0f));
+    if (lo.x >= hi.x - kShapeEpsilon || lo.z >= hi.z - kShapeEpsilon || lo.y >= hi.y - kShapeEpsilon) return false;
+    if (b.IsStepped()) {
+        // Quarter [qx][qz] is EdgeData edge kEdgeAt[qx][qz].
+        constexpr int kEdgeAt[2][2] = { { 2, 0 }, { 1, 3 } };
+        for (int qx = 0; qx < 2; qx++)
+            for (int qz = 0; qz < 2; qz++) {
+                const int e = kEdgeAt[qx][qz];
+                const float top = b.edgeData.GetTopY(e) / 8.0f, bottom = b.edgeData.GetBottomY(e) / 8.0f;
+                if (top <= bottom) continue;
+                if (std::max(lo.x, qx * 0.5f) < std::min(hi.x, qx * 0.5f + 0.5f) - kShapeEpsilon &&
+                    std::max(lo.z, qz * 0.5f) < std::min(hi.z, qz * 0.5f + 0.5f) - kShapeEpsilon && lo.y < top - kShapeEpsilon &&
+                    hi.y > bottom + kShapeEpsilon)
+                    return true;
+            }
+        return false;
+    }
+    return lo.y < b.SurfaceMax(lo.x, hi.x, lo.z, hi.z) - kShapeEpsilon;
+}
+
+float UprightTop(const Block& b, float x0, float x1, float z0, float z1) {
+    x0 = std::max(x0, 0.0f), z0 = std::max(z0, 0.0f), x1 = std::min(x1, 1.0f), z1 = std::min(z1, 1.0f);
+    if (x0 >= x1 - kShapeEpsilon || z0 >= z1 - kShapeEpsilon) return -1.0f;
+    if (b.IsStepped()) {
+        constexpr int kEdgeAt[2][2] = { { 2, 0 }, { 1, 3 } };
+        float top = -1.0f;
+        for (int qx = 0; qx < 2; qx++)
+            for (int qz = 0; qz < 2; qz++) {
+                const int e = kEdgeAt[qx][qz];
+                if (b.edgeData.GetTopY(e) <= b.edgeData.GetBottomY(e)) continue;
+                if (std::max(x0, qx * 0.5f) < std::min(x1, qx * 0.5f + 0.5f) - kShapeEpsilon &&
+                    std::max(z0, qz * 0.5f) < std::min(z1, qz * 0.5f + 0.5f) - kShapeEpsilon)
+                    top = std::max(top, b.edgeData.GetTopY(e) / 8.0f);
+            }
+        return top;
+    }
+    return b.SurfaceMax(x0, x1, z0, z1);
+}
+} // namespace
+
+float Block::SurfaceMax(float x0, float x1, float z0, float z1) const {
+    x0 = std::max(x0, 0.0f), z0 = std::max(z0, 0.0f), x1 = std::min(x1, 1.0f), z1 = std::min(z1, 1.0f);
+    if (x0 > x1 || z0 > z1) return -1.0f;
+    // The surface is flat on each side of the x + z = 1 diagonal, so its highest point over
+    // a rectangle is at a corner of the rectangle or where the diagonal crosses its edges.
+    float top = std::max(std::max(SurfaceHeight(x0, z0), SurfaceHeight(x1, z0)), std::max(SurfaceHeight(x0, z1), SurfaceHeight(x1, z1)));
+    for (const float x : { x0, x1 })
+        if (const float z = 1.0f - x; z >= z0 && z <= z1) top = std::max(top, SurfaceHeight(x, z));
+    for (const float z : { z0, z1 })
+        if (const float x = 1.0f - z; x >= x0 && x <= x1) top = std::max(top, SurfaceHeight(x, z));
+    return top;
+}
+
+bool Block::ShapeOverlaps(const glm::vec3& lo, const glm::vec3& hi) const {
+    if (IsFullBlock()) return glm::all(glm::lessThan(lo, glm::vec3(1.0f - kShapeEpsilon))) && glm::all(glm::greaterThan(hi, glm::vec3(kShapeEpsilon)));
+    if (!IsPartial()) return false;
+    const int dir = ShapeDir();
+    if (dir == 0) return UprightOverlaps(*this, lo, hi);
+    // Turned a quarter or a half turn at a time, a box is still a box in the shape's frame.
+    const glm::vec3 a = CellToShape(dir, lo), b = CellToShape(dir, hi);
+    return UprightOverlaps(*this, glm::min(a, b), glm::max(a, b));
+}
+
+float Block::ShapeTop(float x0, float x1, float z0, float z1) const {
+    if (IsFullBlock()) return (x0 < 1.0f && x1 > 0.0f && z0 < 1.0f && z1 > 0.0f) ? 1.0f : -1.0f;
+    if (!IsPartial()) return -1.0f;
+    const int dir = ShapeDir();
+    if (dir == 0) return UprightTop(*this, x0, x1, z0, z1);
+    // Upside down: it hangs from the top of the cell, wherever it's over the footprint.
+    if (dir == 3) return ShapeOverlaps({ x0, 0.0f, z0 }, { x1, 1.0f, z1 }) ? 1.0f : -1.0f;
+    // On its side: find the highest slice with some of it in, then the top within that
+    // slice (below the top it's there, above it it isn't).
+    constexpr int kSlices = 64;
+    auto within = [&](float y0, float y1) { return ShapeOverlaps({ x0, y0, z0 }, { x1, y1, z1 }); };
+    for (int k = kSlices; k > 0; k--) {
+        const float sliceTop = k / static_cast<float>(kSlices), sliceBottom = (k - 1) / static_cast<float>(kSlices);
+        if (!within(sliceBottom, sliceTop)) continue;
+        float lo = sliceBottom, hi = sliceTop;
+        for (int i = 0; i < 10; i++) {
+            const float mid = (lo + hi) * 0.5f;
+            if (within(mid, sliceTop)) lo = mid; else hi = mid;
+        }
+        return lo;
+    }
+    return -1.0f;
+}
+
+EdgeData Block::WaterEdges() const {
+    if (ShapeDir() == 0) return edgeData;
+    // Each quarter as high as the most of it the turned shape fills, rounded up to eighths.
+    constexpr int kEdgeAt[2][2] = { { 2, 0 }, { 1, 3 } };
+    EdgeData edges;
+    for (int qx = 0; qx < 2; qx++)
+        for (int qz = 0; qz < 2; qz++) {
+            const float top = ShapeTop(qx * 0.5f, qx * 0.5f + 0.5f, qz * 0.5f, qz * 0.5f + 0.5f);
+            const int e = kEdgeAt[qx][qz];
+            edges.SetBottomY(e, 0);
+            edges.SetTopY(e, static_cast<uint8_t>(top <= 0.0f ? 0 : std::clamp(static_cast<int>(std::ceil(top * 8.0f - 0.01f)), 0, 8)));
+        }
+    return edges;
+}
+
+Block Block::Upright() const {
+    const int dir = ShapeDir();
+    Block b = *this;
+    if (dir == 0) return b;
+    if (!KeepsGrain(type)) {
+        b.axis = 0;
+        return b;
+    }
+    // The grain, as it runs in the shape's own frame.
+    glm::vec3 grain(0.0f);
+    grain[GrainAxis()] = 1.0f;
+    const glm::vec3 g = glm::abs(CellVectorToShape(dir, grain));
+    b.axis = g.x > 0.5f ? kAlongX : g.z > 0.5f ? kAlongZ : kUpright;
+    return b;
 }
 
 void Block::AddPlantVertices(std::vector<uint32_t>& vertices, int x, int y, int z, uint8_t blockLight, uint8_t skyLight) const {
@@ -740,26 +893,17 @@ void Block::AddPebbleVertices(std::vector<uint32_t>& vertices, int x, int y, int
     // by the cell's position (so neighbouring cells differ), on the ground the plant
     // drop says.
     const int texture = GetTextureData(type).bottom; // stone
-    const float bottom = y - PlantDrop();
-    uint32_t h = static_cast<uint32_t>(x) * 73856093u ^ static_cast<uint32_t>(z) * 19349663u ^ static_cast<uint32_t>(y) * 83492791u;
-    auto next = [&](uint32_t range) {
-        h ^= h << 13;
-        h ^= h >> 17;
-        h ^= h << 5;
-        return h % range;
-    };
     auto vertex = [&](const glm::vec3& p, float u, float v, const glm::vec3& normal) {
         VertexData d(p, glm::vec2(u, v), texture, normal);
         d.light = blockLight;
         d.sky = skyLight;
         return d;
     };
-    const int count = 4 + static_cast<int>(next(2));
+    glm::vec3 stoneLo[5], stoneHi[5];
+    const int count = PebbleStones(x, y, z, stoneLo, stoneHi);
     for (int i = 0; i < count; i++) {
-        const int w = 1 + static_cast<int>(next(2)), d = 1 + static_cast<int>(next(2)); // eighths
-        const int px = 1 + static_cast<int>(next(static_cast<uint32_t>(7 - w))), pz = 1 + static_cast<int>(next(static_cast<uint32_t>(7 - d)));
-        const glm::vec3 lo(x + px / 8.0f, bottom, z + pz / 8.0f), hi(lo.x + w / 8.0f, bottom + 1.0f / 8.0f, lo.z + d / 8.0f);
-        const float u0 = px / 8.0f, v0 = pz / 8.0f, u1 = u0 + w / 8.0f, v1 = v0 + d / 8.0f; // their bit of the texture
+        const glm::vec3 lo = glm::vec3(x, y, z) + stoneLo[i], hi = glm::vec3(x, y, z) + stoneHi[i];
+        const float u0 = stoneLo[i].x, v0 = stoneLo[i].z, u1 = stoneHi[i].x, v1 = stoneHi[i].z; // their bit of the texture
         auto quad = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec3& e, const glm::vec3& n) {
             const VertexData q[4] = { vertex(a, u0, v1, n), vertex(b, u1, v1, n), vertex(c, u0, v0, n), vertex(e, u1, v0, n) };
             // Both windings (like plants): small enough not to matter.
@@ -776,7 +920,68 @@ void Block::AddPebbleVertices(std::vector<uint32_t>& vertices, int x, int y, int
     }
 }
 
-std::vector<glm::vec3> Block::OutlineSegments() const {
+int Block::ModelBoxes(unsigned joined, glm::vec3 lo[kMaxModelBoxes], glm::vec3 hi[kMaxModelBoxes]) const {
+    int n = 0;
+    auto box = [&](glm::vec3 a, glm::vec3 b) { lo[n] = a, hi[n] = b, n++; };
+    // A box along an axis (0 x, 1 y, 2 z): from..to along it, `half` either side of the
+    // middle across it.
+    auto rod = [&](int axisIndex, float from, float to, float half) {
+        glm::vec3 a(0.5f - half), b(0.5f + half);
+        a[axisIndex] = from, b[axisIndex] = to;
+        box(a, b);
+    };
+    if (IsPipe() || IsValveType(type)) {
+        // The core, and an arm out of each face it joins (as the mesher draws it); and a
+        // valve's handle on top.
+        constexpr float kHalf = 0.25f;
+        rod(0, 0.5f - kHalf, 0.5f + kHalf, kHalf);
+        for (int face = 0; face < kFaceCount; ++face) {
+            if (!(joined & (1u << face))) continue;
+            const int a = kFaceAxis[face];
+            const bool positive = kFaceOffsets[face][a] > 0;
+            rod(a, positive ? 0.5f + kHalf : 0.0f, positive ? 1.0f : 0.5f - kHalf, kHalf);
+        }
+        if (IsValveType(type)) box({ 0.125f, 0.75f, 0.125f }, { 0.875f, 1.0f, 0.875f }); // (round the handle, either way it's turned)
+        return n;
+    }
+    switch (type) {
+    case BlockType::SHAFT:
+        rod(GrainAxis(), 0.0f, 1.0f, 0.15f); // the rod and its band
+        return n;
+    case BlockType::WATER_WHEEL:
+        rod(GrainAxis(), 0.0f, 1.0f, 0.12f);  // the axle
+        rod(GrainAxis(), 0.15f, 0.85f, 0.25f); // the hub
+        return n;
+    case BlockType::PRESSURE_GAUGE: {
+        // The housing and dial over the front of the back half, and the stem behind.
+        const int face = axis % 6, a = kFaceAxis[face];
+        const bool positive = kFaceOffsets[face][a] > 0; // it faces this way; the pipe is behind
+        rod(a, positive ? 0.23f : 0.47f, positive ? 0.53f : 0.77f, 0.26f);
+        rod(a, positive ? 0.0f : 0.77f, positive ? 0.23f : 1.0f, 0.07f);
+        return n;
+    }
+    case BlockType::LEVER:
+    case BlockType::LEVER_ON: {
+        // Its base on the block behind it and the handle out from it.
+        const glm::ivec3 f = LeverFacing();
+        const int a = f.x != 0 ? 0 : f.y != 0 ? 1 : 2;
+        const bool positive = f[a] > 0;
+        rod(a, positive ? 0.0f : 0.4f, positive ? 0.6f : 1.0f, 0.25f);
+        return n;
+    }
+    case BlockType::PISTON_HEAD: {
+        // A plate across the far end and a rod back through the rest.
+        const int face = axis % 6, a = kFaceAxis[face];
+        const bool positive = kFaceOffsets[face][a] > 0;
+        rod(a, positive ? 0.75f : 0.0f, positive ? 1.0f : 0.25f, 0.5f);
+        rod(a, positive ? 0.0f : 0.25f, positive ? 0.75f : 1.0f, 0.125f);
+        return n;
+    }
+    default: return -1;
+    }
+}
+
+std::vector<glm::vec3> Block::OutlineSegments(const glm::ivec3& cell, unsigned joined) const {
     if (const int dir = ShapeDir(); dir != 0 && IsPartial()) {
         // Turned: the upright outline, turned into place.
         Block upright = *this;
@@ -800,14 +1005,30 @@ std::vector<glm::vec3> Block::OutlineSegments() const {
         }
     };
     if (type == BlockType::PEBBLES) {
-        const float drop = PlantDrop();
-        box({ 0.1f, -drop, 0.1f }, { 0.9f, 0.15f - drop, 0.9f });
+        // Each stone (where it's drawn: by the cell's place in its chunk).
+        const glm::ivec3 local = Coords::LocalOf(cell);
+        glm::vec3 lo[5], hi[5];
+        const int count = PebbleStones(local.x, local.y, local.z, lo, hi);
+        for (int i = 0; i < count; i++) box(lo[i], hi[i]);
         return lines;
     }
-    if (IsPlant()) {
+    if (IsPlant() && !IsLeverType(type)) {
+        // Round its picture (its two crossed sprites, as far as they have anything solid).
         const float drop = PlantDrop();
-        box({ 0.15f, -drop, 0.15f }, { 0.85f, 0.9f - drop, 0.85f });
+        float u0 = 0.15f, u1 = 0.85f, height = 0.9f;
+        if (SpriteMasks::Bounds(GetTextureData(type).top, u0, u1, height)) {
+            const float a = std::min(u0, 1.0f - u1), b = std::max(u1, 1.0f - u0);
+            u0 = a, u1 = b;
+        }
+        box({ u0, -drop, u0 }, { u1, height - drop, u1 });
         return lines;
+    }
+    {
+        // Drawn smaller than its cell: round each of its boxes.
+        glm::vec3 lo[kMaxModelBoxes], hi[kMaxModelBoxes];
+        const int count = ModelBoxes(joined, lo, hi);
+        for (int i = 0; i < count; i++) box(lo[i], hi[i]);
+        if (count >= 0) return lines;
     }
     if (IsFullBlock() || IsLiquid()) {
         box(glm::vec3(0.0f), glm::vec3(1.0f));
@@ -848,7 +1069,7 @@ void Block::Shrink() {
 }
 
 int Block::ResourceUnits() const {
-    if (IsAir() || IsLiquid() || type == BlockType::PISTON_HEAD || type == BlockType::MULTIBLOCK || type == BlockType::MULTIBLOCK_PART) return 0;
+    if (IsAir() || IsLiquid() || IsLava() || type == BlockType::PISTON_HEAD || type == BlockType::MULTIBLOCK || type == BlockType::MULTIBLOCK_PART) return 0;
     if (type == BlockType::PEBBLES) return kPebbleUnits;
     if (IsFullBlock() || !CanChisel()) return kUnitsPerBlock;
     if (IsStepped()) {
@@ -864,7 +1085,7 @@ int Block::ResourceUnits() const {
 }
 
 bool Block::CanChisel() const {
-    if (IsAir() || IsLiquid() || IsPlant()) return false;
+    if (IsAir() || IsLiquid() || IsLava() || IsPlant()) return false;
     switch (type) {
     case BlockType::PUMP:
     case BlockType::PIPE:
@@ -877,8 +1098,11 @@ bool Block::CanChisel() const {
     case BlockType::SIGNAL_LAMP:
     case BlockType::SIGNAL_LAMP_ON:
     case BlockType::AIR_TANK:
+    case BlockType::CREATIVE_AIR_TANK:
     case BlockType::VALVE:
     case BlockType::VALVE_OPEN:
+    case BlockType::FLUID_VALVE:
+    case BlockType::FLUID_VALVE_OPEN:
     case BlockType::PISTON:
     case BlockType::PISTON_HEAD:
     case BlockType::WATER_SENSOR:
@@ -924,6 +1148,7 @@ Block Block::Chiselled(int edge, int deltaEighths) const {
     b.edgeData.SetTopY(edge, static_cast<uint8_t>(height));
     if (b.edgeData.IsFull()) {
         b.water = b.shown = 0; // a full block holds no water
+        b.SetShapeDir(0);      // (and, whole again, isn't turned any way)
         return b;
     }
     int remaining = 0;

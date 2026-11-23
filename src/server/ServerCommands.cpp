@@ -363,7 +363,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         double v[6];
         for (int i = 0; i < 6; i++)
             if (!ParseNumber(words[1 + i], v[i]) || std::abs(v[i]) > 1e7) return usage("/fill <x1 y1 z1> <x2 y2 z2> <block>");
-        const BlockType type = Lower(words[7]) == "air" ? BlockType::AIR : BlockFromId(Lower(words[7]));
+        const BlockType type = Lower(words[7]) == "air" ? BlockType::AIR : Current(BlockFromId(Lower(words[7])));
         if (type == BlockType::COUNT) return reply(Kind::Error, "No block called " + words[7]);
         const glm::ivec3 a(glm::floor(glm::dvec3(v[0], v[1], v[2]))), b(glm::floor(glm::dvec3(v[3], v[4], v[5])));
         const glm::ivec3 lo = glm::min(a, b), hi = glm::max(a, b), size = hi - lo + 1;
@@ -414,14 +414,14 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         reply(Kind::Info, "Filled " + std::to_string(parts.size()) + " air parts");
     }
     else if (command == "fluid") {
-        // A fluid pipe or tank filled with water, crude or fuel (its network shares it).
+        // A fluid pipe or tank filled with water, crude, fuel or steam (its network shares it).
         double v[3];
-        const char* use = "/fluid <x y z> <water|crude|fuel>";
+        const char* use = "/fluid <x y z> <water|crude|fuel|steam>";
         if (words.size() != 5) return usage(use);
         for (int i = 0; i < 3; i++)
             if (!ParseNumber(words[1 + i], v[i]) || std::abs(v[i]) > 1e7) return usage(use);
         const std::string what = Lower(words[4]);
-        const Fluids::Kind kind = what == "water" ? Fluids::Kind::Water : what == "crude" ? Fluids::Kind::Crude : what == "fuel" ? Fluids::Kind::Fuel : Fluids::Kind::None;
+        const Fluids::Kind kind = what == "water" ? Fluids::Kind::Water : what == "crude" ? Fluids::Kind::Crude : what == "fuel" ? Fluids::Kind::Fuel : what == "steam" ? Fluids::Kind::Steam : Fluids::Kind::None;
         if (kind == Fluids::Kind::None) return usage(use);
         const glm::ivec3 at(glm::floor(glm::dvec3(v[0], v[1], v[2])));
         std::lock_guard<std::recursive_mutex> edit(world->GetEditMutex());

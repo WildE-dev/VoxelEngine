@@ -16,22 +16,23 @@ Chunk::~Chunk() {
 
 Block Chunk::GetBlock(int x, int y, int z) const {
     std::lock_guard<std::mutex> lock(blockMutex);
-    return blocks[Index(x, y, z)];
+    return data ? data->blocks[Index(x, y, z)] : Block();
 }
 
 void Chunk::CopyBlocks(Blocks& out) const {
     std::lock_guard<std::mutex> lock(blockMutex);
-    out = blocks;
+    if (data) out = data->blocks;
+    else out.fill(Block());
 }
 
 bool Chunk::IsOpaque(int x, int y, int z) const {
     std::lock_guard<std::mutex> lock(blockMutex);
-    return blocks[Index(x, y, z)].IsFullBlock();
+    return data && data->blocks[Index(x, y, z)].IsFullBlock();
 }
 
 void Chunk::SetBlock(int x, int y, int z, const Block& block) {
     std::lock_guard<std::mutex> lock(blockMutex);
-    blocks[Index(x, y, z)] = block;
+    DataLocked().blocks[Index(x, y, z)] = block;
 }
 
 bool Chunk::TryBeginGenerate() {
@@ -42,7 +43,7 @@ bool Chunk::TryBeginGenerate() {
 void Chunk::SetGenerated(const Blocks& generated) {
     {
         std::lock_guard<std::mutex> lock(blockMutex);
-        blocks = generated;
+        DataLocked().blocks = generated;
     }
     state = State::Loaded;
 }
@@ -50,8 +51,9 @@ void Chunk::SetGenerated(const Blocks& generated) {
 bool Chunk::PublishLight() {
     {
         std::lock_guard<std::mutex> lock(blockMutex);
-        if (publishedLight == light && lightVersion.load(std::memory_order_relaxed) > 0) return false;
-        publishedLight = light;
+        Contents& d = DataLocked();
+        if (d.publishedLight == d.light && lightVersion.load(std::memory_order_relaxed) > 0) return false;
+        d.publishedLight = d.light;
     }
     lightVersion.fetch_add(1, std::memory_order_acq_rel);
     return true;
@@ -59,20 +61,22 @@ bool Chunk::PublishLight() {
 
 void Chunk::CopyPublishedLight(Light& out) const {
     std::lock_guard<std::mutex> lock(blockMutex);
-    out = publishedLight;
+    if (data) out = data->publishedLight;
+    else out.fill(0);
 }
 
 uint8_t Chunk::GetReceivedLight(int x, int y, int z) const {
     std::lock_guard<std::mutex> lock(blockMutex);
-    return light[Index(x, y, z)];
+    return data ? data->light[Index(x, y, z)] : 0;
 }
 
 void Chunk::SetLightData(const Light& values, std::vector<int>* changedCells) {
     std::lock_guard<std::mutex> lock(blockMutex);
+    Contents& d = DataLocked();
     if (changedCells) {
         changedCells->clear();
         for (int i = 0; i < VOLUME; i++)
-            if (light[i] != values[i]) changedCells->push_back(i);
+            if (d.light[i] != values[i]) changedCells->push_back(i);
     }
-    light = values;
+    d.light = values;
 }

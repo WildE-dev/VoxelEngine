@@ -294,6 +294,19 @@ enum class BlockType : uint8_t {
     // hand) into copper ingots, the wiring every signal block needs (world/Signals.h).
     COPPER_ORE,
     COPPER_INGOT,
+    // A creative air tank: part of an air network that never runs out of air (it
+    // keeps the whole network full). Creative only: there's no recipe, survival
+    // players can't place one, and breaking one in survival gives nothing.
+    CREATIVE_AIR_TANK,
+    // Lava (world/Lava.h): a glowing liquid that flows slowly, a few blocks from its
+    // source, and burns whoever wades in. Water touching it boils away into steam
+    // (server/Steam.h). Its `axis` holds how far it has flowed (0 a source, 1..3)
+    // and whether it's falling. Creative only.
+    LAVA,
+    // A fluid valve: joins the fluid pipes either side of it only while it's open (like
+    // the air valve with air pipes); shut, the two sides are separate networks.
+    FLUID_VALVE,
+    FLUID_VALVE_OPEN,
     COUNT
 };
 // Machines with an inventory of their own (opened like a chest, empty-handed): what
@@ -302,14 +315,34 @@ inline bool IsMachineInventory(BlockType t) {
     return t == BlockType::SMELTER || t == BlockType::SMELTER_LIT || t == BlockType::DRILL || t == BlockType::CRAFTER || t == BlockType::HARVESTER ||
            t == BlockType::CRUSHER || t == BlockType::BOILER || t == BlockType::MULTIBLOCK;
 }
+// Blocks only creative players may place (and that give nothing when broken).
+// The old water pipe (BlockType::PIPE), from before fluid pipes carried pumps' water:
+// kept for its number, and turned into a fluid pipe wherever it's found.
+inline BlockType Current(BlockType t) { return t == BlockType::PIPE ? BlockType::FLUID_PIPE : t; }
+// Valves (air and fluid, shut and open): drawn as a length of their pipe with a handle
+// on top, turned along the pipe when open and across it when shut.
+inline bool IsValveType(BlockType t) {
+    return t == BlockType::VALVE || t == BlockType::VALVE_OPEN || t == BlockType::FLUID_VALVE || t == BlockType::FLUID_VALVE_OPEN;
+}
+inline bool IsOpenValve(BlockType t) { return t == BlockType::VALVE_OPEN || t == BlockType::FLUID_VALVE_OPEN; }
+// The same valve opened (or shut).
+inline BlockType ValveSetTo(BlockType t, bool open) {
+    const bool fluid = t == BlockType::FLUID_VALVE || t == BlockType::FLUID_VALVE_OPEN;
+    return fluid ? (open ? BlockType::FLUID_VALVE_OPEN : BlockType::FLUID_VALVE) : (open ? BlockType::VALVE_OPEN : BlockType::VALVE);
+}
+// The pipe a valve sits in (whose tube it's drawn as, and joins like).
+inline BlockType ValvePipe(BlockType t) { return t == BlockType::FLUID_VALVE || t == BlockType::FLUID_VALVE_OPEN ? BlockType::FLUID_PIPE : BlockType::AIR_PIPE; }
+inline bool IsCreativeOnlyType(BlockType t) { return t == BlockType::CREATIVE_AIR_TANK || t == BlockType::LAVA; }
 // Blocks that hold things like a chest (opened, filled, emptied, broken open).
 inline bool IsStorageType(BlockType t) { return t == BlockType::CHEST || t == BlockType::MINING_POST || IsMachineInventory(t); }
 
 // Solid blocks drawn by a model of their own (turning wheels and shafts), and pipes
 // drawn as thin tubes: neither hides what's beside it or blocks light.
+inline bool IsLeverType(BlockType t) { return t == BlockType::LEVER || t == BlockType::LEVER_ON; }
 inline bool IsModelType(BlockType type) {
     return type == BlockType::WATER_WHEEL || type == BlockType::SHAFT || type == BlockType::PRESSURE_GAUGE || type == BlockType::MULTIBLOCK ||
-           type == BlockType::MULTIBLOCK_PART || type == BlockType::DOOR || type == BlockType::DOOR_OPEN; // (a door swings open: drawn as it turns)
+           type == BlockType::MULTIBLOCK_PART || type == BlockType::DOOR || type == BlockType::DOOR_OPEN || // (a door swings open: drawn as it turns)
+           IsLeverType(type); // (a lever's handle tips over)
 }
 // Ladders and doors face one of the four level ways (their `axis`, a Face: +x, -x, +z or
 // -z): a ladder out from the wall it hangs on, a door toward whoever put it up. Each is a
@@ -359,6 +392,7 @@ inline BlockType ResourceTypeOf(BlockType type) {
     case BlockType::LEVER_ON: return BlockType::LEVER;
     case BlockType::SIGNAL_LAMP_ON: return BlockType::SIGNAL_LAMP;
     case BlockType::VALVE_OPEN: return BlockType::VALVE;
+    case BlockType::FLUID_VALVE_OPEN: return BlockType::FLUID_VALVE;
     case BlockType::PISTON_HEAD: return BlockType::AIR; // (part of the piston: gives nothing)
     case BlockType::SMELTER_LIT: return BlockType::SMELTER;
     case BlockType::SPRING:
@@ -406,7 +440,7 @@ inline ShapeStyle StyleOf(BlockType type) {
 // (The game's own; Resources/Data/blocks.json may change it: see world/BlockData.h.)
 inline uint8_t DefaultLightEmission(BlockType type) {
     return type == BlockType::LAMP || type == BlockType::SIGNAL_LAMP_ON ? kMaxLight : type == BlockType::CAMPFIRE ? kMaxLight - 1 : type == BlockType::SMELTER_LIT ? 12
-         : type == BlockType::GLOW_FUNGUS ? 11 : type == BlockType::MAGMA ? 12 : 0;
+         : type == BlockType::GLOW_FUNGUS ? 11 : type == BlockType::MAGMA ? 12 : type == BlockType::LAVA ? kMaxLight : 0;
 }
 namespace BlockData { extern int8_t gLight[]; }
 inline uint8_t GetLightEmission(BlockType type) {
@@ -500,9 +534,20 @@ struct Block {
     BlockType FilterType() const { return axis < static_cast<uint8_t>(BlockType::COUNT) ? static_cast<BlockType>(axis) : BlockType::AIR; }
     // A facing block's direction (a unit step).
     glm::ivec3 Facing() const { return glm::ivec3(kFaceOffsets[axis % 6][0], kFaceOffsets[axis % 6][1], kFaceOffsets[axis % 6][2]); }
+    // A lever is fixed to the face of a solid block and sticks out from it: the way it
+    // points (out of that face). Kept in `axis` so that 0 is a lever on the floor (all
+    // the old ones were): the Face is (axis + 2) % 6. The block it's fixed to is behind it.
+    glm::ivec3 LeverFacing() const {
+        const int f = (axis + 2) % 6;
+        return glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]);
+    }
+    static uint8_t LeverAxisFor(int face) { return static_cast<uint8_t>((face + 4) % 6); }
+    // Whether a block holds a lever up: a solid, whole block (not a pipe, valve or model).
+    static bool HoldsLever(const Block& b) { return b.IsFullBlock() && !IsModelType(b.type) && !IsPipeType(b.type) && !IsValveType(b.type); }
     static bool IsOrientable(BlockType t) { return t == BlockType::LOG || t == BlockType::WATER_WHEEL || t == BlockType::SHAFT; }
     // The axis in kFaceAxis terms (0 x, 1 y, 2 z), and the orientation for one.
-    int GrainAxis() const { return axis == kAlongX ? 0 : axis == kAlongZ ? 2 : 1; }
+    // (A log's axis byte also holds its shape's direction, above the grain: see ShapeDir.)
+    int GrainAxis() const { return (axis & 7) == kAlongX ? 0 : (axis & 7) == kAlongZ ? 2 : 1; }
     static uint8_t AxisFor(int faceAxis) { return faceAxis == 0 ? kAlongX : faceAxis == 2 ? kAlongZ : kUpright; }
     // The same block turned to run along `faceAxis` (if it can be). A facing block
     // takes a Face (0..5) instead.
@@ -578,22 +623,60 @@ struct Block {
     static constexpr uint8_t kShownDeadband = kMaxWaterVolume / 8;
     // A cell of only water (as opposed to a waterlogged partial block).
     bool IsLiquid() const { return type == BlockType::WATER; }
+    // Lava: a liquid too, but not water's (nothing to stand on or bump into, and not
+    // aimed at or broken; see world/Lava.h).
+    bool IsLava() const { return type == BlockType::LAVA; }
     bool HasWater() const { return water > 0; }
     uint8_t WaterVolume() const { return water; }
     bool IsFullWater() const { return IsLiquid() && water == kMaxWaterVolume; }
     // A sloped block: solid below its surface, open above it.
-    bool IsPartial() const { return !IsAir() && !IsPlant() && !IsLiquid() && !IsFullBlock(); }
-    // (A shape turned sideways or upside down holds no water: see ShapeDir.)
-    bool CanHoldWater() const { return IsReplaceableByWater() || IsLiquid() || (IsPartial() && ShapeDir() == 0); }
+    bool IsPartial() const { return !IsAir() && !IsPlant() && !IsLiquid() && !IsLava() && !IsFullBlock(); }
+    // (A turned shape holds water above what it fills of each quarter: see WaterEdges.)
+    bool CanHoldWater() const { return IsReplaceableByWater() || IsLiquid() || IsPartial(); }
 
     // Which way a shaped block's shape runs (its `axis`): 0 upright (its corners' heights
     // up from its bottom, as it always was), 1 and 2 along +x and +z (as a log's axis), 3
     // upside down (down from its top), 4 and 5 along -x and -z. The shape is kept as if
     // upright and turned into place wherever it's drawn, collided with or aimed at.
-    // Chiselling a full block on a side (or underneath) turns it that way first. Only
-    // plain building blocks turn: a log's axis is its grain, a piston's its facing.
-    static bool CanTurnShape(BlockType t) { return CanShape(t) && !IsOrientable(t) && !IsFacingType(t) && !IsWallFacingType(t); }
-    int ShapeDir() const { return CanTurnShape(type) && axis <= 5 ? axis : 0; }
+    // Chiselling a full block on a side (or underneath) turns it that way first. A log
+    // keeps its grain in the byte's low three bits and the direction in the next three
+    // (KeepsGrain), so it turns too, its grain running the way it did.
+    static bool CanTurnShape(BlockType t) { return CanShape(t) && !IsFacingType(t) && !IsWallFacingType(t); }
+    static bool KeepsGrain(BlockType t) { return IsOrientable(t) && CanShape(t); }
+    int ShapeDir() const {
+        if (!CanTurnShape(type)) return 0;
+        const int d = KeepsGrain(type) ? axis >> 3 : axis;
+        return d <= 5 ? d : 0;
+    }
+    void SetShapeDir(int d) {
+        if (CanTurnShape(type)) axis = static_cast<uint8_t>(KeepsGrain(type) ? (axis & 7) | (d << 3) : d);
+    }
+    // The block as its own upright shape (ShapeDir 0), for drawing it before it's turned
+    // into place: a log's grain turned along with it.
+    Block Upright() const;
+    // The solid a partial block fills, in the cell (0..1 each way), turned the way it's
+    // turned: whether a box overlaps it (touching doesn't count), and the highest point of
+    // it over a footprint (x0..x1, z0..z1; -1 if none of it is over that footprint). Exact
+    // for quarters and slopes alike.
+    bool ShapeOverlaps(const glm::vec3& lo, const glm::vec3& hi) const;
+    // A solid block drawn smaller than its cell (a pipe, a shaft, a wheel's hub, a
+    // pressure gauge, a piston's head): the boxes (0..1 in the cell, up to kMaxModelBoxes)
+    // roughly matching how it's drawn, which it collides and is aimed at as. -1 for any
+    // other block. `joined`: the faces a pipe reaches out of (ModelBoxes::Joins).
+    static constexpr int kMaxModelBoxes = 7;
+    int ModelBoxes(unsigned joined, glm::vec3 lo[kMaxModelBoxes], glm::vec3 hi[kMaxModelBoxes]) const;
+    float ShapeTop(float x0, float x1, float z0, float z1) const;
+    // The highest point of an upright slope's surface over a footprint (the footprint
+    // clipped to the cell; -1 if it misses the cell).
+    float SurfaceMax(float x0, float x1, float z0, float z1) const;
+    // What water sees of a partial block: four quarter-columns (WaterStepped) or an
+    // upright slope's corners, heights in eighths. A turned shape is its quarters each as
+    // high as the most it fills of them.
+    EdgeData WaterEdges() const;
+    bool WaterStepped() const { return IsStepped() || ShapeDir() != 0; }
+    // A pebbles block's stones (up to 5), in the cell (their bottom on the ground the
+    // plant drop says), placed by the cell's position in its chunk.
+    int PebbleStones(int x, int y, int z, glm::vec3 lo[5], glm::vec3 hi[5]) const;
     // The direction whose top faces the way `n` points (a face's normal).
     static int ShapeDirFacing(const glm::ivec3& n) {
         if (n.x > 0) return 1;
@@ -645,7 +728,7 @@ struct Block {
         default: return v;
         }
     }
-    // The box (in the cell, 0..1) a shape fills, turned: what a turned one collides as.
+    // The box (in the cell, 0..1) a shape fills, turned (round it: ShapeOverlaps is exact).
     void ShapeBounds(glm::vec3& lo, glm::vec3& hi) const {
         int top = 0, bottom = 8;
         for (int e = 0; e < 4; e++) top = std::max<int>(top, edgeData.GetTopY(e)), bottom = std::min<int>(bottom, edgeData.GetBottomY(e));
@@ -660,7 +743,7 @@ struct Block {
     static constexpr bool IsChiselStep(int s) { return s == 1 || s == 2 || s == 4; }
     Block ChiselledFrom(int dir, int edge, int deltaEighths) const {
         Block b = *this;
-        if (b.IsFullBlock() && CanTurnShape(b.type) && dir >= 0 && dir <= 5) b.axis = static_cast<uint8_t>(dir);
+        if (b.IsFullBlock() && CanTurnShape(b.type) && dir >= 0 && dir <= 5) b.SetShapeDir(dir);
         return b.Chiselled(edge, deltaEighths);
     }
     // Water in a partial block sits above its slope. For flow it's treated as a cell
@@ -719,14 +802,14 @@ struct Block {
 
     bool IsAir() const { return type == BlockType::AIR; }
     // Full, opaque cube that hides any neighbouring face touching it, and collides.
-    bool IsFullBlock() const { return type != BlockType::AIR && !IsPlant() && !IsLiquid() && edgeData.IsFull(); }
+    bool IsFullBlock() const { return type != BlockType::AIR && !IsPlant() && !IsLiquid() && !IsLava() && edgeData.IsFull(); }
     // Light passes through air, partial blocks, plants, leaves and water (water also
     // absorbs some; see LightPropagator).
-    bool BlocksLight() const { return IsFullBlock() && !IsLeavesType(type) && type != BlockType::ICE && type != BlockType::GLASS && type != BlockType::SIGNAL_LAMP && type != BlockType::SIGNAL_LAMP_ON && !IsModelType(type) && !IsPipeType(type) && type != BlockType::PISTON_HEAD; }
+    bool BlocksLight() const { return IsFullBlock() && !IsLeavesType(type) && type != BlockType::ICE && type != BlockType::GLASS && type != BlockType::SIGNAL_LAMP && type != BlockType::SIGNAL_LAMP_ON && !IsModelType(type) && !IsPipeType(type) && !IsValveType(type) && type != BlockType::PISTON_HEAD; }
     // A full block that hides the faces of the blocks it touches (not glass).
-    bool HidesNeighbours() const { return IsFullBlock() && type != BlockType::GLASS && !IsModelType(type) && !IsPipeType(type) && type != BlockType::PISTON_HEAD; }
+    bool HidesNeighbours() const { return IsFullBlock() && type != BlockType::GLASS && !IsModelType(type) && !IsPipeType(type) && !IsValveType(type) && type != BlockType::PISTON_HEAD; }
     // Air, a plant or water: nothing to stand on or bump into.
-    bool IsPassable() const { return IsAir() || IsPlant() || IsLiquid(); }
+    bool IsPassable() const { return IsAir() || IsPlant() || IsLiquid() || IsLava(); }
     // Water may flow into this cell (washing away any plant).
     bool IsReplaceableByWater() const {
         return IsAir() || (IsPlant() && type != BlockType::LADDER && type != BlockType::DOOR_OPEN && type != BlockType::LEVER && type != BlockType::LEVER_ON);
@@ -773,7 +856,9 @@ struct Block {
     // The edges of the block's shape (pairs of points, block-local), for the outline
     // around the block in view: a cube, a slope's outline, a stepped block's quarters,
     // or the box a plant stands in.
-    std::vector<glm::vec3> OutlineSegments() const;
+    // (`cell`: where it is, which places a pebbles block's stones.)
+    // (`joined`: a pipe's arms, as for ModelBoxes.)
+    std::vector<glm::vec3> OutlineSegments(const glm::ivec3& cell = glm::ivec3(0), unsigned joined = 0) const;
 
     // Appends 6 vertices (2 packed uint32 each) for the given face.
     void AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading) const;
@@ -793,6 +878,11 @@ inline Block Block::Placed(BlockType t, int heightEighths, int faceAxis) {
     if (t == BlockType::PRESSURE_PLATE) return PressurePlate();
     if (t == BlockType::BED) return Bed();
     if (t == BlockType::LADDER || t == BlockType::DOOR_OPEN) return Block(t).Turned(faceAxis); // (a panel, not a sprite's drop)
+    if (IsLeverType(t)) { // (pointing out of the face it's put on)
+        Block lever(t);
+        lever.axis = LeverAxisFor(faceAxis >= 0 && faceAxis < 6 ? faceAxis : 2);
+        return lever;
+    }
     if (IsPlantType(t)) return Plant(t, 0);
     if (heightEighths >= 8 || heightEighths <= 0 || !CanShape(t)) return Block(t).Turned(faceAxis);
     EdgeData slab;

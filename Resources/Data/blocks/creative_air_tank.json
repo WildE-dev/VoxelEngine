@@ -1,0 +1,2 @@
+// creative_air_tank: a block (the format is in README.md, here)
+{ "name": "Creative air tank", "textures": { "top": "creative_air_tank_top", "bottom": "creative_air_tank_top", "side": "creative_air_tank_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#9050a0" }

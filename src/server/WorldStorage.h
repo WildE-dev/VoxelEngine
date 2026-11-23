@@ -39,7 +39,7 @@ public:
     // 2: world type; 3: time of day; 4: game modes and resources; 5: block axes (logs);
     // 6: tools players have made; ...; 14: inventories of item stacks (world/Inventory.h)
     // in place of units by type, tool and upgrade masks (older ones are converted)
-    static constexpr uint32_t kFormatVersion = 14;
+    static constexpr uint32_t kFormatVersion = 15;
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
@@ -93,6 +93,15 @@ public:
     };
     std::vector<SavedAir> GetAir() const;
     void SetAir(std::vector<SavedAir> a);
+    // Items lying on the ground (server/DroppedItems.h), format 15 on.
+    struct SavedItem {
+        ItemId item = Items::kNone;
+        uint8_t count = 0, units = 0;
+        glm::vec3 position{ 0.0f };
+        float age = 0.0f;
+    };
+    std::vector<SavedItem> GetItems() const;
+    void SetItems(std::vector<SavedItem> i);
 
     // One bit per block column of a chunk (index x * CHUNK_SIZE + z).
     using ColumnMask = std::array<uint64_t, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE / 64>;
@@ -185,4 +194,5 @@ private:
     std::vector<SavedSignal> signalBlocks;
     std::vector<SavedFluid> fluids;
     std::vector<SavedAir> air;
+    std::vector<SavedItem> items;
 };

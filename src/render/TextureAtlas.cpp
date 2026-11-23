@@ -9,6 +9,7 @@
 #include <stb_image.h>
 
 #include "render/Shader.h"
+#include "world/SpriteMasks.h"
 
 namespace fs = std::filesystem;
 
@@ -155,6 +156,13 @@ bool TextureAtlas::Build(const std::string& directory) {
         names.push_back(images[i].name);
         indices[images[i].name] = i;
     }
+    // Which pixels are solid, for aiming at plants by their picture (world/SpriteMasks.h).
+    std::vector<std::vector<uint8_t>> solid(static_cast<size_t>(count));
+    for (int i = 0; i < count; i++) {
+        solid[i].resize(static_cast<size_t>(tileSize) * tileSize);
+        for (int p = 0; p < tileSize * tileSize; p++) solid[i][p] = images[i].rgba[p * 4 + 3] >= 128 ? 1 : 0;
+    }
+    SpriteMasks::Set(tileSize, std::move(solid));
 
     std::cout << "Texture atlas: " << count - 1 << " textures, " << size.x << "x" << size.y
               << " (" << tileSize << "px tiles, " << maxLevel << " mip levels)" << std::endl;

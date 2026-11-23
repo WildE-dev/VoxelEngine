@@ -12,6 +12,8 @@
 //  - the pump runs on the air,
 //  - right-clicking parts describes them,
 //  - cutting the air pipe starves the drill,
+//  - a creative air tank beside it keeps it going, full, with no compressor,
+//    and a survival player can't place one,
 //  - stopping the water brings the wheels to a stop,
 //  - the air a tank holds is saved: after a restart it's all still there.
 #include <chrono>
@@ -160,7 +162,7 @@ int main() {
     fill({ 19, 1, 17 }, { 19, 1, 17 }, "stone");
     fill({ 18, 1, 18 }, { 19, 1, 19 }, "stone"); // (the tank's lid)
     fill(pumpAt, pumpAt, "pump");
-    fill({ 19, 0, 17 }, { 19, 0, 17 }, "pipe"); // the pump's water pipe, into the tank
+    fill({ 19, 0, 17 }, { 19, 0, 17 }, "fluid_pipe"); // the pump's water pipe, into the tank
     // The reservoir, empty for now: a stone tank above the wheels with two holes in its
     // floor, one over each wheel's +x side, and a pit under the wheels to catch it.
     fill({ 20, 5, 6 }, { 26, 15, 12 }, "stone");
@@ -251,6 +253,26 @@ int main() {
     std::cout << "Cutting the air" << std::endl;
     a.client.BreakBlock(cut);
     Check(pump(15.0, [&] { return machine(drill, [&](auto& m) { return m.state == state(Power::DrillState::NoPressure); }); }), "cutting the air pipe starves the drill");
+
+    std::cout << "A creative air tank" << std::endl;
+    const glm::ivec3 endless{ 20, 4, 16 }; // on top of the drill
+    a.client.PlaceBlock(endless, BlockType::CREATIVE_AIR_TANK);
+    Check(pump(20.0, [&] { return machine(drill, [&](auto& m) { return m.state == state(Power::DrillState::Working) && m.pressure == 255; }); }),
+          "a creative air tank on the drill keeps it digging, with the network full");
+    wait(3.5);
+    Check(machine(drill, [&](auto& m) { return m.pressure == 255; }) && machine(endless, [](auto& m) { return m.type == uint8_t(BlockType::CREATIVE_AIR_TANK); }),
+          "and it stays full however much the drill and pump use");
+    server.QueueConsoleCommand("gamemode survival Miller");
+    pump(10.0, [&] { return !a.client.IsCreative(); });
+    server.QueueConsoleCommand("give creative_air_tank 1 Miller");
+    pump(10.0, [&] { return a.client.GetResources(BlockType::CREATIVE_AIR_TANK) > 0; });
+    a.client.PlaceBlock({ 20, 4, 15 }, BlockType::CREATIVE_AIR_TANK);
+    wait(1.0);
+    Check(blockAt({ 20, 4, 15 }) == BlockType::AIR, "a survival player can't place one");
+    server.QueueConsoleCommand("gamemode creative Miller");
+    pump(10.0, [&] { return a.client.IsCreative(); });
+    fill(endless, endless, "air");
+    Check(pump(15.0, [&] { return machine(drill, [&](auto& m) { return m.state == state(Power::DrillState::NoPressure); }); }), "taken away, the drill starves again");
 
     std::cout << "Stopping the water" << std::endl;
     fill({ 21, 5, 8 }, { 21, 5, 10 }, "stone"); // plug the holes

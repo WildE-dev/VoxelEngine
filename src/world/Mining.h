@@ -72,6 +72,7 @@ inline float DefaultHardness(BlockType type) {
     switch (type) {
     case BlockType::AIR:
     case BlockType::WATER:
+    case BlockType::LAVA:
     case BlockType::TALL_GRASS:
     case BlockType::FLOWER_RED:
     case BlockType::FLOWER_YELLOW:
@@ -114,8 +115,11 @@ inline float DefaultHardness(BlockType type) {
     case BlockType::DRILL:
     case BlockType::COMPRESSOR:
     case BlockType::AIR_TANK:
+    case BlockType::CREATIVE_AIR_TANK:
     case BlockType::VALVE:
     case BlockType::VALVE_OPEN:
+    case BlockType::FLUID_VALVE:
+    case BlockType::FLUID_VALVE_OPEN:
     case BlockType::LOGIC_GATE:
     case BlockType::PISTON:
     case BlockType::PISTON_HEAD:
@@ -211,8 +215,11 @@ inline Tool DefaultBestTool(BlockType type) {
     case BlockType::DRILL:
     case BlockType::COMPRESSOR:
     case BlockType::AIR_TANK:
+    case BlockType::CREATIVE_AIR_TANK:
     case BlockType::VALVE:
     case BlockType::VALVE_OPEN:
+    case BlockType::FLUID_VALVE:
+    case BlockType::FLUID_VALVE_OPEN:
     case BlockType::LOGIC_GATE:
     case BlockType::PISTON:
     case BlockType::PISTON_HEAD:

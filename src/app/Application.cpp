@@ -1,4 +1,6 @@
 #include "app/Application.h"
+#include "world/ModelBoxes.h"
+#include "world/Trees.h"
 #include "world/Trades.h"
 #include "world/Dwarves.h"
 
@@ -57,12 +59,12 @@ constexpr const char* kGlslVersion = "#version 330 core";
 constexpr float kCreativeReach = 50.0f, kSurvivalReach = 6.0f;
 constexpr float kLaserRange = 100.0f;
 constexpr int kLaserRadius = 4;
-// Everything the inventory (I) offers, in the order it shows them.
+// Everything the inventory (Tab) offers, in the order it shows them.
 constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
-    BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP, BlockType::PIPE,
-    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::BOILER, BlockType::TURBINE, BlockType::AIR_DIFFUSER, BlockType::DRILL, BlockType::SMELTER, BlockType::STEEL_FRAME, BlockType::MACHINE_CASING, BlockType::FIRE_BRICK, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
+    BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::LAVA, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP,
+    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::CREATIVE_AIR_TANK, BlockType::VALVE, BlockType::FLUID_VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::BOILER, BlockType::TURBINE, BlockType::AIR_DIFFUSER, BlockType::DRILL, BlockType::SMELTER, BlockType::STEEL_FRAME, BlockType::MACHINE_CASING, BlockType::FIRE_BRICK, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
     BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::MINING_POST, BlockType::CRUSHER, BlockType::GLOW_FUNGUS, BlockType::MAGMA, BlockType::GOLD_ORE, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::COPPER_ORE, BlockType::OIL_SHALE, BlockType::TAR, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::COPPER_INGOT, BlockType::STEEL_INGOT, BlockType::HAMMER, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
@@ -112,7 +114,7 @@ const char* ToolHint(Tool tool) {
     case Tool::Sword: return "for fighting: 3.5 hearts a hit (and quick on leaves)";
     case Tool::Bow: return "right-click to shoot an arrow (2.5 hearts); needs arrows";
     case Tool::Rod: return "right-click water to cast; wait for a bite (stay close)";
-    case Tool::Chisel: return "right-click (or C) to cut a block's corner down, with Shift to build it up; V: how fine";
+    case Tool::Chisel: return "right-click to cut a block's corner down, with Shift to build it up; V: how fine";
     default: return "";
     }
 }
@@ -176,6 +178,7 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::FLOWER_YELLOW: return "Yellow flower";
     case BlockType::SAND:  return "Sand";
     case BlockType::WATER: return "Water";
+    case BlockType::LAVA: return "Lava";
     case BlockType::PUMP:  return "Pump";
     case BlockType::PIPE:  return "Pipe";
     case BlockType::WATER_WHEEL: return "Water wheel";
@@ -189,8 +192,11 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::SIGNAL_LAMP: return "Signal lamp";
     case BlockType::SIGNAL_LAMP_ON: return "Signal lamp (lit)";
     case BlockType::AIR_TANK: return "Air tank";
+    case BlockType::CREATIVE_AIR_TANK: return "Creative air tank";
     case BlockType::VALVE: return "Valve (closed)";
     case BlockType::VALVE_OPEN: return "Valve (open)";
+    case BlockType::FLUID_VALVE: return "Fluid valve";
+    case BlockType::FLUID_VALVE_OPEN: return "Fluid valve (open)";
     case BlockType::PISTON: return "Piston";
     case BlockType::PISTON_HEAD: return "Piston head";
     case BlockType::WATER_SENSOR: return "Water sensor";
@@ -358,6 +364,9 @@ bool Application::Init(const ClientOptions& options) {
     // VOXEL_HOLD_MINE=1 mines whatever's in view, as if the left button were held
     // (for unattended screenshots of mining).
     holdMine = std::getenv("VOXEL_HOLD_MINE") != nullptr;
+    // VOXEL_AUTO_FLY=1 flies straight ahead, sprinting, in creative (for watching how
+    // the world streams in as you travel).
+    autoFly = std::getenv("VOXEL_AUTO_FLY") != nullptr;
     // VOXEL_RUN="/time noon;/summon deer" sends those chat lines (commands) once joined.
     if (const char* run = std::getenv("VOXEL_RUN")) startCommands = run;
     // VOXEL_BENCH=1 turns vsync off and prints where frame time goes, once a second.
@@ -720,10 +729,13 @@ void Application::Run() {
         }
 
         double mark = glfwGetTime();
+        const double frameStart = mark;
+        for (double& s : benchFrame) s = 0.0;
         auto lap = [&](int section) {
             if (!bench) return;
             const double t = glfwGetTime();
             benchSections[section] += t - mark;
+            benchFrame[section] += t - mark;
             mark = t;
         };
         UpdateNetwork();
@@ -774,12 +786,12 @@ void Application::Run() {
         if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
             params.highlightedBlock = hit->block;
             Block target;
-            if (world->GetBlock(hit->block.x, hit->block.y, hit->block.z, target)) params.highlightOutline = target.OutlineSegments();
+            if (world->GetBlock(hit->block.x, hit->block.y, hit->block.z, target)) params.highlightOutline = target.OutlineSegments(hit->block, ModelBoxes::Joins(*world, hit->block, target));
         }
         if (mining && mineProgress > 0.0f) {
             // Cracks over the box the block's shape fills.
             glm::vec3 lo(1.0f), hi(0.0f);
-            for (const glm::vec3& p : miningBlock.OutlineSegments()) lo = glm::min(lo, p), hi = glm::max(hi, p);
+            for (const glm::vec3& p : miningBlock.OutlineSegments(miningPos)) lo = glm::min(lo, p), hi = glm::max(hi, p);
             if (hi.x > lo.x) {
                 params.breakProgress = mineProgress;
                 params.breakBoxMin = glm::vec3(miningPos) + lo;
@@ -844,7 +856,7 @@ void Application::Run() {
             const glm::vec3 at = glm::vec3(*lastBobber) + glm::vec3(0.5f, surface + 0.04f * std::sin(static_cast<float>(Client::Now()) * 3.0f), 0.5f);
             glm::vec2 uv0, uv1;
             renderer->GetAtlas().GetTileUV(renderer->GetAtlas().GetIndex("bobber"), uv0, uv1);
-            params.particles.push_back({ at, 0.18f, glm::vec4(uv0, uv1), lightAt(at) });
+            params.particles.push_back({ at, 0.18f, glm::vec4(uv0, uv1), lightAt(at), 0.0f, true });
         }
         for (const auto& a : client->GetArrows()) {
             // Flying arrows point where they're going; stuck ones keep the way they came in.
@@ -857,6 +869,27 @@ void Application::Run() {
             params.arrows.push_back({ a.position, dir, lightAt(a.position) });
         }
         if (arrowFacing.size() > 512) arrowFacing.clear();
+        {
+            const TextureAtlas& atlas = renderer->GetAtlas();
+            for (const auto& i : client->GetItems()) {
+                if (!Items::Valid(i.item)) continue;
+                ItemModel model;
+                model.position = i.position;
+                const BlockType type = Items::BlockOf(i.item);
+                model.cube = Items::IsBlock(i.item) && !IsItemType(type) && !IsPlantType(type) && !Block(type).IsLiquid();
+                glm::vec2 uv0, uv1;
+                atlas.GetTileUV(ItemTile(atlas, i.item), uv0, uv1);
+                model.uv = glm::vec4(uv0, uv1);
+                model.copies = i.count >= 32 ? 3 : i.count >= 2 ? 2 : 1;
+                model.phase = static_cast<float>(i.id % 97) * 0.37f;
+                model.light = lightAt(i.position);
+                params.items.push_back(model);
+            }
+            const glm::vec3 chest = player.GetEyePosition() - glm::vec3(0.0f, 0.6f, 0.0f);
+            bool picked = false;
+            for (const glm::vec3& at : client->TakeVanishedItems()) picked |= glm::distance(at, chest) < 2.0f;
+            if (picked) audio->PlayHere("pickup", 0.35f);
+        }
         UpdateMachines(params, lightAt);
         for (const auto& p : particles) {
             // Bits shrink away at the end; spray clouds billow out to two and a half times
@@ -864,7 +897,30 @@ void Application::Run() {
             const float age = 1.0f - p.life / p.maxLife;
             const float size = p.mist ? p.size * (1.0f + 1.5f * age) * std::min(1.0f, p.life / (0.25f * p.maxLife))
                                       : p.size * std::min(1.0f, p.life / (0.4f * p.maxLife));
-            params.particles.push_back({ p.position, size, p.uv, lightAt(p.position - glm::vec3(0.0f, 0.1f, 0.0f)), p.mist ? 1.0f : 0.0f });
+            // Clouds of spray and smoke are flat billboards; bits of blocks and drops are cubes.
+            params.particles.push_back({ p.position, size, p.uv, lightAt(p.position - glm::vec3(0.0f, 0.1f, 0.0f)), p.mist ? 1.0f : 0.0f, p.mist || p.rise });
+        }
+        {
+            // Steam: a translucent cloud in the cells it fills (render/SteamVolume.h).
+            const glm::vec3 eye = camera.GetPosition();
+            const auto& steam = client->GetSteam();
+            long long near = 0;
+            glm::ivec3 thickest(0);
+            int most = -1;
+            params.steamCells.clear();
+            params.steamCells.reserve(steam.size());
+            for (const auto& s : steam) {
+                if (glm::distance(glm::vec3(s.cell) + glm::vec3(0.5f), eye) < 24.0f) near += s.density;
+                if (s.density > most) most = s.density, thickest = s.cell;
+                params.steamCells.emplace_back(glm::vec3(s.cell), static_cast<float>(s.density));
+            }
+            params.steamVersion = client->GetSteamVersion();
+            // A burst near us hisses.
+            if (client->GetSteamVersion() != steamSeen) {
+                if (near > steamNear + 400 && most >= 0) PlayAt("hiss", thickest, 0.8f);
+                steamSeen = client->GetSteamVersion();
+                steamNear = near;
+            }
         }
         const TextureAtlas& atlas = renderer->GetAtlas();
         for (const auto& other : client->GetRemotePlayers()) {
@@ -960,8 +1016,18 @@ void Application::Run() {
         lap(5);
         if (bench) {
             benchFrames++;
+            if (glfwGetTime() - frameStart > benchWorst) {
+                benchWorst = glfwGetTime() - frameStart;
+                for (int i = 0; i < 7; i++) benchWorstSections[i] = benchFrame[i];
+            }
             if (now - benchLast >= 1.0) {
                 const double n = benchFrames;
+                // (The worst frame, and where its time went, when it stood out.)
+                if (benchWorst > 0.025)
+                    std::printf("[bench] worst frame %.1f ms: network %.1f  update %.1f  raycast %.1f  render %.1f  gpu %.1f  ui %.1f  swap %.1f\n", benchWorst * 1e3,
+                                benchWorstSections[0] * 1e3, benchWorstSections[1] * 1e3, benchWorstSections[2] * 1e3, benchWorstSections[3] * 1e3,
+                                benchWorstSections[6] * 1e3, benchWorstSections[4] * 1e3, benchWorstSections[5] * 1e3);
+                benchWorst = 0.0;
                 std::printf("[bench] %.1f fps | network %.2f  update %.2f  raycast %.2f  render %.2f  gpu %.2f  ui %.2f  swap %.2f ms | %zu chunks, %zu meshed, %zu drawn\n",
                             n / (now - benchLast), benchSections[0] / n * 1e3, benchSections[1] / n * 1e3, benchSections[2] / n * 1e3,
                             benchSections[3] / n * 1e3, benchSections[6] / n * 1e3, benchSections[4] / n * 1e3, benchSections[5] / n * 1e3, world->GetLoadedChunkCount(),
@@ -1008,7 +1074,45 @@ void Application::UpdateSky(float deltaTime, FrameParams& params) {
         }
         params.snow = snowy;
     }
-    const float target = (sheltered || params.underwater) ? 0.0f : rain;
+    // The rain falls all round, but not under cover: for each column round the camera,
+    // the top of the highest solid block over it (from well above down to under our
+    // feet), refreshed a few rows a frame (all of them after a jump).
+    {
+        constexpr int N = Rain::kCoverSize, R = N / 2;
+        if (rainCover.size() != static_cast<size_t>(N) * N) rainCover.assign(static_cast<size_t>(N) * N, -1e6f);
+        const bool jumped = glm::any(glm::greaterThan(glm::abs(eye - rainCoverAt), glm::ivec3(3)));
+        const int rows = jumped ? N : 6;
+        for (int r = 0; r < rows; r++) {
+            const int dz = (rainCoverRow + r) % N - R;
+            for (int dx = -R; dx <= R; dx++) {
+                const int x = eye.x + dx, z = eye.z + dz;
+                float top = -1e6f;
+                for (int y = eye.y + 48; y >= eye.y - 14; y--) {
+                    Block b;
+                    if (world->GetBlock(x, y, z, b) && !b.IsAir() && !b.IsPlant()) {
+                        top = static_cast<float>(y + 1);
+                        break;
+                    }
+                }
+                rainCover[static_cast<size_t>(((z % N) + N) % N) * N + ((x % N) + N) % N] = top;
+            }
+        }
+        rainCoverRow = (rainCoverRow + rows) % N;
+        if (jumped) rainCoverAt = eye;
+        else if (rainCoverRow < rows) rainCoverAt = eye; // (a whole pass done)
+        // How open the sky is just round us: the share of the nearby columns open above
+        // our head. Under a roof the rain is muffled, not gone.
+        int open = 0, all = 0;
+        for (int dz = -3; dz <= 3; dz++)
+            for (int dx = -3; dx <= 3; dx++) {
+                const int x = eye.x + dx, z = eye.z + dz;
+                open += rainCover[static_cast<size_t>(((z % N) + N) % N) * N + ((x % N) + N) % N] <= static_cast<float>(eye.y) ? 1 : 0;
+                all++;
+            }
+        rainOpen += (static_cast<float>(open) / all - rainOpen) * std::min(1.0f, deltaTime * 3.0f);
+        params.rainCover = rainCover.data();
+    }
+    const float target = params.underwater ? 0.0f : rain;
     const float ease = std::min(1.0f, deltaTime * 4.0f);
     rainHere += (target - rainHere) * ease;
     params.rain = rainHere;
@@ -1022,7 +1126,7 @@ void Application::UpdateSky(float deltaTime, FrameParams& params) {
 }
 
 void Application::UpdateNetwork() {
-    client->Poll();
+    client->Poll(0.004); // (at most 4 ms a frame: a burst of chunks is spread over frames)
 
     // Joined: start at the spawn point the server picked, and drop onto the terrain
     // there once it has arrived.
@@ -1100,7 +1204,7 @@ void Application::DrawCrosshair() {
         }
         case Signals::Kind::Lamp: std::snprintf(text, sizeof text, "Signal lamp - listens to %s", ch(info.a).c_str()); break;
         case Signals::Kind::Valve:
-            std::snprintf(text, sizeof text, "Valve: %s - %s", target.type == BlockType::VALVE_OPEN ? "open" : "shut",
+            std::snprintf(text, sizeof text, "%s: %s - %s", ValvePipe(target.type) == BlockType::FLUID_PIPE ? "Fluid valve" : "Valve", IsOpenValve(target.type) ? "open" : "shut",
                           info.a ? ("listens to " + ch(info.a)).c_str() : "by hand");
             break;
         case Signals::Kind::Piston: std::snprintf(text, sizeof text, "Piston - %s", info.a ? ("listens to " + ch(info.a)).c_str() : "no channel"); break;
@@ -1152,6 +1256,7 @@ std::string Application::MachineStatus(const glm::ivec3& pos) const {
         else if (target.type == BlockType::COMPRESSOR)
             std::snprintf(text, sizeof text, "Compressor: +%.1f air/s from %d wheel%s - air %d%%", m.speed / 2.0f, m.depth, m.depth == 1 ? "" : "s", pressure);
         else if (target.type == BlockType::AIR_TANK) std::snprintf(text, sizeof text, "Air tank - air %d%%", pressure);
+        else if (target.type == BlockType::CREATIVE_AIR_TANK) std::snprintf(text, sizeof text, "Creative air tank: never runs out - air %d%%", pressure);
         else if (target.type == BlockType::SMELTER || target.type == BlockType::SMELTER_LIT)
             std::snprintf(text, sizeof text, "Smelter: %s - air %d%%",
                           state == Power::DrillState::Working ? ("making " + std::string(m.depth < static_cast<uint8_t>(BlockType::COUNT) ? BlockName(static_cast<BlockType>(m.depth)) : "?")).c_str()
@@ -1272,6 +1377,19 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
     }
     doorSwings.swap(swings);
 
+    // Levers: the handle tips over in a tenth of a second when flipped.
+    std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> tips;
+    for (const auto& pos : world->GetModelBlocks()) {
+        Block l;
+        if (!world->GetBlock(pos.x, pos.y, pos.z, l) || !IsLeverType(l.type)) continue;
+        const float target = l.type == BlockType::LEVER_ON ? 1.0f : 0.0f;
+        float on = leverSwings.count(pos) ? leverSwings[pos] : target;
+        on = target > on ? std::min(target, on + dt * 10.0f) : std::max(target, on - dt * 10.0f);
+        tips[pos] = on;
+        params.levers.push_back({ glm::vec3(pos) + glm::vec3(0.5f), l.LeverFacing(), on, lightAt(glm::vec3(pos) + glm::vec3(0.5f)) });
+    }
+    leverSwings.swap(tips);
+
     // Formed structures: their models, at their pattern's corner, working or not.
     std::unordered_map<glm::ivec3, uint8_t, Coords::IVec3Hash> states;
     for (const auto& m : client->GetMachines()) states[m.pos] = m.state;
@@ -1389,6 +1507,7 @@ uint32_t DefaultMapColour(BlockType type) {
     case BlockType::IRON_ORE:
     case BlockType::PEBBLES: return 0xFF808080u;
     case BlockType::WATER: return 0xFFC07A3Cu;
+    case BlockType::LAVA: return 0xFF1A60F0u;
     case BlockType::ICE: return 0xFFF0D8B0u;
     case BlockType::LEAVES: return 0xFF2A6E2Au;
     case BlockType::PINE_LEAVES: return 0xFF2E5A2Eu;
@@ -2085,6 +2204,7 @@ void Application::HandleContinuousInput(float deltaTime) {
     // (double-tapping jump), and stops outside creative.
     const bool noclip = client->GetAbilities() & net::kAbilityNoclip;
     if (!client->IsCreative()) creativeFlight = false;
+    if (autoFly && client->IsCreative()) creativeFlight = true;
     const bool wantFly = noclip || creativeFlight;
     if (wantFly != player.IsFlying() || (noclip && player.IsFlyingSolid())) player.SetFlying(*world, wantFly, !noclip);
 
@@ -2115,6 +2235,7 @@ void Application::HandleContinuousInput(float deltaTime) {
     const bool winded = (cause == Breathing::Cause::ThinAir || cause == Breathing::Cause::StaleAir) && client->GetAir() < Breathing::kShortOfBreath;
     input.sprint = (key(Action::Sprint) || pad.buttons[GLFW_GAMEPAD_BUTTON_LEFT_THUMB] == GLFW_PRESS) && !winded;
     }
+    if (autoFly && player.IsFlying()) input.move = glm::vec2(0.0f, 1.0f), input.sprint = true;
     input.yaw = camera.GetYaw();
     input.lookDirection = camera.GetDirection();
     player.Update(*world, input, deltaTime);
@@ -2305,7 +2426,7 @@ void Application::OnKey(int key, int action) {
         if (key == GLFW_KEY_ESCAPE) CloseChat();
         return;
     }
-    // The inventory takes I and Esc (to close) and the number keys (to pick a slot).
+    // The inventory takes its key (Tab) and Esc (to close) and the number keys (to pick a slot).
     if (inventoryOpen) {
         if ((key == settings.Key(Action::Inventory) && !signMode && !signalMode) || key == GLFW_KEY_ESCAPE) SetInventoryOpen(false); // (writing a sign, it's a letter)
         else if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9) SelectSlot(key - GLFW_KEY_1);
@@ -2339,8 +2460,14 @@ void Application::OnKey(int key, int action) {
         placeHeight = shift ? (placeHeight >= 8 ? 2 : placeHeight + 2) : (placeHeight <= 2 ? 8 : placeHeight - 2);
         return;
     }
-    if (is(Action::Chisel)) {
-        if (captureCursor) ChiselTarget(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
+    if (is(Action::Drop)) {
+        // The item in hand: one of it, or with Crouch held the whole stack.
+        const auto& slots = client->GetInventory().slots;
+        if (selectedSlot >= 0 && selectedSlot < static_cast<int>(slots.size()) && !slots[selectedSlot].Empty()) {
+            const bool all = glfwGetKey(window, settings.Key(Action::Crouch)) == GLFW_PRESS;
+            client->DropItem(net::Box::Player, selectedSlot, all ? 0 : 1, camera.GetDirection());
+            audio->PlayHere("pickup", 0.25f);
+        }
         return;
     }
     if (is(Action::Chat)) return OpenChat('t');
@@ -2370,11 +2497,6 @@ void Application::OnKey(int key, int action) {
     case GLFW_KEY_ESCAPE:
         paused = true; // the pause menu: resume, settings, back to the title screen
         SetCursorCaptured(false);
-        break;
-    case GLFW_KEY_TAB:
-        captureCursor = !captureCursor;
-        glfwSetInputMode(window, GLFW_CURSOR, captureCursor ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-        camera.ResetLook();
         break;
     case GLFW_KEY_F1:
         wireframe = !wireframe;
@@ -2773,9 +2895,22 @@ void Application::HandleSlotClicks() {
         else heldStack->count = std::min(heldStack->count, static_cast<int>(st.count));
     }
     auto isHeld = [&](const std::pair<SlotBox, int>& h) { return heldStack && heldStack->box == h.first && heldStack->slot == h.second; };
+    // Outside every window: what's held is thrown out onto the ground.
+    const bool outside = !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) && !ImGui::IsAnyItemHovered();
+    auto throwHeld = [&] {
+        if (heldStack->box != SlotBox::Palette) {
+            const net::Box box = heldStack->box == SlotBox::Armour ? net::Box::Armour : heldStack->box == SlotBox::Chest ? net::Box::Chest : net::Box::Player;
+            const Stack st = StackIn(heldStack->box, heldStack->slot);
+            client->DropItem(box, heldStack->slot, heldStack->count >= st.count ? 0 : heldStack->count, camera.GetDirection());
+            audio->PlayHere("pickup", 0.25f);
+        }
+        heldStack.reset();
+        draggingStack = false;
+    };
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         if (!hoveredSlot) {
-            if (heldStack && !ImGui::IsAnyItemHovered()) heldStack.reset(); // (clicked off the slots: let go)
+            if (heldStack && outside) throwHeld();
+            else if (heldStack && !ImGui::IsAnyItemHovered()) heldStack.reset(); // (clicked off the slots: let go)
         }
         else if (heldStack) {
             if (!isHeld(*hoveredSlot)) MoveStack(*heldStack, hoveredSlot->first, hoveredSlot->second, heldStack->count);
@@ -2793,7 +2928,8 @@ void Application::HandleSlotClicks() {
     // stays picked up, to be put down with a click.)
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && draggingStack) {
         draggingStack = false;
-        if (heldStack && hoveredSlot && !isHeld(*hoveredSlot)) {
+        if (heldStack && !hoveredSlot && outside) throwHeld();
+        else if (heldStack && hoveredSlot && !isHeld(*hoveredSlot)) {
             MoveStack(*heldStack, hoveredSlot->first, hoveredSlot->second, heldStack->count);
             heldStack.reset();
         }
@@ -3076,21 +3212,25 @@ void Application::OnMouseButton(int button, int action) {
             if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f)) client->UseBed(at->block);
             return;
         }
-        // A machine with its own inventory opens like a chest with an empty hand or a tool,
-        // with how it's doing at the top. Any block of a formed structure (its ports too)
-        // opens the structure's. With a block in hand it's built against, and a crafter
-        // takes what's in hand as its recipe.
+        // Menus come before building: a machine with its own inventory opens like a chest,
+        // with how it's doing at the top, whatever's in hand (Shift: build against it
+        // instead). Any block of a formed structure (its ports too) opens the
+        // structure's. A crafter takes what's in hand as its recipe.
+        // (Holding machinery that joins machines (a pipe, a gauge, a shaft, a wheel, a
+        // valve), right-clicking a machine builds it on, as that's how they're connected.)
         const bool holding = SelectedTool() == Tool::None && SelectedBlock() != BlockType::AIR;
-        const bool blockInHand = holding && !IsItemType(SelectedBlock());
+        const BlockType inHand = SelectedBlock();
+        const bool connecting = holding && (IsPipeType(inHand) || inHand == BlockType::PRESSURE_GAUGE || inHand == BlockType::SHAFT ||
+                                            inHand == BlockType::WATER_WHEEL || IsValveType(inHand));
         auto opens = [&](BlockType t) {
             if (t == BlockType::CHEST || t == BlockType::MINING_POST) return true;
             if (t == BlockType::CRAFTER) return !holding;
-            return IsMachineInventory(t) && !blockInHand;
+            return IsMachineInventory(t) && !connecting;
         };
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
             at && world->GetBlock(at->block.x, at->block.y, at->block.z, target)) {
             glm::ivec3 pos = at->block;
-            if (!blockInHand)
+            if (!connecting)
                 if (const auto core = StructureCoreAt(pos); core && world->GetBlock(core->x, core->y, core->z, target)) pos = *core;
             if (opens(target.type)) return OpenMachine(pos, true);
         }
@@ -3101,15 +3241,18 @@ void Application::OnMouseButton(int button, int action) {
             client->UseBed(at->block);
             return;
         }
-        // With a block in hand, right-clicking machinery builds against it (a wheel on a
-        // shaft, a pipe on a compressor); with an empty hand or a tool, it's used.
+        // With a block in hand, right-clicking a pipe, a shaft, a wheel or a valve builds
+        // against it (a pipe run on, a wheel on a shaft); anything with a menu opens it.
         const bool building = SelectedTool() == Tool::None && SelectedBlock() != BlockType::AIR && !IsItemType(SelectedBlock());
+        auto buildsOn = [&](BlockType t) {
+            return building && (IsPipeType(t) || t == BlockType::SHAFT || t == BlockType::WATER_WHEEL || IsValveType(t));
+        };
         // A signal block: crouching, set its channels; a gate or a lamp (nothing else to
-        // do with them), likewise when not building.
+        // do with them), likewise.
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
             at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Signals::KindOf(target.type) != Signals::Kind::None &&
             (player.IsCrouching() ||
-             (!building && (target.type == BlockType::LOGIC_GATE || target.type == BlockType::SIGNAL_LAMP || target.type == BlockType::SIGNAL_LAMP_ON)))) {
+             (!connecting && (target.type == BlockType::LOGIC_GATE || target.type == BlockType::SIGNAL_LAMP || target.type == BlockType::SIGNAL_LAMP_ON)))) {
             OpenSignalEditor(at->block, target.type);
             return;
         }
@@ -3124,13 +3267,13 @@ void Application::OnMouseButton(int button, int action) {
             at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) &&
             (target.type == BlockType::BED || target.type == BlockType::DOOR || target.type == BlockType::DOOR_OPEN || target.type == BlockType::CAMPFIRE ||
              target.type == BlockType::TNT || target.type == BlockType::LEVER || target.type == BlockType::LEVER_ON ||
-             (!building && (target.type == BlockType::VALVE || target.type == BlockType::VALVE_OPEN)))) {
+             (!building && IsValveType(target.type)))) {
             client->UseBed(at->block);
             return;
         }
         // Any other machine, or a pipe: its menu, saying how it's doing.
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
-            at && !building && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Power::IsPart(target.type))
+            at && !connecting && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Power::IsPart(target.type) && !buildsOn(target.type))
             return OpenMachine(at->block, false);
     }
 
@@ -3188,10 +3331,11 @@ void Application::OnMouseButton(int button, int action) {
     // items are never placed.
     if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::None && IsItemType(SelectedBlock())) {
         const BlockType item = SelectedBlock();
-        // A boat: into it, on the water looked at (within 4 blocks).
+        // A boat: into it, on the water looked at (within 3 blocks: a hop the server's
+        // movement check allows).
         if (item == BlockType::BOAT) {
             const glm::vec3 eye = camera.GetPosition(), dir = camera.GetDirection();
-            for (float t = 0.5f; t < 4.0f && !player.IsBoating(); t += 0.1f) {
+            for (float t = 0.5f; t < 3.0f && !player.IsBoating(); t += 0.1f) {
                 const glm::ivec3 cell(glm::floor(eye + dir * t));
                 Block b, above;
                 if (!world->GetBlock(cell.x, cell.y, cell.z, b)) break;
@@ -3216,8 +3360,7 @@ void Application::OnMouseButton(int button, int action) {
                 const glm::ivec3 plot = intoPlant ? at->block : at->block + at->normal;
                 if ((intoPlant || at->normal == glm::ivec3(0, 1, 0)) && world->GetBlock(plot.x, plot.y - 1, plot.z, soil) &&
                     (soil.type == BlockType::DIRT || IsGrassType(soil.type)) && client->CanAfford(BlockType::CROP, 8)) {
-                    client->PlaceBlock(plot, BlockType::CROP);
-                    PlayAt("place", plot, 0.5f);
+                    if (client->PlaceBlock(plot, BlockType::CROP)) PlayAt("place", plot, 0.5f);
                 }
             }
             return;
@@ -3253,10 +3396,11 @@ void Application::OnMouseButton(int button, int action) {
         // Don't build a solid block inside yourself when walking (water, sprites and
         // pressure plates are fine).
         const BlockType placeBlock = SelectedBlock();
+        if (placeBlock == BlockType::AIR) return; // (an empty hand, or armour: nothing to place)
         const int height = Block::CanShape(placeBlock) ? placeHeight : 8;
         if (!client->CanAfford(placeBlock, height)) return;
         const Block placed = Block::Placed(placeBlock, height);
-        if (!player.IsFlying() && (placed.IsFullBlock() || Block::CanShape(placeBlock))) {
+        if (!(player.IsFlying() && !player.IsFlyingSolid()) && placed.IsFullBlock()) {
             const Collision::AABB body = player.GetBounds();
             const glm::vec3 lo(place), hi = lo + glm::vec3(1.0f);
             if (glm::all(glm::lessThan(lo, body.max)) && glm::all(glm::greaterThan(hi, body.min))) return;
@@ -3274,7 +3418,7 @@ void Application::OnMouseButton(int button, int action) {
             const glm::vec3 look = camera.GetDirection(), a = glm::abs(look);
             faceAxis = a.y >= a.x && a.y >= a.z ? (look.y > 0 ? 2 : 3) : a.x >= a.z ? (look.x > 0 ? 0 : 1) : (look.z > 0 ? 4 : 5);
         }
-        if (placeBlock == BlockType::PRESSURE_GAUGE || placeBlock == BlockType::FLUID_OUTLET)
+        if (placeBlock == BlockType::PRESSURE_GAUGE || placeBlock == BlockType::FLUID_OUTLET || IsLeverType(placeBlock)) // (out of the face it's put on)
             for (int f = 0; f < kFaceCount; f++)
                 if (glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]) == hit->normal) faceAxis = f;
         // A door faces whoever puts it up (level); a ladder faces out from the wall it's
@@ -3289,7 +3433,7 @@ void Application::OnMouseButton(int button, int action) {
                 if (aimed.type == BlockType::LADDER && hit->normal.y != 0) faceAxis = aimed.axis;
             }
         }
-        client->PlaceBlock(place, placeBlock, height, faceAxis);
+        if (!client->PlaceBlock(place, placeBlock, height, faceAxis)) return; // (refused, as the server would: no sound, no editor)
         PlayAt("place", place, 0.8f);
         if (placeBlock == BlockType::SIGN) OpenSign(place); // and write on it
         // Signal blocks: set their channels straight away.
@@ -3542,6 +3686,9 @@ void Application::UpdateMining() {
     if (elapsed >= needed) {
         PlayAt(BreakSound(block.type), miningPos);
         SpawnParticles(miningPos, block.type, 18);
+        // With an axe, the tree comes down: the logs above it break too.
+        if (Trees::IsLog(block) && client->Usable(tool) == Tool::Axe)
+            for (const auto& p : Trees::LogsAbove(*world, miningPos)) SpawnParticles(p, block.type, 10);
         client->BreakBlock(miningPos, tool);
         mining = false;
         mineProgress = 0.0f;
@@ -3693,9 +3840,11 @@ void Application::UpdateParticles(float dt) {
                         continue;
                     }
                     // Rapids: shallow water (a top layer lying on its bed, at most three
-                    // quarters deep) whose surface stands clearly above the water beside
-                    // it, so it's running that way. Water at rest is level, and dry ground
-                    // beside a puddle doesn't count, so still water stays calm.
+                    // quarters deep) whose surface stands well above the water beside it
+                    // (a quarter of a block or more), so it's tumbling that way. A river's
+                    // surface slopes gently all along its length, a little lower each
+                    // cell, and that's just flowing, not rapids; water at rest is level,
+                    // and dry ground beside a puddle doesn't count.
                     if (!b.HasWater() || rapids.size() >= 400) continue;
                     const int level = b.WaterShownLevel();
                     if (level > kFull * 3 / 4) continue;
@@ -3709,10 +3858,10 @@ void Application::UpdateParticles(float dt) {
                         int theirs;
                         if (surfaceAt(p + glm::ivec3(d.x, 0, d.y), theirs) && mine - theirs > bestDrop) bestDrop = mine - theirs, bestDir = d;
                     }
-                    constexpr int kMinDrop = kFull / 24; // about a twentieth of a block
+                    constexpr int kMinDrop = kFull / 4;
                     if (bestDrop < kMinDrop) continue;
                     rapids.push_back({ p, static_cast<float>(p.y) + level / static_cast<float>(kFull), glm::vec2(bestDir),
-                                       std::min(1.0f, static_cast<float>(bestDrop) / (kFull / 2)) });
+                                       std::clamp(static_cast<float>(bestDrop - kMinDrop) / (kFull / 2), 0.15f, 1.0f) });
                 }
     }
     // Spray off the rapids: big white clouds of water thrown up and carried on
@@ -3920,8 +4069,8 @@ void Application::UpdateSounds() {
     }
     for (auto it = creatureSounds.begin(); it != creatureSounds.end();) it = it->second.seen ? std::next(it) : creatureSounds.erase(it);
 
-    // Rain, as heard here (none under a roof).
-    audio->SetLoop("rain_loop", rainHere * 0.45f);
+    // Rain, as heard here: muffled under cover (a quarter as loud with no open sky near).
+    audio->SetLoop("rain_loop", rainHere * 0.45f * (0.25f + 0.75f * rainOpen));
 }
 
 void Application::OnCursorMove(double x, double y) {

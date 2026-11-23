@@ -13,6 +13,8 @@ uniform float height;
 uniform float speed;
 uniform float streak;
 uniform float snow; // 1: flakes, drifting from side to side as they fall
+uniform sampler2D cover; // where the rain stops in each column (world x, z modulo coverSize)
+uniform float coverSize;
 
 out float Alpha;
 
@@ -33,6 +35,13 @@ void main()
     // Snowflakes sway, each on its own phase, and are short slanted dashes.
     xz += snow * vec2(sin(time * 0.9 + aDrop.x * 40.0), cos(time * 0.7 + aDrop.z * 40.0)) * 0.6;
     xz.x += snow * aDrop.w * 0.05;
+    // Under cover (a roof, a tree): not there.
+    ivec2 column = ivec2(mod(floor(xz), coverSize));
+    if (y < texelFetch(cover, column, 0).r) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        Alpha = 0.0;
+        return;
+    }
     vec3 world = vec3(xz.x, y, xz.y);
     gl_Position = projection * view * vec4(world, 1.0);
     // Fade toward the edge of the box so it has no visible border.

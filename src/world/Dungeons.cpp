@@ -371,7 +371,7 @@ void Furnish(Stamper& s, const Room& r, const std::vector<Box>& corridors) {
         const int zm = r.lane, w = PumpLength(r);
         s.Fill(PumpBasin(r), [&](const glm::ivec3& p) { s.Set(p, kFullWater); });
         s.Set({ PumpX(r, 2), y0 - 3, zm }, Block(BlockType::PUMP));
-        const Block pipe(BlockType::PIPE);
+        const Block pipe(BlockType::FLUID_PIPE);
         s.Set({ PumpX(r, 3), y0 - 3, zm }, pipe);
         for (int y = y0 - 3; y <= y1; y++) s.Set({ PumpX(r, 4), y, zm }, pipe);
         for (int k = 5; k <= w - 3; k++) s.Set({ PumpX(r, k), y1, zm }, pipe);
@@ -762,11 +762,11 @@ std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terr
     static const Entry kCommon[] = {
         { BlockType::COOKED_VENISON, 1, 3 }, { BlockType::RAW_VENISON, 1, 2 }, { BlockType::HIDE, 1, 3 }, { BlockType::LAMP, 1, 3 },
         { BlockType::PLANKS, 4, 10 }, { BlockType::GLASS, 2, 5 }, { BlockType::STONE_BRICK, 4, 12 }, { BlockType::MOSSY_BRICK, 2, 6 },
-        { BlockType::PIPE, 2, 6 }, { BlockType::LOG, 2, 5 },
+        { BlockType::FLUID_PIPE, 2, 6 }, { BlockType::LOG, 2, 5 },
     };
     static const Entry kRich[] = {
         { BlockType::COOKED_VENISON, 3, 6 }, { BlockType::HIDE, 3, 8 }, { BlockType::LAMP, 3, 8 }, { BlockType::PUMP, 1, 2 },
-        { BlockType::SLUICE, 1, 3 }, { BlockType::GLASS, 6, 12 }, { BlockType::PIPE, 6, 16 }, { BlockType::SPIKES, 2, 4 },
+        { BlockType::SLUICE, 1, 3 }, { BlockType::GLASS, 6, 12 }, { BlockType::FLUID_PIPE, 6, 16 }, { BlockType::SPIKES, 2, 4 },
         { BlockType::CHEST, 1, 2 }, { BlockType::BED, 1, 1 },
     };
     const Entry* table = rich ? kRich : kCommon;

@@ -282,7 +282,7 @@ void Server::UpdateSignals() {
             break;
         case Signals::Kind::Valve:
             if (c.a == 0) break;
-            if (a != (b.type == BlockType::VALVE_OPEN)) world->SetBlock(pos.x, pos.y, pos.z, Block(a ? BlockType::VALVE_OPEN : BlockType::VALVE));
+            if (a != IsOpenValve(b.type)) world->SetBlock(pos.x, pos.y, pos.z, Block(ValveSetTo(b.type, a)));
             break;
         case Signals::Kind::Piston:
             // (UpdatePower moves it, when it has the air.)

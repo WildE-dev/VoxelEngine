@@ -1,0 +1,2 @@
+// fluid_valve: a block (the format is in README.md, here)
+{ "name": "Fluid valve", "textures": { "top": "valve_handle", "bottom": "valve_handle", "side": "fluid_valve_icon" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

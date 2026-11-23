@@ -52,8 +52,9 @@ public:
     bool Connect(const std::string& host, uint16_t port, const std::string& name, std::string& error, int viewDistance = 0);
     void Disconnect();
 
-    // Handles everything that has arrived. Call once per frame.
-    void Poll();
+    // Handles what has arrived. Call once per frame. `budget` (seconds, 0: no limit):
+    // stop after about this long and leave the rest for the next call.
+    void Poll(double budget = 0.0);
 
     bool IsConnected() const { return net.IsConnected(); }
     bool IsWelcomed() const { return welcomed; }
@@ -83,7 +84,8 @@ public:
     void BreakBlock(const glm::ivec3& pos, Tool tool = Tool::None);
     // heightEighths: how tall a shapeable block is placed (8 full, see Block::Placed).
     // faceAxis: the axis of the face it's placed against (0 x, 1 y, 2 z); logs lie along it.
-    void PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths = 8, int faceAxis = 1);
+    // Returns whether it was sent (false: refused here, as the server would refuse it).
+    bool PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths = 8, int faceAxis = 1);
     // Lowers (or raises) one quarter of a block by a quarter (predicted, like edits).
     // dir: the side chiselled from, for a full block (Block::ShapeDir; it becomes that way up).
     // step: how far the corner moves, in eighths (1, 2 or 4: Block::kChiselSteps). Needs the chisel.
@@ -239,6 +241,25 @@ public:
     bool TakeBite() { const bool b = bite; bite = false; return b; }
     // Arrows near us, as of the last update, moved on by their speed since.
     std::vector<net::ArrowInfo> GetArrows() const;
+    // Steam in the air near us (server/Steam.h), as of the last update: each cell and
+    // how much is in it (0..255). `version` counts the updates.
+    struct SteamPuff {
+        glm::ivec3 cell;
+        uint8_t density;
+    };
+    const std::vector<SteamPuff>& GetSteam() const { return steam; }
+    uint32_t GetSteamVersion() const { return steamVersion; }
+    // Items lying near us (server/DroppedItems.h), likewise.
+    std::vector<net::ItemInfo> GetItems() const;
+    // Where items were that have gone since the last call (picked up, mostly: the
+    // caller plays the sound for those beside us).
+    std::vector<glm::vec3> TakeVanishedItems() {
+        std::vector<glm::vec3> out;
+        out.swap(vanishedItems);
+        return out;
+    }
+    // Throw `count` (0: all) out of a slot (net::Box), from the eye this way.
+    void DropItem(net::Box box, int slot, int count, const glm::vec3& direction);
     void CloseChest();
     // Up to `count` whole items of a kind, wherever they are, into the chest or out of it.
     void MoveChestItems(ItemId item, uint32_t count, bool intoChest);
@@ -280,6 +301,11 @@ private:
     std::vector<glm::ivec3> lightning;
     std::vector<net::Explosion> explosions;
     std::vector<net::ArrowInfo> arrows;
+    std::vector<net::ItemInfo> items;
+    std::vector<SteamPuff> steam;
+    uint32_t steamVersion = 0;
+    double itemsAt = 0.0;
+    std::vector<glm::vec3> vanishedItems;
     std::vector<net::MachineInfo> machines;
     std::unordered_map<glm::ivec3, net::SignalInfo, Coords::IVec3Hash> signalInfos;
     std::optional<glm::ivec3> bobber;

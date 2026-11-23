@@ -6,6 +6,7 @@
 #include <climits>
 
 #include "server/ServerWorld.h"
+#include "world/Fluids.h"
 
 namespace {
 
@@ -31,7 +32,7 @@ Quarters OpenQuarters(const Block& b, int level) {
     Quarters q;
     for (int x = 0; x < 2; x++)
         for (int z = 0; z < 2; z++)
-            q.open[x][z] = !b.IsPartial() || b.edgeData.GetTopY(kEdgeAt[x][z]) * (Block::kMaxWaterVolume / 8) < level;
+            q.open[x][z] = !b.IsPartial() || b.WaterEdges().GetTopY(kEdgeAt[x][z]) * (Block::kMaxWaterVolume / 8) < level;
     return q;
 }
 // The quarters on the face toward horizontal direction d.
@@ -228,14 +229,21 @@ void WaterSimulation::RunPump(ServerWorld& world, const glm::ivec3& pump) {
     for (const auto& d : faces) {
         Block b;
         const BlockType t = typeAt(pump + d, b);
-        if (t == BlockType::PIPE) frontier.push_back(pump + d);
+        if (t == BlockType::FLUID_PIPE || t == BlockType::FLUID_VALVE_OPEN) frontier.push_back(pump + d);
         else if (t != BlockType::COUNT && b.HasWater()) intake.push_back({ pump + d, b });
     }
     if (intake.empty() || frontier.empty()) return;
 
-    // The pipe network, and its ends: pipes joining only one other pipe or pump.
+    // The pipe network. Where it leads: each end that isn't joined to anything (a pipe
+    // joined to just one thing, pipe, pump, tank or machine) lets water out of its end
+    // face only (the side away from what it's joined to), into the cell there. And if
+    // the pipes reach a fluid tank or machine anywhere, that fluid network takes a share
+    // too (as much as it has room for: the server says, SetDrainBudget, and takes what
+    // went in). Open ends spill whatever's at the other ends.
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> seen(frontier.begin(), frontier.end());
     std::vector<Cell> outlets;
+    bool connected = false;
+    int top = pump.y; // (the highest pipe, for the lift into a tank)
     auto isIntake = [&](const glm::ivec3& p) {
         for (const auto& c : intake)
             if (c.pos == p) return true;
@@ -243,39 +251,50 @@ void WaterSimulation::RunPump(ServerWorld& world, const glm::ivec3& pump) {
     };
     for (size_t i = 0; i < frontier.size() && seen.size() <= kMaxPipes; i++) {
         const glm::ivec3 pipe = frontier[i];
+        top = std::max(top, pipe.y);
         int joins = 0;
-        std::vector<Cell> open;
+        glm::ivec3 joinedAt(0);
         for (const auto& d : faces) {
             const glm::ivec3 n = pipe + d;
             Block b;
             const BlockType t = typeAt(n, b);
-            if (t == BlockType::PIPE || t == BlockType::PUMP) {
-                joins++;
-                if (t == BlockType::PIPE && seen.insert(n).second) frontier.push_back(n);
+            if (t == BlockType::FLUID_PIPE || t == BlockType::FLUID_VALVE_OPEN || t == BlockType::PUMP) {
+                joins++, joinedAt = d;
+                if (t != BlockType::PUMP && seen.insert(n).second) frontier.push_back(n);
             }
-            else if (t != BlockType::COUNT && b.CanHoldWater() && b.WaterVolume() < b.WaterCapacity() && !isIntake(n)) {
-                open.push_back({ n, b });
+            else if (t == BlockType::FLUID_VALVE) {
+                joins++, joinedAt = d; // (shut: this way's closed)
+            }
+            else if (t == BlockType::FLUID_TANK || Fluids::IsMachine(t)) {
+                joins++, joinedAt = d;
+                connected = true;
             }
         }
-        if (joins <= 1) outlets.insert(outlets.end(), open.begin(), open.end());
+        if (joins != 1) continue;
+        // An open end: out of the face opposite what it's joined to.
+        const glm::ivec3 out = pipe - joinedAt;
+        Block b;
+        if (typeAt(out, b) != BlockType::COUNT && b.CanHoldWater() && b.WaterVolume() < b.WaterCapacity() && !isIntake(out)) outlets.push_back({ out, b });
     }
-    if (outlets.empty()) return;
-    // A cell beside two pipe ends counts once.
+    // A cell at two pipe ends counts once.
     std::sort(outlets.begin(), outlets.end(), [](const Cell& a, const Cell& b) {
         return a.pos.x != b.pos.x ? a.pos.x < b.pos.x : a.pos.y != b.pos.y ? a.pos.y < b.pos.y : a.pos.z < b.pos.z;
     });
     outlets.erase(std::unique(outlets.begin(), outlets.end(), [](const Cell& a, const Cell& b) { return a.pos == b.pos; }), outlets.end());
+    int& netRoom = drainBudget[pump];
+    const int intoNet = connected ? std::max(0, netRoom) : 0;
+    if (outlets.empty() && intoNet <= 0) return;
 
-    // How much can move: the pump's rate, the water around it, the room at the ends.
-    int available = 0, room = 0;
+    // How much can move: the pump's rate, the water around it, the room where it goes.
+    int available = 0, room = intoNet;
     for (const auto& c : intake) available += c.block.WaterVolume();
     for (const auto& c : outlets) room += c.block.WaterCapacity() - c.block.WaterVolume();
     int amount = std::min({ kPumpRate, available, room });
     if (amount <= 0) return;
-    // As much as its air allows: each unit costs its lift.
-    int top = outlets.front().pos.y;
-    for (const auto& c : outlets) top = std::max(top, c.pos.y);
-    const int lift = std::max(1, top - pump.y);
+    // As much as its air allows: each unit costs its lift (to the highest place it goes).
+    int high = intoNet > 0 ? top : pump.y;
+    for (const auto& c : outlets) high = std::max(high, c.pos.y);
+    const int lift = std::max(1, high - pump.y);
     PumpUse& use = pumpUse[pump];
     use.wanted = true;
     float& budget = pumpBudget[pump];
@@ -294,23 +313,30 @@ void WaterSimulation::RunPump(ServerWorld& world, const glm::ivec3& pump) {
         toTake -= take;
     }
 
-    // Equal shares to the ends, each capped by its room; what doesn't fit goes round
-    // to the others.
-    std::vector<int> given(outlets.size(), 0);
+    // Equal shares to the ends and the fluid network, each capped by its room; what
+    // doesn't fit goes round to the others. (The network is the last share.)
+    const size_t shares = outlets.size() + (intoNet > 0 ? 1 : 0);
+    std::vector<int> given(shares, 0);
+    auto roomOf = [&](size_t i) { return i < outlets.size() ? outlets[i].block.WaterCapacity() - outlets[i].block.WaterVolume() : intoNet; };
     while (amount > 0) {
         int open = 0;
-        for (size_t i = 0; i < outlets.size(); i++)
-            if (given[i] < outlets[i].block.WaterCapacity() - outlets[i].block.WaterVolume()) open++;
+        for (size_t i = 0; i < shares; i++)
+            if (given[i] < roomOf(i)) open++;
+        if (open == 0) break;
         const int share = std::max(1, amount / open);
-        for (size_t i = 0; i < outlets.size() && amount > 0; i++) {
-            const int roomLeft = outlets[i].block.WaterCapacity() - outlets[i].block.WaterVolume() - given[i];
-            const int g = std::min({ share, roomLeft, amount });
+        for (size_t i = 0; i < shares && amount > 0; i++) {
+            const int g = std::min({ share, roomOf(i) - given[i], amount });
+            if (g <= 0) continue;
             given[i] += g;
             amount -= g;
         }
     }
     for (size_t i = 0; i < outlets.size(); i++)
         if (given[i] > 0) SetWater(world, outlets[i].pos, outlets[i].block, outlets[i].block.WaterVolume() + given[i]);
+    if (intoNet > 0 && given.back() > 0) {
+        netRoom -= given.back();
+        drainUse[pump] += given.back();
+    }
 }
 
 bool WaterSimulation::IsPuddle(const ServerWorld& world, const glm::ivec3& pos, const Block& block) {

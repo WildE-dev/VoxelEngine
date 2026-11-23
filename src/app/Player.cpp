@@ -22,6 +22,8 @@ constexpr float kClimbSpeed = 3.0f;        // up a ladder
 constexpr float kLadderSlide = 1.5f;       // down one, letting go
 constexpr float kGroundAcceleration = 60.0f;
 constexpr float kAirAcceleration = 12.0f;
+// On ice: hardly any grip, so speeding up, stopping and turning all slide.
+constexpr float kIceAcceleration = 5.0f;
 
 constexpr float kFlySpeed = 10.0f;
 
@@ -53,6 +55,17 @@ bool Player::InWater(const BlockAccess& world) const {
     return world.IsUnderwater(feet + glm::vec3(0.0f, 0.1f, 0.0f)) || world.IsUnderwater(feet + glm::vec3(0.0f, 0.9f, 0.0f));
 }
 
+bool Player::InLava(const BlockAccess& world) const {
+    const auto box = GetBounds();
+    for (int x = static_cast<int>(std::floor(box.min.x)); x <= static_cast<int>(std::floor(box.max.x)); x++)
+        for (int y = static_cast<int>(std::floor(box.min.y)); y <= static_cast<int>(std::floor(box.max.y)); y++)
+            for (int z = static_cast<int>(std::floor(box.min.z)); z <= static_cast<int>(std::floor(box.max.z)); z++) {
+                Block b;
+                if (world.GetBlock(x, y, z, b) && b.IsLava()) return true;
+            }
+    return false;
+}
+
 bool Player::OnLadder(const BlockAccess& world) const {
     const auto box = GetBounds();
     for (int x = static_cast<int>(std::floor(box.min.x)); x <= static_cast<int>(std::floor(box.max.x)); x++)
@@ -62,6 +75,13 @@ bool Player::OnLadder(const BlockAccess& world) const {
                 if (world.GetBlock(x, y, z, b) && b.type == BlockType::LADDER) return true;
             }
     return false;
+}
+
+bool Player::OnIce(const BlockAccess& world) const {
+    // The block just under the middle of the feet.
+    Block b;
+    return world.GetBlock(static_cast<int>(std::floor(feet.x)), static_cast<int>(std::floor(feet.y - 0.05f)), static_cast<int>(std::floor(feet.z)), b) &&
+           b.type == BlockType::ICE;
 }
 
 bool Player::IsHeadUnderwater(const BlockAccess& world) const {
@@ -182,7 +202,8 @@ void Player::Step(const BlockAccess& world, const PlayerInput& input, float dt) 
     const glm::vec2 right(-forward.y, forward.x);
     glm::vec2 move = input.move;
     if (glm::length(move) > 1.0f) move = glm::normalize(move);
-    inWater = InWater(world);
+    inLava = InLava(world);
+    inWater = InWater(world) || inLava; // (lava: swum like water, but slower)
 
     // Crouch while it's held (not swimming); stand up again once there's room.
     if (input.crouch && !inWater) {
@@ -199,8 +220,8 @@ void Player::Step(const BlockAccess& world, const PlayerInput& input, float dt) 
     const float speed = crouching ? kWalkSpeed * kCrouchSpeedFactor : input.sprint ? kSprintSpeed : kWalkSpeed;
     const glm::vec2 wish = (forward * move.y + right * move.x) * speed;
 
-    const float acceleration = inWater ? kSwimAcceleration : onGround ? kGroundAcceleration : kAirAcceleration;
-    glm::vec2 horizontal = Approach({ velocity.x, velocity.z }, inWater ? wish * kSwimSpeedFactor : wish, acceleration * dt);
+    const float acceleration = inWater ? kSwimAcceleration : onGround ? (OnIce(world) ? kIceAcceleration : kGroundAcceleration) : kAirAcceleration;
+    glm::vec2 horizontal = Approach({ velocity.x, velocity.z }, inWater ? wish * kSwimSpeedFactor * (inLava ? 0.5f : 1.0f) : wish, acceleration * dt);
     velocity.x = horizontal.x;
     velocity.z = horizontal.y;
 
@@ -293,14 +314,15 @@ void Player::StepFlying(const BlockAccess& world, const PlayerInput& input, floa
         velocity = glm::vec3(0.0f);
         return;
     }
-    // Creative flight: an axis at a time, stopped by what's in the way; coming down onto
+    // Creative flight: an axis at a time, stopped by what's in the way (natural slopes
+    // too, as what they fill: there's no walking up them in the air); coming down onto
     // the ground lands.
     const glm::vec3 move = direction * speed * dt;
     for (int axis = 0; axis < 3; axis++) {
         if (move[axis] == 0.0f) continue;
         glm::vec3 next = feet;
         next[axis] += move[axis];
-        if (!Collision::BoxBlocked(world, BoundsAt(next, height))) feet = next;
+        if (!Collision::BoxBlocked(world, BoundsAt(next, height), -1e30f)) feet = next;
         else if (axis == 1 && move[axis] < 0.0f) {
             SetFlying(world, false);
             onGround = true;
@@ -313,13 +335,14 @@ void Player::StepFlying(const BlockAccess& world, const PlayerInput& input, floa
 void Player::MoveHorizontal(const BlockAccess& world, int axis, float distance) {
     const int steps = static_cast<int>(std::ceil(std::abs(distance) / kMaxSubstep));
     const float step = steps ? distance / steps : 0.0f;
-    const float half = kWidth * 0.5f;
 
     for (int i = 0; i < steps; i++) {
         glm::vec3 next = feet;
         next[axis] += step;
 
-        if (Collision::BoxBlocked(world, BoundsAt(next, height))) {
+        // (Slopes in cells higher than a step are in the way, like anything else.)
+        const float overhead = feet.y + kStepHeight + kSkin;
+        if (Collision::BoxBlocked(world, BoundsAt(next, height), overhead)) {
             // Walk up low ledges (e.g. from a slope onto a full block) without jumping:
             // find the ground a step up, then check there's room at that height (just
             // there, so a half slab can be stepped onto under a low ceiling).
@@ -337,9 +360,16 @@ void Player::MoveHorizontal(const BlockAccess& world, int axis, float distance) 
                 }
             }
 
-            // Stop flush against the block face we ran into.
-            if (step > 0) feet[axis] = std::floor(next[axis] + half) - half - kSkin;
-            else feet[axis] = std::floor(next[axis] - half) + 1.0f + half + kSkin;
+            // Stop right against what we ran into (a block's face, or a quarter's or a
+            // turned shape's side partway into its cell): as far as there's room for.
+            float free = 0.0f, blocked = step;
+            for (int k = 0; k < 12; k++) {
+                glm::vec3 probe = feet;
+                probe[axis] += (free + blocked) * 0.5f;
+                if (Collision::BoxBlocked(world, BoundsAt(probe, height), overhead)) blocked = (free + blocked) * 0.5f;
+                else free = (free + blocked) * 0.5f;
+            }
+            feet[axis] += free;
             velocity[axis] = 0.0f;
             blockedHorizontally = true;
             return;
@@ -348,7 +378,7 @@ void Player::MoveHorizontal(const BlockAccess& world, int axis, float distance) 
         // Slopes don't block sideways, but one rising more than a step is a wall, and so
         // is one that would lift our head into a ceiling.
         bool unknown = false;
-        auto slope = Collision::SlopeHeight(world, next.x, next.z, feet.y, feet.y + height, unknown);
+        auto slope = Collision::SlopeHeight(world, BoundsAt(next, height), feet.y, feet.y + height, unknown);
         const bool tooSteep = slope && *slope > feet.y + kStepHeight;
         const bool noHeadroom = slope && *slope > feet.y &&
             Collision::BoxBlocked(world, BoundsAt(glm::vec3(next.x, *slope + kSkin, next.z), height));
@@ -377,9 +407,19 @@ void Player::MoveVertical(const BlockAccess& world, float distance, bool wasOnGr
         const int steps = static_cast<int>(std::ceil(distance / kMaxSubstep));
         for (int i = 0; i < steps; i++) {
             glm::vec3 next = feet + glm::vec3(0.0f, distance / steps, 0.0f);
-            if (Collision::BoxBlocked(world, BoundsAt(next, height))) {
-                // Flush under the ceiling, but never lower than we already were.
-                feet.y = std::max(feet.y, std::floor(next.y + height) - height - kSkin);
+            // (A slope in a cell more than a step above our feet is ground overhead: its
+            // underside stops our head. Nearer, it's ground we're walking up onto.)
+            const float overhead = feet.y + kStepHeight;
+            if (Collision::BoxBlocked(world, BoundsAt(next, height), overhead)) {
+                // Right under the ceiling (a block's bottom, or a turned shape's partway
+                // down its cell), but never lower than we already were.
+                float free = 0.0f, blocked = next.y - feet.y;
+                for (int k = 0; k < 12; k++) {
+                    const float mid = (free + blocked) * 0.5f;
+                    if (Collision::BoxBlocked(world, BoundsAt(feet + glm::vec3(0.0f, mid, 0.0f), height), overhead)) blocked = mid;
+                    else free = mid;
+                }
+                feet.y += free;
                 velocity.y = 0.0f;
                 break;
             }

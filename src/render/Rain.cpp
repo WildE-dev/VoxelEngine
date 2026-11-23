@@ -36,17 +36,31 @@ Rain::Rain() {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glBindVertexArray(0);
+    // Where the rain stops in each column (none, to start).
+    std::vector<float> open(static_cast<size_t>(kCoverSize) * kCoverSize, -1e6f);
+    glGenTextures(1, &coverTexture);
+    glBindTexture(GL_TEXTURE_2D, coverTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, kCoverSize, kCoverSize, 0, GL_RED, GL_FLOAT, open.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 Rain::~Rain() {
     glDeleteVertexArrays(1, &vao);
     glDeleteBuffers(1, &vbo);
+    glDeleteTextures(1, &coverTexture);
 }
 
 void Rain::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPosition, float time, bool snow,
-                float intensity, float brightness) {
+                float intensity, float brightness, const float* cover) {
     if (intensity <= 0.0f) return;
     shader.Use();
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, coverTexture);
+    if (cover) glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kCoverSize, kCoverSize, GL_RED, GL_FLOAT, cover);
+    shader.SetUniform("cover", 0);
+    shader.SetUniform("coverSize", static_cast<float>(kCoverSize));
     shader.SetUniform("view", view);
     shader.SetUniform("projection", projection);
     shader.SetUniform("cameraPos", cameraPosition);

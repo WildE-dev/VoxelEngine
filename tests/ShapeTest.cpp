@@ -36,6 +36,7 @@
 #include "world/Coords.h"
 #include "world/Multiblocks.h"
 #include "world/Raycast.h"
+#include "world/SpriteMasks.h"
 #include "world/TerrainGenerator.h"
 
 // Test clients ask for a short view (chunks): plenty for the checks, and light enough
@@ -516,7 +517,6 @@ int main() {
         const Block cut = full.ChiselledFrom(1, 0, -2);
         Check(cut.ShapeDir() == 1 && cut.edgeData.GetTopY(0) == 6 && cut.ResourceUnits() == full.Chiselled(0, -2).ResourceUnits() && cut.ResourceUnits() < full.ResourceUnits(),
               "chiselled from its side, a block turns that way (one corner down a quarter, for what that costs from the top)");
-        Check(Block(BlockType::LOG).ChiselledFrom(1, 0, -2).ShapeDir() == 0, "but a log keeps to its grain (it doesn't turn)");
 
         // A half slab turned along +x fills the half of its cell against its -x side.
         Block wall = Block::Placed(BlockType::STONE, 4);
@@ -546,11 +546,184 @@ int main() {
         for (const auto& q : Positions(v, false)) xMax = std::max(xMax, q.x);
         Check(!v.empty() && xMax <= 4.5f + 1e-4f, "and is drawn in that half");
 
+        // A log turns too, its grain running the way it did; built back up whole, it's
+        // upright again (and still along z).
+        const Block log = Block::Placed(BlockType::LOG, 8, 2);
+        const Block turnedLog = log.ChiselledFrom(1, 0, -2);
+        Check(log.GrainAxis() == 2 && turnedLog.ShapeDir() == 1 && turnedLog.GrainAxis() == 2 && turnedLog.Upright().ShapeDir() == 0 &&
+                  turnedLog.Upright().GrainAxis() == 2,
+              "a log turns when chiselled from its side, keeping its grain");
+        Check(turnedLog.Chiselled(0, 2).IsFullBlock() && turnedLog.Chiselled(0, 2).ShapeDir() == 0 && turnedLog.Chiselled(0, 2).GrainAxis() == 2,
+              "and built back up whole, it's an ordinary log along z again");
+
+        // Exact collision. A wedge of dirt rising along z (height = z), upright, upside down
+        // and on its side: boxes collide with the wedge, not the box round it.
+        const Block wedge = Shaped(BlockType::DIRT, 0, 0, 8, 8);
+        auto overlaps = [](const Block& b, glm::vec3 lo, glm::vec3 hi) { return b.ShapeOverlaps(lo, hi); };
+        Check(!overlaps(wedge, { 0.2f, 0.5f, 0.0f }, { 0.8f, 0.9f, 0.2f }) && overlaps(wedge, { 0.2f, 0.5f, 0.8f }, { 0.8f, 0.7f, 1.0f }),
+              "an upright wedge fills under its slope");
+        Block hanging = wedge;
+        hanging.axis = 3; // upside down: filled above the plane y = z
+        Check(overlaps(hanging, { 0.2f, 0.5f, 0.0f }, { 0.8f, 0.9f, 0.2f }) && !overlaps(hanging, { 0.2f, 0.1f, 0.8f }, { 0.8f, 0.3f, 1.0f }) &&
+                  hanging.ShapeTop(0.2f, 0.8f, 0.0f, 0.2f) == 1.0f,
+              "upside down, it fills above (and its top is the cell's)");
+        Block side = wedge;
+        side.axis = 1; // on its side: filled where x <= z
+        Check(overlaps(side, { 0.0f, 0.2f, 0.6f }, { 0.2f, 0.8f, 0.9f }) && !overlaps(side, { 0.7f, 0.2f, 0.0f }, { 0.9f, 0.8f, 0.3f }) &&
+                  side.ShapeTop(0.7f, 0.9f, 0.0f, 0.3f) < 0.0f && side.ShapeTop(0.0f, 0.2f, 0.6f, 0.9f) > 0.99f,
+              "on its side, it blocks only where it is (a sideways slope isn't a box)");
+        Cells slopes;
+        slopes.blocks[{ 5, 0, 5 }] = wedge;
+        bool unknown = false;
+        const auto ground = Collision::GroundHeight(slopes, Collision::AABB{ { 5.2f, 0.5f, 5.2f }, { 5.8f, 2.3f, 5.8f } }, 0.6f, 1.0f, unknown);
+        Check(ground && std::abs(*ground - 0.8f) < 1e-3f, "standing on a slope, you stand on its highest point under you, not its middle");
+
+        // Walking into quarters stops at the quarter's face, not at the edge of its cell: a
+        // ledge a block high over the far half of each cell at x = 3.
+        Cells ledge;
+        for (int z = -2; z <= 2; z++) ledge.blocks[{ 3, 0, z }] = Shaped(BlockType::STONE_BRICK, 0, 8, 0, 8);
+        Player walker(glm::vec3(0.5f, 0.0f, 0.5f));
+        walker.Spawn(ledge);
+        PlayerInput forward;
+        forward.yaw = 0.0f; // along +x
+        forward.move = { 0.0f, 1.0f };
+        for (int i = 0; i < 120; i++) walker.Update(ledge, forward, 1.0f / 60.0f);
+        Check(std::abs(walker.GetFeetPosition().x - 3.2f) < 0.02f,
+              "walking into a raised quarter stops you against it (at x " + std::to_string(walker.GetFeetPosition().x) + ", not 2.7)");
+
+        // A natural slope overhead (a wedge of grass four blocks up) is ground over you:
+        // flying up into it, your head stops at its underside.
+        {
+            Cells sky;
+            for (int x = -1; x <= 1; x++)
+                for (int z = -1; z <= 1; z++) sky.blocks[{ x, 4, z }] = Shaped(BlockType::GRASS, 2, 6, 2, 6);
+            Player flier(glm::vec3(0.5f, 0.0f, 0.5f));
+            // (Not Spawn: that would stand it on top of the slope.)
+            flier.SetFlying(sky, true, true);
+            PlayerInput up;
+            up.jump = true;
+            up.lookDirection = glm::vec3(1.0f, 0.0f, 0.0f);
+            for (int i = 0; i < 180; i++) flier.Update(sky, up, 1.0f / 60.0f);
+            const float head = flier.GetFeetPosition().y + flier.GetBounds().max.y - flier.GetBounds().min.y;
+            Check(head <= 4.0f + 1e-3f && head > 3.9f, "flying up under a sloped grass block, your head stops at its underside (at " + std::to_string(head) + ")");
+            // And a gentle slope rising across a cell's top is still walked and jumped up.
+            Cells hill;
+            for (int x = 0; x <= 6; x++)
+                for (int z = -2; z <= 2; z++) hill.blocks[{ x, x / 2, z }] = Shaped(BlockType::GRASS, (x % 2) * 4 + 1, (x % 2) * 4 + 4, (x % 2) * 4 + 1, (x % 2) * 4 + 4);
+            Player climber(glm::vec3(0.5f, 0.2f, 0.5f));
+            climber.Spawn(hill);
+            PlayerInput uphill = forward;
+            float highest = 0.0f;
+            for (int i = 0; i < 150; i++) {
+                uphill.jump = i % 30 == 0;
+                climber.Update(hill, uphill, 1.0f / 60.0f);
+                highest = std::max(highest, climber.GetFeetPosition().y);
+            }
+            Check(highest > 3.0f,
+                  "and a slope rising underfoot is still walked (and jumped) up (to x " + std::to_string(climber.GetFeetPosition().x) + ")");
+        }
+
+        // Ice: hardly any grip. Run, let go, and see how far you slide.
+        struct Rink : BlockAccess {
+            BlockType floor;
+            bool GetBlock(int, int y, int, Block& block) const override {
+                block = y < 0 ? Block(floor) : Block();
+                return true;
+            }
+        };
+        auto slide = [&](BlockType floor) {
+            Rink rink;
+            rink.floor = floor;
+            Player skater(glm::vec3(0.5f, 0.0f, 0.5f));
+            skater.Spawn(rink);
+            for (int i = 0; i < 120; i++) skater.Update(rink, forward, 1.0f / 60.0f);
+            const float letGo = skater.GetFeetPosition().x;
+            PlayerInput still;
+            still.yaw = 0.0f;
+            for (int i = 0; i < 120; i++) skater.Update(rink, still, 1.0f / 60.0f);
+            return skater.GetFeetPosition().x - letGo;
+        };
+        const float onStone = slide(BlockType::STONE), onIce = slide(BlockType::ICE);
+        Check(onStone < 0.4f && onIce > 1.5f, "ice is slippery: letting go you slide " + std::to_string(onIce) + " blocks (on stone " + std::to_string(onStone) + ")");
+
+        // Water stands in a turned shape above what it fills of each quarter: a half slab on
+        // its side fills the two quarters toward -x right up.
+        const EdgeData edges = wall.WaterEdges();
+        Check(wall.CanHoldWater() && wall.WaterStepped() && edges.GetTopY(2) == 8 && edges.GetTopY(0) == 8 && edges.GetTopY(1) == 0 && edges.GetTopY(3) == 0 &&
+                  wall.WaterCapacity() == Block::kMaxWaterVolume / 2,
+              "a turned shape holds water beside it (half a cell, for a half slab on its side)");
+        Chunk::Blocks wet{};
+        Block soaked = wall;
+        soaked.water = soaked.shown = static_cast<uint8_t>(Block::kMaxWaterVolume / 2);
+        wet[Chunk::Index(4, 4, 4)] = soaked;
+        std::vector<uint32_t> solid, water;
+        Mesh(wet, solid, water);
+        Check(!water.empty(), "and its water is drawn");
+
+        // Pebbles are aimed at by their stones, not the box round them.
+        cells.blocks[{ 6, 0, 0 }] = Block::Plant(BlockType::PEBBLES, 0);
+        glm::vec3 stoneLo[5], stoneHi[5];
+        const int stones = Block::Plant(BlockType::PEBBLES, 0).PebbleStones(6, 0, 0, stoneLo, stoneHi);
+        const glm::vec3 onStoneTop = glm::vec3(6.0f, 0.0f, 0.0f) + (stoneLo[0] + stoneHi[0]) * 0.5f + glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec3 bare(-1.0f);
+        for (int i = 0; i < 8 && bare.x < 0.0f; i++)
+            for (int k = 0; k < 8 && bare.x < 0.0f; k++) {
+                const glm::vec3 p((i + 0.5f) / 8.0f, 0.0f, (k + 0.5f) / 8.0f);
+                bool covered = false;
+                for (int s = 0; s < stones; s++) covered |= p.x > stoneLo[s].x && p.x < stoneHi[s].x && p.z > stoneLo[s].z && p.z < stoneHi[s].z;
+                if (!covered) bare = p;
+            }
+        const auto onPebble = Raycast(cells, onStoneTop, glm::vec3(0.0f, -1.0f, 0.0f), 1.5f);
+        const auto pastPebbles = Raycast(cells, glm::vec3(6.0f, 1.0f, 0.0f) + bare, glm::vec3(0.0f, -1.0f, 0.0f), 1.5f);
+        Check(onPebble && onPebble->block == glm::ivec3(6, 0, 0) && pastPebbles && pastPebbles->block == glm::ivec3(6, -1, 0),
+              "pebbles are aimed at by their stones (between them, the ground under them)");
+        Check(Block::Plant(BlockType::PEBBLES, 0).OutlineSegments({ 6, 0, 0 }).size() == static_cast<size_t>(stones) * 24, "and outlined stone by stone");
+
+        // Pipes, shafts and the like collide, carry you and are aimed at as they're drawn:
+        // a pipe running from x = 20 to 21 (an arm each way where they join), a shaft along z.
+        Cells works;
+        works.blocks[{ 20, 0, 0 }] = Block(BlockType::AIR_PIPE);
+        works.blocks[{ 21, 0, 0 }] = Block(BlockType::AIR_PIPE);
+        works.blocks[{ 24, 0, 0 }] = Block::Placed(BlockType::SHAFT, 8, 2);
+        auto blocked = [&](glm::vec3 lo, glm::vec3 hi) { return Collision::BoxBlocked(works, Collision::AABB{ lo, hi }); };
+        Check(!blocked({ 20.0f, 0.0f, 0.0f }, { 20.2f, 1.0f, 0.2f }) && blocked({ 20.4f, 0.4f, 0.4f }, { 20.6f, 0.6f, 0.6f }) &&
+                  blocked({ 20.85f, 0.4f, 0.4f }, { 20.95f, 0.6f, 0.6f }) && !blocked({ 20.85f, 0.4f, 0.0f }, { 20.95f, 0.6f, 0.2f }),
+              "a pipe blocks its core and the arm to the next pipe, not the rest of its cell");
+        bool unsure = false;
+        const auto onShaft = Collision::GroundHeight(works, Collision::AABB{ { 24.3f, 0.8f, 0.3f }, { 24.7f, 2.6f, 0.7f } }, 0.2f, 0.5f, unsure);
+        Check(onShaft && std::abs(*onShaft - 0.65f) < 1e-3f, "you stand on a shaft at the top of its rod");
+        const auto atCore = Raycast(works, { 20.5f, 0.5f, 3.0f }, { 0.0f, 0.0f, -1.0f }, 5.0f);
+        const auto pastCorner = Raycast(works, { 20.1f, 0.9f, 3.0f }, { 0.0f, 0.0f, -1.0f }, 5.0f);
+        Check(atCore && atCore->block == glm::ivec3(20, 0, 0) && !pastCorner, "and is aimed at by its tube, not the empty corners of its cell");
+        Check(Block(BlockType::AIR_PIPE).OutlineSegments({ 20, 0, 0 }, 1u << 0).size() == 2 * 24, "and outlined as its core and arms");
+        // A lever on a wall: aimed at by its base and handle, passed through (not bumped into).
+        works.blocks[{ 30, 1, 0 }] = Block(BlockType::STONE);
+        works.blocks[{ 31, 1, 0 }] = Block::Placed(BlockType::LEVER, 8, 0);
+        Check(works.LeverHeld({ 31, 1, 0 }, works.blocks[{ 31, 1, 0 }]) && !works.LeverHeld({ 31, 3, 0 }, Block::Placed(BlockType::LEVER, 8, 0)) &&
+                  Block(BlockType::LEVER).LeverFacing() == glm::ivec3(0, 1, 0),
+              "a lever is held by the solid block behind it (and the old ones stand on the floor)");
+        const auto atLever = Raycast(works, { 31.3f, 1.5f, 3.0f }, { 0.0f, 0.0f, -1.0f }, 5.0f);
+        const auto pastLever = Raycast(works, { 31.9f, 1.5f, 3.0f }, { 0.0f, 0.0f, -1.0f }, 5.0f);
+        Check(atLever && atLever->block == glm::ivec3(31, 1, 0) && !pastLever && !blocked({ 31.1f, 1.1f, 0.1f }, { 31.5f, 1.9f, 0.9f }),
+              "it's aimed at by its base and handle, and walked through");
+
         // Grass: aimed at only where it's drawn (its two crossed sprites), not anywhere in its cell.
         cells.blocks[{ 2, 0, 0 }] = Block::Plant(BlockType::TALL_GRASS, 0);
         const auto past = Raycast(cells, glm::vec3(2.05f, 0.5f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), 2.85f); // along its cell's edge
         const auto through = Raycast(cells, glm::vec3(2.5f, 0.5f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), 6.0f); // through its middle
         Check(!past && through && through->block == glm::ivec3(2, 0, 0), "grass is aimed at only where it's drawn");
+        {
+            // With its texture known, by its solid pixels: here one column down the middle.
+            const int texture = GetTextureData(BlockType::TALL_GRASS).top;
+            std::vector<std::vector<uint8_t>> masks(static_cast<size_t>(texture) + 1);
+            masks[texture].assign(16 * 16, 0);
+            for (int y = 0; y < 16; y++) masks[texture][static_cast<size_t>(y * 16 + 8)] = 1;
+            SpriteMasks::Set(16, masks);
+            const auto middle = Raycast(cells, glm::vec3(2.53f, 0.5f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), 6.0f);
+            const auto offPixel = Raycast(cells, glm::vec3(2.3f, 0.5f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), 2.95f);
+            Check(middle && middle->block == glm::ivec3(2, 0, 0) && !offPixel, "with its texture known, grass is aimed at by its solid pixels");
+            SpriteMasks::Set(0, {});
+        }
 
         // Nothing built into a formed structure's hollow: a blast furnace's top middle.
         Block core(BlockType::MULTIBLOCK);

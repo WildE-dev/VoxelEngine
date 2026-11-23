@@ -29,7 +29,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 54;
+constexpr uint32_t kProtocolVersion = 56;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -62,6 +62,7 @@ enum class MsgType : uint8_t {
     Trade,         // take a dwarf trader's offer (world/Trades.h)
     InventoryMove, // move items between slots: yours, your armour's, the open chest's
     CreativeSlot,  // creative: put any item in one of your slots
+    DropItem,      // throw items out of a slot onto the ground, this way
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -90,6 +91,8 @@ enum class MsgType : uint8_t {
     SignalInfo,    // a signal block's channels and whether it's sending (or that it's gone)
     TradePrices,   // a dwarf trader's prices just now (world/Trades.h): what each offer costs
     Sites,         // the dwarf sites around you (camps, mines, markets, strongholds), for the map
+    ItemsNear,     // the items lying on the ground near you (when they change, and now and then)
+    SteamNear,     // the steam in the air near you (server/Steam.h), a few times a second
 };
 
 // ---------------------------------------------------------------------------------
@@ -380,6 +383,37 @@ struct Arrows {
 };
 constexpr size_t kMaxArrowsSent = 128;
 
+// Throwing items away: `count` (0: all) from a slot of yours (or your armour's, or the
+// open chest's), thrown from the eye this way.
+struct DropItem {
+    uint8_t box = 0; // Box
+    uint8_t slot = 0;
+    uint8_t count = 0;
+    glm::vec3 direction{ 0.0f, 0.0f, -1.0f };
+};
+// An item lying on the ground (or flying to someone): `position` the middle of it.
+struct ItemInfo {
+    uint32_t id = 0;
+    uint16_t item = 0; // ItemId
+    uint8_t count = 0; // (0: less than a block of one)
+    glm::vec3 position{ 0.0f }, velocity{ 0.0f };
+};
+struct ItemsNear {
+    std::vector<ItemInfo> items;
+};
+constexpr size_t kMaxItemsSent = 256;
+
+// Steam near you: each cell (from `base`) and how much is in it.
+struct SteamCell {
+    int16_t dx = 0, dy = 0, dz = 0;
+    uint8_t density = 0; // units of steam, up to 255
+};
+struct SteamNear {
+    glm::ivec3 base{ 0 };
+    std::vector<SteamCell> cells;
+};
+constexpr size_t kMaxSteamSent = 4096;
+
 // An explosion (TNT) at the centre of this cell, this big.
 struct Explosion {
     glm::ivec3 pos{0};
@@ -590,6 +624,12 @@ std::vector<uint8_t> Encode(const InventoryMove& m);
 bool Decode(ByteReader& in, InventoryMove& m);
 std::vector<uint8_t> Encode(const CreativeSlot& m);
 bool Decode(ByteReader& in, CreativeSlot& m);
+std::vector<uint8_t> Encode(const DropItem& m);
+bool Decode(ByteReader& in, DropItem& m);
+std::vector<uint8_t> Encode(const ItemsNear& m);
+bool Decode(ByteReader& in, ItemsNear& m);
+std::vector<uint8_t> Encode(const SteamNear& m);
+bool Decode(ByteReader& in, SteamNear& m);
 std::vector<uint8_t> Encode(const ChatSend& m);
 std::vector<uint8_t> Encode(const ChatMessage& m);
 bool Decode(ByteReader& in, ChatSend& m);

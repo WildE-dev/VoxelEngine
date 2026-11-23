@@ -73,6 +73,10 @@ endif()
 add_library(voxel_server STATIC
     src/server/Creatures.cpp
     src/server/Creatures.h
+    src/server/DroppedItems.cpp
+    src/server/DroppedItems.h
+    src/server/Steam.cpp
+    src/server/Steam.h
     src/server/Server.cpp
     src/server/Power.cpp
     src/server/Signals.cpp
@@ -146,6 +150,8 @@ add_executable(${PROJECT_NAME}
     src/render/Rain.h
     src/render/Renderer.cpp
     src/render/Renderer.h
+    src/render/SteamVolume.cpp
+    src/render/SteamVolume.h
     src/render/Textures.cpp
     src/render/Textures.h
     src/render/TextureAtlas.cpp
@@ -234,6 +240,11 @@ target_link_libraries(CreatureTest PRIVATE voxel_server voxel_client)
 add_executable(MiningTest tests/MiningTest.cpp)
 target_link_libraries(MiningTest PRIVATE voxel_server voxel_client)
 
+# Lava and steam: lava running and draining, water boiling off it into steam, steam rising,
+# spreading and fading, and the steam reaching a client.
+add_executable(SteamTest tests/SteamTest.cpp)
+target_link_libraries(SteamTest PRIVATE voxel_server voxel_client)
+
 # Food: hunger, starving, eating, venison from deer and cooking it.
 add_executable(FoodTest tests/FoodTest.cpp)
 target_link_libraries(FoodTest PRIVATE voxel_server voxel_client)
@@ -262,7 +273,7 @@ target_link_libraries(ShapeTest PRIVATE voxel_server voxel_client)
 add_executable(BiomeTest tests/BiomeTest.cpp)
 target_link_libraries(BiomeTest PRIVATE voxel_common)
 
-foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} ModelEditor VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest SyncTest)
+foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} ModelEditor VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest SyncTest SteamTest)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W3)
     else()
@@ -291,7 +302,7 @@ set(FactoryTest_GROUPS machines mining structures)
 set(BreathTest_GROUPS water air)
 set(TrapTest_GROUPS traps falling tnt)
 set(FoodTest_GROUPS hunger food)
-foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest SyncTest)
+foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest SyncTest SteamTest)
     if(DEFINED ${test}_GROUPS)
         foreach(group ${${test}_GROUPS})
             add_test(NAME ${test}.${group} COMMAND ${test} ${group} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})

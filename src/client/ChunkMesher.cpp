@@ -1,4 +1,5 @@
 #include "client/ChunkMesher.h"
+#include "world/Lava.h"
 #include "world/Power.h"
 
 #include <algorithm>
@@ -18,8 +19,9 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
     auto lightSnapshot = std::make_unique<Chunk::Light>();
     {
         std::lock_guard<std::mutex> lock(chunk.blockMutex);
-        *snapshot = chunk.blocks;
-        *lightSnapshot = chunk.light;
+        if (!chunk.data) return; // (nothing in it yet)
+        *snapshot = chunk.data->blocks;
+        *lightSnapshot = chunk.data->light;
     }
     const auto& local = *snapshot;
     const auto& light = *lightSnapshot;
@@ -66,7 +68,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
             for (int dx = -1; dx <= 1; dx++) {
                 if (dx == 0 && dy == 0 && dz == 0) continue;
                 const auto& neighbour = neighbours[Chunk::NeighbourIndex(dx, dy, dz)];
-                if (!neighbour || !neighbour->IsLoaded()) continue;
+                if (!neighbour || !neighbour->IsLoaded() || !neighbour->data) continue;
 
                 int x0, x1, y0, y1, z0, z1;
                 span(dx, x0, x1);
@@ -78,9 +80,9 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     for (int y = y0; y <= y1; y++)
                         for (int x = x0; x <= x1; x++) {
                             const int i = Index(x - dx * CHUNK_SIZE, y - dy * CHUNK_SIZE, z - dz * CHUNK_SIZE);
-                            grid[paddedIndex(x, y, z)] = neighbour->blocks[i].HidesNeighbours();
-                            lights[paddedIndex(x, y, z)] = neighbour->light[i];
-                            cells[paddedIndex(x, y, z)] = neighbour->blocks[i];
+                            grid[paddedIndex(x, y, z)] = neighbour->data->blocks[i].HidesNeighbours();
+                            lights[paddedIndex(x, y, z)] = neighbour->data->light[i];
+                            cells[paddedIndex(x, y, z)] = neighbour->data->blocks[i];
                         }
             }
         }
@@ -223,7 +225,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     wetTop = std::max(wetTop, surface);
                 }
                 else {
-                    dryStepped[dryN] = inGrid(q) && cellAt(q).IsPartial() && cellAt(q).IsStepped();
+                    dryStepped[dryN] = inGrid(q) && cellAt(q).IsPartial() && cellAt(q).WaterStepped();
                     dry[dryN++] = surface;
                 }
             }
@@ -278,7 +280,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
             top[e] = static_cast<uint8_t>((top32[e] + 3) / 4);
             fine[e] = static_cast<uint8_t>(top[e] * 4 - top32[e]);
             // In a waterlogged block the water sits on the slope.
-            bottom[e] = self.IsPartial() ? std::min(self.edgeData.GetTopY(e), top[e]) : 0;
+            bottom[e] = self.IsPartial() ? std::min(self.WaterEdges().GetTopY(e), top[e]) : 0;
             visible |= top32[e] > bottom[e] * 4;
         }
         // Entirely below the slope: nothing shows. But a thin layer on more water whose
@@ -366,7 +368,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 auto exposedFrom = [&](int k) {
                     const int e = edges.ours[k];
                     uint8_t from = bottom[e];
-                    if (neighbour.IsPartial()) from = std::max(from, std::min(neighbour.edgeData.GetTopY(edges.theirs[k]), top[e]));
+                    if (neighbour.IsPartial()) from = std::max(from, std::min(neighbour.WaterEdges().GetTopY(edges.theirs[k]), top[e]));
                     const int theirs = theirWater32(e);
                     if (theirs >= 0) from = std::max(from, static_cast<uint8_t>(std::min(theirs / 4, static_cast<int>(top[e]))));
                     return from;
@@ -374,7 +376,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 // A stepped block on either side has a step in the middle of the side: two
                 // halves, each with its own flat bottom (a straight edge between the two
                 // corners would cut across the step and leave a hole).
-                const bool steps = (neighbour.IsPartial() && neighbour.IsStepped()) || (self.IsPartial() && self.IsStepped());
+                const bool steps = (neighbour.IsPartial() && neighbour.WaterStepped()) || (self.IsPartial() && self.WaterStepped());
                 if (steps) {
                     for (int k = 0; k < 2; k++) {
                         const uint8_t from = exposedFrom(k);
@@ -413,6 +415,20 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 }
 
                 if (block.IsModel()) continue; // (drawn as a model: Renderer)
+                if (block.IsLava()) {
+                    // A glowing slab as deep as it is (world/Lava.h): faces against lava or
+                    // solid blocks left out. It lights itself.
+                    unsigned skip = 0;
+                    for (int face = 0; face < kFaceCount; ++face) {
+                        const glm::ivec3 n = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
+                        const Block& other = cellAt(n);
+                        const bool up = face == static_cast<int>(Face::Top);
+                        if (isOpaque(n) || (other.IsLava() && (up || Lava::HeightEighths(other) >= Lava::HeightEighths(block)))) skip |= 1u << face;
+                    }
+                    block.AddBoxVertices(vertices, x, y, z, glm::ivec3(0), glm::ivec3(8, Lava::HeightEighths(block), 8), skip, kMaxLight,
+                                          static_cast<uint8_t>(skyLightAt(pos)));
+                    continue;
+                }
                 if (block.type == BlockType::PISTON_HEAD) {
                     // A plate across the far end of the cell and a rod back through the
                     // rest to the piston (lit by the light in its own cell).
@@ -429,21 +445,26 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     block.AddBoxVertices(vertices, x, y, z, rlo, rhi, (1u << face) | (1u << (face ^ 1)), bl, sl);
                     continue;
                 }
-                if (block.IsPipe()) {
+                if (block.IsPipe() || IsValveType(block.type)) {
+                    // (A valve: a length of its pipe, drawn with the pipe's look, and its handle.)
+                    const bool valve = IsValveType(block.type);
+                    const Block tube = valve ? Block(ValvePipe(block.type)) : block;
                     // A thin tube: a core in the middle of the cell, and an arm out to each
                     // neighbour it joins (another pipe, a pump, a compressor, a machine).
                     // Lit by the light in its own cell (pipes let light through).
                     const uint8_t bl = static_cast<uint8_t>(blockLightAt(pos)), sl = static_cast<uint8_t>(skyLightAt(pos));
                     constexpr int kLo = 2, kHi = 6; // eighths: half a block across
-                    unsigned joined = 0;
+                    unsigned joined = 0, gauges = 0;
                     for (int face = 0; face < kFaceCount; ++face) {
                         const glm::ivec3 n = pos + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);
                         const Block& other = cellAt(n);
-                        // (And an air pipe out to a pressure gauge fixed to it.)
-                        const bool gauge = block.type == BlockType::AIR_PIPE && other.type == BlockType::PRESSURE_GAUGE && other.axis % 6 == face;
-                        if (Power::PipeJoins(block.type, other.type) || gauge) joined |= 1u << face;
+                        // (And an air or fluid pipe out to a pressure gauge fixed to it.)
+                        const bool gauge = !valve && (block.type == BlockType::AIR_PIPE || block.type == BlockType::FLUID_PIPE) && other.type == BlockType::PRESSURE_GAUGE &&
+                                           other.axis % 6 == face;
+                        if (Power::PipeJoins(tube.type, other.type) || gauge) joined |= 1u << face;
+                        if (gauge) gauges |= 1u << face;
                     }
-                    block.AddBoxVertices(vertices, x, y, z, glm::ivec3(kLo), glm::ivec3(kHi), joined, bl, sl);
+                    tube.AddBoxVertices(vertices, x, y, z, glm::ivec3(kLo), glm::ivec3(kHi), joined, bl, sl);
                     for (int face = 0; face < kFaceCount; ++face) {
                         if (!(joined & (1u << face))) continue;
                         const int axis = kFaceAxis[face];
@@ -451,9 +472,18 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                         glm::ivec3 lo(kLo), hi(kHi);
                         lo[axis] = positive ? kHi : 0;
                         hi[axis] = positive ? 8 : kLo;
-                        // (Neither end shows: one meets the core, the other the neighbour.)
-                        const unsigned ends = (1u << face) | (1u << (face ^ 1));
-                        block.AddBoxVertices(vertices, x, y, z, lo, hi, ends, bl, sl);
+                        // (Neither end shows: one meets the core, the other the neighbour. A
+                        // gauge's stem is thinner than the pipe, so the end toward it shows.)
+                        const unsigned ends = (gauges & (1u << face) ? 0u : (1u << face)) | (1u << (face ^ 1));
+                        tube.AddBoxVertices(vertices, x, y, z, lo, hi, ends, bl, sl);
+                    }
+                    if (valve) {
+                        // The handle: a stem up from the tube and a bar across its top, along the
+                        // pipe when open, across it when shut.
+                        const bool alongX = (joined & 0x3u) != 0 || (joined & 0x30u) == 0; // (the pipe's way, level)
+                        const bool barAlongX = IsOpenValve(block.type) ? alongX : !alongX;
+                        block.AddBoxVertices(vertices, x, y, z, glm::ivec3(3, 6, 3), glm::ivec3(5, 7, 5), 1u << static_cast<int>(Face::Bottom), bl, sl);
+                        block.AddBoxVertices(vertices, x, y, z, barAlongX ? glm::ivec3(1, 7, 3) : glm::ivec3(3, 7, 1), barAlongX ? glm::ivec3(7, 8, 5) : glm::ivec3(5, 8, 7), 0, bl, sl);
                     }
                     continue;
                 }
@@ -485,19 +515,38 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 }
 
                 // A shape turned sideways or upside down (Block::ShapeDir): its faces drawn as
-                // if upright, each lit from the side it ends up facing, then turned into
-                // place about the cell.
+                // if upright (a log's grain turned to match), then turned into place about
+                // the cell. Each face is lit, corner shadows and all, from the side it ends
+                // up facing: its corners take the shading of the corners they end up at.
                 if (const int dir = block.ShapeDir(); dir != 0 && !block.IsFullBlock()) {
                     const size_t first = vertices.size();
+                    const Block upright = block.Upright();
                     const bool quarters = block.IsStepped();
+                    auto offset = [](int f) { return glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]); };
                     for (int face = 0; face < kFaceCount; ++face) {
-                        const glm::vec3 n = Block::ShapeVectorToCell(dir, glm::vec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]));
+                        const glm::ivec3 n(glm::round(Block::ShapeVectorToCell(dir, glm::vec3(offset(face)))));
                         int worldFace = face;
                         for (int f = 0; f < kFaceCount; f++)
-                            if (glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]) == glm::ivec3(glm::round(n))) worldFace = f;
-                        const auto shading = shadeFace(pos, worldFace, false, true);
-                        if (quarters) block.AddSteppedFaces(vertices, static_cast<Face>(face), x, y, z, shading, true);
-                        else block.AddFaceVertices(vertices, static_cast<Face>(face), x, y, z, shading);
+                            if (offset(f) == n) worldFace = f;
+                        const auto seen = shadeFace(pos, worldFace, true, true);
+                        // Corner [a][b] of the upright face (low or high along its two tangents)
+                        // is the world face's corner where that point ends up.
+                        const auto& tangents = kFaceTangents[kFaceAxis[face]];
+                        const auto& worldTangents = kFaceTangents[kFaceAxis[worldFace]];
+                        FaceShading shading;
+                        for (int a = 0; a < 2; a++)
+                            for (int b = 0; b < 2; b++) {
+                                glm::vec3 p(0.5f);
+                                p[tangents[0]] = a ? 0.75f : 0.25f;
+                                p[tangents[1]] = b ? 0.75f : 0.25f;
+                                const glm::vec3 c = Block::ShapeToCell(dir, p);
+                                const int wa = c[worldTangents[0]] > 0.5f, wb = c[worldTangents[1]] > 0.5f;
+                                shading.ao[a][b] = seen.ao[wa][wb];
+                                shading.light[a][b] = seen.light[wa][wb];
+                                shading.sky[a][b] = seen.sky[wa][wb];
+                            }
+                        if (quarters) upright.AddSteppedFaces(vertices, static_cast<Face>(face), x, y, z, shading, true);
+                        else upright.AddFaceVertices(vertices, static_cast<Face>(face), x, y, z, shading);
                     }
                     for (size_t i = first; i + 1 < vertices.size(); i += 2) {
                         const uint32_t p = vertices[i], s = vertices[i + 1];
@@ -513,6 +562,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                         auto bits = [](float v) { return static_cast<uint32_t>(std::clamp(std::lround((v + 1.0f) * 7.5f), 0L, 15L)); };
                         vertices[i + 1] = (s & ~(0xFFFu << 20)) | (bits(turned.x) << 28) | (bits(turned.y) << 24) | (bits(turned.z) << 20);
                     }
+                    if (block.HasWater()) emitWater(pos, block); // (water standing in it)
                     continue;
                 }
 

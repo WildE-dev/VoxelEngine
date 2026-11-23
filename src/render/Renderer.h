@@ -11,6 +11,7 @@
 #include "render/Rain.h"
 #include "render/PlayerModels.h"
 #include "render/Shader.h"
+#include "render/SteamVolume.h"
 #include "render/TextureAtlas.h"
 
 class ClientWorld;
@@ -24,7 +25,8 @@ struct FrameParams {
     float sunBrightness = 1.0f; // 0 = night, 1 = day (already dimmed by rain)
     glm::vec3 sunDirection{0.35f, 0.75f, 0.55f}; // towards the sun, normalised
     glm::vec3 skyTint{1.0f};    // colour of the sky (warm at dawn and dusk)
-    float rain = 0.0f;          // 0..1: how hard it rains here (0 when sheltered)
+    float rain = 0.0f;          // 0..1: how hard it rains (it doesn't fall under cover: rainCover)
+    const float* rainCover = nullptr; // Rain::kCoverSize squared: where the rain stops in each column round the camera
     bool snow = false;          // it falls as snow here (cold ground around)
     float rainbow = 0.0f;       // 0..1: a rainbow opposite the sun (a shower clearing by day)
     float overcast = 0.0f;      // 0..1: how grey the sky is
@@ -42,9 +44,13 @@ struct FrameParams {
     std::vector<ParticleModel> particles; // bits of broken blocks
     std::vector<BoltModel> bolts;         // lightning
     std::vector<ArrowModel> arrows;
+    std::vector<ItemModel> items; // lying on the ground
+    std::vector<glm::vec4> steamCells; // steam in the air (xyz: the cell, w: how thick, 0..255)
+    uint32_t steamVersion = 0;         // (changes when the steam does)
     std::vector<WheelModel> wheels;
     std::vector<GaugeModel> gauges;
     std::vector<DoorModel> doors;
+    std::vector<LeverModel> levers;
     std::vector<GlowModel> glows; // fireflies
     std::vector<glm::vec4> handLights; // lights carried in hand: position, and strength (a light level)
 };
@@ -98,9 +104,11 @@ private:
     Shader rainShader;
     Shader playerShader;
     Shader crackShader;
+    Shader steamShader;
 
     DebugDraw debugDraw;
     Rain rain;
+    SteamVolume steam;
     PlayerModels playerModels;
 public:
     bool LoadCreatureModels(std::string& error) { return playerModels.LoadCreatureModels(PlayerModels::kCreatureModelsPath, error); }

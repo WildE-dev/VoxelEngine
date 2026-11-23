@@ -1,4 +1,5 @@
 #include "client/Client.h"
+#include "world/Trees.h"
 
 #include "world/Crafting.h"
 
@@ -49,9 +50,13 @@ void Client::Disconnect() {
     welcomed = false;
 }
 
-void Client::Poll() {
+void Client::Poll(double budget) {
     net::NetEvent event;
-    while (net.Poll(event, 0)) {
+    // With a budget, stop taking messages once it's spent: the rest wait in the queue for
+    // the next frame, so a burst of chunks (flying into new ground, a teleport) is spread
+    // over a few frames rather than stalling one.
+    const double deadline = budget > 0.0 ? Now() + budget : 0.0;
+    while ((deadline == 0.0 || Now() < deadline) && net.Poll(event, 0)) {
         switch (event.type) {
         case net::NetEvent::Type::Receive:
             HandleMessage(event.data);
@@ -240,6 +245,26 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
         arrowsAt = Now();
         break;
     }
+    case net::MsgType::SteamNear: {
+        net::SteamNear m;
+        if (!(ok = net::Decode(in, m))) break;
+        steam.clear();
+        for (const auto& c : m.cells) steam.push_back({ m.base + glm::ivec3(c.dx, c.dy, c.dz), c.density });
+        steamVersion++;
+        break;
+    }
+    case net::MsgType::ItemsNear: {
+        net::ItemsNear m;
+        if (!(ok = net::Decode(in, m))) break;
+        for (const auto& old : items) {
+            bool still = false;
+            for (const auto& now : m.items) still |= now.id == old.id;
+            if (!still && vanishedItems.size() < 64) vanishedItems.push_back(old.position);
+        }
+        items = std::move(m.items);
+        itemsAt = Now();
+        break;
+    }
     case net::MsgType::SignalInfo: {
         net::SignalInfo m;
         if (!(ok = net::Decode(in, m))) break;
@@ -335,12 +360,27 @@ void Client::StartMining(const glm::ivec3& pos, Tool tool) {
 void Client::BreakBlock(const glm::ivec3& pos, Tool tool) {
     if (!welcomed) return;
     Block block;
-    // (Not predicted where what it gives won't fit: the server refuses that.)
-    if (world.GetBlock(pos.x, pos.y, pos.z, block) && (IsCreative() || inventory.FitsUnits(block.ResourceType(), static_cast<uint32_t>(block.ResourceUnits())) ||
-                                                        block.ResourceUnits() == 0)) {
+    // (What it gives drops on the ground, to be picked up: the server sends that.)
+    // (A formed structure comes apart into its blocks: that's left to the server.)
+    if (world.GetBlock(pos.x, pos.y, pos.z, block) && block.type != BlockType::MULTIBLOCK && block.type != BlockType::MULTIBLOCK_PART) {
         // Breaking a waterlogged block leaves its water behind (as the server does).
         world.SetBlock(pos.x, pos.y, pos.z, block.HasWater() ? Block::Water(block.WaterVolume()) : Block());
-        if (!IsCreative()) inventory.AddUnits(block.ResourceType(), static_cast<uint32_t>(block.ResourceUnits()));
+        // With an axe, a log fells the logs above it (as the server does).
+        if (Trees::IsLog(block) && Usable(tool) == Tool::Axe)
+            for (const auto& p : Trees::LogsAbove(world, pos)) {
+                Block log;
+                world.GetBlock(p.x, p.y, p.z, log);
+                world.SetBlock(p.x, p.y, p.z, log.HasWater() ? Block::Water(log.WaterVolume()) : Block());
+            }
+        // A door goes as a whole: its other half too.
+        if (block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN)
+            for (const int dy : { 1, -1 }) {
+                Block other;
+                if (world.GetBlock(pos.x, pos.y + dy, pos.z, other) && other.type == block.type) {
+                    world.SetBlock(pos.x, pos.y + dy, pos.z, Block());
+                    break;
+                }
+            }
     }
     net.Send(net::kChannelReliable, net::Encode(net::EditBreak{ pos, tool }));
 }
@@ -374,25 +414,43 @@ void Client::SetCreativeSlot(int slot, ItemId item, int count) {
 
 bool Client::CanAfford(BlockType type, int heightEighths) const {
     if (IsCreative()) return true;
+    if (IsCreativeOnlyType(type)) return false; // (as the server rules)
     const Block placed = Block::Placed(type, heightEighths);
     return !placed.IsLiquid() && GetResources(type) >= static_cast<uint32_t>(placed.ResourceUnits());
 }
 
-void Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths, int faceAxis) {
-    if (!welcomed || IsItemType(type) || !CanAfford(type, heightEighths)) return; // (items aren't placed)
+bool Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths, int faceAxis) {
+    // The server's rules (Server::HandlePlace), so what's refused here would be there too:
+    // nothing (an empty hand), items, creative-only blocks in survival, what we can't
+    // afford, no room.
+    if (!welcomed || type == BlockType::AIR || type >= BlockType::COUNT || IsItemType(type) || !CanAfford(type, heightEighths)) return false;
     // Shown at once (predicted) only where the server will place it too, not over another
     // block, or it would show for a moment and then be taken back. Where this copy of the
     // world doesn't have the cell yet, it's left to the server (and shown when it answers).
     Block here;
     const bool known = world.GetBlock(pos.x, pos.y, pos.z, here);
-    if (known && !world.CanPlace(pos, type)) return; // the server would refuse it
+    if (known && !world.CanPlace(pos, type)) return false; // the server would refuse it
     const Block placed = Block::Placed(type, heightEighths, faceAxis);
-    if (known) {
+    if (known && IsLeverType(type) && !world.LeverHeld(pos, placed)) return false; // (only on a solid block, as the server says)
+    // Not a solid block inside another player walking there; one flying might be in
+    // no-clip (which the server allows), so that's left to it, unpredicted.
+    bool predict = known;
+    if (placed.IsFullBlock())
+        for (const auto& other : GetRemotePlayers()) {
+            const bool crouched = (other.flags & net::kFlagCrouching) != 0;
+            const glm::vec3 lo(pos), hi = lo + glm::vec3(1.0f);
+            const glm::vec3 bodyLo = other.feet - glm::vec3(0.3f, 0.0f, 0.3f), bodyHi = other.feet + glm::vec3(0.3f, crouched ? 1.45f : 1.8f, 0.3f);
+            if (!glm::all(glm::lessThan(lo, bodyHi)) || !glm::all(glm::greaterThan(hi, bodyLo))) continue;
+            if (!(other.flags & net::kFlagFlying)) return false;
+            predict = false;
+        }
+    if (predict) {
         world.SetBlock(pos.x, pos.y, pos.z, placed);
         if (type == BlockType::DOOR) world.SetBlock(pos.x, pos.y + 1, pos.z, placed); // its upper half, as the server makes it
         if (!IsCreative()) inventory.TakeUnits(ResourceTypeOf(type), static_cast<uint32_t>(placed.ResourceUnits()));
     }
     net.Send(net::kChannelReliable, net::Encode(net::EditPlace{ pos, type, static_cast<uint8_t>(heightEighths), static_cast<uint8_t>(faceAxis) }));
+    return true;
 }
 
 void Client::Chisel(const glm::ivec3& pos, int edge, bool raise, int dir, int step) {
@@ -404,7 +462,8 @@ void Client::Chisel(const glm::ivec3& pos, int edge, bool raise, int dir, int st
         const BlockType type = block.ResourceType();
         const int change = after.ResourceUnits() - block.ResourceUnits();
         if (change > 0 && !inventory.TakeUnits(type, static_cast<uint32_t>(change))) return; // can't afford to build it up
-        if (change < 0 && inventory.AddUnits(type, static_cast<uint32_t>(-change)) != 0) return; // (no room: the server refuses it)
+        if (change < 0 && !inventory.FitsUnits(type, static_cast<uint32_t>(-change))) return; // (no room: the server refuses it)
+        if (change < 0) inventory.AddUnits(type, static_cast<uint32_t>(-change));
     }
     world.SetBlock(pos.x, pos.y, pos.z, after);
     net.Send(net::kChannelReliable, net::Encode(net::EditChisel{ pos, static_cast<uint8_t>(edge), static_cast<uint8_t>(raise ? 1 : 0), static_cast<uint8_t>(dir),
@@ -505,6 +564,18 @@ void Client::Cast(const glm::ivec3& pos, bool cast) {
 
 void Client::Shoot(const glm::vec3& direction) {
     if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::Shoot{ direction }));
+}
+
+std::vector<net::ItemInfo> Client::GetItems() const {
+    const float since = static_cast<float>(std::min(0.06, Now() - itemsAt));
+    std::vector<net::ItemInfo> out = items;
+    for (auto& i : out) i.position += i.velocity * since;
+    return out;
+}
+
+void Client::DropItem(net::Box box, int slot, int count, const glm::vec3& direction) {
+    if (!welcomed || slot < 0 || slot > 255 || count < 0 || count > 255) return;
+    net.Send(net::kChannelReliable, net::Encode(net::DropItem{ static_cast<uint8_t>(box), static_cast<uint8_t>(slot), static_cast<uint8_t>(count), direction }));
 }
 
 std::vector<net::ArrowInfo> Client::GetArrows() const {

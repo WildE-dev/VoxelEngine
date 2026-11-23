@@ -38,8 +38,11 @@ const char* DefaultMaterial(BlockType type) {
     case BlockType::DRILL:
     case BlockType::COMPRESSOR:
     case BlockType::AIR_TANK:
+    case BlockType::CREATIVE_AIR_TANK:
     case BlockType::VALVE:
     case BlockType::VALVE_OPEN:
+    case BlockType::FLUID_VALVE:
+    case BlockType::FLUID_VALVE_OPEN:
     case BlockType::LOGIC_GATE:
     case BlockType::PISTON:
     case BlockType::PISTON_HEAD:

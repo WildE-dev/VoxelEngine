@@ -252,6 +252,73 @@ bool Decode(ByteReader& in, Shoot& m) {
     return in.Vec3(m.direction) && FiniteVec(m.direction) && glm::length(m.direction) > 0.1f && in.AtEnd();
 }
 
+std::vector<uint8_t> Encode(const DropItem& m) {
+    ByteWriter w;
+    Begin(w, MsgType::DropItem);
+    w.U8(m.box);
+    w.U8(m.slot);
+    w.U8(m.count);
+    w.Vec3(m.direction);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, DropItem& m) {
+    return in.U8(m.box) && m.box <= 2 && in.U8(m.slot) && in.U8(m.count) && in.Vec3(m.direction) && FiniteVec(m.direction) && in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const ItemsNear& m) {
+    ByteWriter w;
+    Begin(w, MsgType::ItemsNear);
+    const size_t n = std::min(m.items.size(), kMaxItemsSent);
+    w.VarU32(static_cast<uint32_t>(n));
+    for (size_t i = 0; i < n; i++) {
+        w.VarU32(m.items[i].id);
+        w.U16(m.items[i].item);
+        w.U8(m.items[i].count);
+        w.Vec3(m.items[i].position);
+        w.Vec3(m.items[i].velocity);
+    }
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, ItemsNear& m) {
+    uint32_t n;
+    if (!in.VarU32(n) || n > kMaxItemsSent) return false;
+    m.items.resize(n);
+    for (auto& i : m.items)
+        if (!in.VarU32(i.id) || !in.U16(i.item) || !in.U8(i.count) || !in.Vec3(i.position) || !in.Vec3(i.velocity) || !FiniteVec(i.position) ||
+            !FiniteVec(i.velocity))
+            return false;
+    return in.AtEnd();
+}
+
+std::vector<uint8_t> Encode(const SteamNear& m) {
+    ByteWriter w;
+    Begin(w, MsgType::SteamNear);
+    w.IVec3(m.base);
+    const size_t n = std::min(m.cells.size(), kMaxSteamSent);
+    w.VarU32(static_cast<uint32_t>(n));
+    for (size_t i = 0; i < n; i++) {
+        w.U16(static_cast<uint16_t>(m.cells[i].dx));
+        w.U16(static_cast<uint16_t>(m.cells[i].dy));
+        w.U16(static_cast<uint16_t>(m.cells[i].dz));
+        w.U8(m.cells[i].density);
+    }
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, SteamNear& m) {
+    uint32_t n;
+    if (!in.IVec3(m.base) || !in.VarU32(n) || n > kMaxSteamSent) return false;
+    m.cells.resize(n);
+    for (auto& c : m.cells) {
+        uint16_t x, y, z;
+        if (!in.U16(x) || !in.U16(y) || !in.U16(z) || !in.U8(c.density)) return false;
+        c.dx = static_cast<int16_t>(x), c.dy = static_cast<int16_t>(y), c.dz = static_cast<int16_t>(z);
+    }
+    return in.AtEnd();
+}
+
 std::vector<uint8_t> Encode(const Arrows& m) {
     ByteWriter w;
     Begin(w, MsgType::Arrows);
@@ -548,6 +615,7 @@ bool ReadInventory(ByteReader& in, ::Inventory& inv, size_t maxSlots) {
         if (item == 0) continue;
         uint8_t count;
         if (!Items::Valid(item) || !in.U8(count) || count == 0 || count > Items::MaxStack(item)) return false;
+        if (Items::IsBlock(item)) item = Items::OfBlock(Current(Items::BlockOf(item))); // (old water pipes are fluid pipes now)
         st = { item, count };
     }
     uint32_t kinds;
@@ -555,7 +623,8 @@ bool ReadInventory(ByteReader& in, ::Inventory& inv, size_t maxSlots) {
     for (uint32_t k = 0; k < kinds; k++) {
         uint8_t t, units;
         if (!in.U8(t) || t >= inv.offcuts.size() || !in.U8(units) || units >= Items::kUnits) return false;
-        inv.offcuts[t] = units;
+        const size_t kept = static_cast<size_t>(Current(static_cast<BlockType>(t)));
+        inv.offcuts[kept] = static_cast<uint8_t>(std::min<int>(Items::kUnits - 1, inv.offcuts[kept] + units));
     }
     return true;
 }

@@ -1,0 +1,2 @@
+// lava: a block (the format is in README.md, here)
+{ "name": "Lava", "textures": { "all": "lava" }, "hardness": 0, "tool": "none", "sound": "soft", "light": 15, "map": "#f06018" }
