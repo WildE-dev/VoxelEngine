@@ -63,7 +63,7 @@ constexpr int kLaserRadius = 4;
 constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
-    BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::LAVA, BlockType::OBSIDIAN, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP,
+    BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::LAVA, BlockType::OBSIDIAN, BlockType::FIRE, BlockType::BUCKET, BlockType::WATER_BUCKET, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP,
     BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::CREATIVE_AIR_TANK, BlockType::VALVE, BlockType::FLUID_VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::OBSIDIAN_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::BOILER, BlockType::TURBINE, BlockType::AIR_DIFFUSER, BlockType::DRILL, BlockType::SMELTER, BlockType::STEEL_FRAME, BlockType::MACHINE_CASING, BlockType::FIRE_BRICK, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
     BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::MINING_POST, BlockType::CRUSHER, BlockType::GLOW_FUNGUS, BlockType::MAGMA, BlockType::GOLD_ORE, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::COPPER_ORE, BlockType::OIL_SHALE, BlockType::TAR, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::COPPER_INGOT, BlockType::STEEL_INGOT, BlockType::HAMMER, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
@@ -181,6 +181,9 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::LAVA: return "Lava";
     case BlockType::OBSIDIAN: return "Obsidian";
     case BlockType::OBSIDIAN_PIPE: return "Obsidian pipe";
+    case BlockType::FIRE: return "Fire";
+    case BlockType::BUCKET: return "Bucket";
+    case BlockType::WATER_BUCKET: return "Water bucket";
     case BlockType::PUMP:  return "Pump";
     case BlockType::PIPE:  return "Pipe";
     case BlockType::WATER_WHEEL: return "Water wheel";
@@ -900,7 +903,8 @@ void Application::Run() {
             const float size = p.mist ? p.size * (1.0f + 1.5f * age) * std::min(1.0f, p.life / (0.25f * p.maxLife))
                                       : p.size * std::min(1.0f, p.life / (0.4f * p.maxLife));
             // Clouds of spray and smoke are flat billboards; bits of blocks and drops are cubes.
-            params.particles.push_back({ p.position, size, p.uv, lightAt(p.position - glm::vec3(0.0f, 0.1f, 0.0f)), p.mist ? 1.0f : 0.0f, p.mist || p.rise });
+            params.particles.push_back({ p.position, size, p.uv, lightAt(p.position - glm::vec3(0.0f, 0.1f, 0.0f)), p.mist ? 1.0f : 0.0f, p.mist || p.rise || p.flame,
+                                         p.flame ? 1.0f : 0.0f });
         }
         {
             // Steam: a translucent cloud in the cells it fills (render/SteamVolume.h).
@@ -3344,6 +3348,33 @@ void Application::OnMouseButton(int button, int action) {
     // items are never placed.
     if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::None && IsItemType(SelectedBlock())) {
         const BlockType item = SelectedBlock();
+        // A bucket: scoop up the (full) water looked at; a water bucket: pour it out where
+        // you're looking (on fire: it puts it out, and the fires round it).
+        if (item == BlockType::BUCKET) {
+            const glm::vec3 eye = camera.GetPosition(), dir = camera.GetDirection();
+            for (float t = 0.3f; t < Reach(); t += 0.1f) {
+                const glm::ivec3 cell(glm::floor(eye + dir * t));
+                Block b;
+                if (!world->GetBlock(cell.x, cell.y, cell.z, b)) break;
+                if (b.IsFullWater()) {
+                    client->UseBucket(cell, false);
+                    audio->Play("splash", glm::vec3(cell) + glm::vec3(0.5f), 0.4f, 0.2f);
+                    break;
+                }
+                if (!b.IsPassable()) break;
+            }
+            return;
+        }
+        if (item == BlockType::WATER_BUCKET) {
+            if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
+                Block aimed;
+                const bool into = world->GetBlock(at->block.x, at->block.y, at->block.z, aimed) && aimed.IsReplaceableByWater();
+                const glm::ivec3 cell = into ? at->block : at->block + at->normal;
+                client->UseBucket(cell, true);
+                audio->Play("splash", glm::vec3(cell) + glm::vec3(0.5f), 0.7f, 0.15f);
+            }
+            return;
+        }
         // A boat: into it, on the water looked at (within 3 blocks: a hop the server's
         // movement check allows).
         if (item == BlockType::BOAT) {
@@ -3918,6 +3949,51 @@ void Application::UpdateParticles(float dt) {
             particles.push_back(p);
         }
     }
+    // Fires: licks of flame shooting up from each near us, smoke now and then, and a
+    // crackle from one of them every so often.
+    {
+        static std::mt19937 fireRng(2024);
+        glm::vec2 f0, f1, s0, s1;
+        renderer->GetAtlas().GetTileUV(renderer->GetAtlas().GetIndex("flame"), f0, f1);
+        renderer->GetAtlas().GetTileUV(renderer->GetAtlas().GetIndex("smoke"), s0, s1);
+        const glm::vec3 eye = camera.GetPosition();
+        std::vector<glm::ivec3> fires;
+        for (const auto& pos : world->GetModelBlocks()) {
+            Block b;
+            if (world->GetBlock(pos.x, pos.y, pos.z, b) && b.type == BlockType::FIRE && glm::distance(glm::vec3(pos), eye) < 48.0f) fires.push_back(pos);
+        }
+        if (fires.size() > 400) fires.resize(400);
+        for (const auto& pos : fires) {
+            float rate = dt * 14.0f;
+            while (rate > 0.0f && particles.size() < 3000) {
+                if (rate < 1.0f && unit(fireRng) >= rate) break;
+                rate -= 1.0f;
+                Particle p;
+                p.position = glm::vec3(pos) + glm::vec3(0.15f + 0.7f * unit(fireRng), 0.1f + 0.2f * unit(fireRng), 0.15f + 0.7f * unit(fireRng));
+                p.velocity = glm::vec3(0.3f * (unit(fireRng) - 0.5f), 1.6f + 1.4f * unit(fireRng), 0.3f * (unit(fireRng) - 0.5f));
+                p.maxLife = p.life = 0.35f + 0.35f * unit(fireRng);
+                p.size = 0.35f + 0.3f * unit(fireRng);
+                p.uv = glm::vec4(f0, f1);
+                p.flame = true;
+                particles.push_back(p);
+            }
+            if (unit(fireRng) < dt * 1.5f && particles.size() < 3000) {
+                Particle s;
+                s.position = glm::vec3(pos) + glm::vec3(0.5f, 0.9f, 0.5f);
+                s.velocity = glm::vec3(0.2f * (unit(fireRng) - 0.5f), 0.0f, 0.2f * (unit(fireRng) - 0.5f));
+                s.maxLife = s.life = 2.0f + unit(fireRng);
+                s.size = 0.25f + 0.2f * unit(fireRng);
+                s.uv = glm::vec4(s0, s1);
+                s.rise = true;
+                particles.push_back(s);
+            }
+        }
+        if (!fires.empty() && now >= nextCrackle) {
+            const glm::ivec3 at = fires[static_cast<size_t>(unit(fireRng) * fires.size()) % fires.size()];
+            PlayAt("fire_crackle", at, std::min(1.0f, 0.4f + 0.05f * static_cast<float>(fires.size())));
+            nextCrackle = now + std::max(0.15, 0.9 - 0.02 * static_cast<double>(fires.size()));
+        }
+    }
     if (!campfires.empty() && unit(smokeRng) < dt * 5.0f * std::min<size_t>(campfires.size(), 4)) {
         const glm::ivec3 fire = campfires[static_cast<size_t>(unit(smokeRng) * campfires.size()) % campfires.size()];
         glm::vec2 uv0, uv1;
@@ -3935,6 +4011,12 @@ void Application::UpdateParticles(float dt) {
     // (smoke rises instead, slowly).
     for (auto& p : particles) {
         p.life -= dt;
+        if (p.flame) {
+            // Shooting up and slowing (shrinking away as it's drawn).
+            p.velocity *= std::exp(-1.5f * dt);
+            p.position += p.velocity * dt;
+            continue;
+        }
         if (p.rise) {
             p.velocity.y += (1.1f - p.velocity.y) * std::min(1.0f, dt * 2.0f);
             p.position += p.velocity * dt;

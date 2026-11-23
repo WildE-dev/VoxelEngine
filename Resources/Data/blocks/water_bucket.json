@@ -1,0 +1,2 @@
+// water_bucket: a block (the format is in README.md, here)
+{ "name": "Water bucket", "textures": { "all": "water_bucket" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

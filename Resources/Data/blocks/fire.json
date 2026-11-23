@@ -1,0 +1,2 @@
+// fire: a block (the format is in README.md, here)
+{ "name": "Fire", "textures": { "all": "fire" }, "hardness": 0, "tool": "none", "sound": "soft", "light": 15, "map": "#ff7020" }

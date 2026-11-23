@@ -573,6 +573,10 @@ std::vector<net::ItemInfo> Client::GetItems() const {
     return out;
 }
 
+void Client::UseBucket(const glm::ivec3& pos, bool pour) {
+    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::UseBucket{ pos, static_cast<uint8_t>(pour ? 1 : 0) }));
+}
+
 void Client::DropItem(net::Box box, int slot, int count, const glm::vec3& direction) {
     if (!welcomed || slot < 0 || slot > 255 || count < 0 || count > 255) return;
     net.Send(net::kChannelReliable, net::Encode(net::DropItem{ static_cast<uint8_t>(box), static_cast<uint8_t>(slot), static_cast<uint8_t>(count), direction }));

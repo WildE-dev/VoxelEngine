@@ -355,6 +355,9 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* FLUID_VALVE_OPEN */ {{ "valve_handle", "valve_handle", "fluid_valve_icon", "fluid_valve_icon", "fluid_valve_icon", "fluid_valve_icon" }},
     /* OBSIDIAN    */ {{ "obsidian", "obsidian", "obsidian", "obsidian", "obsidian", "obsidian" }},
     /* OBSIDIAN_PIPE */ {{ "obsidian_pipe_end", "obsidian_pipe_end", "obsidian_pipe", "obsidian_pipe", "obsidian_pipe", "obsidian_pipe" }},
+    /* FIRE        */ {{ "fire", nullptr, nullptr, nullptr, nullptr, nullptr }},
+    /* BUCKET      */ {{ "bucket", "bucket", "bucket", "bucket", "bucket", "bucket" }},
+    /* WATER_BUCKET */ {{ "water_bucket", "water_bucket", "water_bucket", "water_bucket", "water_bucket", "water_bucket" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -398,7 +401,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "extractor", "filter_pipe", "crafter", "harvester", "drain", "sinkhole", "pressure_gauge",
     "oil_shale", "tar", "fluid_pipe", "fluid_tank", "oil_derrick", "refinery", "engine", "fluid_outlet", "mining_post",
     "steel_frame", "machine_casing", "fire_brick", "hammer", "multiblock", "multiblock_part",
-    "crusher", "crushed_iron", "coke", "glow_fungus", "magma", "gold_ore", "gold_ingot", "crossbow", "forge_core", "machine_sensor", "boiler", "turbine", "air_diffuser", "copper_ore", "copper_ingot", "creative_air_tank", "lava", "fluid_valve", "fluid_valve_open", "obsidian", "obsidian_pipe",
+    "crusher", "crushed_iron", "coke", "glow_fungus", "magma", "gold_ore", "gold_ingot", "crossbow", "forge_core", "machine_sensor", "boiler", "turbine", "air_diffuser", "copper_ore", "copper_ingot", "creative_air_tank", "lava", "fluid_valve", "fluid_valve_open", "obsidian", "obsidian_pipe", "fire", "bucket", "water_bucket",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");

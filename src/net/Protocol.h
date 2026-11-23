@@ -29,7 +29,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 56;
+constexpr uint32_t kProtocolVersion = 57;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -63,6 +63,7 @@ enum class MsgType : uint8_t {
     InventoryMove, // move items between slots: yours, your armour's, the open chest's
     CreativeSlot,  // creative: put any item in one of your slots
     DropItem,      // throw items out of a slot onto the ground, this way
+    UseBucket,     // scoop up the water here with a bucket, or pour a water bucket out here
 
     // Server -> client
     Welcome = 64,  // accepted: your id, spawn point, view distance
@@ -398,6 +399,10 @@ struct ItemInfo {
     uint8_t count = 0; // (0: less than a block of one)
     glm::vec3 position{ 0.0f }, velocity{ 0.0f };
 };
+struct UseBucket {
+    glm::ivec3 pos{ 0 };
+    uint8_t pour = 0; // 0: scoop up the water there; 1: pour it out there
+};
 struct ItemsNear {
     std::vector<ItemInfo> items;
 };
@@ -626,6 +631,8 @@ std::vector<uint8_t> Encode(const CreativeSlot& m);
 bool Decode(ByteReader& in, CreativeSlot& m);
 std::vector<uint8_t> Encode(const DropItem& m);
 bool Decode(ByteReader& in, DropItem& m);
+std::vector<uint8_t> Encode(const UseBucket& m);
+bool Decode(ByteReader& in, UseBucket& m);
 std::vector<uint8_t> Encode(const ItemsNear& m);
 bool Decode(ByteReader& in, ItemsNear& m);
 std::vector<uint8_t> Encode(const SteamNear& m);

@@ -313,6 +313,13 @@ enum class BlockType : uint8_t {
     // An obsidian pipe: a fluid pipe that can hold lava (world/Fluids.h), drawing it in
     // where it touches lava, to fire a boiler.
     OBSIDIAN_PIPE,
+    // Fire (world/Fire.h): spreads through what burns, burns whoever's in it, hard to put
+    // out. Drawn by the game as flames. Creative only (it starts itself well enough).
+    FIRE,
+    // A bucket (an item): scoops up a block of water (a water bucket) and pours it out
+    // again, putting out fires round where it lands.
+    BUCKET,
+    WATER_BUCKET,
     COUNT
 };
 // Machines with an inventory of their own (opened like a chest, empty-handed): what
@@ -338,7 +345,7 @@ inline BlockType ValveSetTo(BlockType t, bool open) {
 }
 // The pipe a valve sits in (whose tube it's drawn as, and joins like).
 inline BlockType ValvePipe(BlockType t) { return t == BlockType::FLUID_VALVE || t == BlockType::FLUID_VALVE_OPEN ? BlockType::FLUID_PIPE : BlockType::AIR_PIPE; }
-inline bool IsCreativeOnlyType(BlockType t) { return t == BlockType::CREATIVE_AIR_TANK || t == BlockType::LAVA; }
+inline bool IsCreativeOnlyType(BlockType t) { return t == BlockType::CREATIVE_AIR_TANK || t == BlockType::LAVA || t == BlockType::FIRE; }
 // Blocks that hold things like a chest (opened, filled, emptied, broken open).
 inline bool IsStorageType(BlockType t) { return t == BlockType::CHEST || t == BlockType::MINING_POST || IsMachineInventory(t); }
 
@@ -348,7 +355,8 @@ inline bool IsLeverType(BlockType t) { return t == BlockType::LEVER || t == Bloc
 inline bool IsModelType(BlockType type) {
     return type == BlockType::WATER_WHEEL || type == BlockType::SHAFT || type == BlockType::PRESSURE_GAUGE || type == BlockType::MULTIBLOCK ||
            type == BlockType::MULTIBLOCK_PART || type == BlockType::DOOR || type == BlockType::DOOR_OPEN || // (a door swings open: drawn as it turns)
-           IsLeverType(type); // (a lever's handle tips over)
+           IsLeverType(type) || // (a lever's handle tips over)
+           type == BlockType::FIRE; // (flames)
 }
 // Ladders and doors face one of the four level ways (their `axis`, a Face: +x, -x, +z or
 // -z): a ladder out from the wall it hangs on, a door toward whoever put it up. Each is a
@@ -374,7 +382,7 @@ inline bool IsItemType(BlockType type) {
            type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH || type == BlockType::BOAT ||
            type == BlockType::STEEL_INGOT || type == BlockType::HAMMER || type == BlockType::CRUSHED_IRON || type == BlockType::COKE ||
            type == BlockType::GOLD_INGOT || type == BlockType::CROSSBOW || type == BlockType::FORGE_CORE ||
-           type == BlockType::COPPER_INGOT;
+           type == BlockType::COPPER_INGOT || type == BlockType::BUCKET || type == BlockType::WATER_BUCKET;
 }
 
 inline bool IsPlantType(BlockType type) {
@@ -382,7 +390,7 @@ inline bool IsPlantType(BlockType type) {
            type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES || type == BlockType::CROP || type == BlockType::RIPE_WHEAT ||
            type == BlockType::LADDER || type == BlockType::DOOR_OPEN || type == BlockType::CAMPFIRE ||
            type == BlockType::SIGN || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING || type == BlockType::LEVER ||
-           type == BlockType::LEVER_ON || type == BlockType::GLOW_FUNGUS;
+           type == BlockType::LEVER_ON || type == BlockType::GLOW_FUNGUS || type == BlockType::FIRE;
 }
 
 // The resource a block counts as in survival (see Block::ResourceUnits): its own type,
@@ -447,7 +455,7 @@ inline ShapeStyle StyleOf(BlockType type) {
 // (The game's own; Resources/Data/blocks.json may change it: see world/BlockData.h.)
 inline uint8_t DefaultLightEmission(BlockType type) {
     return type == BlockType::LAMP || type == BlockType::SIGNAL_LAMP_ON ? kMaxLight : type == BlockType::CAMPFIRE ? kMaxLight - 1 : type == BlockType::SMELTER_LIT ? 12
-         : type == BlockType::GLOW_FUNGUS ? 11 : type == BlockType::MAGMA ? 12 : type == BlockType::LAVA ? kMaxLight : 0;
+         : type == BlockType::GLOW_FUNGUS ? 11 : type == BlockType::MAGMA ? 12 : type == BlockType::LAVA || type == BlockType::FIRE ? kMaxLight : 0;
 }
 namespace BlockData { extern int8_t gLight[]; }
 inline uint8_t GetLightEmission(BlockType type) {

@@ -601,6 +601,45 @@ It also runs the whole path over a real connection: a creative player pours wate
 next to their lava, the steam reaches the game and fades, and a survival player can't
 place lava.
 
+## Fire
+
+Fire is a real danger. It sits in an open cell beside something that burns, and four
+times a second it:
+
+- **Eats what it touches.** Each burnable block beside it goes sooner or later, and the
+  fire often takes its place. Leaves and plants go in a moment; planks, doors, ladders,
+  signs, beds and chests in a few seconds (a chest's contents burn with it); logs slowly
+  but surely.
+- **Spreads.** It tries the cells round it, higher ones most (fire climbs), and catches
+  in an open cell beside something that burns, as readily as that burns. A wood goes up
+  in under a minute. Rain on an open fire slows it and now and then puts it out, but it
+  won't stop a blaze.
+- **Dies down** a few seconds after it has nothing left to burn.
+- **Burns.** Step in it and you catch fire, losing half a heart every half second, and
+  you go on burning for four seconds after you're out of it, unless you get into water.
+  Creatures in it are hurt, items lying in it are lost, and TNT beside it goes off.
+
+Lava sets fire to what burns beside it, lightning to where it strikes, and a TNT blast
+to what's round it. Players can't light fires (creative can place it, for testing).
+
+It's hard to put out. You can't punch it out, since aiming passes through flames.
+
+**Fighting it:**
+
+- **A bucket** (three quarters of an iron ingot). Right-click a full block of water to
+  scoop it up, then right-click to pour it out where you're looking. The splash puts out
+  every fire round where it lands, and puts you out if you're burning.
+- **Water** flowing into a fire puts it out: a pump, pipes and an outlet make a hose, or
+  open a sluice.
+- **Smothering.** Put any block that doesn't burn (sand, dirt, stone) where a fire is.
+- **A firebreak.** Clear or chop what burns in its path, and it dies down at the gap.
+
+Flames are drawn as glowing licks of fire shooting up from each burning cell, with
+smoke, a crackle, and the light of a lamp. `FireTest` checks that a fire spreads
+through a little wood and burns it down, dies out on bare stone, leaves stone and
+obsidian alone, is put out by water, by smothering and by a bucket, burns a survival
+player who keeps burning until in water, and destroys items thrown into it.
+
 ## Player
 
 You walk on the terrain with gravity and collision. The body is a 0.6 x 1.8

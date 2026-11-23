@@ -101,6 +101,8 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
     if (Power::IsMachine(block.type)) machines.insert({ x, y, z });
     // Lava: track it, and wake it (and lava beside it) when anything here changes, so
     // it runs on, drains away, or boils water that came up to it.
+    if (previous.type == BlockType::FIRE && block.type != BlockType::FIRE) fireCells.erase({ x, y, z });
+    if (block.type == BlockType::FIRE) fireCells.insert({ x, y, z });
     if (previous.IsLava() && !block.IsLava()) lavaCells.erase({ x, y, z });
     if (block.IsLava()) lavaCells.insert({ x, y, z }), lavaWake.insert({ x, y, z });
     if (!lavaCells.empty())
@@ -313,7 +315,7 @@ void ServerWorld::PropagateLight(const std::vector<ChunkPtr>& loadedChunks, cons
 void ServerWorld::WorkerLoop() {
     std::vector<ChunkPtr> batch, generated;
     auto generatedBlocks = std::make_unique<TerrainGenerator::Blocks>(); // reused generation buffer
-    std::vector<glm::ivec3> edits, savedWater, savedPumps, savedMachines, savedLava, restingLava;
+    std::vector<glm::ivec3> edits, savedWater, savedPumps, savedMachines, savedLava, restingLava, savedFire;
     batch.reserve(kGenerateBatchSize);
 
     while (true) {
@@ -336,6 +338,7 @@ void ServerWorld::WorkerLoop() {
         savedPumps.clear();
         savedLava.clear();
         restingLava.clear();
+        savedFire.clear();
         savedMachines.clear();
         for (auto& chunk : batch) {
             if (chunk->IsRemoved() || !chunk->TryBeginGenerate()) continue;
@@ -356,6 +359,7 @@ void ServerWorld::WorkerLoop() {
                 // flowing then). Generated pools start at rest, and flow once something
                 // beside them changes.
                 if (b.IsLava()) (saved ? savedLava : restingLava).push_back(c * S + glm::ivec3(i % S, (i / S) % S, i / (S * S)));
+                if (b.type == BlockType::FIRE) savedFire.push_back(c * S + glm::ivec3(i % S, (i / S) % S, i / (S * S)));
                 if (!pump && !machine && !(saved && b.HasWater())) continue;
                 const glm::ivec3 pos = c * S + glm::ivec3(i % S, (i / S) % S, i / (S * S));
                 (pump ? savedPumps : machine ? savedMachines : savedWater).push_back(pos);
@@ -367,8 +371,9 @@ void ServerWorld::WorkerLoop() {
         if (!generated.empty() || !edits.empty()) PropagateLight(generated, edits);
 
         // Let it carry on flowing (settled water just stays put after one look).
-        if (!savedWater.empty() || !savedPumps.empty() || !savedMachines.empty() || !savedLava.empty() || !restingLava.empty()) {
+        if (!savedWater.empty() || !savedPumps.empty() || !savedMachines.empty() || !savedLava.empty() || !restingLava.empty() || !savedFire.empty()) {
             std::lock_guard<std::recursive_mutex> edit(editMutex);
+            for (const auto& pos : savedFire) fireCells.insert(pos);
             for (const auto& pos : savedLava) lavaCells.insert(pos), lavaWake.insert(pos);
             for (const auto& pos : restingLava) lavaCells.insert(pos);
             for (const auto& pos : savedWater) water.Activate(pos);
@@ -421,6 +426,11 @@ void ServerWorld::TakeLavaWake(std::vector<glm::ivec3>& out) {
         for (auto it = lavaCells.begin(); it != lavaCells.end();) {
             Block b;
             if (!GetBlock(it->x, it->y, it->z, b) || !b.IsLava()) it = lavaCells.erase(it);
+            else ++it;
+        }
+        for (auto it = fireCells.begin(); it != fireCells.end();) {
+            Block b;
+            if (!GetBlock(it->x, it->y, it->z, b) || b.type != BlockType::FIRE) it = fireCells.erase(it);
             else ++it;
         }
     }

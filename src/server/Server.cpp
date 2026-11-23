@@ -1,4 +1,5 @@
 #include "server/Server.h"
+#include "world/Fire.h"
 #include "world/Lava.h"
 #include "world/Trees.h"
 #include "world/ModelBoxes.h"
@@ -472,6 +473,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     case net::MsgType::CreativeSlot: {
         net::CreativeSlot m;
         if ((ok = net::Decode(in, m))) HandleCreativeSlot(client, m);
+        break;
+    }
+    case net::MsgType::UseBucket: {
+        net::UseBucket m;
+        if ((ok = net::Decode(in, m))) HandleUseBucket(client, m);
         break;
     }
     case net::MsgType::DropItem: {
@@ -1375,6 +1381,9 @@ void Server::UpdateStorm() {
     const auto packet = net::Encode(net::Lightning{ *top });
     for (auto& [peer, client] : clients)
         if (client.welcomed) net.Send(peer, net::kChannelReliable, packet);
+    // It sets fire to where it strikes (it dies down soon on bare ground; in a forest...).
+    Ignite(*top);
+    Scorch(*top, 2, 0.5f);
     // Anyone close by is struck: three hearts (armour helps).
     for (ClientState* p : players)
         if (glm::distance(p->feet, glm::vec3(*top) + glm::vec3(0.5f, 0.0f, 0.5f)) < 3.0f) Hurt(*p, 6, "was struck by lightning");
@@ -1870,6 +1879,8 @@ void Server::Explode(const glm::ivec3& pos, int radius) {
                 if (b.type == BlockType::SIGN && signs.erase(p)) BroadcastSign(p);
                 world->SetBlock(p.x, p.y, p.z, Block());
             }
+    // It leaves fires round it, where there's something to burn.
+    Scorch(pos, radius + 1, 0.15f);
     const auto packet = net::Encode(net::Explosion{ pos, static_cast<uint8_t>(radius) });
     const glm::vec3 centre = glm::vec3(pos) + glm::vec3(0.5f);
     for (auto& [peer, client] : clients) {
@@ -2202,6 +2213,174 @@ void Server::UpdateLeaves() {
     }
 }
 
+bool Server::Ignite(const glm::ivec3& pos) {
+    Block b;
+    if (!world->GetBlock(pos.x, pos.y, pos.z, b) || !Fire::CanBurnIn(b) || world->GetFireCount() >= Fire::kMaxFires) return false;
+    world->SetBlock(pos.x, pos.y, pos.z, Block(BlockType::FIRE));
+    fireLit[pos] = Now();
+    return true;
+}
+
+void Server::Scorch(const glm::ivec3& pos, int radius, float chance) {
+    for (int dx = -radius; dx <= radius; dx++)
+        for (int dy = -radius; dy <= radius; dy++)
+            for (int dz = -radius; dz <= radius; dz++) {
+                const glm::ivec3 c = pos + glm::ivec3(dx, dy, dz);
+                Block b;
+                if (!world->GetBlock(c.x, c.y, c.z, b) || !Fire::CanBurnIn(b)) continue;
+                bool fuel = false;
+                for (int f = 0; f < kFaceCount && !fuel; f++) {
+                    Block n;
+                    fuel = world->GetBlock(c.x + kFaceOffsets[f][0], c.y + kFaceOffsets[f][1], c.z + kFaceOffsets[f][2], n) && Fire::Burns(n.type);
+                }
+                if (fuel && FireRandom() < chance) Ignite(c);
+            }
+}
+
+void Server::UpdateFire() {
+    const double now = Now();
+    if (now < nextFire) return;
+    nextFire = now + Fire::kInterval;
+    const float dt = static_cast<float>(Fire::kInterval);
+    std::vector<glm::ivec3> fires;
+    world->GetFires(fires);
+    // Items lying in fire or lava are lost.
+    std::vector<uint32_t> burnt;
+    for (const auto& d : dropped.All()) {
+        const glm::ivec3 c(glm::floor(d.position));
+        Block b;
+        if (world->GetBlock(c.x, c.y, c.z, b) && (b.type == BlockType::FIRE || b.IsLava())) burnt.push_back(d.id);
+    }
+    for (const uint32_t id : burnt) dropped.Remove(id);
+    if (fires.empty()) {
+        fireLit.clear();
+        return;
+    }
+    // Creatures in it are hurt.
+    {
+        std::vector<std::pair<uint16_t, glm::vec3>> hurt;
+        for (const auto& c : creatures.All())
+            for (const int dy : { 0, 1 }) {
+                const glm::ivec3 cell(glm::floor(c.feet + glm::vec3(0.0f, 0.2f + dy, 0.0f)));
+                Block b;
+                if (world->GetBlock(cell.x, cell.y, cell.z, b) && b.type == BlockType::FIRE) {
+                    hurt.emplace_back(c.id, c.feet);
+                    break;
+                }
+            }
+        for (const auto& [id, feet] : hurt) {
+            bool killed = false;
+            creatures.Damage(id, 1, feet - glm::vec3(0.0f, 0.5f, 0.0f), now, killed); // (a little hop up out of it)
+        }
+    }
+    static const glm::ivec3 kTries[] = { { 0, 1, 0 }, { 0, 2, 0 }, { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 }, { 1, 0, 0 }, { -1, 0, 0 },
+                                         { 0, 0, 1 }, { 0, 0, -1 }, { 1, 0, 1 }, { -1, 0, -1 }, { 1, 0, -1 }, { -1, 0, 1 }, { 0, -1, 0 }, { 1, -1, 0 } };
+    for (const auto& f : fires) {
+        Block self;
+        if (!world->GetBlock(f.x, f.y, f.z, self) || self.type != BlockType::FIRE) continue;
+        if (!fireLit.count(f)) fireLit[f] = now;
+        // Rain on it (open to the sky): it spreads less, and now and then goes out.
+        bool rainedOn = false;
+        if (raining) {
+            rainedOn = true;
+            for (int y = f.y + 1; y <= f.y + 40 && rainedOn; y++) {
+                Block b;
+                if (world->GetBlock(f.x, y, f.z, b) && !b.IsAir() && !b.IsPlant()) rainedOn = false;
+            }
+        }
+        if (rainedOn && FireRandom() < 0.15f * dt) {
+            world->SetBlock(f.x, f.y, f.z, Block());
+            fireLit.erase(f);
+            continue;
+        }
+        // It eats what it touches (and often takes its place), and sets off TNT.
+        bool fuel = false;
+        for (int i = 0; i < kFaceCount; i++) {
+            const glm::ivec3 n = f + glm::ivec3(kFaceOffsets[i][0], kFaceOffsets[i][1], kFaceOffsets[i][2]);
+            Block b;
+            if (!world->GetBlock(n.x, n.y, n.z, b)) continue;
+            if (b.type == BlockType::TNT) LightTnt(n, 0.5 + FireRandom());
+            if (!Fire::Burns(b.type)) continue;
+            fuel = true;
+            if (FireRandom() >= Fire::BurnRate(b.type) * dt * (rainedOn ? 0.5f : 1.0f)) continue;
+            if (IsStorageType(b.type)) RemoveChest(n, nullptr); // (what was in it burns too)
+            if (b.type == BlockType::SIGN && signs.erase(n)) BroadcastSign(n);
+            if (b.type == BlockType::CROP || b.type == BlockType::SAPLING || b.type == BlockType::PINE_SAPLING) crops.erase(n);
+            world->SetBlock(n.x, n.y, n.z, Block());
+            if (FireRandom() < 0.7f) Ignite(n);
+        }
+        // With nothing left to burn, it dies down.
+        if (!fuel) {
+            const double lit = fireLit[f];
+            const float hold = Fire::kDieOut * (1.0f + Noise::Random01(f.x, f.y, f.z, 0xF1Eu));
+            if (now - lit > hold) {
+                world->SetBlock(f.x, f.y, f.z, Block());
+                fireLit.erase(f);
+            }
+            continue;
+        }
+        // It spreads: open cells round it (above it most) beside something that burns.
+        float tries = Fire::kSpreadTries * dt;
+        while (tries > 0.0f) {
+            if (tries < 1.0f && FireRandom() >= tries) break;
+            tries -= 1.0f;
+            const glm::ivec3 c = f + kTries[static_cast<size_t>(FireRandom() * std::size(kTries)) % std::size(kTries)];
+            Block b;
+            if (!world->GetBlock(c.x, c.y, c.z, b) || !Fire::CanBurnIn(b)) continue;
+            float best = 0.0f;
+            for (int i = 0; i < kFaceCount; i++) {
+                Block n;
+                if (world->GetBlock(c.x + kFaceOffsets[i][0], c.y + kFaceOffsets[i][1], c.z + kFaceOffsets[i][2], n)) best = std::max(best, Fire::Flammability(n.type));
+            }
+            const float chance = best * (c.y > f.y ? 1.0f : 0.6f) * (rainedOn ? Fire::kRainDamping : 1.0f);
+            if (FireRandom() < chance) Ignite(c);
+        }
+    }
+    // (Forget fires that are gone.)
+    if (fireLit.size() > fires.size() * 2 + 64)
+        for (auto it = fireLit.begin(); it != fireLit.end();) {
+            Block b;
+            if (!world->GetBlock(it->first.x, it->first.y, it->first.z, b) || b.type != BlockType::FIRE) it = fireLit.erase(it);
+            else ++it;
+        }
+}
+
+void Server::HandleUseBucket(ClientState& client, const net::UseBucket& m) {
+    const glm::ivec3& p = m.pos;
+    Block b;
+    if (!InReach(client, p, EditReach(client)) || !world->GetBlock(p.x, p.y, p.z, b)) return SendInventory(client);
+    const bool creative = Creative(client);
+    const ItemId bucket = Items::OfBlock(BlockType::BUCKET), full = Items::OfBlock(BlockType::WATER_BUCKET);
+    if (!m.pour) {
+        // Scooping up a block of water: only from a full cell (a bucket holds a block).
+        if (!b.IsFullWater() || (!creative && client.inventory.Count(bucket) == 0)) return SendInventory(client);
+        world->SetBlock(p.x, p.y, p.z, Block());
+        if (!creative) {
+            client.inventory.Take(bucket, 1);
+            if (client.inventory.Add(full, 1) != 0)
+                dropped.Drop(full, 1, 0, client.feet + glm::vec3(0.0f, 0.5f, 0.0f), glm::vec3(0.0f), DroppedItems::kBlockDelay);
+        }
+        return SendInventory(client);
+    }
+    // Pouring it out: a block of water there (fire and plants washed away), and fires round
+    // it put out by the splash.
+    if ((!creative && client.inventory.Count(full) == 0) || !(b.IsReplaceableByWater() || b.type == BlockType::FIRE) || b.HasWater()) return SendInventory(client);
+    world->SetBlock(p.x, p.y, p.z, Block::Water(Block::kMaxWaterVolume));
+    for (int dx = -1; dx <= 1; dx++)
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dz = -1; dz <= 1; dz++) {
+                Block f;
+                const glm::ivec3 c = p + glm::ivec3(dx, dy, dz);
+                if (world->GetBlock(c.x, c.y, c.z, f) && f.type == BlockType::FIRE) world->SetBlock(c.x, c.y, c.z, Block());
+            }
+    if (glm::distance(client.feet, glm::vec3(p) + glm::vec3(0.5f)) < 2.5f) client.burningUntil = 0.0; // (splashed: out)
+    if (!creative) {
+        client.inventory.Take(full, 1);
+        client.inventory.Add(bucket, 1);
+    }
+    SendInventory(client);
+}
+
 void Server::UpdateLava() {
     const double now = Now();
     if (now < nextLava) return;
@@ -2213,6 +2392,11 @@ void Server::UpdateLava() {
     std::vector<Lava::Boil> boils;
     Lava::Step(*world, woken, changes, boils);
     for (const auto& c : changes) world->SetBlock(c.pos.x, c.pos.y, c.pos.z, c.block);
+    // Lava sets fire to what burns beside it.
+    for (const auto& p : woken) {
+        Block b;
+        if (world->GetBlock(p.x, p.y, p.z, b) && b.IsLava()) Scorch(p, 1, 0.3f);
+    }
     // Water touching lava boils away into a cloud of steam, with a hiss.
     for (const auto& b : boils) steam.Add(b.pos, b.steam);
 }
@@ -2381,15 +2565,26 @@ void Server::UpdateTraps() {
         // Wading in lava burns, hard.
         {
             const Collision::AABB body = BodyAt(client.feet, 0.05f, (client.flags & net::kFlagCrouching) != 0);
-            bool inLava = false;
+            bool inLava = false, inFire = false, inWater = false;
             int steamIn = 0; // the thickest steam the body's in
-            for (int x = static_cast<int>(std::floor(body.min.x)); x <= static_cast<int>(std::floor(body.max.x)) && !inLava; x++)
-                for (int y = static_cast<int>(std::floor(body.min.y)); y <= static_cast<int>(std::floor(body.max.y)) && !inLava; y++)
-                    for (int z = static_cast<int>(std::floor(body.min.z)); z <= static_cast<int>(std::floor(body.max.z)) && !inLava; z++) {
+            for (int x = static_cast<int>(std::floor(body.min.x)); x <= static_cast<int>(std::floor(body.max.x)); x++)
+                for (int y = static_cast<int>(std::floor(body.min.y)); y <= static_cast<int>(std::floor(body.max.y)); y++)
+                    for (int z = static_cast<int>(std::floor(body.min.z)); z <= static_cast<int>(std::floor(body.max.z)); z++) {
                         Block b;
-                        inLava = world->GetBlock(x, y, z, b) && b.IsLava();
+                        if (!world->GetBlock(x, y, z, b)) continue;
+                        inLava |= b.IsLava();
+                        inFire |= b.type == BlockType::FIRE;
+                        inWater |= b.HasWater();
                         steamIn = std::max(steamIn, steam.At({ x, y, z }));
                     }
+            // Fire (and lava) set you alight, and you go on burning a while after you're
+            // out of it, unless you get into water.
+            if ((inFire || inLava) && !Creative(client)) client.burningUntil = now + Fire::kBurnSeconds;
+            if (inWater) client.burningUntil = 0.0;
+            if (now < client.burningUntil && now >= client.nextBurnHurt) {
+                client.nextBurnHurt = now + Fire::kBurnHurtInterval;
+                Hurt(client, Fire::kBurnDamage, inFire ? "was burned to death" : "burned to death", false);
+            }
             // Thick steam scalds (armour doesn't keep it out).
             if (steamIn >= SteamCloud::kScaldUnits && now >= client.nextScald) {
                 client.nextScald = now + SteamCloud::kScaldInterval;
@@ -2537,6 +2732,7 @@ void Server::Tick() {
     UpdateLava();
     UpdateSteam();
     UpdateLeaves();
+    UpdateFire();
     UpdateFishing();
     UpdateTnt();
     section(2);

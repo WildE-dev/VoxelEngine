@@ -245,6 +245,11 @@ target_link_libraries(MiningTest PRIVATE voxel_server voxel_client)
 add_executable(SteamTest tests/SteamTest.cpp)
 target_link_libraries(SteamTest PRIVATE voxel_server voxel_client)
 
+# Fire: spreading through a wood, dying down, put out (water, smothering, buckets),
+# burning players and items.
+add_executable(FireTest tests/FireTest.cpp)
+target_link_libraries(FireTest PRIVATE voxel_server voxel_client)
+
 # Food: hunger, starving, eating, venison from deer and cooking it.
 add_executable(FoodTest tests/FoodTest.cpp)
 target_link_libraries(FoodTest PRIVATE voxel_server voxel_client)
@@ -273,7 +278,7 @@ target_link_libraries(ShapeTest PRIVATE voxel_server voxel_client)
 add_executable(BiomeTest tests/BiomeTest.cpp)
 target_link_libraries(BiomeTest PRIVATE voxel_common)
 
-foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} ModelEditor VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest SyncTest SteamTest)
+foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} ModelEditor VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest SyncTest SteamTest FireTest)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W3)
     else()
@@ -302,7 +307,7 @@ set(FactoryTest_GROUPS machines mining structures)
 set(BreathTest_GROUPS water air)
 set(TrapTest_GROUPS traps falling tnt)
 set(FoodTest_GROUPS hunger food)
-foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest SyncTest SteamTest)
+foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest SyncTest SteamTest FireTest)
     if(DEFINED ${test}_GROUPS)
         foreach(group ${${test}_GROUPS})
             add_test(NAME ${test}.${group} COMMAND ${test} ${group} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})

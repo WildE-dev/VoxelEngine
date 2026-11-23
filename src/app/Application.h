@@ -187,6 +187,7 @@ private:
         glm::vec4 uv;
         bool rise = false; // smoke: drifts up instead of falling
         bool mist = false; // spray: a cloud that drifts and slows, lifting a little, growing as it fades
+        bool flame = false; // a lick of fire: shoots up, shrinking, and lights itself
     };
     std::vector<Particle> particles;
     // Steam (server/Steam.h): the update last looked at, and how much was near then
@@ -194,6 +195,7 @@ private:
     uint32_t steamSeen = 0;
     long long steamNear = 0;
     float steamFog = 0.0f; // the white-out in steam, eased
+    double nextCrackle = 0.0; // fires near us crackle now and then
     std::vector<glm::ivec3> campfires; // near the player, for smoke
     // Shallow water running downhill near the player, for spray (found by the same
     // look round as the campfires): the cell, where its surface is, which way it runs

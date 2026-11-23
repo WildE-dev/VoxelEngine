@@ -73,6 +73,7 @@ inline float DefaultHardness(BlockType type) {
     case BlockType::AIR:
     case BlockType::WATER:
     case BlockType::LAVA:
+    case BlockType::FIRE:
     case BlockType::TALL_GRASS:
     case BlockType::FLOWER_RED:
     case BlockType::FLOWER_YELLOW:

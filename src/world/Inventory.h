@@ -54,7 +54,10 @@ inline Tool ToolOf(ItemId id) { return IsTool(id) ? static_cast<Tool>((id - kToo
 inline int TierOf(ItemId id) { return IsTool(id) ? (id - kToolBase) % 4 : 0; }
 inline ArmourPiece ArmourOf(ItemId id) { return IsArmour(id) ? static_cast<ArmourPiece>(id - kArmourBase) : ArmourPiece::Count; }
 
-inline uint32_t MaxStack(ItemId id) { return IsBlock(id) ? kMaxStack : 1; }
+inline uint32_t MaxStack(ItemId id) {
+    if (id == static_cast<ItemId>(BlockType::BUCKET) || id == static_cast<ItemId>(BlockType::WATER_BUCKET)) return 1; // (one each)
+    return IsBlock(id) ? kMaxStack : 1;
+}
 
 inline const char* TierName(int tier) { return tier >= 2 ? "Steel" : tier == 1 ? "Iron" : "Stone"; }
 

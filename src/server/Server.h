@@ -241,6 +241,8 @@ private:
         bool sentSteam = false;  // the last SteamNear they were sent had some in it
         double nextLavaBurn = 0.0; // standing in lava burns at most this often
         double nextScald = 0.0;    // thick steam scalds at most this often
+        double burningUntil = 0.0; // alight (world/Fire.h) until then, unless they get into water
+        double nextBurnHurt = 0.0;
         // Movement checks (HandlePlayerState): until when a knock (a hit, a blast) lets them
         // move faster; where and when they were last held up (on the ground, in water or
         // lava, on a ladder, in a boat), so survival players can't fly or hover; and the
@@ -302,6 +304,7 @@ private:
     void HandleInventoryMove(ClientState& client, const net::InventoryMove& m);
     void HandleCreativeSlot(ClientState& client, const net::CreativeSlot& m);
     void HandleDropItem(ClientState& client, const net::DropItem& m);
+    void HandleUseBucket(ClientState& client, const net::UseBucket& m);
     // Gives a player units of a type (survival); what doesn't fit is lost, and they're
     // told. Returns whether it all fitted. (The caller sends the inventory.)
     bool Give(ClientState& client, BlockType type, uint32_t units);
@@ -425,6 +428,16 @@ private:
     SteamCloud steam;
     double nextLava = 0.0, nextSteam = 0.0, nextSteamSend = 0.0;
     void UpdateLava();
+    // Fire (world/Fire.h): when each was lit (it dies down a while after it has nothing to
+    // burn), the next step, and lighting one (false: it can't be there).
+    std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> fireLit;
+    double nextFire = 0.0;
+    uint32_t fireRoll = 0x9E3779B9u;
+    float FireRandom() { fireRoll = fireRoll * 1664525u + 1013904223u; return (fireRoll >> 8) / float(1u << 24); }
+    bool Ignite(const glm::ivec3& pos);
+    // Sets fire, now and then, to open cells round `pos` beside something that burns.
+    void Scorch(const glm::ivec3& pos, int radius, float chance);
+    void UpdateFire();
     // Leaves no log holds up any more (world/Trees.h), and when each falls away.
     std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> leafFalls;
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> placedLeaves; // put down by players: they stay (saved)

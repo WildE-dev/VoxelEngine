@@ -260,6 +260,8 @@ public:
     }
     // Throw `count` (0: all) out of a slot (net::Box), from the eye this way.
     void DropItem(net::Box box, int slot, int count, const glm::vec3& direction);
+    // A bucket: scoop up the (full) water at `pos`, or pour a water bucket out there.
+    void UseBucket(const glm::ivec3& pos, bool pour);
     void CloseChest();
     // Up to `count` whole items of a kind, wherever they are, into the chest or out of it.
     void MoveChestItems(ItemId item, uint32_t count, bool intoChest);

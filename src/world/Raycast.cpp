@@ -207,7 +207,7 @@ std::optional<RaycastHit> Raycast(const BlockAccess& world, const glm::vec3& ori
         // Rays pass through water (you click the sea floor, not the surface), and
         // through the open part of a partial block (aiming past a slope or a step).
         bool onTop = false;
-        if (world.GetBlock(pos.x, pos.y, pos.z, block) && !block.IsAir() && !block.IsLiquid() && !block.IsLava() &&
+        if (world.GetBlock(pos.x, pos.y, pos.z, block) && !block.IsAir() && !block.IsLiquid() && !block.IsLava() && block.type != BlockType::FIRE &&
             HitsShape(block, pos, origin, direction, tEnter, tExit, onTop, ModelBoxes::Joins(world, pos, block))) {
             // Met the shape inside the cell (over a slope, onto a quarter): its top.
             // (A turned shape's top faces the way it's turned.)

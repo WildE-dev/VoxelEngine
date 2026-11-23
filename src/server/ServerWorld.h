@@ -110,6 +110,15 @@ public:
     // them or beside them (or by loading), for the server to step. Any thread; takes
     // the edit mutex.
     void TakeLavaWake(std::vector<glm::ivec3>& out);
+    // Every loaded fire (world/Fire.h). Any thread; takes the edit mutex.
+    void GetFires(std::vector<glm::ivec3>& out) {
+        std::lock_guard<std::recursive_mutex> edit(editMutex);
+        out.assign(fireCells.begin(), fireCells.end());
+    }
+    size_t GetFireCount() {
+        std::lock_guard<std::recursive_mutex> edit(editMutex);
+        return fireCells.size();
+    }
 
     // Plants and levers knocked off since the last call (the block holding them went):
     // where, and what they were, for the server to drop as items. Any thread.
@@ -185,6 +194,7 @@ private:
     void NoteWaterMoved(const glm::ivec3& pos, int units);                 // edit mutex held
     // Lava, guarded by the edit mutex: every loaded lava cell, and those woken.
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> lavaCells, lavaWake;
+    std::unordered_set<glm::ivec3, Coords::IVec3Hash> fireCells; // (edit mutex)
     int lavaPrune = 0; // (TakeLavaWake calls since loaded lava was last looked through)
     std::vector<std::pair<glm::ivec3, Block>> knockedOff; // (guarded by logMutex)
     std::thread worker;

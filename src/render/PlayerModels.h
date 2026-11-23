@@ -61,6 +61,7 @@ struct ParticleModel {
     glm::vec2 light{ 15.0f, 0.0f };
     float soft = 0.0f; // 1: lit evenly all round (spray), not shaded away from the sun
     bool billboard = false; // a flat square always facing the camera (clouds of smoke and spray, the bobber), not a cube
+    float glow = 0.0f;      // 1: lights itself (a flame)
 };
 
 // An item lying on the ground (server/DroppedItems.h): a little textured cube for a

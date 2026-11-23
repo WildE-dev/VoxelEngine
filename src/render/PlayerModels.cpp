@@ -464,6 +464,7 @@ void PlayerModels::DrawParticles(Shader& shader, const glm::mat4& view, const gl
         shader.SetUniform("tileRect", p.uv);
         // (A billboard faces the camera whatever the sun does: lit evenly.)
         shader.SetUniform("soft", p.billboard ? 1.0f : p.soft);
+        shader.SetUniform("glow", p.glow);
         if (p.billboard) {
             // The unit cube flattened to a square in the camera's plane.
             glm::mat4 model(1.0f);
@@ -478,6 +479,7 @@ void PlayerModels::DrawParticles(Shader& shader, const glm::mat4& view, const gl
     }
     shader.SetUniform("textured", 0.0f);
     shader.SetUniform("soft", 0.0f);
+    shader.SetUniform("glow", 0.0f);
 }
 
 void PlayerModels::DrawCreatures(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const std::vector<CreatureModel>& creatures,

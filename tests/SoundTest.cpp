@@ -69,7 +69,7 @@ int main() {
                             "break_wood", "break_glass", "place", "pickup", "craft", "hurt", "hit", "splash", "grunt", "rain_loop", "eat", "thunder", "bow", "birds", "crickets", "explosion",
                             // machines at work, and pistons
                             "hum_wheel", "hum_compressor", "hum_drill", "hum_pump", "hum_engine", "hum_turbine", "hum_furnace",
-                            "hum_crusher", "hum_boiler", "hum_diffuser", "hum_machine", "hum_derrick", "hum_refinery", "piston",
+                            "hum_crusher", "hum_boiler", "hum_diffuser", "hum_machine", "hum_derrick", "hum_refinery", "piston", "fire_crackle",
                             // steam bursting off lava
                             "hiss" };
     bool all = true;
