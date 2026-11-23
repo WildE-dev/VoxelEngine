@@ -241,6 +241,14 @@ private:
         bool sentSteam = false;  // the last SteamNear they were sent had some in it
         double nextLavaBurn = 0.0; // standing in lava burns at most this often
         double nextScald = 0.0;    // thick steam scalds at most this often
+        // Movement checks (HandlePlayerState): until when a knock (a hit, a blast) lets them
+        // move faster; where and when they were last held up (on the ground, in water or
+        // lava, on a ladder, in a boat), so survival players can't fly or hover; and the
+        // mode those were last checked in.
+        double knockedUntil = 0.0;
+        glm::vec3 support{ 0.0f }; // (where: corrections for flying put them back there)
+        double supportAt = 0.0;
+        bool checkedFree = true; // creative or no-clip last time (no air checks)
         bool sentMachines = false; // the last Machines they were sent had some in it
         // Fishing: where their bobber floats (if it's out), where they cast from, and
         // when a fish will bite.

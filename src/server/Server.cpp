@@ -41,6 +41,16 @@ constexpr size_t kResendThreshold = 400;
 // velocity (50 blocks/s); fly mode sprints at 20.
 constexpr float kMaxSpeed = 55.0f;
 constexpr float kMoveSlack = 1.5f;
+// Movement the server allows, besides falling (blocks a second): survival on foot or in a
+// boat (a boat sprints at 9), creative flying (sprinting at 20), and anyone for a moment
+// after a knock (kKnockSeconds).
+constexpr float kSurvivalSpeed = 11.0f, kCreativeSpeed = 24.0f, kKnockedSpeed = 26.0f;
+constexpr double kKnockSeconds = 1.5;
+// Survival players in the air: how far above where they were last held up they may rise
+// (a jump onto a step, a hop out of water), and how long they may stay up without
+// coming down below it (a jump takes well under a second).
+constexpr float kMaxRise = 1.9f, kKnockedRise = 3.0f;
+constexpr double kMaxHover = 2.0;
 constexpr int kBlockedStatesBeforeCorrection = 4;
 
 // Body size, matching Player (app/Player.h).
@@ -110,7 +120,13 @@ bool InsideSolid(const ServerWorld& world, const Collision::AABB& box) {
         for (int y = lo.y; y <= hi.y; y++)
             for (int z = lo.z; z <= hi.z; z++) {
                 Block block;
-                if (!world.GetBlock(x, y, z, block) || !block.IsFullBlock()) continue;
+                if (!world.GetBlock(x, y, z, block)) continue;
+                // (Quarters and turned shapes fill what they fill; upright slopes are ground.)
+                if (block.IsPartial() && !(block.ShapeDir() == 0 && !block.IsStepped())) {
+                    if (block.ShapeOverlaps(box.min - glm::vec3(x, y, z), box.max - glm::vec3(x, y, z))) return true;
+                    continue;
+                }
+                if (!block.IsFullBlock()) continue;
                 // A pipe, a shaft or a gauge fills only its boxes (as players collide with it).
                 glm::vec3 lo[Block::kMaxModelBoxes], hi[Block::kMaxModelBoxes];
                 const int count = block.ModelBoxes(ModelBoxes::Joins(world, glm::ivec3(x, y, z), block), lo, hi);
@@ -619,6 +635,40 @@ void Server::HandlePlayerState(ClientState& client, const net::PlayerState& stat
     else if (glm::distance(state.feet, client.lastValid) > kMaxSpeed * dt + kMoveSlack) {
         return correct(client.lastValid, "moved too fast");
     }
+    else if (!client.noclip) {
+        // Across the ground (falling isn't limited): as fast as the mode allows, faster for
+        // a moment after a knock.
+        const float limit = now < client.knockedUntil ? kKnockedSpeed : Creative(client) ? kCreativeSpeed : kSurvivalSpeed;
+        const glm::vec2 across(state.feet.x - client.lastValid.x, state.feet.z - client.lastValid.z);
+        if (glm::length(across) > limit * dt + kMoveSlack) return correct(client.lastValid, "moved too fast");
+    }
+    // Survival players fly only as high as a jump above where they were last held up, and
+    // don't stay up in the air.
+    {
+        const bool free = client.noclip || Creative(client);
+        const bool crouching = (state.flags & net::kFlagCrouching) != 0;
+        bool unknown = false;
+        const bool grounded = Collision::GroundHeight(*world, BodyAt(state.feet, 0.05f, crouching), 0.1f, 0.15f, unknown).has_value() || unknown;
+        bool held = grounded;
+        const Collision::AABB body = BodyAt(state.feet, 0.0f, crouching);
+        for (int x = static_cast<int>(std::floor(body.min.x)); x <= static_cast<int>(std::floor(body.max.x)) && !held; x++)
+            for (int y = static_cast<int>(std::floor(body.min.y)) - 1; y <= static_cast<int>(std::floor(body.max.y)) && !held; y++)
+                for (int z = static_cast<int>(std::floor(body.min.z)); z <= static_cast<int>(std::floor(body.max.z)) && !held; z++) {
+                    Block b;
+                    held = world->GetBlock(x, y, z, b) && (b.HasWater() || b.IsLava() || b.type == BlockType::LADDER);
+                }
+        if (free || client.checkedFree || held || !client.hasState) {
+            client.support = state.feet;
+            client.supportAt = now;
+        }
+        else {
+            const float rise = now < client.knockedUntil ? kKnockedRise : kMaxRise;
+            // (Back to where they last stood: they get no higher by trying again.)
+            if (state.feet.y > client.support.y + rise) return correct(client.support, "flew up");
+            if (now - client.supportAt > kMaxHover && state.feet.y > client.support.y - 0.5f) return correct(client.support, "hovering");
+        }
+        client.checkedFree = free;
+    }
 
     // Walking players can't be inside solid blocks. The client may briefly disagree
     // (a block placed where it stands, not yet received), so only a run of these counts.
@@ -1030,6 +1080,7 @@ void Server::HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool)
             glm::vec2 away(target.feet.x - client.feet.x, target.feet.z - client.feet.z);
             away = glm::length(away) > 1e-3f ? glm::normalize(away) : glm::vec2(1.0f, 0.0f);
             net.Send(target.peer, net::kChannelReliable, net::Encode(net::Knockback{ glm::vec3(away.x * 7.0f, 5.5f, away.y * 7.0f) }));
+            target.knockedUntil = Now() + kKnockSeconds;
         }
         return;
     }
@@ -1833,6 +1884,7 @@ void Server::Explode(const glm::ivec3& pos, int radius) {
         away.y = 0.0f;
         away = glm::length(away) > 1e-3f ? glm::normalize(away) : glm::vec3(1.0f, 0.0f, 0.0f);
         net.Send(peer, net::kChannelReliable, net::Encode(net::Knockback{ away * 8.0f * (1.0f - d / (radius * 2.0f)) + glm::vec3(0.0f, 6.0f, 0.0f) }));
+        client.knockedUntil = Now() + kKnockSeconds;
     }
     // Creatures too (ids first: a killed one leaves the list).
     std::vector<std::pair<uint16_t, int>> struck;
@@ -1968,6 +2020,7 @@ void Server::UpdateArrows() {
                     if (target.health > 0 && target.lastHurt >= now && target.invulnerableUntil == before) {
                         const glm::vec2 push = glm::length(glm::vec2(a.velocity.x, a.velocity.z)) > 1e-3f ? glm::normalize(glm::vec2(a.velocity.x, a.velocity.z)) : glm::vec2(0.0f);
                         net.Send(target.peer, net::kChannelReliable, net::Encode(net::Knockback{ glm::vec3(push.x * 5.0f, 4.0f, push.y * 5.0f) }));
+                        target.knockedUntil = now + kKnockSeconds;
                     }
                 }
                 gone = true;

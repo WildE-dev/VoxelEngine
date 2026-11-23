@@ -132,10 +132,22 @@ server.
   re-sent whole. A flood of about a hundred water blocks costs each client around
   30 KB/s. When light changes, the chunk's new light is sent.
 - **Movement** is predicted on the client with the usual collision and sent 20
-  times a second. The server checks it loosely (no faster than falling at terminal
-  velocity, not inside solid blocks for long) and otherwise moves the player back
-  to its last good position. Others are shown 100 ms in the past, interpolated
-  between snapshots.
+  times a second. The server checks it:
+  - **Speed:** across the ground, no faster than the mode allows. That's 11 blocks a
+    second in survival (a sprinting boat does 9) and 24 flying in creative, more for a
+    moment and a half after a hit or a blast knocks you. Falling isn't limited, short
+    of 55 a second.
+  - **Air:** in survival, no higher than a jump above where you last stood (in water or
+    lava, on a ladder, in a boat), and not staying up for more than two seconds
+    without coming back down.
+  - **Solid blocks:** not inside them for long, chiselled quarters and turned shapes
+    included.
+
+  A move that fails puts the player back: to the last good position, or for flying, to
+  where they last stood. No-clip players aren't checked. `MiningTest` checks that
+  running too fast, flying up and hovering are put back, an ordinary step isn't, and a
+  creative player may fly. Others are shown 100 ms in the past, interpolated between
+  snapshots.
 - **Edits** are applied on the client at once and sent to the server, which checks
   reach and that solid blocks don't go inside a player. It answers with the real
   block either way, so a refused edit is undone.

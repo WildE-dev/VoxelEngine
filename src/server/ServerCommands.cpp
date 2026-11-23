@@ -235,6 +235,7 @@ void Server::Teleport(ClientState& client, const glm::vec3& feet) {
     client.blockedStates = 0;
     client.falling = false; // (a fall from here on counts from here)
     client.fallPeak = feet.y;
+    client.checkedFree = true; // (the air checks start again from wherever they are next)
     net.Send(client.peer, net::kChannelReliable, net::Encode(net::Correction{ client.correctionId, feet }));
 }
 

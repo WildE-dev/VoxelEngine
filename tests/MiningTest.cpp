@@ -346,6 +346,35 @@ int main() {
         Check(both(20.0, [&] { return a.client.GetResources(BlockType::GRASS) == 64 && grassOn(a.client).empty(); }), "walking over it picks it up again");
     }
 
+    std::cout << "Cheating" << std::endl;
+    {
+        // The server holds survival players to how they can move; creative ones may fly.
+        server.QueueConsoleCommand("tp Miner 11.5 0 9.5");
+        both(10.0, [&] { return std::abs(a.feet.x - 11.5f) < 0.1f && std::abs(a.feet.y) < 0.1f; });
+        wait(0.5);
+        a.feet.x += 15.0f; // (in one update)
+        Check(both(5.0, [&] { return a.feet.x < 12.0f; }), "running 15 blocks in a twentieth of a second is put back");
+        wait(0.5);
+        a.feet.y += 5.0f; // (straight up, in the air)
+        Check(both(5.0, [&] { return a.feet.y < 0.5f; }), "rising five blocks into the air is put back down");
+        wait(0.5);
+        a.feet.y += 1.0f; // (a jump's height, but staying up there)
+        const glm::vec3 up = a.feet;
+        Check(both(6.0, [&] { return a.feet.y < 0.5f; }), "hanging a block up in the air (not coming down) is put back down");
+        (void)up;
+        wait(0.5);
+        a.feet.x += 0.2f; // (an ordinary step)
+        wait(1.0);
+        Check(a.feet.x > 11.6f, "an ordinary step isn't");
+        const float builderY = builder.feet.y;
+        for (int i = 0; i < 16; i++) { // (flying up, half a block an update)
+            builder.feet.y += 0.5f;
+            wait(0.06);
+        }
+        wait(2.5);
+        Check(builder.feet.y > builderY + 7.0f, "a creative player may fly up and stay there");
+    }
+
     a.client.Disconnect();
     builder.client.Disconnect();
     Pump({ &a, &builder }, 0.3, [] { return false; });
