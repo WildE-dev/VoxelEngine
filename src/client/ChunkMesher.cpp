@@ -280,7 +280,11 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
             bottom[e] = self.IsPartial() ? std::min(self.edgeData.GetTopY(e), top[e]) : 0;
             visible |= top32[e] > bottom[e] * 4;
         }
-        if (!visible) return; // entirely below the slope
+        // Entirely below the slope: nothing shows. But a thin layer on more water whose
+        // surface rounds down to the bottom of its cell still draws its top there (the
+        // water below doesn't draw one, as it has water above it), or there'd be a hole
+        // in the surface down to the floor.
+        if (!visible && (self.IsPartial() || !hasWater(here - up))) return;
 
         for (int face = 0; face < kFaceCount; ++face) {
             const glm::ivec3 n = here + glm::ivec3(kFaceOffsets[face][0], kFaceOffsets[face][1], kFaceOffsets[face][2]);

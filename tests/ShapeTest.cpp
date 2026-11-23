@@ -309,6 +309,38 @@ int main() {
         Check(highest > 5.1f && lowest == 5.0f && walls == 0,
               "a thin layer of water on water thins out to nothing at its edges, with no walls (" + std::to_string(walls) + " wall vertices)");
 
+        // Barely any water on top of a pool (a trickle spreading over a lake): its surface
+        // rounds down to the bottom of its cell, but there's still a surface there. Every
+        // column of the pool has an upward water face over it, not a hole down to the floor.
+        for (const bool wholeLayer : { false, true }) {
+            Chunk::Blocks thin{};
+            for (int x = 2; x <= 8; x++)
+                for (int z = 2; z <= 8; z++) {
+                    thin[Chunk::Index(x, 3, z)] = Block(BlockType::STONE);
+                    thin[Chunk::Index(x, 4, z)] = Block::Water(Block::kMaxWaterVolume);
+                    if (wholeLayer || (x == 5 && z == 5)) thin[Chunk::Index(x, 5, z)] = Block::Water(1);
+                }
+            v.clear();
+            w.clear();
+            Mesh(thin, v, w);
+            const auto tv = Positions(w, true);
+            int holes = 0;
+            for (int x = 2; x <= 8; x++)
+                for (int z = 2; z <= 8; z++) {
+                    bool covered = false;
+                    for (size_t f = 0; f + 6 <= tv.size() && !covered; f += 6) {
+                        const float ny = ((w[f * 2 + 1] >> 24) & 0xFu) / 7.5f - 1.0f;
+                        if (ny < 0.5f) continue; // not facing up
+                        glm::vec3 lo(1e9f), hi(-1e9f);
+                        for (size_t k = f; k < f + 6; k++) lo = glm::min(lo, tv[k]), hi = glm::max(hi, tv[k]);
+                        covered = lo.x <= x + 0.5f && hi.x >= x + 0.5f && lo.z <= z + 0.5f && hi.z >= z + 0.5f && lo.y > 4.5f;
+                    }
+                    if (!covered) holes++;
+                }
+            Check(holes == 0, std::string(wholeLayer ? "a whole layer" : "a single cell") +
+                                  " of barely any water on a pool still has a surface (" + std::to_string(holes) + " columns without one)");
+        }
+
         // A pool beside a carved brick still filling: its notch (the quarter toward the
         // pool) holds a little water, lower than the pool. The pool's surface stays level
         // up to the brick (not dipping toward the low water), and its side shows down to
