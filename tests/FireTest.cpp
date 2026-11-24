@@ -175,6 +175,7 @@ int main() {
         Pump(a, 5.0, [&] { return std::abs(a.feet.x - 61.5f) < 0.1f; });
         const int before = a.client.GetHealth();
         Check(Pump(a, 5.0, [&] { return a.client.GetHealth() < before; }), "standing in fire burns");
+        Check(a.client.Burning(), "and the client is told it's on fire (flames round the screen)");
         server.QueueConsoleCommand("tp Warden 64.5 0 63.5"); // (out of it)
         Pump(a, 5.0, [&] { return std::abs(a.feet.x - 64.5f) < 0.1f; });
         Pump(a, 0.6, [] { return false; });
@@ -185,6 +186,7 @@ int main() {
         const int wet = a.client.GetHealth();
         Pump(a, 2.0, [] { return false; });
         Check(a.client.GetHealth() >= wet, "until you're in water");
+        Check(!a.client.Burning(), "which puts it out on the client too");
 
         // Items in it are lost.
         server.QueueConsoleCommand("gamemode creative Warden");

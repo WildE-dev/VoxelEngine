@@ -216,6 +216,7 @@ private:
         bool onTank = false;
         int sentTank = -1; // as last sent: 0..255 (see TankByte)
         bool sentOnTank = false;
+        bool sentBurning = false;
         double nextBreathHit = 0.0;
         // Hunger (UpdateHunger): food left, drain not yet taken, where they were last
         // tick (walking drains it), when starving next hurts, what the client was told.

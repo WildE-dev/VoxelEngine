@@ -300,6 +300,8 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
     screenShader.SetUniform("screenTexture", 0);
     screenShader.SetUniform("underwater", params.underwater ? 1.0f : 0.0f);
     screenShader.SetUniform("steamFog", params.steamFog);
+    screenShader.SetUniform("burning", params.burning);
+    screenShader.SetUniform("time", params.time);
     screenShader.SetUniform("fogLight", 0.3f + 0.7f * params.sunBrightness);
     glBindVertexArray(screenVAO);
     glActiveTexture(GL_TEXTURE0);

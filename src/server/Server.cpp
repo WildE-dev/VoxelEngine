@@ -1429,6 +1429,8 @@ void Server::SendHealth(ClientState& client, bool hurt) {
     client.sentOnTank = client.onTank;
     m.tank = static_cast<uint8_t>(client.sentTank);
     m.onTank = client.onTank ? 1 : 0;
+    client.sentBurning = Now() < client.burningUntil;
+    m.burning = client.sentBurning ? 1 : 0;
     net.Send(client.peer, net::kChannelReliable, net::Encode(m));
 }
 
@@ -2581,6 +2583,7 @@ void Server::UpdateTraps() {
             // out of it, unless you get into water.
             if ((inFire || inLava) && !Creative(client)) client.burningUntil = now + Fire::kBurnSeconds;
             if (inWater) client.burningUntil = 0.0;
+            if ((now < client.burningUntil) != client.sentBurning) SendHealth(client, false); // (alight, or out: their screen shows it)
             if (now < client.burningUntil && now >= client.nextBurnHurt) {
                 client.nextBurnHurt = now + Fire::kBurnHurtInterval;
                 Hurt(client, Fire::kBurnDamage, inFire ? "was burned to death" : "burned to death", false);
@@ -2936,7 +2939,8 @@ void Server::BroadcastPlayers() {
     for (const auto& [peer, client] : clients) {
         if (!client.welcomed || !client.hasState) continue;
         // Flashes red for others while just hurt.
-        const uint8_t flags = static_cast<uint8_t>((client.flags & ~net::kFlagHurt) | (Now() - client.lastHurt < 0.3 ? net::kFlagHurt : 0));
+        const uint8_t flags = static_cast<uint8_t>((client.flags & ~(net::kFlagHurt | net::kFlagBurning)) | (Now() - client.lastHurt < 0.3 ? net::kFlagHurt : 0) |
+                                                   (Now() < client.burningUntil ? net::kFlagBurning : 0));
         // (Armour shows only in survival, where it's worn.)
         snapshot.players.push_back({ client.id, client.feet, client.yaw, client.pitch, flags, client.heldTool, client.heldBlock,
                                      static_cast<uint8_t>(Creative(client) ? 0 : client.armour) });

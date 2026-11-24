@@ -216,6 +216,7 @@ enum PlayerFlags : uint8_t {
     kFlagHurt = 1 << 3, // (from the server, in snapshots) just took damage: flashes red
     kFlagCrouching = 1 << 4, // crouching: a shorter body (Player::kCrouchHeight), drawn ducked
     kFlagBoat = 1 << 5,      // sitting in a boat (drawn in one; no fall damage)
+    kFlagBurning = 1 << 6,   // (from the server, in snapshots) on fire: drawn in flames
 };
 
 struct PlayerState {
@@ -531,6 +532,8 @@ struct Health {
     uint8_t food = 20, foodMax = 20;
     // An oxygen tank (worn): how full, of 255, and whether it's being breathed from.
     uint8_t tank = 255, onTank = 0;
+    // On fire (1): the screen flickers with flames until it goes out.
+    uint8_t burning = 0;
 };
 
 // Chests: open one (in reach) to see what's in it, move things in and out, close it.

@@ -932,6 +932,16 @@ void Application::Run() {
                 steamFog += (target - steamFog) * std::min(1.0f, deltaTime * 5.0f);
                 params.steamFog = steamFog;
             }
+            // On fire: flames round the screen (fading in fast, out slower), and crackling.
+            {
+                const bool alight = client->Burning();
+                burnGlow += ((alight ? 1.0f : 0.0f) - burnGlow) * std::min(1.0f, deltaTime * (alight ? 8.0f : 2.5f));
+                params.burning = burnGlow;
+                if (alight && Client::Now() >= nextBurnCrackle) {
+                    audio->Play("fire_crackle", camera.GetPosition(), 0.8f, 0.2f);
+                    nextBurnCrackle = Client::Now() + 0.45;
+                }
+            }
             // A burst near us hisses.
             if (client->GetSteamVersion() != steamSeen) {
                 if (near > steamNear + 400 && most >= 0) PlayAt("hiss", thickest, 0.8f);
@@ -3996,6 +4006,21 @@ void Application::UpdateParticles(float dt) {
             if (world->GetBlock(pos.x, pos.y, pos.z, b) && b.type == BlockType::FIRE && glm::distance(glm::vec3(pos), eye) < 48.0f) fires.push_back(pos);
         }
         if (fires.size() > 400) fires.resize(400);
+        // Other players on fire: flames up their bodies.
+        for (const auto& other : client->GetRemotePlayers()) {
+            if (!(other.flags & net::kFlagBurning) || glm::distance(other.feet, eye) > 48.0f) continue;
+            for (int i = 0; i < 2 && particles.size() < 3000; i++) {
+                if (unit(fireRng) >= dt * 30.0f) continue;
+                Particle p;
+                p.position = other.feet + glm::vec3(0.6f * (unit(fireRng) - 0.5f), 1.7f * unit(fireRng), 0.6f * (unit(fireRng) - 0.5f));
+                p.velocity = glm::vec3(0.0f, 1.2f + unit(fireRng), 0.0f);
+                p.maxLife = p.life = 0.3f + 0.3f * unit(fireRng);
+                p.size = 0.3f + 0.2f * unit(fireRng);
+                p.uv = glm::vec4(f0, f1);
+                p.flame = true;
+                particles.push_back(p);
+            }
+        }
         for (const auto& pos : fires) {
             float rate = dt * 14.0f;
             while (rate > 0.0f && particles.size() < 3000) {

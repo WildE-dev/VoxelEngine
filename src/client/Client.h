@@ -138,6 +138,7 @@ public:
     // An oxygen tank's fill (0..1), and whether we're breathing from it.
     float GetTank() const { return tank; }
     bool OnTank() const { return onTank; }
+    bool Burning() const { return burning; }
     float GetRain() const { return rain; }
     bool IsStorm() const { return storm; }
     // Lightning strikes since the last call.
@@ -343,6 +344,7 @@ private:
     Breathing::Cause airCause = Breathing::Cause::None;
     float tank = 1.0f;
     bool onTank = false;
+    bool burning = false;
     net::GameMode mode = net::GameMode::Creative;
     Inventory inventory{ Inventory::kPlayerSlots };
     bool inventoryKnown = false;

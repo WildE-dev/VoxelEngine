@@ -195,6 +195,8 @@ private:
     uint32_t steamSeen = 0;
     long long steamNear = 0;
     float steamFog = 0.0f; // the white-out in steam, eased
+    float burnGlow = 0.0f; // the flames round the screen while we're on fire, eased
+    double nextBurnCrackle = 0.0;
     double nextCrackle = 0.0; // fires near us crackle now and then
     std::unordered_map<glm::ivec3, bool, Coords::IVec3Hash> launchersFiring; // (to catch each throw: a thunk and a puff)
     std::vector<glm::ivec3> campfires; // near the player, for smoke
