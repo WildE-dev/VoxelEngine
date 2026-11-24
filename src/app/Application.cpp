@@ -1474,7 +1474,26 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
         swing = target > swing ? std::min(target, swing + dt * 4.0f) : std::max(target, swing - dt * 4.0f);
         swings[pos] = swing;
         const float eased = swing * swing * (3.0f - 2.0f * swing);
-        params.doors.push_back({ glm::vec3(pos), d.Facing(), eased, glm::vec4(door0, door1), lightAt(glm::vec3(pos) + glm::vec3(0.5f)) });
+        // Its light: the face we see is lit by the cell on our side of it (shut: the
+        // doorway's inside or out), else (that side walled up, or the door swinging) by
+        // its own cell, which light passes into. (Not by the general look-up, which takes
+        // a door's cell, a full block, for the inside of a wall and so finds no light at
+        // all, drawing it in full daylight even in a dark room.)
+        auto cellLight = [&](const glm::ivec3& c, glm::vec2& out) {
+            int blockLight = 0, skyLight = 0;
+            Block b;
+            if (!world->GetLight(c.x, c.y, c.z, blockLight, skyLight)) return false;
+            if (world->GetBlock(c.x, c.y, c.z, b) && b.BlocksLight()) return false;
+            out = glm::vec2(skyLight, blockLight);
+            return true;
+        };
+        const glm::ivec3 facing = d.Facing();
+        const glm::vec3 centre = glm::vec3(pos) + glm::vec3(0.5f);
+        const glm::ivec3 ourSide = glm::dot(camera.GetPosition() - centre, glm::vec3(facing)) >= 0.0f ? pos + facing : pos - facing;
+        glm::vec2 light(0.0f);
+        if (!(eased < 0.05f && cellLight(ourSide, light)) && !cellLight(pos, light)) light = lightAt(centre);
+        for (const auto& h : params.handLights) light.y = std::max(light.y, h.w - glm::distance(centre, glm::vec3(h)));
+        params.doors.push_back({ glm::vec3(pos), facing, eased, glm::vec4(door0, door1), light });
     }
     doorSwings.swap(swings);
 
