@@ -332,6 +332,26 @@ int main() {
             }
         Check(copper > 100, "copper ore runs through the rock (" + std::to_string(copper) + " blocks in 64 chunks)");
     }
+    // Limestone in beds, a few blocks down and no deeper than 48.
+    {
+        TerrainGenerator rock(TerrainGenerator::Type::Normal);
+        long limestone = 0, tooDeep = 0;
+        for (int cx = -2; cx < 2; cx++)
+            for (int cz = -2; cz < 2; cz++) {
+                TerrainGenerator::ColumnHeights h;
+                rock.ComputeColumnHeights(cx, cz, h);
+                for (int cy = -6; cy <= 0; cy++) {
+                    TerrainGenerator::Blocks blocks;
+                    rock.GenerateChunk({ cx, cy, cz }, h, blocks);
+                    for (int i = 0; i < static_cast<int>(blocks.size()); i++) {
+                        if (blocks[i].type != BlockType::LIMESTONE) continue;
+                        limestone++;
+                        if (cy * TerrainGenerator::S < -80) tooDeep++;
+                    }
+                }
+            }
+        Check(limestone > 500 && tooDeep == 0, "limestone lies in beds in the rock (" + std::to_string(limestone) + " blocks), none far down");
+    }
 
     // The Deep: open caverns with fungus, magma and gold ore far down, and no gold above.
     {

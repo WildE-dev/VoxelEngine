@@ -65,6 +65,8 @@ const char* DefaultMaterial(BlockType type) {
     case BlockType::ICE:
     case BlockType::PEBBLES:
     case BlockType::COAL_ORE:
+    case BlockType::LIMESTONE:
+    case BlockType::CONCRETE:
     case BlockType::SPRING:
     case BlockType::DRAIN:
     case BlockType::SINKHOLE:

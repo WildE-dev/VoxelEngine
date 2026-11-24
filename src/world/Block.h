@@ -336,6 +336,11 @@ enum class BlockType : uint8_t {
     BITUMEN,
     // Asphalt: bitumen and stone, a road: you walk faster on it (kAsphaltPace).
     ASPHALT,
+    // Limestone: beds of it in the rock. Burnt (a smelter, or by hand with coal) it's
+    // cement (an item); cement, sand and stone make concrete, a tough building block.
+    LIMESTONE,
+    CEMENT,
+    CONCRETE,
     COUNT
 };
 // Machines with an inventory of their own (opened like a chest, empty-handed): what
@@ -397,7 +402,7 @@ inline bool IsItemType(BlockType type) {
     return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE || type == BlockType::COAL ||
            type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD ||
            type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH || type == BlockType::BOAT ||
-           type == BlockType::STEEL_INGOT || type == BlockType::HAMMER || type == BlockType::CRUSHED_IRON || type == BlockType::COKE || type == BlockType::BITUMEN ||
+           type == BlockType::STEEL_INGOT || type == BlockType::HAMMER || type == BlockType::CRUSHED_IRON || type == BlockType::COKE || type == BlockType::BITUMEN || type == BlockType::CEMENT ||
            type == BlockType::GOLD_INGOT || type == BlockType::CROSSBOW || type == BlockType::FORGE_CORE ||
            type == BlockType::COPPER_INGOT || type == BlockType::BUCKET || type == BlockType::WATER_BUCKET;
 }

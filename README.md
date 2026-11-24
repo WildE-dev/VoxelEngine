@@ -1221,6 +1221,14 @@ quarter of an ingot, a pressure plate an eighth, each sensor a quarter, a logic 
 half, and a machine sensor half (with half an iron ingot). Miners at a mining post dig
 it too, mine chests hold some, and traders sell four ingots for a gold.
 `CraftTest` checks every signal block needs copper; `BiomeTest` that it's in the rock.
+
+**Limestone, cement and concrete.** Limestone lies in wide flat beds in the rock,
+from 3 to 48 blocks down: pale, banded, and mined with a pickaxe. Burnt, it's
+**cement** (an item): a smelter turns a limestone into a cement, or by hand two
+limestone and half a coal make one. A cement, two sand and a stone make four
+**concrete**, a smooth grey building block that's slow to break (hardness 6) and can
+be chiselled like any building block. `CraftTest` checks the smelting and both recipes;
+`BiomeTest` that limestone is in beds in the rock and none far down.
 ## Farming
 
 Breaking tall grass now and then gives **seeds** (three times in ten). With seeds in

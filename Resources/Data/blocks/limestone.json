@@ -1,0 +1,2 @@
+// limestone: a block (the format is in README.md, here)
+{ "name": "Limestone", "textures": { "all": "limestone" }, "hardness": 1.5, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#c8bc98" }

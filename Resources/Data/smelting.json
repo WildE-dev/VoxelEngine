@@ -6,6 +6,7 @@
   { "takes": { "crushed_iron": 1 }, "makes": { "iron_ingot": 2 } },
   { "takes": { "gold_ore": 1 }, "makes": { "gold_ingot": 1 } },
   { "takes": { "copper_ore": 1 }, "makes": { "copper_ingot": 2 } },
+  { "takes": { "limestone": 1 }, "makes": { "cement": 1 } },
   { "takes": { "raw_venison": 1 }, "makes": { "cooked_venison": 1 } },
   { "takes": { "raw_fish": 1 }, "makes": { "cooked_fish": 1 } },
   { "takes": { "sand": 1 }, "makes": { "glass": 1 } },

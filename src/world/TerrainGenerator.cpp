@@ -12,9 +12,15 @@
 namespace {
 
 // Stone, or ore in veins through it: blobs of 3D noise, coal from 8 blocks down,
-// iron (rarer, in smaller veins) from 24 down. A function of position, so chunks agree.
+// iron (rarer, in smaller veins) from 24 down; and wide flat beds of limestone (noise
+// stretched out across, squashed up and down) from 3 down to 48. A function of
+// position, so chunks agree.
 BlockType OreAt(int x, int y, int z, int depth) {
     if (TerrainGenerator::OilAt(x, y, z)) return BlockType::OIL_SHALE;
+    if (depth >= 3 && depth < 48) {
+        const float bed = Noise::Perlin3(x * 0.035f, y * 0.16f, z * 0.035f, 0x11AEu);
+        if (bed > 0.42f) return BlockType::LIMESTONE;
+    }
     if (depth >= 8) {
         const float coal = Noise::Perlin3(x * 0.18f, y * 0.18f, z * 0.18f, 0xC0A1u);
         if (coal > 0.48f) return BlockType::COAL_ORE;

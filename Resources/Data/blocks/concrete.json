@@ -1,0 +1,2 @@
+// concrete: a block (the format is in README.md, here)
+{ "name": "Concrete", "textures": { "all": "concrete" }, "hardness": 6, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#a8a8aa" }

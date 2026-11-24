@@ -110,6 +110,21 @@ int main() {
         const auto& gate = Crafting::Recipes()[Crafting::Find("logic_gate")];
         Check(Crafting::TimesAffordable(gate, noCopper) == 0 && Crafting::TimesAffordable(gate, withCopper) == 2, "a logic gate can't be made without copper (half an ingot each)");
         Check(Smelting::FirstAffordable(std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)>{}) == nullptr, "(nothing to smelt in an empty chest)");
+        // Limestone to cement (smelted, or burnt by hand with coal), and cement to concrete.
+        std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> quarry{};
+        quarry[static_cast<size_t>(BlockType::LIMESTONE)] = 4 * Block::kUnitsPerBlock;
+        quarry[static_cast<size_t>(BlockType::COAL)] = Block::kUnitsPerBlock;
+        const SmeltRecipe* burnt = Smelting::FirstAffordable(quarry);
+        Check(burnt && burnt->input == BlockType::LIMESTONE && burnt->output == BlockType::CEMENT && burnt->outputUnits == Block::kUnitsPerBlock,
+              "a smelter burns limestone into cement");
+        Check(Crafting::TimesAffordable(Crafting::Recipes()[Crafting::Find("cement")], quarry) == 2, "and by hand, two limestone and half a coal make a cement");
+        std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> mix{};
+        mix[static_cast<size_t>(BlockType::CEMENT)] = Block::kUnitsPerBlock;
+        mix[static_cast<size_t>(BlockType::SAND)] = 2 * Block::kUnitsPerBlock;
+        mix[static_cast<size_t>(BlockType::STONE)] = Block::kUnitsPerBlock;
+        const auto& concrete = Crafting::Recipes()[Crafting::Find("concrete")];
+        Check(Crafting::TimesAffordable(concrete, mix) == 1 && concrete.output == BlockType::CONCRETE && concrete.outputUnits == 4 * Block::kUnitsPerBlock,
+              "a cement, two sand and a stone make four concrete");
     }
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> held{};
     held[static_cast<size_t>(BlockType::LOG)] = 3 * kBlock;
