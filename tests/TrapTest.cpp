@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
         b.client.ConfigureSignal(gate);
         Check(both(20.0, [&] { return b.client.GetSignals().count(plate.pos) && b.client.GetSignals().count(gate.pos); }), "the plate sends on 4, and the gate listens to 4");
         server.QueueConsoleCommand("tp Tester 30.5 1 10.5");
-        Check(both(20.0, [&] { return TypeAt(b, { 30, 3, 7 }) == BlockType::AIR && Has(a, "*click*"); }), "stepping on the plate opens the gate");
+        Check(both(20.0, [&] { return TypeAt(b, { 30, 3, 7 }) == BlockType::AIR; }), "stepping on the plate opens the gate");
         Check(TypeAt(b, { 31, 3, 7 }) == BlockType::SLUICE, "but not one with no channel (they don't open the old way)");
         Check(both(20.0, [&] { Block w; return b.world.GetBlock(30, 4, 7, w) && !w.HasWater(); }), "and the water it held pours out");
 

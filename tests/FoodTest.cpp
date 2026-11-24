@@ -235,7 +235,7 @@ int main(int argc, char** argv) {
         Check(!a.client.GetBobber(), "a line cast onto dry ground doesn't stay out");
         a.client.Cast({ 9, -1, 9 }, true);
         Check(Pump(a, 20.0, [&] { return a.client.GetBobber().has_value(); }), "cast into the pond, the bobber floats");
-        Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::RAW_FISH) == Block::kUnitsPerBlock; }) && a.client.TakeBite() && Has(a, "You caught a fish!"),
+        Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::RAW_FISH) == Block::kUnitsPerBlock; }) && a.client.TakeBite(),
               "a fish bites, and it's caught");
         Check(!a.client.GetBobber() && Has(a, "Angler: catch a fish"), "the line comes in (and that's an achievement)");
         server.QueueConsoleCommand("give log 1 Eater");

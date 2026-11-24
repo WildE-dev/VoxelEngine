@@ -939,25 +939,21 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
     const bool landed = creatures.Attack(creature, eye, tool, ToolTier(client, tool), now, killed);
     if (landed && !killed) creatures.Provoke(creature, client.id, now);
     if (landed && killed) {
-        std::string spoils;
         // A deer gives venison (one or two).
         if (type == CreatureType::Deer) {
             const uint32_t venison = 1 + static_cast<uint32_t>(tickCount % 2);
             Give(client, BlockType::RAW_VENISON, venison * Block::kUnitsPerBlock);
             Give(client, BlockType::HIDE, Block::kUnitsPerBlock); // and its hide
             SendInventory(client);
-            spoils = " (+" + std::to_string(venison) + " raw venison, +1 hide)";
         }
         // A crossbowman leaves some of its bolts (arrows).
         if (type == CreatureType::DwarfCrossbow) {
             Give(client, BlockType::ARROW, 2 * Block::kUnitsPerBlock);
             SendInventory(client);
-            spoils = " (+2 arrows)";
         }
         if (type == CreatureType::DwarfKing) KingSlain(client);
         if (type == CreatureType::ForgeGolem) GolemSlain(client);
         if (raider) Award(client, Achievement::Defender);
-        SendChat(client, net::ChatMessage::Kind::Info, std::string("You defeated a ") + SpecOf(type).id + spoils);
         if (type == CreatureType::Deer) Award(client, Achievement::Hunter);
         else if (SpecOf(type).hostile) Award(client, Achievement::DwarfSlayer);
     }
@@ -987,7 +983,7 @@ void Server::HandleInteract(ClientState& client, uint16_t creature) {
         client.inventory.TakeUnits(BlockType::RAW_VENISON, Block::kUnitsPerBlock);
         SendInventory(client);
     }
-    SendChat(client, net::ChatMessage::Kind::Info, "The wolf is yours: it'll follow you, and fight for you");
+    SendChat(client, net::ChatMessage::Kind::Info, "Wolf tamed");
     Award(client, Achievement::BestFriend);
 }
 
@@ -995,7 +991,7 @@ void Server::KingSlain(ClientState& client) {
     Give(client, BlockType::STEEL_INGOT, 6 * Block::kUnitsPerBlock);
     Give(client, BlockType::IRON_INGOT, 8 * Block::kUnitsPerBlock);
     SendInventory(client);
-    SendChat(client, net::ChatMessage::Kind::Info, "The Dwarf King's hoard is yours: +6 steel ingots, +8 iron ingots");
+    SendChat(client, net::ChatMessage::Kind::Info, "Hoard: +6 steel ingots, +8 iron ingots");
     Award(client, Achievement::Kingslayer);
     for (auto& [peer, other] : clients)
         if (other.welcomed) SendChat(other, net::ChatMessage::Kind::Info, client.name + " has defeated a Dwarf King");
@@ -1005,7 +1001,7 @@ void Server::GolemSlain(ClientState& client) {
     Give(client, BlockType::FORGE_CORE, Block::kUnitsPerBlock);
     Give(client, BlockType::STEEL_INGOT, 3 * Block::kUnitsPerBlock);
     SendInventory(client);
-    SendChat(client, net::ChatMessage::Kind::Info, "The golem's fire goes out: +1 forge core, +3 steel ingots");
+    SendChat(client, net::ChatMessage::Kind::Info, "+1 forge core, +3 steel ingots");
     Award(client, Achievement::GolemBreaker);
     for (auto& [peer, other] : clients)
         if (other.welcomed) SendChat(other, net::ChatMessage::Kind::Info, client.name + " has defeated a forge golem");
@@ -1052,7 +1048,7 @@ void Server::HandleTrade(ClientState& client, uint16_t trader, uint8_t offerInde
         toward = glm::length(toward) > 1e-3f ? glm::normalize(toward) : glm::vec2(1.0f, 0.0f);
         if (!creatures.Hire(at + glm::vec3(toward.x, 0.2f, toward.y), client.id, now, Trades::kHireSeconds))
             return SendChat(client, net::ChatMessage::Kind::Error, "No guard is free just now");
-        SendChat(client, net::ChatMessage::Kind::Info, "A dwarf guard will follow you and fight for you for ten minutes");
+        SendChat(client, net::ChatMessage::Kind::Info, "Guard hired (10 minutes)");
     }
     else {
         // (What they pay is gone first, so it may make the room.)
@@ -1125,7 +1121,7 @@ void Server::UpdateCreatures() {
     }
     for (uint16_t owner : creatures.TakeEndedHires())
         for (auto& [peer, client] : clients)
-            if (client.id == owner) SendChat(client, net::ChatMessage::Kind::Info, "Your hired guard's time is up: they've gone home");
+            if (client.id == owner) SendChat(client, net::ChatMessage::Kind::Info, "Your guard went home");
 }
 
 void Server::SendCreatures() {
@@ -1505,7 +1501,7 @@ void Server::DropOnDeath(ClientState& client) {
     SendInventory(client);
     char where[64];
     std::snprintf(where, sizeof where, "%d, %d, %d", spot->x, spot->y, spot->z);
-    SendChat(client, net::ChatMessage::Kind::Info, std::string("Half of what you carried is in a chest where you died (") + where + ")");
+    SendChat(client, net::ChatMessage::Kind::Info, std::string("Half your things are in a chest where you died (") + where + ")");
 }
 
 void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
@@ -1537,7 +1533,7 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
         Block set = block;
         if (block.type == BlockType::FILTER_PIPE) {
             set.axis = static_cast<uint8_t>(held);
-            SendChat(client, net::ChatMessage::Kind::Info, held == BlockType::AIR ? "The filter lets anything through" : std::string("The filter lets only ") + BlockId(held) + " through");
+            SendChat(client, net::ChatMessage::Kind::Info, held == BlockType::AIR ? "Filter: anything" : std::string("Filter: ") + BlockId(held));
         }
         else {
             const auto& recipes = Crafting::Recipes();
@@ -1547,12 +1543,11 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
             if (held == BlockType::AIR) {
                 const int index = static_cast<int>(block.axis) - 1;
                 return SendChat(client, net::ChatMessage::Kind::Info,
-                                index >= 0 && index < static_cast<int>(recipes.size()) ? std::string("The crafter makes ") + recipes[index].name
-                                                                                       : "The crafter has no recipe: right-click it with what it should make in hand");
+                                index >= 0 && index < static_cast<int>(recipes.size()) ? std::string("Crafter: ") + recipes[index].name : "Crafter: no recipe");
             }
-            if (found < 0) return SendChat(client, net::ChatMessage::Kind::Info, std::string("Nothing a crafter can make gives ") + BlockId(held));
+            if (found < 0) return SendChat(client, net::ChatMessage::Kind::Info, std::string("Crafter can't make ") + BlockId(held));
             set.axis = static_cast<uint8_t>(found + 1);
-            SendChat(client, net::ChatMessage::Kind::Info, std::string("The crafter makes ") + recipes[found].name);
+            SendChat(client, net::ChatMessage::Kind::Info, std::string("Crafter: ") + recipes[found].name);
         }
         world->SetBlock(pos.x, pos.y, pos.z, set);
         return;
@@ -1560,7 +1555,7 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     if (IsValveType(block.type)) {
         auto sig = signalBlocks.find(pos);
         if (sig != signalBlocks.end() && sig->second.config.a != 0) {
-            return SendChat(client, net::ChatMessage::Kind::Info, "This valve answers to channel " + std::to_string(sig->second.config.a));
+            return SendChat(client, net::ChatMessage::Kind::Info, "Valve on channel " + std::to_string(sig->second.config.a));
         }
         world->SetBlock(pos.x, pos.y, pos.z, Block(ValveSetTo(block.type, !IsOpenValve(block.type))));
         return;
@@ -1580,7 +1575,7 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     if (client.bed != pos) {
         client.bed = pos;
         client.sitesRegion = glm::ivec2(INT_MIN, INT_MIN); // (tell them, for their map)
-        SendChat(client, net::ChatMessage::Kind::Info, "You'll respawn at this bed");
+        SendChat(client, net::ChatMessage::Kind::Info, "Respawn point set");
     }
     // At night (the sun below the horizon), they sleep; once everyone here is asleep
     // (in bed within the last few seconds), it's morning.
@@ -1970,7 +1965,6 @@ void Server::UpdateFishing() {
         client.bobber.reset();
         Give(client, BlockType::RAW_FISH, Block::kUnitsPerBlock);
         SendInventory(client);
-        SendChat(client, net::ChatMessage::Kind::Info, "You caught a fish!");
         net.Send(peer, net::kChannelReliable, net::Encode(net::Bobber{ at, 0, 1 }));
         Award(client, Achievement::Angler);
     }
@@ -2018,7 +2012,6 @@ void Server::UpdateArrows() {
                         if (shooter.id == a.shooter) {
                             if (type == CreatureType::DwarfKing) KingSlain(shooter);
                             if (type == CreatureType::ForgeGolem) GolemSlain(shooter);
-                            SendChat(shooter, net::ChatMessage::Kind::Info, std::string("You shot a ") + SpecOf(type).id);
                             Award(shooter, Achievement::Marksman);
                             if (type == CreatureType::Deer) Award(shooter, Achievement::Hunter);
                             else if (SpecOf(type).hostile) Award(shooter, Achievement::DwarfSlayer);
@@ -2565,7 +2558,6 @@ void Server::UpdateTraps() {
                 if (b.type == BlockType::PRESSURE_PLATE) {
                     const bool fresh = !plateSignal.count(f);
                     PressPlate(f, now);
-                    if (fresh && signalBlocks.count(f) && signalBlocks[f].config.out) SendChat(client, net::ChatMessage::Kind::Info, "*click*");
                 }
             }
             const glm::ivec3& u = underCells[i];

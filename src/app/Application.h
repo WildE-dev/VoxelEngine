@@ -123,6 +123,8 @@ private:
     void DrawInventory();
     // C / Shift+C: lower / raise the quarter of the block in view.
     void ChiselTarget(bool raise);
+    // The crouch key (or the pad's B) held: the modifier (build against, chisel up, back a step, move a stack across).
+    bool CrouchHeld() const;
     // With the chisel in hand: the block and quarter it's aimed at (and which way the
     // block would be shaped), from where the view meets the block's shape.
     struct ChiselAim {
@@ -323,7 +325,6 @@ private:
     void OpenMachine(const glm::ivec3& pos, bool inventory);
     void DrawMachine();
     void DrawMachineInfo(const glm::ivec3& pos);
-    std::string MachineStatus(const glm::ivec3& pos) const;
     // The core of the formed structure this block is part of (any of its blocks, its
     // ports too), if it is.
     std::optional<glm::ivec3> StructureCoreAt(const glm::ivec3& pos) const;

@@ -1200,197 +1200,139 @@ void Server::SendMachines() {
 }
 
 void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
+    // How a machine is doing, as briefly as it can be said: a word or two for its state
+    // and its numbers (its menu's title already says what it is).
     Block b;
     if (!InReach(client, pos, 8.0f) || !world->GetBlock(pos.x, pos.y, pos.z, b) || !Power::IsPart(b.type)) return;
-    char line[256];
-    std::string text;
-    auto describeFluid = [&](const FluidNet* net) {
-        if (!net) return std::string("Not joined to any fluid pipes.");
-        std::snprintf(line, sizeof line, "Its pipes hold %d of %d units%s%s.", net->amount, net->capacity, net->amount > 0 ? " of " : "",
-                      net->amount > 0 ? Fluids::Name(net->kind) : " (empty)");
-        return std::string(line);
+    auto percent = [](float f) { return std::to_string(static_cast<int>(std::lround(f * 100.0f))) + "%"; };
+    auto airAt = [&](const glm::ivec3& p) -> std::string {
+        auto n = networkOf.find(p);
+        return n == networkOf.end() ? std::string() : "air " + percent(networks[n->second].Pressure());
     };
+    auto fluidOf = [&](const FluidNet* fn) -> std::string {
+        if (!fn) return "not connected";
+        if (fn->amount <= 0) return "empty";
+        return std::string(Fluids::Name(fn->kind)) + " " + std::to_string(fn->amount) + "/" + std::to_string(fn->capacity);
+    };
+    auto join = [](std::string a, const std::string& more) { return more.empty() ? a : a.empty() ? more : a + ", " + more; };
+    auto doing = [](Power::DrillState st, const char* idle) -> std::string {
+        switch (st) {
+        case Power::DrillState::Working: return "working";
+        case Power::DrillState::NoPressure: return "no air";
+        case Power::DrillState::NoChest: return "no chest";
+        case Power::DrillState::Blocked: return "blocked";
+        case Power::DrillState::Done: return "done";
+        default: return idle;
+        }
+    };
+    auto channelOf = [&](const glm::ivec3& p) -> std::string {
+        auto sig = signalBlocks.find(p);
+        return sig != signalBlocks.end() && sig->second.config.a ? "channel " + std::to_string(sig->second.config.a) : std::string("no channel");
+    };
+    std::string text;
     if (b.type == BlockType::MULTIBLOCK || b.type == BlockType::MULTIBLOCK_PART) {
         glm::ivec3 core;
         Block cb;
         if (!CoreOf(pos, core) || !world->GetBlock(core.x, core.y, core.z, cb)) return;
-        const Multiblocks::Pattern& p = Multiblocks::PatternOf(Multiblocks::KindOf(cb));
         const Worker w = workers.count(core) ? workers[core] : Worker{};
-        text = std::string(p.name) + " (a structure): ";
-        switch (w.state) {
-        case Power::DrillState::Working: text += "working. "; break;
-        case Power::DrillState::NoPressure: text += "waiting for air pressure (at its air pipe). "; break;
-        case Power::DrillState::NoChest: text += "its ports need connecting (pipes, or chests along its item pipe). "; break;
-        case Power::DrillState::Done: text += "no oil shale under it. "; break;
-        default: text += Multiblocks::KindOf(cb) == Multiblocks::Kind::BlastFurnace ? "nothing to smelt. " : "idle (nothing in, or no room out). ";
-        }
+        text = w.state == Power::DrillState::NoChest ? "ports not connected" : w.state == Power::DrillState::Done ? "no oil shale" : doing(w.state, "idle");
         glm::ivec3 port;
         if (Multiblocks::PortOf(core, cb, Multiblocks::Role::AirPort, port)) {
-            auto n = networkOf.find(port);
-            std::snprintf(line, sizeof line, "Air pressure %d%%.", n != networkOf.end() ? int(std::lround(networks[n->second].Pressure() * 100)) : 0);
-            text += line;
+            const std::string air = airAt(port);
+            text = join(text, air.empty() ? "air 0%" : air);
         }
         return SendChat(client, net::ChatMessage::Kind::Inspect, text);
     }
-    if (Fluids::IsPart(b.type)) {
-        text = std::string(b.type == BlockType::FLUID_TANK ? "Fluid tank. " : "Fluid pipe. ") + describeFluid(FluidNetAt(pos));
-        return SendChat(client, net::ChatMessage::Kind::Inspect, text);
-    }
-    if (b.type == BlockType::DRAIN || b.type == BlockType::FLUID_OUTLET) {
+    if (Fluids::IsPart(b.type) && !(b.type == BlockType::OBSIDIAN_PIPE && !FluidNetAt(pos))) return SendChat(client, net::ChatMessage::Kind::Inspect, fluidOf(FluidNetAt(pos)));
+    const glm::ivec3 airPos = b.type == BlockType::PRESSURE_GAUGE ? pos - b.Facing() : pos;
+    switch (b.type) {
+    case BlockType::DRAIN:
+    case BlockType::FLUID_OUTLET:
+    case BlockType::SPRINKLER: {
         const FluidNet* net = nullptr;
         for (const auto& d : kFaces)
             if ((net = FluidNetAt(pos + d))) break;
-        text = b.type == BlockType::DRAIN ? "Drain: takes water into the fluid pipes beside it, as much as they have room for. "
-                                          : "Fluid outlet: lets water from the fluid pipes beside it out of its face. ";
-        return SendChat(client, net::ChatMessage::Kind::Inspect, text + describeFluid(net));
+        text = fluidOf(net);
+        if (b.type == BlockType::SPRINKLER) text = join(workers.count(pos) && workers[pos].state == Power::DrillState::Working ? "spraying" : "idle", join(channelOf(pos), text));
+        return SendChat(client, net::ChatMessage::Kind::Inspect, text);
     }
-    if (b.type == BlockType::WATER_WHEEL) {
+    case BlockType::WATER_WHEEL: {
         const Wheel w = wheels.count(pos) ? wheels[pos] : Wheel{};
-        if (w.jammed) std::snprintf(line, sizeof line, "Water wheel: jammed (its paddles need the 8 cells around its hub clear). ");
-        else if (w.speed > 0.0f) std::snprintf(line, sizeof line, "Water wheel: turning at %d%% (%.0f water a second down one side). ", int(std::lround(w.speed * 100)), w.flow);
-        else std::snprintf(line, sizeof line, "Water wheel: still (it needs water flowing down one side). ");
-        text += line;
-        text += w.driving ? "It turns a compressor." : "Its shaft doesn't reach a compressor.";
+        text = w.jammed ? "jammed" : w.speed > 0.0f ? "turning " + percent(w.speed) : "still";
+        if (!w.driving) text = join(text, "no compressor");
+        return SendChat(client, net::ChatMessage::Kind::Inspect, text);
     }
-    else if (b.type == BlockType::SHAFT) {
-        text += "Shaft: carries wheels' turning along its axle to a compressor at the end of the line.";
+    case BlockType::SHAFT: return SendChat(client, net::ChatMessage::Kind::Inspect, "");
+    case BlockType::DRILL: {
+        const Drill d = drills.count(pos) ? drills[pos] : Drill{};
+        text = d.state == Power::DrillState::Working ? "digging" : d.state == Power::DrillState::Done ? "done" : d.state == Power::DrillState::NoPressure ? "no air" : "idle";
+        if (d.depth > 0) text = join(text, std::to_string(d.depth) + " deep");
+        break;
     }
-    else {
-        if (b.type == BlockType::DRILL) {
-            const Drill d = drills.count(pos) ? drills[pos] : Drill{};
-            std::snprintf(line, sizeof line, "Drill: %s%s. ", Power::Describe(d.state), d.depth > 0 ? (", " + std::to_string(d.depth) + " deep").c_str() : "");
-            text += line;
-        }
-        else if (b.type == BlockType::COMPRESSOR) {
-            const Compressor c = compressors.count(pos) ? compressors[pos] : Compressor{};
-            std::snprintf(line, sizeof line, "Compressor: wheels turning %d of %d on its shafts, +%.1f air/s. ", c.turning, c.wheels, c.power * Power::kWheelMaxAir);
-            text += line;
-        }
-        else if (b.type == BlockType::AIR_TANK) {
-            const float held = air.count(pos) ? air[pos] : 0.0f;
-            std::snprintf(line, sizeof line, "Air tank: holding %.0f of %.0f. ", held, Power::kAirPerTank);
-            text += line;
-        }
-        else if (b.type == BlockType::CREATIVE_AIR_TANK) {
-            text += "Creative air tank: keeps this network full, however much air it uses. ";
-        }
-        else if (b.type == BlockType::FLUID_VALVE || b.type == BlockType::FLUID_VALVE_OPEN) {
-            return SendChat(client, net::ChatMessage::Kind::Inspect,
-                            b.type == BlockType::FLUID_VALVE_OPEN ? "Fluid valve: open." : "Fluid valve: shut (the fluid pipes either side are kept apart).");
-        }
-        else if (b.type == BlockType::VALVE || b.type == BlockType::VALVE_OPEN) {
-            text += b.type == BlockType::VALVE_OPEN ? "Valve: open. " : "Valve: shut (the pipes either side are kept apart). ";
-        }
-        else if (b.type == BlockType::SPRINKLER) {
-            auto sig = signalBlocks.find(pos);
-            text += std::string("Sprinkler: sprays the fires round and below it out (") +
-                    (sig != signalBlocks.end() && sig->second.config.a ? "while channel " + std::to_string(sig->second.config.a) + " is on"
-                                                                         : std::string("whenever it senses fire: no channel")) +
-                    "), from the water in the fluid pipes beside it. ";
-        }
-        else if (b.type == BlockType::LAUNCHER) {
-            auto sig = signalBlocks.find(pos);
-            text += std::string("Air launcher: throws what's in front of it each time its channel comes on (") +
-                    (sig != signalBlocks.end() && sig->second.config.a ? "channel " + std::to_string(sig->second.config.a) : std::string("no channel yet")) + "), at " +
-                    std::to_string(static_cast<int>(Power::LaunchSpeed(sig != signalBlocks.end() ? sig->second.config.b : 0))) + " blocks a second. ";
-        }
-        else if (b.type == BlockType::PISTON) {
-            const Power::DrillState st = pistonStates.count(pos) ? pistonStates[pos] : Power::DrillState::Idle;
-            auto sig = signalBlocks.find(pos);
-            text += st == Power::DrillState::Working ? "Piston: pushed out. " : st == Power::DrillState::NoPressure ? "Piston: waiting for air pressure. "
-                  : st == Power::DrillState::Blocked ? "Piston: blocked (something it can't move, or too many blocks in a row). " : "Piston: in. ";
-            text += sig != signalBlocks.end() && sig->second.config.a ? "Listens to channel " + std::to_string(sig->second.config.a) + ". "
-                                                                      : "No channel (crouch and right-click to set one). ";
-        }
-        else if (b.type == BlockType::SMELTER || b.type == BlockType::SMELTER_LIT) {
-            const Smelter sm = smelters.count(pos) ? smelters[pos] : Smelter{};
-            const size_t chestCount = ChestsJoined(pos).size();
-            text += sm.state == Power::DrillState::Working ? "Smelter: smelting. " : sm.state == Power::DrillState::NoPressure ? "Smelter: waiting for air pressure. "
-                  : sm.state == Power::DrillState::NoChest ? "Smelter: needs a chest touching it or joined by item pipes. " : "Smelter: nothing to smelt in its chests. ";
-            text += chestCount > 1 ? std::to_string(chestCount - 1) + (chestCount == 2 ? " chest joined, " : " chests joined, ") + "besides its own inventory. "
-                                   : "Working from its own inventory (right-click it empty-handed). ";
-        }
-        else if (b.type == BlockType::CRUSHER) {
-            const Worker w = workers.count(pos) ? workers[pos] : Worker{};
-            text += w.state == Power::DrillState::Working      ? "Crusher: grinding. "
-                    : w.state == Power::DrillState::NoPressure ? "Crusher: waiting for air pressure. "
-                    : w.state == Power::DrillState::NoChest    ? "Crusher: needs a chest touching it or joined by item pipes. "
-                                                               : "Crusher: no iron ore or stone in its chests. ";
-        }
-        else if (b.type == BlockType::EXTRACTOR || b.type == BlockType::CRAFTER || b.type == BlockType::HARVESTER) {
-            const Worker w = workers.count(pos) ? workers[pos] : Worker{};
-            const char* name = b.type == BlockType::EXTRACTOR ? "Extractor" : b.type == BlockType::CRAFTER ? "Crafter" : "Harvester";
-            text += std::string(name) + ": ";
-            switch (w.state) {
-            case Power::DrillState::Working: text += "working. "; break;
-            case Power::DrillState::NoPressure: text += "waiting for air pressure. "; break;
-            case Power::DrillState::NoChest:
-                text += b.type == BlockType::EXTRACTOR ? "needs a chest in front of it. " : "needs a chest touching it or joined by item pipes. ";
-                break;
-            case Power::DrillState::Blocked: text += "no recipe (right-click it with what it should make in hand). "; break;
-            default:
-                text += b.type == BlockType::EXTRACTOR ? "nothing it can send anywhere. " : b.type == BlockType::CRAFTER ? "its chests don't have what it takes. " : "no ripe wheat near. ";
-            }
-            if (b.type == BlockType::CRAFTER) {
-                const int index = static_cast<int>(b.axis) - 1;
-                if (index >= 0 && index < static_cast<int>(Crafting::Recipes().size())) text += std::string("Makes: ") + Crafting::Recipes()[index].name + ". ";
-            }
-        }
-        else if (b.type == BlockType::PRESSURE_SENSOR) {
-            text += "Pressure sensor. ";
-        }
-        else if (b.type == BlockType::PRESSURE_GAUGE) {
-            text += "Pressure gauge. ";
-            if (const FluidNet* fn = FluidNetAt(pos - b.Facing())) return SendChat(client, net::ChatMessage::Kind::Inspect, text + describeFluid(fn));
-        }
-        else if (b.type == BlockType::OIL_DERRICK || b.type == BlockType::REFINERY) {
-            text += b.type == BlockType::OIL_DERRICK ? "Oil derrick: build the derrick structure round it (steel frames), then strike it with an engineer's hammer. "
-                                                     : "Refinery: build the refinery structure round it (machine casings and fluid tanks), then strike it with an engineer's hammer. ";
-            return SendChat(client, net::ChatMessage::Kind::Inspect, text);
-        }
-        else if (false) {
-            const Worker w = workers.count(pos) ? workers[pos] : Worker{};
-            if (b.type == BlockType::OIL_DERRICK)
-                text += w.state == Power::DrillState::Working ? "Oil derrick: pumping crude oil. " : w.state == Power::DrillState::NoPressure ? "Oil derrick: waiting for air pressure. "
-                      : w.state == Power::DrillState::NoChest ? "Oil derrick: needs fluid pipes beside it with room for crude oil. "
-                      : w.state == Power::DrillState::Done ? "Oil derrick: no oil shale under it. " : "Oil derrick: idle. ";
-            else
-                text += w.state == Power::DrillState::Working ? "Refinery: making fuel. " : w.state == Power::DrillState::NoPressure ? "Refinery: waiting for air pressure. "
-                      : w.state == Power::DrillState::NoChest ? "Refinery: needs fluid pipes at its back (crude in) and in front (fuel out). "
-                      : "Refinery: no crude oil behind it, or no room for fuel in front. ";
-        }
-        else if (b.type == BlockType::AIR_DIFFUSER) {
-            text += diffusers.count(pos) && diffusers[pos] ? "Air diffuser: breathing out fresh air (8 blocks round). " : "Air diffuser: stopped (it needs air pressure). ";
-        }
-        else if (b.type == BlockType::TURBINE) {
-            text += engines.count(pos) && engines[pos] ? "Steam turbine: running. " : "Steam turbine: stopped (it needs fluid pipes beside it with steam). ";
-        }
-        else if (b.type == BlockType::OBSIDIAN_PIPE && !FluidNetAt(pos)) {
-            text += "Obsidian pipe: empty. Dip an end in lava and it draws it in (only obsidian pipes hold lava). ";
-        }
-        else if (b.type == BlockType::BOILER) {
-            const Worker w = workers.count(pos) ? workers[pos] : Worker{};
-            text += w.state == Power::DrillState::Working      ? "Boiler: boiling. "
-                    : w.state == Power::DrillState::NoPressure ? "Boiler: out of fuel (coal or coke in a chest joined to it). "
-                    : w.state == Power::DrillState::NoChest    ? "Boiler: needs fluid pipes under it (water in) and over it (steam out). "
-                                                               : "Boiler: no water under it, or no room for steam over it. ";
-        }
-        else if (b.type == BlockType::ENGINE) {
-            text += engines.count(pos) && engines[pos] ? "Engine: running (burning fuel). " : "Engine: stopped (it needs fluid pipes beside it with fuel). ";
-        }
-        else if (b.type == BlockType::PUMP) {
-            const Power::DrillState st = pumpStates.count(pos) ? pumpStates[pos] : Power::DrillState::Idle;
-            text += st == Power::DrillState::Working ? "Pump: pumping. " : st == Power::DrillState::NoPressure ? "Pump: waiting for air pressure. " : "Pump: nothing to pump. ";
-        }
-        // (A gauge reads what it's fixed to.)
-        auto n = networkOf.find(b.type == BlockType::PRESSURE_GAUGE ? pos - b.Facing() : pos);
-        if (n == networkOf.end()) text += b.type == BlockType::PRESSURE_GAUGE ? "It isn't fixed to an air pipe (or anything joined to a compressor)." : "Not joined to a compressor or machine.";
-        else {
-            const AirNetwork& net = networks[n->second];
-            std::snprintf(line, sizeof line, "Air pressure %d%% (%.0f of %.0f air; %d pipes, %d tanks; compressors: %d, +%.1f air/s; drills working: %d of %d; pumps working: %d of %d)",
-                          int(std::lround(net.Pressure() * 100)), net.air, net.capacity, net.pipes, net.tanks, net.compressors, net.supply, net.working, net.drills, net.pumping, net.pumps);
-            text += line;
-        }
+    case BlockType::COMPRESSOR: {
+        const Compressor c = compressors.count(pos) ? compressors[pos] : Compressor{};
+        char line[64];
+        std::snprintf(line, sizeof line, "+%.1f air/s, %d/%d wheels", c.power * Power::kWheelMaxAir, c.turning, c.wheels);
+        text = line;
+        break;
     }
+    case BlockType::AIR_TANK: text = "holding " + std::to_string(static_cast<int>(std::lround(air.count(pos) ? air[pos] : 0.0f))) + "/" + std::to_string(static_cast<int>(Power::kAirPerTank)); break;
+    case BlockType::CREATIVE_AIR_TANK: text = "infinite"; break;
+    case BlockType::FLUID_VALVE:
+    case BlockType::FLUID_VALVE_OPEN: return SendChat(client, net::ChatMessage::Kind::Inspect, b.type == BlockType::FLUID_VALVE_OPEN ? "open" : "shut");
+    case BlockType::VALVE:
+    case BlockType::VALVE_OPEN: text = b.type == BlockType::VALVE_OPEN ? "open" : "shut"; break;
+    case BlockType::LAUNCHER: {
+        auto sig = signalBlocks.find(pos);
+        text = join(channelOf(pos), std::to_string(static_cast<int>(Power::LaunchSpeed(sig != signalBlocks.end() ? sig->second.config.b : 0))) + " blocks/s");
+        break;
+    }
+    case BlockType::PISTON: {
+        const Power::DrillState st = pistonStates.count(pos) ? pistonStates[pos] : Power::DrillState::Idle;
+        text = join(st == Power::DrillState::Working ? "out" : st == Power::DrillState::NoPressure ? "no air" : st == Power::DrillState::Blocked ? "blocked" : "in", channelOf(pos));
+        break;
+    }
+    case BlockType::SMELTER:
+    case BlockType::SMELTER_LIT: {
+        const Smelter sm = smelters.count(pos) ? smelters[pos] : Smelter{};
+        text = sm.state == Power::DrillState::Working && sm.made != BlockType::AIR ? std::string("making ") + BlockId(sm.made)
+                                                                                                     : doing(sm.state, "nothing to smelt");
+        break;
+    }
+    case BlockType::CRUSHER: text = doing(workers.count(pos) ? workers[pos].state : Power::DrillState::Idle, "nothing to crush"); break;
+    case BlockType::EXTRACTOR:
+    case BlockType::CRAFTER:
+    case BlockType::HARVESTER: {
+        const Worker w = workers.count(pos) ? workers[pos] : Worker{};
+        text = w.state == Power::DrillState::Blocked ? "no recipe" : doing(w.state, b.type == BlockType::HARVESTER ? "no ripe wheat" : "idle");
+        if (b.type == BlockType::CRAFTER) {
+            const int index = static_cast<int>(b.axis) - 1;
+            if (index >= 0 && index < static_cast<int>(Crafting::Recipes().size())) text = join(Crafting::Recipes()[index].name, text);
+        }
+        break;
+    }
+    case BlockType::PRESSURE_GAUGE:
+        if (const FluidNet* fn = FluidNetAt(pos - b.Facing())) return SendChat(client, net::ChatMessage::Kind::Inspect, fluidOf(fn));
+        break;
+    case BlockType::OIL_DERRICK:
+    case BlockType::REFINERY: return SendChat(client, net::ChatMessage::Kind::Inspect, "not formed");
+    case BlockType::AIR_DIFFUSER: text = diffusers.count(pos) && diffusers[pos] ? "running" : "stopped"; break;
+    case BlockType::TURBINE: text = engines.count(pos) && engines[pos] ? "running" : "no steam"; break;
+    case BlockType::ENGINE: text = engines.count(pos) && engines[pos] ? "running" : "no fuel"; break;
+    case BlockType::OBSIDIAN_PIPE: return SendChat(client, net::ChatMessage::Kind::Inspect, "empty");
+    case BlockType::BOILER: {
+        const Power::DrillState st = workers.count(pos) ? workers[pos].state : Power::DrillState::Idle;
+        text = st == Power::DrillState::Working ? "boiling" : st == Power::DrillState::NoPressure ? "out of fuel" : st == Power::DrillState::NoChest ? "no pipes" : "no water";
+        return SendChat(client, net::ChatMessage::Kind::Inspect, text);
+    }
+    case BlockType::PUMP: {
+        const Power::DrillState st = pumpStates.count(pos) ? pumpStates[pos] : Power::DrillState::Idle;
+        text = st == Power::DrillState::Working ? "pumping" : st == Power::DrillState::NoPressure ? "no air" : "nothing to pump";
+        break;
+    }
+    default: break;
+    }
+    const std::string airText = airAt(airPos);
+    text = join(text, airText.empty() ? std::string("not connected") : airText);
     SendChat(client, net::ChatMessage::Kind::Inspect, text);
 }

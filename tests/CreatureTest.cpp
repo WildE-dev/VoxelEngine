@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
             wait(1.0);
             a.client.Attack(deer, Tool::Axe);
             wait(1.0);
-            Check(a.client.GetChat().empty() || !Has(a, "defeated"), "a hit from 20 blocks away doesn't count");
+            Check(a.Find(CreatureType::Deer) != nullptr && a.client.GetResources(BlockType::RAW_VENISON) == 0, "a hit from 20 blocks away doesn't count");
             const auto* d = a.Find(CreatureType::Deer);
             server.QueueConsoleCommand("tp Hunter " + std::to_string(d->feet.x - 2.0f) + " 0 " + std::to_string(d->feet.z));
             both(20.0, [&] { return glm::distance(a.feet, glm::vec3(d->feet.x - 2.0f, 0.0f, d->feet.z)) < 0.5f; });
@@ -158,7 +158,8 @@ int main(int argc, char** argv) {
                 a.client.Attack(deer, Tool::Axe);
                 gone = both(1.0, [&] { return a.Find(CreatureType::Deer) == nullptr; });
             }
-            Check(gone && both(5.0, [&] { return Has(a, "You defeated a deer"); }), "a second axe hit (8 health, 5 a hit) finishes it");
+            Check(gone && both(5.0, [&] { return a.client.GetResources(BlockType::RAW_VENISON) > 0; }) && !Has(a, "defeated"),
+                  "a second axe hit (8 health, 5 a hit) finishes it (its venison given, with nothing said in the chat)");
 
             std::cout << "Dwarf warriors" << std::endl;
             server.QueueConsoleCommand("tp Hunter 8.5 0 8.5");
@@ -217,7 +218,7 @@ int main(int argc, char** argv) {
             a.heldBlock = BlockType::RAW_VENISON;
             both(0.3, [] { return false; });
             a.client.Interact(wolf);
-            Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && w->tame; }) && Has(a, "The wolf is yours"), "fed raw venison, it's tamed (and wears a collar)");
+            Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && w->tame; }) && Has(a, "Wolf tamed"), "fed raw venison, it's tamed (and wears a collar)");
             a.heldBlock = BlockType::AIR;
             server.QueueConsoleCommand("tp Hunter 22.5 0 8.5");
             Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && glm::distance(glm::vec2(w->feet.x, w->feet.z), glm::vec2(22.5f, 8.5f)) < 5.0f; }),
@@ -306,7 +307,7 @@ int main(int argc, char** argv) {
                 a.client.Attack(king, Tool::Sword);
                 return false;
             });
-            Check(slain && both(10.0, [&] { return Has(a, "hoard is yours") && Has(b, "has defeated a Dwarf King"); }), "he falls at last: his hoard is the hunter's, and everyone's told");
+            Check(slain && both(10.0, [&] { return Has(a, "Hoard: ") && Has(b, "has defeated a Dwarf King"); }), "he falls at last: his hoard is the hunter's, and everyone's told");
             server.QueueConsoleCommand("creatures clear");
             both(20.0, [&] { return a.client.GetCreatures().empty(); });
             server.QueueConsoleCommand("gamemode survival Hunter");

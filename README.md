@@ -225,9 +225,9 @@ pauses. The menus can be driven with the pad as well.
 | Q / E | In no-clip (`/noclip`, operators): fly down / up |
 | Mouse | Look (a crosshair marks the middle of the screen) |
 | Left click | Break block (survival: hold to mine it), or hit the creature in front of you |
-| Right click | Place the selected block; eat food in hand; open a chest, a machine's menu or a structure's, whatever's in hand; use a bed (Shift: place against it instead). With a block in hand, pipes, shafts, wheels and valves are built onto |
+| Right click | Place the selected block; eat food in hand; open a chest, a machine's menu or a structure's, whatever's in hand; use a bed (crouching: place against it instead). With a block in hand, pipes, shafts, wheels and valves are built onto |
 | Middle click | Pick the block you're looking at: creative puts a stack of it in the selected hotbar slot; survival selects the hotbar slot holding it, or swaps a stack of it from the rest of the inventory into the selected slot |
-| V / Shift+V | Placement height for building blocks: full, 3/4, 1/2, 1/4 (and back); with the chisel in hand, how fine it cuts: 1/8, 1/4, 1/2 |
+| V / Crouch+V | Placement height for building blocks: full, 3/4, 1/2, 1/4 (and back); with the chisel in hand, how fine it cuts: 1/8, 1/4, 1/2 |
 | 1-9, 0 / mouse wheel | Select the hotbar slot to place from |
 | Tab | Inventory: move stacks between slots, the hotbar and your armour; craft (survival), or take any block or item (creative). Let go of a stack outside the window to throw it away |
 | G / Crouch+G | Throw one of the item in hand onto the ground / the whole stack |
@@ -682,7 +682,7 @@ quarter-columns, each as high as its corner, like small steps.
 
 Shape blocks yourself with the chisel, a tool (in survival, made from a little wood
 and stone). With it in hand, right-click lowers the quarter you're looking
-at, and Shift+right-click raises it again. **V** sets how far each stroke
+at, and crouching and right-clicking raises it again. **V** sets how far each stroke
 goes: an eighth of a block (as fine as natural slopes), a quarter, or a half. Raising every quarter to the top
 makes the block whole; lowering them all removes it.
 The quarter you're looking at is the one your view actually lands on (a low step
@@ -755,7 +755,7 @@ Press I to open the inventory: your armour, the thirty slots, and the hotbar bel
 them. Click a stack to pick it up (it follows the cursor) and click a slot to put it
 down, or drag it there. Onto the same kind it adds what fits; onto something else it
 swaps. Right-click picks up half a stack, or, holding one, puts down one at a time.
-Shift-click moves a stack across: between the hotbar and the rest, into an open
+Crouch-click moves a stack across: between the hotbar and the rest, into an open
 chest and back, and armour on and off. Clicking off the slots lets go. I or Esc
 closes it. The server makes every move, so a modified client can't make things up.
 
@@ -770,7 +770,7 @@ hand.
 
 In **creative** the inventory also shows every block and item, every tool in each
 tier, and every piece of armour: click one to take a full stack (right-click: one),
-and put a stack back there to get rid of it. Shift-click puts a stack in the selected
+and put a stack back there to get rid of it. Crouch-click puts a stack in the selected
 hotbar slot. Nothing you build with runs out. A creative player who joins with an
 empty hotbar gets the usual building blocks in it (or what an older `hotbar.txt`
 chose).
@@ -820,7 +820,7 @@ and every whole block's worth goes back into a slot. Recipes that take part of a
 (half a plank, a quarter of coal) work the same way. Offcuts stay where they are: only
 whole blocks and items move between slots and chests. The inventory lists your
 offcuts under the slots. Press V to pick the height you place building blocks at (full, 3/4, 1/2,
-1/4; Shift+V goes back up). The hotbar shows the selected item's name and, for building
+1/4; Crouch+V goes back up). The hotbar shows the selected item's name and, for building
 blocks, the height they're placed at; it's reddish when you haven't enough of a block,
 and shows how many are in each slot. Chiselling a block down gives back what it takes
 off, and building it up costs the same.
@@ -1276,7 +1276,7 @@ All three take 48% off the damage from hits (creatures and other players) and tr
 rounded, but a hit always does at least half a heart. Armour doesn't help against
 drowning, thin or stale air, or starving. The inventory shows the armour slots (an
 empty one shows its piece faintly) and the total. A piece crafted goes straight on if
-its slot is free, else into your slots; drag it onto its slot (or Shift-click it) to
+its slot is free, else into your slots; drag it onto its slot (or Crouch-click it) to
 wear it, and off again to take it off. Armour is saved with you; operators can hand it
 out with `/give cap|tunic|boots [count] [player]`. The rules are in
 `src/world/Armour.h`. `CraftTest` checks making the sword and the armour, the damage
@@ -1332,9 +1332,9 @@ someone, closing from the other half, and breaking.
 
 A **chest** (crafted from 2 planks) stores things: thirty slots of stacks, like
 yours (see [Inventory](#inventory)). Right-click one within 6 blocks to open it
-(Shift-right-click builds against it instead). The window shows its slots above
+(Crouch-right-click builds against it instead). The window shows its slots above
 yours: click or drag stacks between them, right-click for half or one, and
-Shift-click to move a stack across. I or Esc closes it, and so does walking away.
+Crouch-click to move a stack across. I or Esc closes it, and so does walking away.
 Anyone can open any chest, and everyone with it open sees changes at once. Breaking a
 chest gives what was in it to whoever broke it (if it fits in their inventory).
 Chests can't be shaped, and they're fastest to break with an axe. Machines that work
@@ -1349,7 +1349,7 @@ The client is only told what's in a chest while it has it open. `ChestTest` chec
 - crafting and placing a chest;
 - opening it within reach and not from afar, and nothing going in unopened;
 - moving things in and out, and not more than you have;
-- moving stacks between slots, swapping, Shift-click, and armour slots taking only
+- moving stacks between slots, swapping, Crouch-click, and armour slots taking only
   their own piece;
 - a second player seeing the same contents and taking from them;
 - breaking it (it closes, and the contents go to the breaker);
@@ -1430,7 +1430,7 @@ The machines:
   It works through what the chest holds in turn, and leaves what nowhere will take.
 - A **filter pipe** (a blue item pipe) lets only one thing through. Right-click it
   with something in hand to set it to that, or empty-handed to let anything through
-  (Shift-right-click builds against it). Drills and extractors send things through a
+  (Crouch-right-click builds against it). Drills and extractors send things through a
   filter only if it passes them; smelters and crafters reach only through unset ones.
   Look at one to see what it passes.
 - A **crafter** makes one recipe over and over: right-click it with what it should
@@ -1468,12 +1468,13 @@ else on a network: place it against one and it faces out from it, a dial on a sh
 stem, its needle swinging from empty to full with the network's pressure (the
 running pressure, a quarter, is marked in green). It reads the network but isn't part
 of it, so it doesn't join what's either side of it; one fixed to nothing reads
-nothing. Look at a wheel, compressor, pump or drill to see how it's doing under the
-crosshair, and right-click any part (wheel, shaft, compressor, pipe, pump or drill)
-with an empty hand or a tool
-for the details in chat: how fast a wheel turns and how much water passes it, whether
-it reaches a compressor, the wheels on a compressor's shafts, and the network's
-pressure, pipes and working machines.
+nothing. Right-click any part (wheel, compressor, pipe, pump, drill, tank...) with an
+empty hand or a tool for its menu: its name and one short line of how it's doing (a
+word or two for its state, its numbers, and its network's air pressure, such as
+"working, 12 deep, air 80%").
+
+Messages are kept short: what you get for a kill shows in your inventory rather than
+the chat, and only big moments (a boss falling, a raid coming) are announced.
 
 Recipes: a water wheel from 6 planks and a log; 3 shafts from a log; a compressor
 from an iron ingot and 2 stone; 4 air pipes from a stone and a quarter of an iron

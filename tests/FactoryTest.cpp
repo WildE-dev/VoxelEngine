@@ -147,7 +147,7 @@ int main(int argc, char** argv) {
                   "a drill over sand and iron ore, item pipes to a chest, a smelter on the chest, air pipes to both");
             wait(1.0); // (an air update or two)
             a.client.Inspect(smelter);
-            Check(pump(5.0, [&] { return Has(a.client, "Smelter: waiting for air pressure"); }), "with no air, the smelter waits for pressure");
+            Check(pump(5.0, [&] { return Has(a.client, "no air"); }), "with no air, the smelter waits for pressure");
             a.client.OpenChest(chest);
             Check(pump(10.0, [&] { return a.client.GetOpenChest() == chest; }), "the chest opens");
 
@@ -171,7 +171,7 @@ int main(int argc, char** argv) {
             Check(sawLit, "lit while it works");
             Check(pump(6.0, [&] { return blockAt(smelter) == BlockType::SMELTER; }), "and dark again once there's nothing left to smelt");
             a.client.Inspect(smelter);
-            Check(pump(5.0, [&] { return Has(a.client, "Smelter: nothing to smelt") && Has(a.client, "1 chest joined"); }), "right-clicking it says it has nothing to smelt, with 1 chest");
+            Check(pump(5.0, [&] { return Has(a.client, "nothing to smelt"); }), "right-clicking it says it has nothing to smelt");
 
 
             std::cout << "Sorting" << std::endl;
@@ -196,7 +196,7 @@ int main(int argc, char** argv) {
             a.held = BlockType::GLASS;
             wait(0.3);
             a.client.UseBed(filter);
-            Check(pump(5.0, [&] { return Has(a.client, "lets only glass through"); }), "right-clicking the filter with glass in hand sets it to glass");
+            Check(pump(5.0, [&] { return Has(a.client, "Filter: glass"); }), "right-clicking the filter with glass in hand sets it to glass");
             Check(pump(5.0, [&] {
                       Block f;
                       return a.world.GetBlock(filter.x, filter.y, filter.z, f) && f.FilterType() == BlockType::GLASS;
@@ -224,11 +224,11 @@ int main(int argc, char** argv) {
             pump(5.0, [&] { return blockAt(crafter) == BlockType::CRAFTER; });
             wait(1.0);
             a.client.Inspect(crafter);
-            Check(pump(5.0, [&] { return Has(a.client, "Crafter: no recipe"); }), "a crafter with no recipe says so");
+            Check(pump(5.0, [&] { return Has(a.client, "no recipe"); }), "a crafter with no recipe says so");
             a.held = BlockType::STONE_BRICK;
             wait(0.3);
             a.client.UseBed(crafter);
-            Check(pump(5.0, [&] { return Has(a.client, "The crafter makes Stone bricks"); }), "right-clicking it with stone bricks in hand sets it to make them");
+            Check(pump(5.0, [&] { return Has(a.client, "Crafter: Stone bricks"); }), "right-clicking it with stone bricks in hand sets it to make them");
             a.held = BlockType::AIR;
             server.QueueConsoleCommand("give stone 2 Builder");
             pump(5.0, [&] { return a.client.GetResources(BlockType::STONE) >= 2 * Crafting::kBlock; });
@@ -278,7 +278,7 @@ int main(int argc, char** argv) {
             Check(pump(5.0, [&] { return reading(gauge) > 200; }), "a gauge on an air pipe reads the network's pressure (" + std::to_string(reading(gauge)) + "/255)");
             Check(reading(loose) == 0, "one fixed to nothing reads nothing");
             a.client.Inspect(gauge);
-            Check(pump(5.0, [&] { return Has(a.client, "Pressure gauge. Air pressure"); }), "right-clicking it describes the network");
+            Check(pump(5.0, [&] { return Has(a.client, "air 8") || Has(a.client, "air 9") || Has(a.client, "air 100%"); }), "right-clicking it describes the network");
 
             std::cout << "Oil" << std::endl;
             // An oil derrick structure over oil shale; its crude into a tank; a refinery
@@ -557,13 +557,13 @@ int main(int argc, char** argv) {
             Check(pump(5.0, [&] { return Has(a.client, "Formed a Diesel compressor"); }), "a diesel compressor forms");
             a.held = BlockType::AIR;
             a.client.Inspect({ 91, 0, 49 });
-            Check(pump(5.0, [&] { return Has(a.client, "Air pressure 0%"); }), "without fuel its air pipes stay empty");
+            Check(pump(5.0, [&] { return Has(a.client, "air 0%"); }), "without fuel its air pipes stay empty");
             server.QueueConsoleCommand("fluid 89 0 51 fuel");
             bool filled = false;
             for (int i = 0; i < 15 && !filled; i++) {
                 pump(1.0, [] { return false; });
                 a.client.Inspect({ 91, 0, 49 });
-                filled = pump(1.0, [&] { return Has(a.client, "Air pressure 100%"); });
+                filled = pump(1.0, [&] { return Has(a.client, "air 100%"); });
             }
             Check(filled, "with fuel it fills its air network");
 
@@ -582,7 +582,7 @@ int main(int argc, char** argv) {
             server.QueueConsoleCommand("fluid 100 0 50 water");
             wait(1.0);
             a.client.Inspect({ 100, 1, 50 });
-            Check(pump(5.0, [&] { return Has(a.client, "Boiler: out of fuel"); }), "with water but no coal, the boiler says it's out of fuel");
+            Check(pump(5.0, [&] { return Has(a.client, "out of fuel"); }), "with water but no coal, the boiler says it's out of fuel");
             server.QueueConsoleCommand("give coal 2 Builder");
             pump(5.0, [&] { return a.client.GetResources(BlockType::COAL) >= 2 * Crafting::kBlock; });
             a.client.OpenChest({ 99, 1, 50 });
@@ -599,7 +599,7 @@ int main(int argc, char** argv) {
             for (int i = 0; i < 15 && !turbineFilled; i++) {
                 pump(1.0, [] { return false; });
                 a.client.Inspect({ 103, 2, 50 });
-                turbineFilled = pump(1.0, [&] { return Has(a.client, "Air pressure 100%"); });
+                turbineFilled = pump(1.0, [&] { return Has(a.client, "air 100%"); });
             }
             Check(turbineFilled, "and the turbine beside it fills its air pipes from the steam");
 

@@ -114,10 +114,10 @@ const char* ToolHint(Tool tool) {
     case Tool::Pickaxe: return "fast on stone, bricks, ice and machines";
     case Tool::Axe: return "fast on wood";
     case Tool::Shovel: return "fast on dirt, grass, sand and snow";
-    case Tool::Sword: return "for fighting: 3.5 hearts a hit (and quick on leaves)";
-    case Tool::Bow: return "right-click to shoot an arrow (2.5 hearts); needs arrows";
-    case Tool::Rod: return "right-click water to cast; wait for a bite (stay close)";
-    case Tool::Chisel: return "right-click to cut a block's corner down, with Shift to build it up; V: how fine";
+    case Tool::Sword: return "for fighting";
+    case Tool::Bow: return "right-click to shoot (needs arrows)";
+    case Tool::Rod: return "right-click water to cast";
+    case Tool::Chisel: return "right-click: cut a corner (crouch: build up); V: how fine";
     default: return "";
     }
 }
@@ -1228,50 +1228,30 @@ void Application::DrawCrosshair() {
         auto it = infos.find(at->block);
         char text[160];
         const net::SignalInfo info = it != infos.end() ? it->second : net::SignalInfo{};
-        auto ch = [](int c) { return c ? std::to_string(c) : std::string("none"); };
+        auto ch = [](int c) { return c ? "ch " + std::to_string(c) : std::string("no channel"); };
+        const char* onOff = info.on ? "on" : "off";
         switch (Signals::KindOf(target.type)) {
-        case Signals::Kind::Lever: std::snprintf(text, sizeof text, "Lever: %s - sends on %s", target.type == BlockType::LEVER_ON ? "on" : "off", ch(info.out).c_str()); break;
-        case Signals::Kind::Plate: std::snprintf(text, sizeof text, "Pressure plate - sends on %s", ch(info.out).c_str()); break;
+        case Signals::Kind::Lever: std::snprintf(text, sizeof text, "Lever: %s, %s", target.type == BlockType::LEVER_ON ? "on" : "off", ch(info.out).c_str()); break;
+        case Signals::Kind::Plate: std::snprintf(text, sizeof text, "Plate: %s", ch(info.out).c_str()); break;
         case Signals::Kind::Gate: {
             const auto mode = static_cast<Signals::Mode>(info.mode);
-            const std::string inputs = Signals::Inputs(mode) == 2 ? ch(info.a) + ", " + ch(info.b) : ch(info.a);
-            std::snprintf(text, sizeof text, "%s gate (%s) -> %s: %s", Signals::ModeName(mode), inputs.c_str(), ch(info.out).c_str(), info.on ? "on" : "off");
+            const std::string inputs = Signals::Inputs(mode) == 2 ? std::to_string(info.a) + "+" + std::to_string(info.b) : std::to_string(info.a);
+            std::snprintf(text, sizeof text, "%s gate: %s, %s > %s", Signals::ModeName(mode), onOff, inputs.c_str(), ch(info.out).c_str());
             break;
         }
-        case Signals::Kind::Lamp: std::snprintf(text, sizeof text, "Signal lamp - listens to %s", ch(info.a).c_str()); break;
-        case Signals::Kind::Valve:
-            std::snprintf(text, sizeof text, "%s: %s - %s", ValvePipe(target.type) == BlockType::FLUID_PIPE ? "Fluid valve" : "Valve", IsOpenValve(target.type) ? "open" : "shut",
-                          info.a ? ("listens to " + ch(info.a)).c_str() : "by hand");
-            break;
-        case Signals::Kind::Piston: std::snprintf(text, sizeof text, "Piston - %s", info.a ? ("listens to " + ch(info.a)).c_str() : "no channel"); break;
-        case Signals::Kind::Launcher:
-            std::snprintf(text, sizeof text, "Air launcher (%d blocks/s) - %s", static_cast<int>(Power::LaunchSpeed(info.b)), info.a ? ("fires on " + ch(info.a)).c_str() : "no channel");
-            break;
-        case Signals::Kind::WaterSensor:
-        case Signals::Kind::PressureSensor:
-        case Signals::Kind::DaylightSensor:
-        case Signals::Kind::Sprinkler:
-            std::snprintf(text, sizeof text, "Sprinkler - %s", info.a ? ("sprays on " + ch(info.a)).c_str() : "no channel (sprays when it senses fire)");
-            break;
-        case Signals::Kind::MachineSensor:
-        case Signals::Kind::HeatSensor:
-        case Signals::Kind::PlayerSensor: {
+        case Signals::Kind::Lamp: std::snprintf(text, sizeof text, "Lamp: %s", ch(info.a).c_str()); break;
+        case Signals::Kind::Valve: std::snprintf(text, sizeof text, "Valve: %s%s", IsOpenValve(target.type) ? "open" : "shut", info.a ? (", " + ch(info.a)).c_str() : ""); break;
+        case Signals::Kind::Piston: std::snprintf(text, sizeof text, "Piston: %s", ch(info.a).c_str()); break;
+        case Signals::Kind::Launcher: std::snprintf(text, sizeof text, "Launcher: %s, %d/s", ch(info.a).c_str(), static_cast<int>(Power::LaunchSpeed(info.b))); break;
+        case Signals::Kind::Sprinkler: std::snprintf(text, sizeof text, "Sprinkler: %s", info.a ? ch(info.a).c_str() : "auto"); break;
+        case Signals::Kind::Sluice: std::snprintf(text, sizeof text, "Sluice gate: %s", ch(info.a).c_str()); break;
+        default: {
             const auto k = Signals::KindOf(target.type);
             const char* what = k == Signals::Kind::WaterSensor ? "Water sensor" : k == Signals::Kind::PressureSensor ? "Pressure sensor"
                              : k == Signals::Kind::DaylightSensor ? "Daylight sensor" : k == Signals::Kind::MachineSensor ? "Machine sensor"
                              : k == Signals::Kind::HeatSensor ? "Heat sensor" : "Player sensor";
-            std::string setting;
-            if (k == Signals::Kind::PressureSensor) setting = info.b ? " at " + std::to_string(info.b) + "%" : " (any air)";
-            if (k == Signals::Kind::MachineSensor)
-                setting = std::string(" (") + Signals::WatchName(static_cast<Signals::Watch>(std::min<uint8_t>(info.mode, 5))) +
-                          (info.mode == static_cast<uint8_t>(Signals::Watch::Level) ? ": " + std::to_string(info.b) + "%" : "") + ")";
-            if (k == Signals::Kind::HeatSensor) setting = " within " + std::to_string(Signals::HeatRange(info.b)) + " blocks";
-            if (k == Signals::Kind::PlayerSensor)
-                setting = (info.mode == static_cast<uint8_t>(Signals::Mode::Or) ? " (and creatures) within " : " within ") + std::to_string(Signals::PlayerRange(info.b)) + " blocks";
-            std::snprintf(text, sizeof text, "%s%s: %s - sends on %s", what, setting.c_str(), info.on ? "on" : "off", ch(info.out).c_str());
-            break;
+            std::snprintf(text, sizeof text, "%s: %s, %s", what, onOff, ch(info.out).c_str());
         }
-        default: std::snprintf(text, sizeof text, "Sluice gate - %s", info.a ? ("listens to " + ch(info.a)).c_str() : "no channel (stays shut)"); break;
         }
         label(text);
         return;
@@ -1280,90 +1260,9 @@ void Application::DrawCrosshair() {
     if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
         at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && target.type == BlockType::FILTER_PIPE) {
         const BlockType only = target.FilterType();
-        label(only == BlockType::AIR ? std::string("Filter pipe: lets anything through").c_str() : (std::string("Filter pipe: lets only ") + BlockName(only) + " through").c_str());
+        label((std::string("Filter: ") + (only == BlockType::AIR ? "anything" : BlockName(only))).c_str());
         return;
     }
-}
-
-// How a machine is doing, in a line (empty for one that has nothing to say): shown in
-// its menu (right-click it). A structure's blocks go by its core.
-std::string Application::MachineStatus(const glm::ivec3& pos) const {
-    Block target;
-    if (!world->GetBlock(pos.x, pos.y, pos.z, target) || !Power::IsMachine(target.type)) return {};
-    for (const auto& m : client->GetMachines()) {
-        if (m.pos != pos) continue;
-        char text[128];
-        const int pressure = static_cast<int>(std::lround(m.pressure / 2.55f));
-        const auto state = static_cast<Power::DrillState>(m.state);
-        if (target.type == BlockType::WATER_WHEEL)
-            std::snprintf(text, sizeof text, state == Power::DrillState::Blocked ? "Water wheel: jammed" : m.speed ? "Water wheel: turning (%d%%)" : "Water wheel: still",
-                          int(std::lround(m.speed / 2.55f)));
-        else if (target.type == BlockType::COMPRESSOR)
-            std::snprintf(text, sizeof text, "Compressor: +%.1f air/s from %d wheel%s - air %d%%", m.speed / 2.0f, m.depth, m.depth == 1 ? "" : "s", pressure);
-        else if (target.type == BlockType::AIR_TANK) std::snprintf(text, sizeof text, "Air tank - air %d%%", pressure);
-        else if (target.type == BlockType::CREATIVE_AIR_TANK) std::snprintf(text, sizeof text, "Creative air tank: never runs out - air %d%%", pressure);
-        else if (target.type == BlockType::SMELTER || target.type == BlockType::SMELTER_LIT)
-            std::snprintf(text, sizeof text, "Smelter: %s - air %d%%",
-                          state == Power::DrillState::Working ? ("making " + std::string(m.depth < static_cast<uint8_t>(BlockType::COUNT) ? BlockName(static_cast<BlockType>(m.depth)) : "?")).c_str()
-                          : state == Power::DrillState::NoPressure ? "needs air pressure" : state == Power::DrillState::NoChest ? "needs a chest" : "nothing to smelt",
-                          pressure);
-        else if (target.type == BlockType::PRESSURE_GAUGE || target.type == BlockType::FLUID_TANK) {
-            // On fluid pipes, or a tank: how full, of what.
-            Block on;
-            const glm::ivec3 behind = target.type == BlockType::FLUID_TANK ? m.pos : m.pos - target.Facing();
-            const bool fluid = world->GetBlock(behind.x, behind.y, behind.z, on) && Fluids::IsPart(on.type);
-            const char* what = Fluids::Name(static_cast<Fluids::Kind>(std::min<uint8_t>(m.depth, static_cast<uint8_t>(Fluids::Kind::Count) - 1)));
-            if (fluid) std::snprintf(text, sizeof text, "%s - %d%% full%s%s", target.type == BlockType::FLUID_TANK ? "Fluid tank" : "Gauge", pressure,
-                                     pressure > 0 ? " of " : "", pressure > 0 ? what : "");
-            else std::snprintf(text, sizeof text, "Pressure gauge - air %d%%", pressure);
-        }
-        else if (target.type == BlockType::MULTIBLOCK) {
-            const char* doing = state == Power::DrillState::Working ? "working" : state == Power::DrillState::NoPressure ? "needs air pressure"
-                              : state == Power::DrillState::NoChest ? "connect its ports" : state == Power::DrillState::Done ? "no oil under it" : "idle";
-            std::snprintf(text, sizeof text, "%s: %s - air %d%%", Multiblocks::PatternOf(Multiblocks::KindOf(target)).name, doing, pressure);
-        }
-        else if (target.type == BlockType::MINING_POST) {
-            const char* doing = state == Power::DrillState::NoPressure ? "waiting for pay (put cooked food in it)"
-                              : state == Power::DrillState::Done        ? "no ore left within 12 blocks"
-                                                                        : "mining";
-            std::snprintf(text, sizeof text, "Mining post: %d miner%s - %s", m.depth, m.depth == 1 ? "" : "s", doing);
-        }
-        else if (target.type == BlockType::ENGINE)
-            std::snprintf(text, sizeof text, "Engine: %s - air %d%%", state == Power::DrillState::Working ? "running" : "stopped (no fuel)", pressure);
-        else if (target.type == BlockType::AIR_DIFFUSER)
-            std::snprintf(text, sizeof text, "Air diffuser: %s - air %d%%", state == Power::DrillState::Working ? "breathing out fresh air" : "stopped (needs air pressure)", pressure);
-        else if (target.type == BlockType::TURBINE)
-            std::snprintf(text, sizeof text, "Steam turbine: %s - air %d%%", state == Power::DrillState::Working ? "running" : "stopped (no steam)", pressure);
-        else if (target.type == BlockType::BOILER)
-            std::snprintf(text, sizeof text, "Boiler: %s", state == Power::DrillState::Working      ? "boiling"
-                                                          : state == Power::DrillState::NoPressure ? "out of fuel (coal or coke in its chests)"
-                                                          : state == Power::DrillState::NoChest    ? "needs fluid pipes under it (water) and over it (steam)"
-                                                                                                   : "no water under it, or no room for steam over it");
-        else if (target.type == BlockType::OIL_DERRICK || target.type == BlockType::REFINERY) {
-            const bool derrick = target.type == BlockType::OIL_DERRICK;
-            const char* doing = state == Power::DrillState::Working ? (derrick ? "pumping oil" : "making fuel") : state == Power::DrillState::NoPressure ? "needs air pressure"
-                              : state == Power::DrillState::NoChest ? (derrick ? "needs fluid pipes" : "needs pipes in and out")
-                              : state == Power::DrillState::Done ? "no oil under it" : "idle";
-            std::snprintf(text, sizeof text, "%s: %s - air %d%%", derrick ? "Oil derrick" : "Refinery", doing, pressure);
-        }
-        else if (target.type == BlockType::EXTRACTOR || target.type == BlockType::CRAFTER || target.type == BlockType::HARVESTER) {
-            const char* name = target.type == BlockType::EXTRACTOR ? "Extractor" : target.type == BlockType::CRAFTER ? "Crafter" : "Harvester";
-            std::string what;
-            if (target.type == BlockType::CRAFTER) {
-                const int index = static_cast<int>(target.axis) - 1;
-                what = index >= 0 && index < static_cast<int>(Crafting::Recipes().size()) ? std::string(" making ") + Crafting::Recipes()[index].name : " (no recipe)";
-            }
-            const char* doing = state == Power::DrillState::Working ? "working" : state == Power::DrillState::NoPressure ? "needs air pressure"
-                              : state == Power::DrillState::NoChest ? "needs a chest" : state == Power::DrillState::Blocked ? "no recipe" : "idle";
-            std::snprintf(text, sizeof text, "%s%s: %s - air %d%%", name, what.c_str(), doing, pressure);
-        }
-        else if (target.type == BlockType::PISTON || target.type == BlockType::PISTON_HEAD || target.type == BlockType::PRESSURE_SENSOR) return {};
-        else if (target.type == BlockType::PUMP)
-            std::snprintf(text, sizeof text, "Pump: %s - air %d%%", state == Power::DrillState::Working ? "pumping" : state == Power::DrillState::NoPressure ? "needs air pressure" : "nothing to pump", pressure);
-        else std::snprintf(text, sizeof text, "Drill: %s - air %d%%", Power::Describe(state), pressure);
-        return text;
-    }
-    return {};
 }
 
 void Application::UpdateMachines(FrameParams& params, const std::function<glm::vec2(const glm::vec3&)>& lightAt) {
@@ -2583,9 +2482,9 @@ void Application::OnKey(int key, int action) {
     }
     if (is(Action::Inventory)) return SetInventoryOpen(true);
     if (is(Action::PlaceHeight)) {
-        // Placement height: full, 3/4, 1/2, 1/4 (with Shift, back up). With the chisel in
-        // hand, how fine it cuts instead: an eighth, a quarter, a half (Shift: back).
-        const bool shift = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+        // Placement height: full, 3/4, 1/2, 1/4 (crouching, back up). With the chisel in
+        // hand, how fine it cuts instead: an eighth, a quarter, a half (crouching: back).
+        const bool shift = CrouchHeld();
         if (SelectedTool() == Tool::Chisel) {
             constexpr int kSteps = static_cast<int>(std::size(Block::kChiselSteps));
             int i = 0;
@@ -2826,7 +2725,7 @@ void Application::DrawTrade() {
             ImGui::EndDisabled();
             ImGui::PopID();
         }
-        ImGui::TextDisabled("You have what's in white. I or Esc closes.");
+        ImGui::TextDisabled("You have what's in white.");
     }
     ImGui::End();
     if (!keepOpen) SetInventoryOpen(false);
@@ -2853,8 +2752,7 @@ void Application::DrawInventory() {
         const TextureAtlas& atlas = renderer->GetAtlas();
         const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 10 * (kIcon + 10.0f));
-        ImGui::TextDisabled("Click a stack to pick it up and a slot to put it down (or drag it there); right-click picks up half, or puts down one. "
-                            "Shift-click moves it across. 1-9 and 0 choose the hotbar slot in hand. I or Esc closes.");
+        ImGui::TextDisabled("Right-click: half or one. Crouch-click: move across.");
         ImGui::PopTextWrapPos();
         // Armour: a slot for each piece (only that piece goes in it), and what they take off.
         ImGui::SeparatorText("Armour");
@@ -2873,7 +2771,7 @@ void Application::DrawInventory() {
             if (inv.offcuts[t]) cuts += (cuts.empty() ? "" : ", ") + FormatBlocks(inv.offcuts[t]) + " " + BlockName(static_cast<BlockType>(t));
         if (!cuts.empty()) {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 10 * (kIcon + 10.0f));
-            ImGui::TextDisabled("Offcuts (part blocks, used first): %s", cuts.c_str());
+            ImGui::TextDisabled("Offcuts: %s", cuts.c_str());
             ImGui::PopTextWrapPos();
         }
 
@@ -3053,7 +2951,7 @@ void Application::HandleSlotClicks() {
             heldStack.reset();
         }
         else if (const Stack st = StackIn(hoveredSlot->first, hoveredSlot->second); !st.Empty()) {
-            if (ImGui::GetIO().KeyShift) QuickMove(hoveredSlot->first, hoveredSlot->second);
+            if (CrouchHeld()) QuickMove(hoveredSlot->first, hoveredSlot->second);
             else {
                 heldStack = HeldStack{ hoveredSlot->first, hoveredSlot->second, st.item, st.count };
                 draggingStack = true;
@@ -3170,7 +3068,6 @@ void Application::DrawMachineInfo(const glm::ivec3& pos) {
         machineInspectAt = now;
     }
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 460.0f);
-    if (const std::string status = MachineStatus(pos); !status.empty()) ImGui::TextUnformatted(status.c_str());
     const auto& said = client->GetInspections();
     if (!said.empty() && said.back().time >= machineAskedAt - 0.5) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
@@ -3200,7 +3097,6 @@ void Application::DrawMachine() {
     const std::string title = std::string(BlockName(b.type)) + "###machine";
     if (ImGui::Begin(title.c_str(), &keepOpen, flags)) {
         DrawMachineInfo(machineAt);
-        ImGui::TextDisabled("I or Esc closes.");
     }
     ImGui::End();
     if (!keepOpen) SetInventoryOpen(false);
@@ -3233,14 +3129,14 @@ void Application::DrawChest() {
     hoveredSlot.reset();
     if (ImGui::Begin(title.c_str(), &keepOpen, flags)) {
         if (const auto at = client->GetOpenChest()) DrawMachineInfo(*at); // (a machine: how it's doing)
-        ImGui::TextDisabled("Click or drag stacks between it and your slots; right-click: half, or one. Shift-click moves a stack across. I or Esc closes.");
+        ImGui::TextDisabled("Right-click: half or one. Crouch-click: move across.");
         ImGui::SeparatorText("In it");
         DrawSlotGrid(SlotBox::Chest, 0, static_cast<int>(client->GetChest().slots.size()), 10, kIcon);
         std::string cuts;
         const Inventory& chest = client->GetChest();
         for (size_t t = 0; t < chest.offcuts.size(); t++)
             if (chest.offcuts[t]) cuts += (cuts.empty() ? "" : ", ") + FormatBlocks(chest.offcuts[t]) + " " + BlockName(static_cast<BlockType>(t));
-        if (!cuts.empty()) ImGui::TextDisabled("Offcuts (part blocks, for its machines): %s", cuts.c_str());
+        if (!cuts.empty()) ImGui::TextDisabled("Offcuts: %s", cuts.c_str());
         DrawPlayerSlots(kIcon);
     }
     ImGui::End();
@@ -3266,6 +3162,12 @@ std::optional<Application::ChiselAim> Application::AimChisel() {
     const glm::vec3 p = glm::clamp(hit->point + dir * 0.002f - glm::vec3(hit->block), glm::vec3(0.0f), glm::vec3(1.0f));
     aim.edge = Block::ChiselEdgeAt(aim.shapeDir, p);
     return aim;
+}
+
+bool Application::CrouchHeld() const {
+    if (glfwGetKey(window, settings.Key(Action::Crouch)) == GLFW_PRESS) return true;
+    GLFWgamepadstate pad;
+    return glfwGetGamepadState(GLFW_JOYSTICK_1, &pad) && pad.buttons[GLFW_GAMEPAD_BUTTON_B] == GLFW_PRESS;
 }
 
 void Application::ChiselTarget(bool raise) {
@@ -3333,9 +3235,13 @@ void Application::OnMouseButton(int button, int action) {
         }
     }
 
-    // Right-click on a chest within 6 blocks opens it (with Shift held, or further off,
-    // it's built against instead).
-    if (button == GLFW_MOUSE_BUTTON_RIGHT && glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) != GLFW_PRESS) {
+    // Right-click on a chest within 6 blocks opens it (crouching, or further off, it's
+    // built against instead; but crouching at a signal block sets its channels).
+    Block aimedAt;
+    const auto aimedHit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
+    const bool atSignalBlock = aimedHit && world->GetBlock(aimedHit->block.x, aimedHit->block.y, aimedHit->block.z, aimedAt) &&
+                               Signals::KindOf(aimedAt.type) != Signals::Kind::None;
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && (!CrouchHeld() || atSignalBlock)) {
         Block target;
         // The engineer's hammer: strike a structure's block to form it (the server
         // checks the pattern and says what's missing).
@@ -3344,7 +3250,7 @@ void Application::OnMouseButton(int button, int action) {
             return;
         }
         // Menus come before building: a machine with its own inventory opens like a chest,
-        // with how it's doing at the top, whatever's in hand (Shift: build against it
+        // with how it's doing at the top, whatever's in hand (crouch: build against it
         // instead). Any block of a formed structure (its ports too) opens the
         // structure's. A crafter takes what's in hand as its recipe.
         // (Holding machinery that joins machines (a pipe, a gauge, a shaft, a wheel, a
@@ -3365,7 +3271,7 @@ void Application::OnMouseButton(int button, int action) {
                 if (const auto core = StructureCoreAt(pos); core && world->GetBlock(core->x, core->y, core->z, target)) pos = *core;
             if (opens(target.type)) return OpenMachine(pos, true);
         }
-        // A filter pipe or a crafter: set it to what's in hand (with Shift held, it's
+        // A filter pipe or a crafter: set it to what's in hand (crouching, it's
         // built against instead).
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
             at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && (target.type == BlockType::FILTER_PIPE || target.type == BlockType::CRAFTER)) {
@@ -3382,7 +3288,7 @@ void Application::OnMouseButton(int button, int action) {
         // do with them), likewise.
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
             at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Signals::KindOf(target.type) != Signals::Kind::None &&
-            (player.IsCrouching() ||
+            (CrouchHeld() ||
              (!connecting && (target.type == BlockType::LOGIC_GATE || target.type == BlockType::SIGNAL_LAMP || target.type == BlockType::SIGNAL_LAMP_ON)))) {
             OpenSignalEditor(at->block, target.type);
             return;
@@ -3408,9 +3314,9 @@ void Application::OnMouseButton(int button, int action) {
             return OpenMachine(at->block, false);
     }
 
-    // Right-click with the chisel: cut the corner looked at (Shift: build it up).
+    // Right-click with the chisel: cut the corner looked at (crouching: build it up).
     if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::Chisel) {
-        ChiselTarget(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
+        ChiselTarget(CrouchHeld());
         return;
     }
 
@@ -3642,7 +3548,7 @@ void Application::DrawSignalEditor() {
             ImGui::SetNextItemWidth(160.0f);
             if (ImGui::InputInt(label, &value)) value = std::clamp(value, 0, 255);
         };
-        ImGui::TextDisabled("Channels 1-255 (0: none). Signals reach %.0f blocks.", Signals::kRange);
+        ImGui::TextDisabled("Channels 1-255 (0: none)");
         if (kind == Signals::Kind::Gate) {
             const char* modes[] = { "AND (on while A and B are)", "OR (on while A or B is)", "XOR (on while just one of A, B is)", "NOT (on while A isn't)",
                                     "RELAY (sends A on again, further)", "CLOCK (on and off each second while A is on, or always)",
@@ -3656,14 +3562,9 @@ void Application::DrawSignalEditor() {
         else if (Signals::Sends(kind)) {
             channel("Sends on", signalOut);
             switch (kind) {
-            case Signals::Kind::Lever: ImGui::TextDisabled("Right-click the lever to flip it."); break;
-            case Signals::Kind::Plate: ImGui::TextDisabled("It sends while stood on, and for a second after."); break;
-            case Signals::Kind::WaterSensor: ImGui::TextDisabled("Sends while water touches it (an eighth of a block or more, on any side)."); break;
-            case Signals::Kind::DaylightSensor: ImGui::TextDisabled("Sends by day, while the sky is open above it."); break;
             case Signals::Kind::PressureSensor:
                 ImGui::SetNextItemWidth(160.0f);
                 if (ImGui::InputInt("Pressure (%)", &signalB)) signalB = std::clamp(signalB, 0, 100);
-                ImGui::TextDisabled("Join it to air pipes. Sends while their pressure is at least this (0: any air at all).");
                 break;
             case Signals::Kind::MachineSensor: {
                 const char* watches[] = { "a machine working", "a machine stopped", "a machine waiting for air", "a chest with anything in it", "an empty chest",
@@ -3676,13 +3577,11 @@ void Application::DrawSignalEditor() {
                     ImGui::SetNextItemWidth(160.0f);
                     if (ImGui::InputInt("Full (%)", &signalB)) signalB = std::clamp(signalB, 0, 100);
                 }
-                ImGui::TextDisabled("Place it touching a machine, a chest, a fluid tank or pipe, or air pipes.");
                 break;
             }
             case Signals::Kind::HeatSensor:
                 ImGui::SetNextItemWidth(160.0f);
                 if (ImGui::InputInt("Range (blocks)", &signalB)) signalB = std::clamp(signalB, 0, Signals::kMaxHeatRange);
-                ImGui::TextDisabled("Sends while fire or lava is this near (0: %d blocks).", Signals::kHeatRange);
                 break;
             case Signals::Kind::PlayerSensor:
                 ImGui::SetNextItemWidth(160.0f);
@@ -3691,27 +3590,18 @@ void Application::DrawSignalEditor() {
                     bool creaturesToo = signalModeIndex == static_cast<int>(Signals::Mode::Or);
                     if (ImGui::Checkbox("Hostile creatures too", &creaturesToo)) signalModeIndex = creaturesToo ? static_cast<int>(Signals::Mode::Or) : 0;
                 }
-                ImGui::TextDisabled("Sends while a player (or, ticked, a hostile dwarf) is this near (0: %d blocks).", Signals::kPlayerRange);
                 break;
             default: break;
             }
         }
         else {
             channel("Listens to", signalA);
-            if (kind == Signals::Kind::Lamp) ImGui::TextDisabled("Lights while the channel is on.");
-            if (kind == Signals::Kind::Valve) ImGui::TextDisabled("Opens while the channel is on. With none, right-click (empty-handed) opens and shuts it.");
-            if (kind == Signals::Kind::Sluice) ImGui::TextDisabled("Opens while the channel is on, and closes again when it's off.");
-            if (kind == Signals::Kind::Sprinkler)
-                ImGui::TextDisabled("Sprays the fires round and below it out while the channel is on. With no channel it sprays whenever it senses fire. It needs water in the fluid pipes beside it.");
+            if (kind == Signals::Kind::Sprinkler) ImGui::TextDisabled("No channel: sprays when it senses fire");
             if (kind == Signals::Kind::Launcher) {
                 ImGui::SetNextItemWidth(160.0f);
                 if (ImGui::InputInt("Power (blocks/s)", &signalB)) signalB = signalB <= 0 ? 0 : std::clamp(signalB, Power::kMinLaunchSpeed, Power::kMaxLaunchSpeed);
-                ImGui::TextDisabled("Throws what's in front of it each time the channel comes on (power 0: %d; %d to %d).", static_cast<int>(Power::kLaunchSpeed),
-                                    Power::kMinLaunchSpeed, Power::kMaxLaunchSpeed);
-                ImGui::TextDisabled("It runs on air (harder throws take more): join it to air pipes.");
+                ImGui::TextDisabled("0: %d; %d to %d", static_cast<int>(Power::kLaunchSpeed), Power::kMinLaunchSpeed, Power::kMaxLaunchSpeed);
             }
-            if (kind == Signals::Kind::Piston)
-                ImGui::TextDisabled("Pushes out while the channel is on and pulls back when it's off. It runs on air: join it to air pipes.");
         }
         if (ImGui::Button("Done") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
             net::SignalInfo info;
@@ -3724,8 +3614,6 @@ void Application::DrawSignalEditor() {
             client->ConfigureSignal(info);
             open = false;
         }
-        ImGui::SameLine();
-        ImGui::TextDisabled("Crouch and right-click to change it later.");
     }
     ImGui::End();
     if (!open) SetInventoryOpen(false);

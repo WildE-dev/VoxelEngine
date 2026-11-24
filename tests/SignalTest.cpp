@@ -255,7 +255,7 @@ int main() {
               "a valve listening to 2 (on) opens");
         a.client.UseBed(valve);
         wait(0.5);
-        Check(blockAt(valve) == BlockType::VALVE_OPEN && Has(a.client, "answers to channel 2"), "and won't shut by hand");
+        Check(blockAt(valve) == BlockType::VALVE_OPEN && Has(a.client, "Valve on channel 2"), "and won't shut by hand");
         goTo(8.5f, 12.5f);
         flip(lever2, false);
         Check(pump(5.0, [&] { return blockAt(valve) == BlockType::VALVE; }), "it shuts when 2 goes off");
