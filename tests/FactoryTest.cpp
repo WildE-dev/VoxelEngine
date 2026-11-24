@@ -339,6 +339,13 @@ int main(int argc, char** argv) {
             Check(crudeIn, "the derrick pumps crude oil into the first tank");
             Check(fuelIn, "the refinery turns it into fuel in the second");
             Check(engineRan, "the engine runs on the fuel");
+            // What the refinery leaves over: bitumen, in its own inventory.
+            a.client.OpenChest({ 35, 0, 31 });
+            Check(pump(30.0, [&] {
+                      server.QueueConsoleCommand("pressurise 29 0 31");
+                      return a.client.GetOpenChest() == glm::ivec3(35, 0, 31) && a.client.GetChestUnits(BlockType::BITUMEN) > 0;
+                  }),
+                  "and leaves bitumen over in its inventory");
             const auto* g = machine(engineGauge);
             Check(pump(5.0, [&] { g = machine(engineGauge); return g && g->pressure > 0; }), "and fills its own air network (its gauge reads " + std::to_string(g ? g->pressure : 0) + "/255)");
             Block shale;

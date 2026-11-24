@@ -168,6 +168,7 @@ inline float DefaultHardness(BlockType type) {
     case BlockType::TURBINE:
     case BlockType::AIR_DIFFUSER:
     case BlockType::SPRINKLER:
+    case BlockType::ASPHALT:
     case BlockType::FLUID_OUTLET: return 3.0f;
     case BlockType::DRAIN: return 3.0f;
     case BlockType::COAL_ORE: return 4.5f;
@@ -201,6 +202,7 @@ inline Tool DefaultBestTool(BlockType type) {
     case BlockType::AIR_DIFFUSER:
     case BlockType::FLUID_OUTLET:
     case BlockType::SPRINKLER:
+    case BlockType::ASPHALT:
     case BlockType::STEEL_FRAME:
     case BlockType::MACHINE_CASING:
     case BlockType::FIRE_BRICK:

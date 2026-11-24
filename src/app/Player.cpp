@@ -17,6 +17,7 @@ const float kJumpSpeed = std::sqrt(2.0f * kGravity * kJumpHeight);
 
 constexpr float kWalkSpeed = 4.5f;
 constexpr float kSprintSpeed = 7.0f;
+constexpr float kAsphaltPace = 1.3f; // walking (or sprinting) on asphalt, this much faster
 constexpr float kCrouchSpeedFactor = 0.3f; // crouching walks at this share of walking speed
 constexpr float kClimbSpeed = 3.0f;        // up a ladder
 constexpr float kLadderSlide = 1.5f;       // down one, letting go
@@ -217,7 +218,13 @@ void Player::Step(const BlockAccess& world, const PlayerInput& input, float dt) 
     const float targetEye = crouching ? kCrouchEyeHeight : kEyeHeight;
     eyeHeight += (targetEye - eyeHeight) * std::min(1.0f, dt * 18.0f);
 
-    const float speed = crouching ? kWalkSpeed * kCrouchSpeedFactor : input.sprint ? kSprintSpeed : kWalkSpeed;
+    float speed = crouching ? kWalkSpeed * kCrouchSpeedFactor : input.sprint ? kSprintSpeed : kWalkSpeed;
+    // On a road: faster.
+    {
+        Block under;
+        const glm::ivec3 below(glm::floor(feet - glm::vec3(0.0f, 0.05f, 0.0f)));
+        if (onGround && world.GetBlock(below.x, below.y, below.z, under) && under.type == BlockType::ASPHALT) speed *= kAsphaltPace;
+    }
     const glm::vec2 wish = (forward * move.y + right * move.x) * speed;
 
     const float acceleration = inWater ? kSwimAcceleration : onGround ? (OnIce(world) ? kIceAcceleration : kGroundAcceleration) : kAirAcceleration;

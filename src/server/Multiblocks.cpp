@@ -183,6 +183,13 @@ bool Server::RunStructure(const glm::ivec3& core, const Block& block, Worker& w)
         in->amount -= units;
         out->amount += units;
         out->kind = Fluids::Kind::Fuel;
+        // What's left over: bitumen, into its own inventory (while there's room for it).
+        int& toward = refinedTowardBitumen[core];
+        toward += units;
+        if (toward >= kCrudePerBitumen) {
+            toward -= kCrudePerBitumen;
+            if (ChestAt(core).AddUnits(BlockType::BITUMEN, Block::kUnitsPerBlock) == 0) SendChestToViewers(core);
+        }
         w.state = Power::DrillState::Working;
         return true;
     }

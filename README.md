@@ -1543,6 +1543,10 @@ it; they aren't part of it, so they don't join what's on either side of them:
   units, then it's spent (stone).
 - A **refinery** structure takes crude oil from the pipe at its crude port and puts the
   same amount of **fuel** into the pipe at its fuel port.
+  What's left over is **bitumen**: one for every 256 units of crude it refines, into the
+  refinery's own inventory (right-click it to take it out). One bitumen, two sand and a
+  stone make four **asphalt**, a dark road block that you walk (or sprint) 30% faster
+  on. It can be chiselled like any building block.
 - An **engine** is part of an air network, like a compressor: it burns 16 units of
   fuel a second from the pipes beside it and adds 24 units of air a second to its
   network (more than a water wheel), so oil powers machines anywhere, no river needed.
@@ -1574,7 +1578,8 @@ The rules are in `src/world/Fluids.h`; the server runs it with the air
 water simulation through allowances, like pumps (`WaterSimulation::SetDrainBudget`).
 `FactoryTest` builds a derrick over oil shale, pipes to a tank, a refinery into another
 tank and an engine on that with an air network of its own, and checks crude oil
-reaches the first tank, fuel the second, the engine runs and fills its network, and the
+reaches the first tank, fuel the second (with bitumen left in the refinery), the engine
+runs and fills its network, and the
 shale records what's been drawn; then a drain under a cup of water, piped through a
 tank to an outlet, and checks the cup empties and the water comes out of the outlet.
 `SaveTest` checks what pipes and tanks hold is saved. `PumpTest` checks a drain with no

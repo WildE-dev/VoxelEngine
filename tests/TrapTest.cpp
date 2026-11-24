@@ -225,6 +225,23 @@ int main(int argc, char** argv) {
         Check(a.player.GetFeetPosition().y < 1.5f && a.client.GetHealth() == beforeRun,
               "sprinting down twelve one-block steps doesn't hurt (health " + std::to_string(a.client.GetHealth()) + ", at y " +
                   std::to_string(a.player.GetFeetPosition().y) + ")");
+        // On asphalt you walk faster than on stone.
+        auto walked = [&](const char* ground, float z) {
+            server.QueueConsoleCommand(std::string("fill 100 -1 ") + std::to_string(int(z)) + " 130 -1 " + std::to_string(int(z)) + " " + ground);
+            server.QueueConsoleCommand(std::string("fill 100 0 ") + std::to_string(int(z)) + " 130 2 " + std::to_string(int(z)) + " air");
+            server.QueueConsoleCommand("tp Tester 100.5 0 " + std::to_string(z + 0.5f));
+            both(20.0, [&] { return std::abs(a.player.GetFeetPosition().x - 100.5f) < 0.2f && a.player.IsOnGround(); });
+            both(0.5, [] { return false; });
+            const float from = a.player.GetFeetPosition().x;
+            a.input.move = glm::vec2(0.0f, 1.0f);
+            a.input.yaw = 0.0f;
+            a.input.lookDirection = glm::vec3(1.0f, 0.0f, 0.0f);
+            both(1.5, [] { return false; });
+            a.input = PlayerInput{};
+            return a.player.GetFeetPosition().x - from;
+        };
+        const float onStone = walked("stone", 20.0f), onAsphalt = walked("asphalt", 22.0f);
+        Check(onAsphalt > onStone * 1.2f, "on asphalt you walk faster (" + std::to_string(onAsphalt) + " blocks against " + std::to_string(onStone) + " on stone)");
 
     }
     if (sections.Run("tnt")) {

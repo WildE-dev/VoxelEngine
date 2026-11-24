@@ -362,6 +362,8 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* HAY_BALE    */ {{ "hay_bale_top", "hay_bale_top", "hay_bale_side", "hay_bale_side", "hay_bale_side", "hay_bale_side" }},
     /* HEAT_SENSOR */ {{ "heat_sensor", "sensor_bottom", "heat_sensor", "heat_sensor", "heat_sensor", "heat_sensor" }},
     /* SPRINKLER   */ {{ "sprinkler_side", "sprinkler_head", "sprinkler_side", "sprinkler_side", "sprinkler_side", "sprinkler_side" }},
+    /* BITUMEN     */ {{ "bitumen", "bitumen", "bitumen", "bitumen", "bitumen", "bitumen" }},
+    /* ASPHALT     */ {{ "asphalt", "asphalt", "asphalt", "asphalt", "asphalt", "asphalt" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -405,7 +407,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "extractor", "filter_pipe", "crafter", "harvester", "drain", "sinkhole", "pressure_gauge",
     "oil_shale", "tar", "fluid_pipe", "fluid_tank", "oil_derrick", "refinery", "engine", "fluid_outlet", "mining_post",
     "steel_frame", "machine_casing", "fire_brick", "hammer", "multiblock", "multiblock_part",
-    "crusher", "crushed_iron", "coke", "glow_fungus", "magma", "gold_ore", "gold_ingot", "crossbow", "forge_core", "machine_sensor", "boiler", "turbine", "air_diffuser", "copper_ore", "copper_ingot", "creative_air_tank", "lava", "fluid_valve", "fluid_valve_open", "obsidian", "obsidian_pipe", "fire", "bucket", "water_bucket", "launcher", "hay_bale", "heat_sensor", "sprinkler",
+    "crusher", "crushed_iron", "coke", "glow_fungus", "magma", "gold_ore", "gold_ingot", "crossbow", "forge_core", "machine_sensor", "boiler", "turbine", "air_diffuser", "copper_ore", "copper_ingot", "creative_air_tank", "lava", "fluid_valve", "fluid_valve_open", "obsidian", "obsidian_pipe", "fire", "bucket", "water_bucket", "launcher", "hay_bale", "heat_sensor", "sprinkler", "bitumen", "asphalt",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");

@@ -550,6 +550,10 @@ private:
     static constexpr int kStructureWellDepth = 160;
     static constexpr int kStructureCrude = 48;     // a derrick structure's draw every half second
     static constexpr int kStructureRefine = 96;    // a refinery's every update
+    // A refinery leaves a bitumen in its inventory for every this much crude it refines
+    // (what it's refined toward the next, by its core: not saved).
+    static constexpr int kCrudePerBitumen = 256;
+    std::unordered_map<glm::ivec3, int, Coords::IVec3Hash> refinedTowardBitumen;
     static constexpr double kFurnaceInterval = 0.5;
     bool Refine(const glm::ivec3& pos, const Block& refinery, Worker& w);
     std::unordered_map<glm::ivec3, Compressor, Coords::IVec3Hash> compressors;

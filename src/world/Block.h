@@ -332,6 +332,10 @@ enum class BlockType : uint8_t {
     // round and below it out, while its channel is on (with none, whenever it
     // senses fire itself).
     SPRINKLER,
+    // Bitumen (an item): what's left of crude oil once a refinery has made fuel of it.
+    BITUMEN,
+    // Asphalt: bitumen and stone, a road: you walk faster on it (kAsphaltPace).
+    ASPHALT,
     COUNT
 };
 // Machines with an inventory of their own (opened like a chest, empty-handed): what
@@ -393,7 +397,7 @@ inline bool IsItemType(BlockType type) {
     return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE || type == BlockType::COAL ||
            type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD ||
            type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH || type == BlockType::BOAT ||
-           type == BlockType::STEEL_INGOT || type == BlockType::HAMMER || type == BlockType::CRUSHED_IRON || type == BlockType::COKE ||
+           type == BlockType::STEEL_INGOT || type == BlockType::HAMMER || type == BlockType::CRUSHED_IRON || type == BlockType::COKE || type == BlockType::BITUMEN ||
            type == BlockType::GOLD_INGOT || type == BlockType::CROSSBOW || type == BlockType::FORGE_CORE ||
            type == BlockType::COPPER_INGOT || type == BlockType::BUCKET || type == BlockType::WATER_BUCKET;
 }
