@@ -120,11 +120,12 @@ int main() {
         Check(Crafting::TimesAffordable(Crafting::Recipes()[Crafting::Find("cement")], quarry) == 2, "and by hand, two limestone and half a coal make a cement");
         std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> mix{};
         mix[static_cast<size_t>(BlockType::CEMENT)] = Block::kUnitsPerBlock;
-        mix[static_cast<size_t>(BlockType::SAND)] = 2 * Block::kUnitsPerBlock;
-        mix[static_cast<size_t>(BlockType::STONE)] = Block::kUnitsPerBlock;
+        mix[static_cast<size_t>(BlockType::GRAVEL)] = 2 * Block::kUnitsPerBlock;
+        mix[static_cast<size_t>(BlockType::SAND)] = Block::kUnitsPerBlock;
         const auto& concrete = Crafting::Recipes()[Crafting::Find("concrete")];
-        Check(Crafting::TimesAffordable(concrete, mix) == 1 && concrete.output == BlockType::CONCRETE && concrete.outputUnits == 4 * Block::kUnitsPerBlock,
-              "a cement, two sand and a stone make four concrete");
+        Check(Crafting::TimesAffordable(concrete, mix) == 1 && concrete.output == BlockType::CONCRETE && concrete.outputUnits == 4 * Block::kUnitsPerBlock &&
+                  Crafting::TimesAffordable(Crafting::Recipes()[Crafting::Find("asphalt")], mix) == 0,
+              "a cement, two gravel and a sand make four concrete");
     }
     std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> held{};
     held[static_cast<size_t>(BlockType::LOG)] = 3 * kBlock;

@@ -335,7 +335,7 @@ int main() {
     // Limestone in beds, a few blocks down and no deeper than 48.
     {
         TerrainGenerator rock(TerrainGenerator::Type::Normal);
-        long limestone = 0, tooDeep = 0;
+        long limestone = 0, tooDeep = 0, gravel = 0;
         for (int cx = -2; cx < 2; cx++)
             for (int cz = -2; cz < 2; cz++) {
                 TerrainGenerator::ColumnHeights h;
@@ -344,6 +344,7 @@ int main() {
                     TerrainGenerator::Blocks blocks;
                     rock.GenerateChunk({ cx, cy, cz }, h, blocks);
                     for (int i = 0; i < static_cast<int>(blocks.size()); i++) {
+                        gravel += blocks[i].type == BlockType::GRAVEL;
                         if (blocks[i].type != BlockType::LIMESTONE) continue;
                         limestone++;
                         if (cy * TerrainGenerator::S < -80) tooDeep++;
@@ -351,6 +352,7 @@ int main() {
                 }
             }
         Check(limestone > 500 && tooDeep == 0, "limestone lies in beds in the rock (" + std::to_string(limestone) + " blocks), none far down");
+        Check(gravel > 200, "and gravel in pockets under the topsoil (" + std::to_string(gravel) + " blocks)");
     }
 
     // The Deep: open caverns with fungus, magma and gold ore far down, and no gold above.

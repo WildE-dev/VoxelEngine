@@ -91,6 +91,7 @@ inline float DefaultHardness(BlockType type) {
     case BlockType::LUSH_GRASS:
     case BlockType::SNOWY_GRASS:
     case BlockType::SAND:
+    case BlockType::GRAVEL:
     case BlockType::SNOW: return 0.6f;
     case BlockType::CACTUS: return 0.6f;
     case BlockType::HAY_BALE: return 0.6f;
@@ -272,6 +273,7 @@ inline Tool DefaultBestTool(BlockType type) {
     case BlockType::LUSH_GRASS:
     case BlockType::SNOWY_GRASS:
     case BlockType::SAND:
+    case BlockType::GRAVEL:
     case BlockType::SNOW: return Tool::Shovel;
     case BlockType::LEAVES:
     case BlockType::PINE_LEAVES: return Tool::Sword;

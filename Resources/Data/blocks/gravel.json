@@ -1,0 +1,2 @@
+// gravel: a block (the format is in README.md, here)
+{ "name": "Gravel", "textures": { "all": "gravel" }, "hardness": 0.6, "tool": "shovel", "sound": "sand", "light": 0, "map": "#807a74" }

@@ -17,6 +17,11 @@ namespace {
 // position, so chunks agree.
 BlockType OreAt(int x, int y, int z, int depth) {
     if (TerrainGenerator::OilAt(x, y, z)) return BlockType::OIL_SHALE;
+    // Gravel: small pockets just under the topsoil.
+    if (depth >= 2 && depth < 30) {
+        const float gravel = Noise::Perlin3(x * 0.12f, y * 0.14f, z * 0.12f, 0x6EA7u);
+        if (gravel > 0.5f) return BlockType::GRAVEL;
+    }
     if (depth >= 3 && depth < 48) {
         const float bed = Noise::Perlin3(x * 0.035f, y * 0.16f, z * 0.035f, 0x11AEu);
         if (bed > 0.42f) return BlockType::LIMESTONE;

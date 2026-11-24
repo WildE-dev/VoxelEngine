@@ -341,6 +341,8 @@ enum class BlockType : uint8_t {
     LIMESTONE,
     CEMENT,
     CONCRETE,
+    // Gravel: pockets of it under the topsoil; it goes into asphalt and concrete.
+    GRAVEL,
     COUNT
 };
 // Machines with an inventory of their own (opened like a chest, empty-handed): what

@@ -1225,10 +1225,13 @@ it too, mine chests hold some, and traders sell four ingots for a gold.
 **Limestone, cement and concrete.** Limestone lies in wide flat beds in the rock,
 from 3 to 48 blocks down: pale, banded, and mined with a pickaxe. Burnt, it's
 **cement** (an item): a smelter turns a limestone into a cement, or by hand two
-limestone and half a coal make one. A cement, two sand and a stone make four
+limestone and half a coal make one. A cement, two gravel and a sand make four
 **concrete**, a smooth grey building block that's slow to break (hardness 6) and can
 be chiselled like any building block. `CraftTest` checks the smelting and both recipes;
-`BiomeTest` that limestone is in beds in the rock and none far down.
+`BiomeTest` that limestone is in beds in the rock and none far down, and gravel in pockets.
+
+**Gravel** lies in small pockets just under the topsoil (2 to 30 blocks down), dug with a
+shovel; it goes into asphalt and concrete.
 ## Farming
 
 Breaking tall grass now and then gives **seeds** (three times in ten). With seeds in
@@ -1552,8 +1555,8 @@ it; they aren't part of it, so they don't join what's on either side of them:
 - A **refinery** structure takes crude oil from the pipe at its crude port and puts the
   same amount of **fuel** into the pipe at its fuel port.
   What's left over is **bitumen**: one for every 256 units of crude it refines, into the
-  refinery's own inventory (right-click it to take it out). One bitumen, two sand and a
-  stone make four **asphalt**, a dark road block that you walk (or sprint) 30% faster
+  refinery's own inventory (right-click it to take it out). One bitumen, two gravel and a
+  sand make four **asphalt**, a dark road block that you walk (or sprint) 30% faster
   on. It can be chiselled like any building block.
 - An **engine** is part of an air network, like a compressor: it burns 16 units of
   fuel a second from the pipes beside it and adds 24 units of air a second to its
