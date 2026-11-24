@@ -1214,6 +1214,15 @@ void Application::DrawCrosshair() {
         draw->AddLine(ImVec2(c.x, c.y - kArm), ImVec2(c.x, c.y - kGap), color, width);
         draw->AddLine(ImVec2(c.x, c.y + kGap), ImVec2(c.x, c.y + kArm), color, width);
     }
+    // Winding up a throw: a bar under the crosshair, filling as it's held.
+    if (throwHeld && ThrowStrength() > 0.0f) {
+        const float strength = ThrowStrength();
+        constexpr float kWidth = 44.0f, kHeight = 5.0f, kBelow = 14.0f;
+        const ImVec2 lo(c.x - kWidth * 0.5f, c.y + kBelow), hi(c.x + kWidth * 0.5f, c.y + kBelow + kHeight);
+        draw->AddRectFilled(ImVec2(lo.x - 1, lo.y - 1), ImVec2(hi.x + 1, hi.y + 1), IM_COL32(0, 0, 0, 170), 2.0f);
+        const ImU32 fill = strength >= 1.0f ? IM_COL32(255, 210, 80, 240) : IM_COL32(255, 255, 255, 220);
+        draw->AddRectFilled(lo, ImVec2(lo.x + kWidth * strength, hi.y), fill, 2.0f);
+    }
     // Looking at a signal block: its channels and whether it's on.
     Block target;
     auto label = [&](const char* text) {
@@ -2293,6 +2302,7 @@ void Application::HandleContinuousInput(float deltaTime) {
     }
 
     UpdateMining();
+    UpdateThrow();
 
     // Laser: carve a tunnel along the view ray while L is held.
     if (captureCursor && !chatOpen && (client->GetAbilities() & net::kAbilityOperator) && glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
@@ -2496,12 +2506,11 @@ void Application::OnKey(int key, int action) {
         return;
     }
     if (is(Action::Drop)) {
-        // The item in hand: one of it, or with Crouch held the whole stack.
+        // Winds up while held; thrown when let go (UpdateThrow).
         const auto& slots = client->GetInventory().slots;
         if (selectedSlot >= 0 && selectedSlot < static_cast<int>(slots.size()) && !slots[selectedSlot].Empty()) {
-            const bool all = glfwGetKey(window, settings.Key(Action::Crouch)) == GLFW_PRESS;
-            client->DropItem(net::Box::Player, selectedSlot, all ? 0 : 1, camera.GetDirection());
-            audio->PlayHere("pickup", 0.25f);
+            throwHeld = true;
+            throwSince = glfwGetTime();
         }
         return;
     }
@@ -3162,6 +3171,29 @@ std::optional<Application::ChiselAim> Application::AimChisel() {
     const glm::vec3 p = glm::clamp(hit->point + dir * 0.002f - glm::vec3(hit->block), glm::vec3(0.0f), glm::vec3(1.0f));
     aim.edge = Block::ChiselEdgeAt(aim.shapeDir, p);
     return aim;
+}
+
+float Application::ThrowStrength() const {
+    if (!throwHeld) return 0.0f;
+    const double held = glfwGetTime() - throwSince;
+    return held < kThrowTap ? 0.0f : static_cast<float>(std::min(1.0, (held - kThrowTap) / (kThrowWindUp - kThrowTap)));
+}
+
+void Application::UpdateThrow() {
+    if (!throwHeld) return;
+    // (Opening a menu or the chat puts it down unthrown.)
+    if (!captureCursor || chatOpen || inventoryOpen) {
+        throwHeld = false;
+        return;
+    }
+    if (glfwGetKey(window, settings.Key(Action::Drop)) == GLFW_PRESS) return;
+    // Let go: the item in hand, one of it (crouching: the whole stack), as hard as it was wound up.
+    const float strength = ThrowStrength();
+    throwHeld = false;
+    const auto& slots = client->GetInventory().slots;
+    if (selectedSlot < 0 || selectedSlot >= static_cast<int>(slots.size()) || slots[selectedSlot].Empty()) return;
+    client->DropItem(net::Box::Player, selectedSlot, CrouchHeld() ? 0 : 1, camera.GetDirection(), strength);
+    audio->PlayHere("pickup", 0.25f + 0.3f * strength);
 }
 
 bool Application::CrouchHeld() const {

@@ -2078,11 +2078,13 @@ void Server::HandleDropItem(ClientState& client, const net::DropItem& m) {
         for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++)
             if (!armourBox.slots[p].Empty()) client.armour |= Armour::Bit(static_cast<ArmourPiece>(p));
     }
-    // Thrown from the eye, the way they're looking, a little up.
+    // Thrown from the eye, the way they're looking, a little up: as hard as they held
+    // the throw for.
     const glm::vec3 dir = glm::length(m.direction) > 1e-3f ? glm::normalize(m.direction) : glm::vec3(0.0f, 0.0f, -1.0f);
     const bool crouching = (client.flags & net::kFlagCrouching) != 0;
     const glm::vec3 eye = client.feet + glm::vec3(0.0f, crouching ? kCrouchHeight - 0.2f : kPlayerHeight - 0.2f, 0.0f);
-    dropped.Drop(item, n, 0, eye + dir * 0.3f - glm::vec3(0.0f, 0.3f, 0.0f), dir * 5.0f + glm::vec3(0.0f, 1.5f, 0.0f), DroppedItems::kThrowDelay);
+    const float speed = net::kThrowSpeed + (net::kThrowSpeedMax - net::kThrowSpeed) * (m.strength / 255.0f);
+    dropped.Drop(item, n, 0, eye + dir * 0.3f - glm::vec3(0.0f, 0.3f, 0.0f), dir * speed + glm::vec3(0.0f, 1.5f, 0.0f), DroppedItems::kThrowDelay);
     SendInventory(client);
     if (boxKind == net::Box::Chest) SendChestToViewers(*client.openChest);
 }

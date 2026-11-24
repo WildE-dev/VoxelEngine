@@ -292,7 +292,16 @@ int main() {
         Pump(a, 1.0, [] { return false; });
         Check(count({ 96, 0, 96 }, { 104, 3, 104 }, BlockType::FIRE) > 0, "on a channel that's off, the sprinkler leaves fire in its reach alone");
         Check(configure(sensor, Signals::Kind::HeatSensor, 0, 2, 5), "the heat sensor now sends on 5");
-        Check(Pump(a, 3.0, [&] { return count({ 96, 0, 96 }, { 104, 3, 104 }, BlockType::FIRE) == 0; }), "which sets the sprinkler off, putting the fires out");
+        // (Within its reach: 4 across, round, from 6 below it to 1 above.)
+        auto firesInReach = [&] {
+            int n = 0;
+            for (int dx = -4; dx <= 4; dx++)
+                for (int dz = -4; dz <= 4; dz++)
+                    for (int dy = -6; dy <= 1; dy++)
+                        if (dx * dx + dz * dz <= 17 && at(sprinkler + glm::ivec3(dx, dy, dz)) == BlockType::FIRE) n++;
+            return n;
+        };
+        Check(Pump(a, 3.0, [&] { return firesInReach() == 0; }), "which sets the sprinkler off, putting the fires in its reach out");
         Check(Pump(a, 3.0, [&] { return !signalOn(sensor); }), "and with the fire out, the sensor goes off");
     }
 

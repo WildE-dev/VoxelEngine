@@ -29,7 +29,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 60;
+constexpr uint32_t kProtocolVersion = 61;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -392,7 +392,9 @@ struct DropItem {
     uint8_t slot = 0;
     uint8_t count = 0;
     glm::vec3 direction{ 0.0f, 0.0f, -1.0f };
+    uint8_t strength = 0; // how hard it's thrown: 0 a toss (kThrowSpeed), 255 as hard as can be (kThrowSpeedMax)
 };
+constexpr float kThrowSpeed = 5.0f, kThrowSpeedMax = 16.0f; // blocks a second
 // An item lying on the ground (or flying to someone): `position` the middle of it.
 struct ItemInfo {
     uint32_t id = 0;

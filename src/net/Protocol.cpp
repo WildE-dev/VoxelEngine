@@ -259,11 +259,12 @@ std::vector<uint8_t> Encode(const DropItem& m) {
     w.U8(m.slot);
     w.U8(m.count);
     w.Vec3(m.direction);
+    w.U8(m.strength);
     return std::move(w.data);
 }
 
 bool Decode(ByteReader& in, DropItem& m) {
-    return in.U8(m.box) && m.box <= 2 && in.U8(m.slot) && in.U8(m.count) && in.Vec3(m.direction) && FiniteVec(m.direction) && in.AtEnd();
+    return in.U8(m.box) && m.box <= 2 && in.U8(m.slot) && in.U8(m.count) && in.Vec3(m.direction) && FiniteVec(m.direction) && in.U8(m.strength) && in.AtEnd();
 }
 
 std::vector<uint8_t> Encode(const UseBucket& m) {

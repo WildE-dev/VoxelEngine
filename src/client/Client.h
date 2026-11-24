@@ -260,7 +260,8 @@ public:
         return out;
     }
     // Throw `count` (0: all) out of a slot (net::Box), from the eye this way.
-    void DropItem(net::Box box, int slot, int count, const glm::vec3& direction);
+    // `strength` 0..1: how hard it's thrown (0 a toss).
+    void DropItem(net::Box box, int slot, int count, const glm::vec3& direction, float strength = 0.0f);
     // A bucket: scoop up the (full) water at `pos`, or pour a water bucket out there.
     void UseBucket(const glm::ivec3& pos, bool pour);
     void CloseChest();

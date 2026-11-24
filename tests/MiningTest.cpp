@@ -344,6 +344,15 @@ int main() {
             server.QueueConsoleCommand(tp);
         }
         Check(both(20.0, [&] { return a.client.GetResources(BlockType::GRASS) == 64 && grassOn(a.client).empty(); }), "walking over it picks it up again");
+        // Thrown as hard as it goes (the throw held right down), it goes much further.
+        const float tossed = lying.empty() ? 0.0f : lying[0].position.x - 11.5f;
+        const float from = a.feet.x;
+        a.client.DropItem(net::Box::Player, slot, 1, glm::vec3(1.0f, 0.0f, 0.0f), 1.0f);
+        both(20.0, [&] { return grassOn(a.client).size() == 1; });
+        wait(3.0);
+        const auto far = grassOn(a.client);
+        Check(far.size() == 1 && far[0].position.x - from > tossed + 3.0f,
+              "held right down, a throw goes much further (" + std::to_string(far.empty() ? 0.0f : far[0].position.x - from) + " blocks, a toss " + std::to_string(tossed) + ")");
     }
 
     std::cout << "Cheating" << std::endl;

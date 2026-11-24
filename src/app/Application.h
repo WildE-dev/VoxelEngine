@@ -125,6 +125,13 @@ private:
     void ChiselTarget(bool raise);
     // The crouch key (or the pad's B) held: the modifier (build against, chisel up, back a step, move a stack across).
     bool CrouchHeld() const;
+    // Throwing (G): held, it winds up (to full in kThrowWindUp seconds); let go, it throws
+    // the item in hand that hard (a tap: a toss at your feet's pace). Shown under the crosshair.
+    static constexpr double kThrowWindUp = 1.0, kThrowTap = 0.15;
+    bool throwHeld = false;
+    double throwSince = 0.0;
+    float ThrowStrength() const;
+    void UpdateThrow();
     // With the chisel in hand: the block and quarter it's aimed at (and which way the
     // block would be shaped), from where the view meets the block's shape.
     struct ChiselAim {

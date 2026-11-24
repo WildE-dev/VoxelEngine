@@ -230,7 +230,7 @@ pauses. The menus can be driven with the pad as well.
 | V / Crouch+V | Placement height for building blocks: full, 3/4, 1/2, 1/4 (and back); with the chisel in hand, how fine it cuts: 1/8, 1/4, 1/2 |
 | 1-9, 0 / mouse wheel | Select the hotbar slot to place from |
 | Tab | Inventory: move stacks between slots, the hotbar and your armour; craft (survival), or take any block or item (creative). Let go of a stack outside the window to throw it away |
-| G / Crouch+G | Throw one of the item in hand onto the ground / the whole stack |
+| G / Crouch+G | Throw one of the item in hand / the whole stack: tap to toss it, hold to throw it further (a bar under the crosshair fills as you wind up) |
 | L (hold) | Laser, operators only: carve a tunnel along the view ray |
 | R | Reload shaders, block textures and the data files (blocks, creature models), rebuild all chunk meshes |
 | F1 | Toggle wireframe |
@@ -802,7 +802,8 @@ little turning cube for a block, a card of its icon for anything else. If you br
 it and are within 8 blocks with room for it, it flies to you. Otherwise it lies
 there until someone walks over it (within about a block and a half, it drifts in).
 A broken chest spills what was in it. G throws one of what's in your hand (Crouch+G
-the stack), and in the inventory you can let go of a stack outside the window to
+the stack): a tap tosses it a few blocks, and holding G winds up a harder throw, up to
+about three times as far after a second (a bar under the crosshair shows how hard), and in the inventory you can let go of a stack outside the window to
 throw it. What you throw lands a few blocks ahead, where you can't pick it up for
 a moment, and it doesn't come back on its own. What won't fit in a full inventory
 (a kill's spoils, a catch) drops at your feet instead of being lost. Items fall,
