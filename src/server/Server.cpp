@@ -3,9 +3,11 @@
 #include "world/Lava.h"
 #include "world/Trees.h"
 #include "world/ModelBoxes.h"
+#include <map>
 #include <unordered_set>
 #include <fstream>
 #include "world/Trades.h"
+#include "world/Mining.h"
 #include "world/Crafting.h"
 #include "world/Smelting.h"
 #include <filesystem>
@@ -509,6 +511,11 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     case net::MsgType::EditChisel: {
         net::EditChisel m;
         if ((ok = net::Decode(in, m))) HandleChisel(client, m);
+        break;
+    }
+    case net::MsgType::Flatten: {
+        net::Flatten m;
+        if ((ok = net::Decode(in, m))) HandleFlatten(client, m.pos);
         break;
     }
     case net::MsgType::EditCarve: {
@@ -1303,6 +1310,72 @@ void Server::HandleChisel(ClientState& client, const net::EditChisel& chisel) {
         SendInventory(client);
     }
     world->SetBlock(p.x, p.y, p.z, after);
+}
+
+void Server::HandleFlatten(ClientState& client, const glm::ivec3& pos) {
+    Block clicked;
+    if (Usable(client, Tool::Shovel) != Tool::Shovel || !InReach(client, pos, EditReach(client)) || !world->GetBlock(pos.x, pos.y, pos.z, clicked)) return;
+    // Soft ground: what a shovel digs (dirt, grass, sand, snow, gravel), whole or shaped.
+    auto soft = [](const Block& b) { return !b.IsAir() && !b.IsLiquid() && !b.IsPlant() && !IsModelType(b.type) && Mining::BestTool(b.type) == Tool::Shovel; };
+    if (!soft(clicked) || clicked.ShapeDir() != 0) return;
+    // The level: the clicked block's top (the middle of its corners, for a shaped one), in
+    // eighths from the bottom of the world's rows.
+    int top = 8;
+    if (!clicked.IsFullBlock()) {
+        int sum = 0;
+        for (int e = 0; e < 4; e++) sum += clicked.edgeData.GetTopY(e);
+        top = (sum + 2) / 4;
+    }
+    const int level = pos.y * 8 + top;
+    struct Change {
+        glm::ivec3 at;
+        Block to;
+    };
+    std::vector<Change> changes;
+    std::map<BlockType, long> cost; // units, by what they're made of: + taken, - given back
+    for (int dx = -kFlattenRadius; dx <= kFlattenRadius; dx++)
+        for (int dz = -kFlattenRadius; dz <= kFlattenRadius; dz++)
+            for (int y = pos.y - 1; y <= pos.y + 2; y++) {
+                const glm::ivec3 at(pos.x + dx, y, pos.z + dz);
+                Block b;
+                if (!world->GetBlock(at.x, at.y, at.z, b) || b.HasWater() || b.IsLava()) continue;
+                const bool open = b.IsAir() || b.IsReplaceablePlant();
+                if (!open && !(soft(b) && b.ShapeDir() == 0)) continue; // (stone, wood, buildings: left be)
+                const int fill = std::clamp(level - y * 8, 0, 8);
+                // Filling an empty cell: with what was clicked (soft ground keeps its own kind).
+                const BlockType kind = open ? clicked.type : b.type;
+                Block to;
+                if (fill == 8) to = Block(kind);
+                else if (fill > 0) {
+                    EdgeData edges;
+                    for (int e = 0; e < 4; e++) edges.SetTopY(e, static_cast<uint8_t>(fill));
+                    to = Block(kind, edges);
+                }
+                if (to == b || (open && fill == 0)) continue;
+                const int before = open ? 0 : b.ResourceUnits(), after = to.ResourceUnits();
+                if (before != after) cost[open ? to.ResourceType() : b.ResourceType()] += after - before;
+                changes.push_back({ at, to });
+            }
+    if (changes.empty()) return;
+    if (!Creative(client)) {
+        Inventory after = client.inventory;
+        for (const auto& [type, units] : cost) {
+            if (units > 0 && !after.TakeUnits(type, static_cast<uint32_t>(units))) {
+                SendChat(client, net::ChatMessage::Kind::Error, std::string("Not enough ") + BlockId(type) + " to fill it in");
+                return SendInventory(client);
+            }
+        }
+        for (const auto& [type, units] : cost)
+            if (units < 0 && after.AddUnits(type, static_cast<uint32_t>(-units)) != 0) {
+                SendChat(client, net::ChatMessage::Kind::Error, "Your inventory is full");
+                return SendInventory(client);
+            }
+        client.inventory = std::move(after);
+        SendInventory(client);
+    }
+    // (Bottom up, so what's filled in rests on what's under it.)
+    std::sort(changes.begin(), changes.end(), [](const Change& a, const Change& b) { return a.at.y < b.at.y; });
+    for (const auto& c : changes) world->SetBlock(c.at.x, c.at.y, c.at.z, c.to);
 }
 
 void Server::HandleCarve(ClientState& client, const net::EditCarve& carve) {

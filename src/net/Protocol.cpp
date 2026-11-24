@@ -267,6 +267,15 @@ bool Decode(ByteReader& in, DropItem& m) {
     return in.U8(m.box) && m.box <= 2 && in.U8(m.slot) && in.U8(m.count) && in.Vec3(m.direction) && FiniteVec(m.direction) && in.U8(m.strength) && in.AtEnd();
 }
 
+std::vector<uint8_t> Encode(const Flatten& m) {
+    ByteWriter w;
+    Begin(w, MsgType::Flatten);
+    w.IVec3(m.pos);
+    return std::move(w.data);
+}
+
+bool Decode(ByteReader& in, Flatten& m) { return in.IVec3(m.pos) && in.AtEnd(); }
+
 std::vector<uint8_t> Encode(const UseBucket& m) {
     ByteWriter w;
     Begin(w, MsgType::UseBucket);

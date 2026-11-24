@@ -29,7 +29,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 65;
+constexpr uint32_t kProtocolVersion = 66;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -94,6 +94,8 @@ enum class MsgType : uint8_t {
     Sites,         // the dwarf sites around you (camps, mines, markets, strongholds), for the map
     ItemsNear,     // the items lying on the ground near you (when they change, and now and then)
     SteamNear,     // the steam in the air near you (server/Steam.h), a few times a second
+    // Client -> server
+    Flatten,       // a shovel's right-click: level the ground round this block to its height
 };
 
 // ---------------------------------------------------------------------------------
@@ -402,6 +404,9 @@ struct ItemInfo {
     uint8_t count = 0; // (0: less than a block of one)
     glm::vec3 position{ 0.0f }, velocity{ 0.0f };
 };
+struct Flatten {
+    glm::ivec3 pos{0}; // the ground block clicked: the area round it goes to its height
+};
 struct UseBucket {
     glm::ivec3 pos{ 0 };
     uint8_t pour = 0; // 0: scoop up the water there; 1: pour it out there
@@ -637,6 +642,8 @@ bool Decode(ByteReader& in, CreativeSlot& m);
 std::vector<uint8_t> Encode(const DropItem& m);
 bool Decode(ByteReader& in, DropItem& m);
 std::vector<uint8_t> Encode(const UseBucket& m);
+std::vector<uint8_t> Encode(const Flatten& m);
+bool Decode(ByteReader& in, Flatten& m);
 bool Decode(ByteReader& in, UseBucket& m);
 std::vector<uint8_t> Encode(const ItemsNear& m);
 bool Decode(ByteReader& in, ItemsNear& m);

@@ -680,6 +680,14 @@ block: natural ground (grass, dirt, sand, stone, snow) slopes smoothly between i
 four corners, while anything built (bricks, logs, lamps and the rest) is four
 quarter-columns, each as high as its corner, like small steps.
 
+**Flattening with a shovel.** Right-click soft ground (dirt, grass, sand, snow or
+gravel) with a shovel and the 3 by 3 area round it is levelled to that block's top:
+soft ground above it is shaved off (down to a slope, or away), and empty cells below it
+are filled with what you clicked. Stone, wood, buildings and water are left as they
+are. In survival it balances like the chisel: what's shaved off comes back to you, and
+filling in costs it (with not enough to fill it all, nothing changes). `ShapeTest`
+checks a bump, a slab and a dip levelled, stone kept, and the survival costs.
+
 Shape blocks yourself with the chisel, a tool (in survival, made from a little wood
 and stone). With it in hand, right-click lowers the quarter you're looking
 at, and crouching and right-clicking raises it again. **V** sets how far each stroke

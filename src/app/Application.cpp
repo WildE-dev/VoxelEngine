@@ -114,7 +114,7 @@ const char* ToolHint(Tool tool) {
     switch (tool) {
     case Tool::Pickaxe: return "fast on stone, bricks, ice and machines";
     case Tool::Axe: return "fast on wood";
-    case Tool::Shovel: return "fast on dirt, grass, sand and snow";
+    case Tool::Shovel: return "fast on dirt, grass, sand and snow; right-click: flatten";
     case Tool::Sword: return "for fighting";
     case Tool::Bow: return "right-click to shoot (needs arrows)";
     case Tool::Rod: return "right-click water to cast";
@@ -3369,6 +3369,14 @@ void Application::OnMouseButton(int button, int action) {
             return OpenMachine(at->block, false);
     }
 
+    // Right-click with the shovel: level the ground round the block looked at to its height.
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::Shovel) {
+        if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
+            client->Flatten(hit->block);
+            PlayAt("place", hit->block, 0.6f);
+        }
+        return;
+    }
     // Right-click with the chisel: cut the corner looked at (crouching: build it up).
     if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::Chisel) {
         ChiselTarget(CrouchHeld());

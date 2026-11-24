@@ -921,6 +921,41 @@ int main() {
         a.client.PlaceBlock({ 11, 0, 7 }, BlockType::LOG, 8, 0);
         Check(Pump({ &a, &b }, 20.0, [&] { return b.world.GetBlock(11, 0, 7, seen) && seen.type == BlockType::LOG; }) && seen.axis == Block::kAlongX,
               "a log placed against a side face is seen lying along x by the other player");
+
+        // A shovel's right-click levels the ground round the block clicked to its height:
+        // a bump of dirt shaved off, a dip filled in, a slope made level; stone left be.
+        server.QueueConsoleCommand("fill 20 0 20 20 0 20 dirt");   // a bump
+        server.QueueConsoleCommand("fill 22 -1 20 22 -1 20 air");  // a dip
+        server.QueueConsoleCommand("fill 21 0 21 21 0 21 stone");  // a stone, to keep
+        a.client.PlaceBlock({ 20, 0, 21 }, BlockType::DIRT, 4);       // a half slab of dirt
+        Pump({ &a, &b }, 1.0, [] { return false; });
+        server.QueueConsoleCommand("tp Mason 21.5 0 18.5");
+        Pump({ &a, &b }, 1.0, [] { return false; }); // (in reach)
+        a.client.Flatten({ 21, -1, 20 });
+        auto at = [&](int x, int y, int z) {
+            Block t;
+            return b.world.GetBlock(x, y, z, t) ? t : Block(BlockType::COUNT);
+        };
+        Check(Pump({ &a, &b }, 20.0, [&] { return at(20, 0, 20).IsAir() && at(22, -1, 20).IsFullBlock() && at(20, 0, 21).IsAir(); }),
+              "a shovel's right-click flattens the ground round it: the bump and the slab shaved off, the dip filled");
+        Check(at(21, 0, 21).type == BlockType::STONE, "but stone is left be");
+        // Survival: what's shaved off comes back (as dirt); filling in costs it, and with
+        // nothing to fill with, nothing changes.
+        server.QueueConsoleCommand("gamemode survival Mason");
+        server.QueueConsoleCommand("give shovel 1 Mason");
+        server.QueueConsoleCommand("fill 25 0 20 25 0 20 dirt"); // a bump to shave
+        Pump({ &a, &b }, 20.0, [&] { return !a.client.IsCreative() && a.client.HasTool(Tool::Shovel) && at(25, 0, 20).type == BlockType::DIRT; });
+        const uint32_t dirtBefore = a.client.GetResources(BlockType::DIRT);
+        a.client.Flatten({ 25, -1, 21 });
+        Check(Pump({ &a, &b }, 20.0, [&] { return at(25, 0, 20).IsAir() && a.client.GetResources(BlockType::DIRT) == dirtBefore + Block::kUnitsPerBlock; }),
+              "in survival, ground shaved off is given back as dirt");
+        server.QueueConsoleCommand("fill 28 -1 20 28 -1 20 air"); // a dip, and no dirt to fill it but the one
+        server.QueueConsoleCommand("fill 29 -1 20 29 -1 20 air");
+        Pump({ &a, &b }, 20.0, [&] { return at(28, -1, 20).IsAir() && at(29, -1, 20).IsAir(); });
+        a.client.Flatten({ 28, -1, 21 });
+        Pump({ &a, &b }, 2.0, [] { return false; });
+        Check(at(28, -1, 20).IsAir() && at(29, -1, 20).IsAir() && a.client.GetResources(BlockType::DIRT) == dirtBefore + Block::kUnitsPerBlock,
+              "two holes and dirt for one: nothing's filled (nothing taken)");
         a.client.Disconnect();
         b.client.Disconnect();
         server.Stop();

@@ -315,6 +315,11 @@ private:
     void SendCreatures();
     void HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType type, int height, int faceAxis);
     void HandleChisel(ClientState& client, const net::EditChisel& chisel);
+    // A shovel's right-click: the ground in kFlattenRadius round the block clicked levelled
+    // to its surface (soft ground shaved off above, filled in below with what was clicked;
+    // anything else left be). Survival: what's taken off is given back, what's filled costs.
+    static constexpr int kFlattenRadius = 1;
+    void HandleFlatten(ClientState& client, const glm::ivec3& pos);
     void HandleCarve(ClientState& client, const net::EditCarve& carve);
     void HandleSkipTime(ClientState& client);
     void HandleChat(ClientState& client, const std::string& text);

@@ -471,6 +471,8 @@ void Client::Chisel(const glm::ivec3& pos, int edge, bool raise, int dir, int st
                                                                  static_cast<uint8_t>(step) }));
 }
 
+void Client::Flatten(const glm::ivec3& pos) { net.Send(net::kChannelReliable, net::Encode(net::Flatten{ pos })); }
+
 void Client::SendChat(const std::string& text) {
     if (welcomed && !text.empty()) net.Send(net::kChannelReliable, net::Encode(net::ChatSend{ text.substr(0, net::kMaxChatLength) }));
 }
