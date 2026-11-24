@@ -538,6 +538,38 @@ int main() {
         Check(Collision::BoxBlocked(cells, box(0.1f, 0.4f)) && !Collision::BoxBlocked(cells, box(0.6f, 0.9f)), "it blocks that half, not the other");
         const auto aimed = Raycast(cells, glm::vec3(3.0f, 0.5f, 0.5f), glm::vec3(-1.0f, 0.0f, 0.0f), 6.0f);
         Check(aimed && aimed->block == glm::ivec3(0) && aimed->normal == glm::ivec3(1, 0, 0), "aimed at from +x, it's hit on its +x face");
+        {
+            // Chiselled from below: its quarters start halfway up. Aimed at from under them,
+            // it's hit on its underside (a block put there goes below it, not on top).
+            Block raised(BlockType::PLANKS);
+            for (int e = 0; e < 4; e++) raised.edgeData.SetBottomY(e, 4);
+            cells.blocks[{ 0, 3, 10 }] = raised;
+            const auto under = Raycast(cells, glm::vec3(2.0f, 3.0f, 10.5f), glm::normalize(glm::vec3(-1.0f, 0.3f, 0.0f)), 6.0f);
+            Check(under && under->block == glm::ivec3(0, 3, 10) && under->normal == glm::ivec3(0, -1, 0),
+                  "a block chiselled from below, aimed at from under it, is hit on its underside");
+            const auto below = Raycast(cells, glm::vec3(2.0f, 3.2f, 10.5f), glm::vec3(-1.0f, 0.0f, 0.0f), 6.0f);
+            Check(!below || below->block != glm::ivec3(0, 3, 10), "and the ray passes through the empty space under it");
+            // Stepped: a low step on the -x side, a tall one on the +x side. Aimed at
+            // from -x over the low step, it's the tall one's -x side that's hit.
+            Block step(BlockType::PLANKS);
+            step.edgeData.SetTopY(2, 2);
+            step.edgeData.SetTopY(0, 2);
+            cells.blocks[{ 0, 3, 12 }] = step;
+            const auto side = Raycast(cells, glm::vec3(-2.0f, 3.5f, 12.5f), glm::vec3(1.0f, 0.0f, 0.0f), 6.0f);
+            Check(side && side->block == glm::ivec3(0, 3, 12) && side->normal == glm::ivec3(-1, 0, 0),
+                  "over a low step, the tall step's side is hit on its side, not its top");
+            const auto onStep = Raycast(cells, glm::vec3(0.25f, 5.0f, 12.5f), glm::vec3(0.0f, -1.0f, 0.0f), 6.0f);
+            Check(onStep && onStep->normal == glm::ivec3(0, 1, 0), "and from above, the low step's top");
+            // Turned on its side (its top facing +x), the same step: aimed at from -x, the
+            // face hit faces -x (it used to be the turned top, +x: the far side).
+            Block turned = step;
+            turned.SetShapeDir(1);
+            cells.blocks[{ 0, 3, 14 }] = turned;
+            const auto turnedHit = Raycast(cells, glm::vec3(-2.0f, 3.9f, 14.5f), glm::vec3(1.0f, 0.0f, 0.0f), 6.0f);
+            Check(turnedHit && turnedHit->block == glm::ivec3(0, 3, 14) && turnedHit->normal.x <= 0,
+                  "a turned step aimed at from -x isn't hit on its far side (normal " + std::to_string(turnedHit ? turnedHit->normal.x : 9) + "," +
+                      std::to_string(turnedHit ? turnedHit->normal.y : 9) + "," + std::to_string(turnedHit ? turnedHit->normal.z : 9) + ")");
+        }
         Chunk::Blocks one{};
         one[Chunk::Index(4, 4, 4)] = wall;
         std::vector<uint32_t> v, w;

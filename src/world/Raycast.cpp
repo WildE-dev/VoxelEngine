@@ -100,9 +100,12 @@ bool HitsSprite(const Block& block, const glm::ivec3& cell, const glm::vec3& ori
     return false;
 }
 
+// `face` (with onTop): which way the face it met inside the cell faces, in the shape's
+// own frame (a quarter's top, its side, or the underside of one chiselled from below).
 bool HitsShape(const Block& block, const glm::ivec3& cell, const glm::vec3& origin, const glm::vec3& direction, float tEnter, float tExit,
-               bool& onTop, unsigned joined = 0) {
+               bool& onTop, glm::vec3& face, unsigned joined = 0) {
     onTop = false;
+    face = glm::vec3(0.0f, 1.0f, 0.0f);
     {
         // Drawn smaller than the cell (a pipe, a shaft, a gauge): its boxes.
         glm::vec3 lo[Block::kMaxModelBoxes], hi[Block::kMaxModelBoxes];
@@ -131,7 +134,7 @@ bool HitsShape(const Block& block, const glm::ivec3& cell, const glm::vec3& orig
         const glm::vec3 base(cell);
         Block upright = block;
         upright.axis = 0;
-        return HitsShape(upright, cell, Block::CellToShape(dir, origin - base) + base, Block::CellVectorToShape(dir, direction), tEnter, tExit, onTop);
+        return HitsShape(upright, cell, Block::CellToShape(dir, origin - base) + base, Block::CellVectorToShape(dir, direction), tEnter, tExit, onTop, face);
     }
     if (block.type == BlockType::PEBBLES) {
         // Its little stones (where they're drawn: by the cell's place in its chunk).
@@ -161,13 +164,19 @@ bool HitsShape(const Block& block, const glm::ivec3& cell, const glm::vec3& orig
     }
     const glm::vec3 base(cell);
     if (block.IsStepped()) {
-        const int h[2][2] = { { block.edgeData.GetTopY(2), block.edgeData.GetTopY(0) }, { block.edgeData.GetTopY(1), block.edgeData.GetTopY(3) } };
+        // Its quarter-columns, each from its bottom (raised, if chiselled from below) to its
+        // top: the nearest one the ray meets, and the face it goes in by.
+        constexpr int kEdgeAt[2][2] = { { 2, 0 }, { 1, 3 } };
+        float nearest = FLT_MAX;
         for (int qx = 0; qx < 2; qx++)
             for (int qz = 0; qz < 2; qz++) {
-                if (h[qx][qz] == 0) continue;
-                const glm::vec3 lo = base + glm::vec3(qx * 0.5f, 0.0f, qz * 0.5f);
-                const glm::vec3 hi = lo + glm::vec3(0.5f, h[qx][qz] / 8.0f, 0.5f);
+                const int e = kEdgeAt[qx][qz];
+                const int top = block.edgeData.GetTopY(e), bottom = block.edgeData.GetBottomY(e);
+                if (top <= bottom) continue;
+                const glm::vec3 lo = base + glm::vec3(qx * 0.5f, bottom / 8.0f, qz * 0.5f);
+                const glm::vec3 hi = base + glm::vec3(qx * 0.5f + 0.5f, top / 8.0f, qz * 0.5f + 0.5f);
                 float t0 = tEnter, t1 = tExit;
+                int enteredBy = -1;
                 for (int a = 0; a < 3 && t0 <= t1; a++) {
                     if (std::abs(direction[a]) < 1e-8f) {
                         if (origin[a] < lo[a] || origin[a] > hi[a]) t0 = t1 + 1.0f;
@@ -175,15 +184,18 @@ bool HitsShape(const Block& block, const glm::ivec3& cell, const glm::vec3& orig
                     }
                     float ta = (lo[a] - origin[a]) / direction[a], tb = (hi[a] - origin[a]) / direction[a];
                     if (ta > tb) std::swap(ta, tb);
-                    t0 = std::max(t0, ta);
+                    if (ta > t0) t0 = ta, enteredBy = a;
                     t1 = std::min(t1, tb);
                 }
-                if (t0 <= t1) {
-                    onTop = t0 > tEnter + 1e-4f;
-                    return true;
+                if (t0 > t1 || t0 >= nearest) continue;
+                nearest = t0;
+                onTop = t0 > tEnter + 1e-4f;
+                if (enteredBy >= 0) {
+                    face = glm::vec3(0.0f);
+                    face[enteredBy] = direction[enteredBy] > 0.0f ? -1.0f : 1.0f;
                 }
             }
-        return false;
+        return nearest != FLT_MAX;
     }
     // A slope: sample along the ray through the cell (fine enough for aiming).
     constexpr int kSamples = 24;
@@ -207,11 +219,12 @@ std::optional<RaycastHit> Raycast(const BlockAccess& world, const glm::vec3& ori
         // Rays pass through water (you click the sea floor, not the surface), and
         // through the open part of a partial block (aiming past a slope or a step).
         bool onTop = false;
+        glm::vec3 face(0.0f, 1.0f, 0.0f);
         if (world.GetBlock(pos.x, pos.y, pos.z, block) && !block.IsAir() && !block.IsLiquid() && !block.IsLava() && block.type != BlockType::FIRE &&
-            HitsShape(block, pos, origin, direction, tEnter, tExit, onTop, ModelBoxes::Joins(world, pos, block))) {
-            // Met the shape inside the cell (over a slope, onto a quarter): its top.
-            // (A turned shape's top faces the way it's turned.)
-            hit = RaycastHit{ pos, onTop ? glm::ivec3(glm::round(Block::ShapeVectorToCell(block.ShapeDir(), glm::vec3(0.0f, 1.0f, 0.0f)))) : normal };
+            HitsShape(block, pos, origin, direction, tEnter, tExit, onTop, face, ModelBoxes::Joins(world, pos, block))) {
+            // Met the shape inside the cell (over a slope, onto a quarter's top, side or
+            // underside): that face, turned the way the shape's turned.
+            hit = RaycastHit{ pos, onTop ? glm::ivec3(glm::round(Block::ShapeVectorToCell(block.ShapeDir(), face))) : normal };
             return false;
         }
         return true;
