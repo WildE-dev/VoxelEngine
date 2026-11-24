@@ -248,6 +248,7 @@ private:
         // lava, on a ladder, in a boat), so survival players can't fly or hover; and the
         // mode those were last checked in.
         double knockedUntil = 0.0;
+        double launchedUntil = 0.0; // thrown by a launcher: no air checks till then
         glm::vec3 support{ 0.0f }; // (where: corrections for flying put them back there)
         double supportAt = 0.0;
         bool checkedFree = true; // creative or no-clip last time (no air checks)
@@ -553,6 +554,11 @@ private:
     std::unordered_map<glm::ivec3, Compressor, Coords::IVec3Hash> compressors;
     std::unordered_map<glm::ivec3, Power::DrillState, Coords::IVec3Hash> pumpStates;
     std::unordered_map<glm::ivec3, Power::DrillState, Coords::IVec3Hash> pistonStates; // Idle (in), Working (out), NoPressure, Blocked
+    // Air launchers: whether each one's channel was on last time (it fires as it comes on),
+    // and when it last fired (for the clients: a thunk and a puff).
+    std::unordered_map<glm::ivec3, bool, Coords::IVec3Hash> launcherArmed;
+    std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> launcherFired;
+    void Launch(const glm::ivec3& pos, const Block& launcher);
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> air; // air held in each part of a network
     std::vector<AirNetwork> networks;                             // as of the last update
     std::unordered_map<glm::ivec3, int, Coords::IVec3Hash> networkOf; // each part's network, as of the last update

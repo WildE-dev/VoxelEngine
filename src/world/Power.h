@@ -49,6 +49,10 @@
 //       holds some of it (so a row of chests sorts itself by example), else the
 //       nearest. Things nothing can take stay put; it
 //       goes through what the chest has in turn.
+//     . An air launcher (facing) throws what's in the cell in front of it (players,
+//       creatures, items lying there) that way at kLaunchSpeed, each time its channel
+//       comes on, for kLaunchAir. A player thrown is given leeway by the server's
+//       movement checks while they fly (but they land as hard as they land).
 //     . A filter pipe passes only its type (none set: anything). Right-click one
 //       with something in hand to set it to that (empty-handed: anything). Drills and
 //       extractors send things only through filters that pass them; smelters and
@@ -94,6 +98,8 @@ constexpr float kPumpGain = 3.0f;
 constexpr float kPumpAir = kWheelMaxAir / (kWheelFullFlow * 3.0f * kPumpGain);
 constexpr int kMaxNetwork = 4096;             // pipes and machines in one network, at most
 constexpr float kPistonAir = 4.0f;            // air for each push (pulling back is free)
+constexpr float kLaunchAir = 12.0f;           // air for each throw of an air launcher
+constexpr float kLaunchSpeed = 18.0f;         // how hard it throws (blocks a second)
 constexpr int kPushLimit = 12;                // blocks a piston can push in a row, at most
 constexpr float kSmeltAir = 6.0f;             // air for each block smelted
 constexpr double kSmeltInterval = 2.0;        // seconds per block smelted
@@ -112,7 +118,7 @@ constexpr double kCrushInterval = 2.0;        // seconds per block ground
 // (A valve is part of the network only while it's open: shut, it divides it.)
 inline bool IsAirPart(BlockType t) {
     return t == BlockType::AIR_PIPE || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
-           t == BlockType::CREATIVE_AIR_TANK || t == BlockType::VALVE_OPEN || t == BlockType::PISTON || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
+           t == BlockType::CREATIVE_AIR_TANK || t == BlockType::VALVE_OPEN || t == BlockType::PISTON || t == BlockType::LAUNCHER || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
            t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::ENGINE || t == BlockType::OIL_DERRICK ||
            t == BlockType::REFINERY || t == BlockType::CRUSHER || t == BlockType::TURBINE || t == BlockType::AIR_DIFFUSER;
 }
@@ -132,7 +138,7 @@ inline bool IsPart(BlockType t) {
 // shafts, which it finds from them).
 inline bool IsMachine(BlockType t) {
     return t == BlockType::WATER_WHEEL || t == BlockType::COMPRESSOR || t == BlockType::DRILL || t == BlockType::PUMP || t == BlockType::AIR_TANK ||
-           t == BlockType::CREATIVE_AIR_TANK || t == BlockType::PISTON || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
+           t == BlockType::CREATIVE_AIR_TANK || t == BlockType::PISTON || t == BlockType::LAUNCHER || t == BlockType::PISTON_HEAD || t == BlockType::PRESSURE_SENSOR || t == BlockType::SMELTER || t == BlockType::SMELTER_LIT ||
            t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::PRESSURE_GAUGE ||
            t == BlockType::FLUID_TANK || Fluids::IsMachine(t) || t == BlockType::MINING_POST || t == BlockType::MULTIBLOCK ||
            t == BlockType::CRUSHER || t == BlockType::AIR_DIFFUSER;

@@ -169,7 +169,7 @@ void Server::UpdatePower() {
             }
 
         std::vector<std::pair<glm::ivec3, Drill*>> netDrills;
-        std::vector<glm::ivec3> netPumps, netPistons, netSmelters, netWorkers, netStructures, netDiffusers;
+        std::vector<glm::ivec3> netPumps, netPistons, netSmelters, netWorkers, netStructures, netDiffusers, netLaunchers;
         for (const auto& m : members) {
             auto a = air.find(m);
             if (a != air.end()) net.air += a->second;
@@ -237,6 +237,7 @@ void Server::UpdatePower() {
                 netPumps.push_back(m);
                 break;
             case BlockType::PISTON: netPistons.push_back(m); break;
+            case BlockType::LAUNCHER: netLaunchers.push_back(m); break;
             case BlockType::SMELTER:
             case BlockType::SMELTER_LIT: netSmelters.push_back(m); break;
             case BlockType::EXTRACTOR:
@@ -291,6 +292,18 @@ void Server::UpdatePower() {
                 state = Power::DrillState::Idle;
             }
             else state = out ? Power::DrillState::Working : Power::DrillState::Idle;
+        }
+
+        // Air launchers fire as their channel comes on (if there's the air).
+        for (const auto& p : netLaunchers) {
+            auto sig = signalBlocks.find(p);
+            const bool want = sig != signalBlocks.end() && sig->second.on;
+            bool& armed = launcherArmed[p];
+            if (want && !armed && net.Pressure() >= Power::kMinPressure && net.air >= Power::kLaunchAir) {
+                net.air -= Power::kLaunchAir;
+                Launch(p, blockAt(p));
+            }
+            armed = want;
         }
 
         // Drills take their turn: whichever has waited longest goes first.
@@ -799,6 +812,30 @@ bool Server::DrillDig(const glm::ivec3& pos, Drill& drill) {
     return false;
 }
 
+void Server::Launch(const glm::ivec3& pos, const Block& launcher) {
+    const double now = Now();
+    launcherFired[pos] = now;
+    const glm::vec3 dir(launcher.Facing());
+    // (Straight along its facing; a sideways throw gets a little lift, so it carries.)
+    const glm::vec3 velocity = dir * Power::kLaunchSpeed + (dir.y == 0.0f ? glm::vec3(0.0f, 5.0f, 0.0f) : glm::vec3(0.0f));
+    const glm::vec3 lo = glm::vec3(pos + launcher.Facing()), hi = lo + glm::vec3(1.0f);
+    auto inFront = [&](const glm::vec3& a, const glm::vec3& b) { return glm::all(glm::lessThan(a, hi)) && glm::all(glm::greaterThan(b, lo)); };
+    for (auto& [peer, client] : clients) {
+        if (!client.welcomed || !client.hasState) continue;
+        if (!inFront(client.feet - glm::vec3(0.3f, 0.0f, 0.3f), client.feet + glm::vec3(0.3f, 1.8f, 0.3f))) continue;
+        net.Send(peer, net::kChannelReliable, net::Encode(net::Knockback{ velocity }));
+        client.knockedUntil = now + 3.0;
+        client.launchedUntil = now + 3.0;
+        client.fallPeak = std::max(client.fallPeak, client.feet.y);
+    }
+    std::vector<uint16_t> thrown;
+    for (const auto& c : creatures.All())
+        if (inFront(c.feet - glm::vec3(0.3f, 0.0f, 0.3f), c.feet + glm::vec3(0.3f, 1.0f, 0.3f))) thrown.push_back(c.id);
+    for (const uint16_t id : thrown) creatures.Launch(id, velocity);
+    for (auto& d : dropped.All())
+        if (inFront(d.position - glm::vec3(DroppedItems::kHalf), d.position + glm::vec3(DroppedItems::kHalf))) d.velocity = velocity, d.onGround = false;
+}
+
 void Server::BuildFluidNets() {
     fluidNets.clear();
     fluidNetOf.clear();
@@ -1088,6 +1125,13 @@ void Server::SendMachines() {
             else if (Block t; world->GetBlock(pos.x, pos.y, pos.z, t) && (t.type == BlockType::AIR_TANK || t.type == BlockType::CREATIVE_AIR_TANK)) {
                 info.type = static_cast<uint8_t>(t.type);
             }
+            else if (Block l; world->GetBlock(pos.x, pos.y, pos.z, l) && l.type == BlockType::LAUNCHER) {
+                info.type = static_cast<uint8_t>(BlockType::LAUNCHER);
+                auto f = launcherFired.find(pos);
+                info.state = static_cast<uint8_t>(f != launcherFired.end() && Now() - f->second < 0.6 ? Power::DrillState::Working : Power::DrillState::Idle);
+                auto on = networkOf.find(pos);
+                info.pressure = on != networkOf.end() ? ToByte(networks[on->second].Pressure()) : 0;
+            }
             else if (auto p = pumpStates.find(pos); p != pumpStates.end()) {
                 info.type = static_cast<uint8_t>(BlockType::PUMP);
                 info.state = static_cast<uint8_t>(p->second);
@@ -1182,6 +1226,11 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
         }
         else if (b.type == BlockType::VALVE || b.type == BlockType::VALVE_OPEN) {
             text += b.type == BlockType::VALVE_OPEN ? "Valve: open. " : "Valve: shut (the pipes either side are kept apart). ";
+        }
+        else if (b.type == BlockType::LAUNCHER) {
+            auto sig = signalBlocks.find(pos);
+            text += std::string("Air launcher: throws what's in front of it each time its channel comes on (") +
+                    (sig != signalBlocks.end() && sig->second.config.a ? "channel " + std::to_string(sig->second.config.a) : std::string("no channel yet")) + "). ";
         }
         else if (b.type == BlockType::PISTON) {
             const Power::DrillState st = pistonStates.count(pos) ? pistonStates[pos] : Power::DrillState::Idle;

@@ -1,0 +1,2 @@
+// launcher: a block (the format is in README.md, here)
+{ "name": "Air launcher", "textures": { "top": "launcher_face", "bottom": "launcher_back", "side": "launcher_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }

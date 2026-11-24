@@ -320,6 +320,10 @@ enum class BlockType : uint8_t {
     // again, putting out fires round where it lands.
     BUCKET,
     WATER_BUCKET,
+    // An air launcher (world/Power.h): facing (the way you look placing it), part of an
+    // air network; each time its channel comes on it throws whatever's in front of it
+    // (players, creatures, items) hard that way, for kLaunchAir.
+    LAUNCHER,
     COUNT
 };
 // Machines with an inventory of their own (opened like a chest, empty-handed): what
@@ -372,6 +376,7 @@ inline bool IsPipeType(BlockType type) {
 inline bool IsDrainType(BlockType type) { return type == BlockType::DRAIN || type == BlockType::SINKHOLE; }
 inline bool IsFacingType(BlockType type) {
     return type == BlockType::PISTON || type == BlockType::PISTON_HEAD || type == BlockType::EXTRACTOR || type == BlockType::PRESSURE_GAUGE ||
+           type == BlockType::LAUNCHER ||
            type == BlockType::REFINERY || type == BlockType::FLUID_OUTLET;
 }
 

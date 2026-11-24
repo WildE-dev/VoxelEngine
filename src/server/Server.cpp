@@ -663,7 +663,7 @@ void Server::HandlePlayerState(ClientState& client, const net::PlayerState& stat
                     Block b;
                     held = world->GetBlock(x, y, z, b) && (b.HasWater() || b.IsLava() || b.type == BlockType::LADDER);
                 }
-        if (free || client.checkedFree || held || !client.hasState) {
+        if (free || client.checkedFree || held || !client.hasState || now < client.launchedUntil) {
             client.support = state.feet;
             client.supportAt = now;
         }

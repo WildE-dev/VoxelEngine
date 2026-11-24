@@ -41,6 +41,7 @@ const char* DefaultMaterial(BlockType type) {
     case BlockType::CREATIVE_AIR_TANK:
     case BlockType::VALVE:
     case BlockType::VALVE_OPEN:
+    case BlockType::LAUNCHER:
     case BlockType::FLUID_VALVE:
     case BlockType::FLUID_VALVE_OPEN:
     case BlockType::LOGIC_GATE:

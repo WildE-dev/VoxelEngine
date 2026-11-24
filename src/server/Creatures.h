@@ -107,6 +107,11 @@ public:
     bool Attack(uint16_t id, const glm::vec3& eye, Tool tool, int tier, double now, bool& killed);
     // Hurts it (from anywhere: an arrow), knocking it back away from `from`.
     bool Damage(uint16_t id, int damage, const glm::vec3& from, double now, bool& killed);
+    // Thrown (an air launcher): off the ground at this velocity.
+    void Launch(uint16_t id, const glm::vec3& velocity) {
+        for (auto& c : creatures)
+            if (c.id == id) c.velocity = velocity, c.onGround = false;
+    }
     // A player hit it: a wild wolf turns on them for a while.
     void Provoke(uint16_t id, uint16_t player, double now);
     // Tames a wild wolf for this player (false if it isn't one, or already has an owner).

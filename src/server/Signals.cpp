@@ -284,8 +284,9 @@ void Server::UpdateSignals() {
             if (c.a == 0) break;
             if (a != IsOpenValve(b.type)) world->SetBlock(pos.x, pos.y, pos.z, Block(ValveSetTo(b.type, a)));
             break;
+        case Signals::Kind::Launcher:
         case Signals::Kind::Piston:
-            // (UpdatePower moves it, when it has the air.)
+            // (UpdatePower moves it, or fires it, when it has the air.)
             if (a != s.on) {
                 s.on = a;
                 BroadcastSignal(pos);

@@ -44,6 +44,7 @@
   { "id": "air_tank", "name": "Air tank", "takes": { "iron_ingot": 2, "glass": 0.5 }, "makes": { "air_tank": 1 } },
   { "id": "pressure_gauge", "name": "Pressure gauge", "takes": { "glass": 0.25, "iron_ingot": 0.25 }, "makes": { "pressure_gauge": 1 } },
   { "id": "valve", "name": "Valve", "takes": { "iron_ingot": 0.5, "stone": 1 }, "makes": { "valve": 1 } },
+  { "id": "launcher", "name": "Air launcher", "takes": { "piston": 1, "iron_ingot": 1 }, "makes": { "launcher": 1 } },
   { "id": "bucket", "name": "Bucket", "takes": { "iron_ingot": 0.75 }, "makes": { "bucket": 1 } },
   { "id": "obsidian_pipe", "name": "4 obsidian pipes", "takes": { "obsidian": 1 }, "makes": { "obsidian_pipe": 4 } },
   { "id": "fluid_valve", "name": "Fluid valve", "takes": { "iron_ingot": 0.5, "fluid_pipe": 1 }, "makes": { "fluid_valve": 1 } },

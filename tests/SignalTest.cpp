@@ -337,6 +337,42 @@ int main() {
         Check(pump(5.0, [&] { return blockAt(piston) == BlockType::AIR && blockAt({ 27, 0, 26 }) == BlockType::AIR; }), "and breaking the piston takes its head");
         flip(lever3, false);
 
+        std::cout << "Air launchers" << std::endl;
+        {
+            // A launcher facing +x (as /fill places it) on an air pipe, the player standing
+            // in front of it: each time its channel comes on it throws them that way.
+            const glm::ivec3 lever4{ 24, 0, 40 }, launcher{ 26, 0, 42 };
+            goTo(25.5f, 39.5f);
+            fill(lever4, "lever");
+            fill(launcher, "launcher");
+            fill(launcher + glm::ivec3(0, 1, 0), "air_pipe");
+            pump(10.0, [&] { return blockAt(launcher) == BlockType::LAUNCHER && blockAt(launcher + glm::ivec3(0, 1, 0)) == BlockType::AIR_PIPE; });
+            Check(configure(lever4, Signals::Kind::Lever, 0, 0, 12) && configure(launcher, Signals::Kind::Launcher, 12, 0, 0), "a launcher listens to 12");
+            goTo(27.5f, 42.5f);
+            a.client.TakeKnockback();
+            flip(lever4, true);
+            wait(1.0);
+            Check(glm::length(a.client.TakeKnockback()) == 0.0f, "with no air it doesn't fire");
+            flip(lever4, false);
+            server.QueueConsoleCommand("pressurise 26 0 42");
+            wait(0.6);
+            glm::vec3 thrown(0.0f);
+            flip(lever4, true);
+            pump(5.0, [&] { thrown += a.client.TakeKnockback(); return thrown.x > 0.0f; });
+            Check(thrown.x > 15.0f && thrown.y > 0.0f && std::abs(thrown.z) < 0.01f, "with air it throws the player along its facing (and up a little)");
+            goTo(27.5f, 42.5f);
+            thrown = glm::vec3(0.0f);
+            wait(1.0);
+            thrown += a.client.TakeKnockback();
+            Check(thrown.x == 0.0f, "held on, it fires only the once");
+            flip(lever4, false);
+            wait(0.5);
+            flip(lever4, true);
+            pump(5.0, [&] { thrown += a.client.TakeKnockback(); return thrown.x > 0.0f; });
+            Check(thrown.x > 15.0f, "off and on again, it fires again");
+            flip(lever4, false);
+        }
+
         std::cout << "Sensors" << std::endl;
         const glm::ivec3 playerSensor{ 24, 0, 32 }, waterSensor{ 26, 0, 32 }, pressureSensor{ 28, 0, 32 }, daySensor{ 30, 0, 32 };
         fill(playerSensor, "player_sensor");

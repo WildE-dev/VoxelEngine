@@ -1430,6 +1430,14 @@ The machines:
   makes a door out of any block. Breaking the piston takes its head too; the head
   itself gives nothing back. A **pressure sensor** (see [Signals](#signals)) joins
   the pipes too, and sends while the pressure is high enough.
+- The **air launcher** faces the way you were looking when you placed it, like a
+  piston. Give it a channel and join it to air pipes: each time the channel comes on
+  it fires once, for 12 units of air (it needs the running pressure), throwing whatever
+  is in the cell in front of it (players, creatures and items lying there) that way at
+  18 blocks a second, with a little lift if it's fired sideways so it carries. It
+  fires with a pneumatic thunk and a puff of air. To fire again, switch the channel
+  off and on. The server gives a thrown player a few seconds' leeway in its movement
+  checks, but they land as hard as they land.
 
 A **pressure gauge** is a block you fix to an air pipe, tank, compressor or anything
 else on a network: place it against one and it faces out from it, a dial on a short
@@ -1447,7 +1455,7 @@ Recipes: a water wheel from 6 planks and a log; 3 shafts from a log; a compresso
 from an iron ingot and 2 stone; 4 air pipes from a stone and a quarter of an iron
 ingot; an air tank from 2 iron ingots and half a glass; a valve from half an iron
 ingot and a stone; a drill from a steel ingot, an iron ingot and 2 stone; a piston from a planks, a
-stone and half an iron ingot; a pressure gauge from a quarter of a glass and a quarter of an iron ingot; a smelter
+stone and half an iron ingot; an air launcher from a piston and an iron ingot; a pressure gauge from a quarter of a glass and a quarter of an iron ingot; a smelter
 from 4 stone bricks and an iron ingot; 4 item
 pipes from a planks and a quarter of an iron ingot; an extractor from an iron ingot and
 a planks; a filter pipe from an item pipe and a quarter of an iron ingot; a crafter
@@ -1645,15 +1653,16 @@ channel is heard by everything listening to it within **64 blocks**.
 | **Valve** | opens while its channel is on (with no channel, right-click opens and shuts it); see [Air power](#air-power) |
 | **Sluice gate** | with a channel, opens out of the way while it's on, letting water through, and closes when it's off, pushing any water in its cell up or aside (it waits if there's nowhere for it to go); with none, it stays shut |
 | **Piston** | pushes out while its channel is on and pulls back when it's off; runs on air (see [Air power](#air-power)) |
+| **Air launcher** | throws what's in front of it once each time its channel comes on; runs on air (see [Air power](#air-power)) |
 | **Water sensor** | sends while water touches it (an eighth of a block or more, on any side) |
 | **Pressure sensor** | joined to air pipes, sends while their pressure is at least its setting (a percentage; 0 for any air at all) |
 | **Daylight sensor** | sends by day, while the sky is open above it |
 | **Player sensor** | sends while a player is within its range (4 blocks unless set, up to 16); tick "Hostile creatures too" and hostile dwarves count as well |
 
-Placing a lever, a logic gate, a signal lamp, a piston or a sensor opens a small
+Placing a lever, a logic gate, a signal lamp, a piston, an air launcher or a sensor opens a small
 window to set its channels (and a pressure or player sensor's setting); right-click a gate or a lamp (with an empty hand or a tool), or crouch and
 right-click any signal block
-(lever, plate, gate, lamp, valve, sluice gate, piston or sensor), to change them. Looking at one shows
+(lever, plate, gate, lamp, valve, sluice gate, piston, launcher or sensor), to change them. Looking at one shows
 its channels (and a lever's, gate's or valve's state) under the crosshair. Gates work
 out their answer from what they heard and send it from the next update, a tenth of
 a second later, so a loop of gates steps along instead of locking up.
@@ -1683,6 +1692,9 @@ about each block's channels and state as they change (`SignalInfo`, protocol 46)
 - a pressure plate lights its lamp while it's stood on, and it goes out after;
 - a piston with air pushes two stones out and pulls the first back, one without air
   stays put, a chest in the row stops it, and breaking a piston takes its head;
+- an air launcher without air doesn't fire; with air it throws the player standing in
+  front of it along its facing, only once while its channel stays on, and again after
+  the channel goes off and on;
 - player, water, pressure and daylight sensors each come on and go off when they
   should;
 - a dwarf penned on a pressure plate presses it, a player sensor set to sense

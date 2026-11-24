@@ -64,7 +64,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::LAVA, BlockType::OBSIDIAN, BlockType::FIRE, BlockType::BUCKET, BlockType::WATER_BUCKET, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP,
-    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::CREATIVE_AIR_TANK, BlockType::VALVE, BlockType::FLUID_VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::OBSIDIAN_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::BOILER, BlockType::TURBINE, BlockType::AIR_DIFFUSER, BlockType::DRILL, BlockType::SMELTER, BlockType::STEEL_FRAME, BlockType::MACHINE_CASING, BlockType::FIRE_BRICK, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
+    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::CREATIVE_AIR_TANK, BlockType::VALVE, BlockType::FLUID_VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::OBSIDIAN_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::BOILER, BlockType::TURBINE, BlockType::AIR_DIFFUSER, BlockType::DRILL, BlockType::SMELTER, BlockType::STEEL_FRAME, BlockType::MACHINE_CASING, BlockType::FIRE_BRICK, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LAUNCHER, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
     BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::MINING_POST, BlockType::CRUSHER, BlockType::GLOW_FUNGUS, BlockType::MAGMA, BlockType::GOLD_ORE, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::COPPER_ORE, BlockType::OIL_SHALE, BlockType::TAR, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::COPPER_INGOT, BlockType::STEEL_INGOT, BlockType::HAMMER, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
@@ -184,6 +184,7 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::FIRE: return "Fire";
     case BlockType::BUCKET: return "Bucket";
     case BlockType::WATER_BUCKET: return "Water bucket";
+    case BlockType::LAUNCHER: return "Air launcher";
     case BlockType::PUMP:  return "Pump";
     case BlockType::PIPE:  return "Pipe";
     case BlockType::WATER_WHEEL: return "Water wheel";
@@ -1224,6 +1225,7 @@ void Application::DrawCrosshair() {
                           info.a ? ("listens to " + ch(info.a)).c_str() : "by hand");
             break;
         case Signals::Kind::Piston: std::snprintf(text, sizeof text, "Piston - %s", info.a ? ("listens to " + ch(info.a)).c_str() : "no channel"); break;
+        case Signals::Kind::Launcher: std::snprintf(text, sizeof text, "Air launcher - %s", info.a ? ("fires on " + ch(info.a)).c_str() : "no channel"); break;
         case Signals::Kind::WaterSensor:
         case Signals::Kind::PressureSensor:
         case Signals::Kind::DaylightSensor:
@@ -1359,6 +1361,35 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
         }
     }
     if (drillDust.size() > 256) drillDust.clear();
+    // Air launchers: a pneumatic thunk and a puff of air out of the front as each fires.
+    {
+        std::unordered_map<glm::ivec3, bool, Coords::IVec3Hash> firing;
+        glm::vec2 s0, s1;
+        renderer->GetAtlas().GetTileUV(renderer->GetAtlas().GetIndex("spray"), s0, s1);
+        static std::mt19937 puffRng(77);
+        std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+        for (const auto& m : client->GetMachines()) {
+            if (m.type != static_cast<uint8_t>(BlockType::LAUNCHER)) continue;
+            const bool on = m.state == static_cast<uint8_t>(Power::DrillState::Working);
+            firing[m.pos] = on;
+            if (!on || launchersFiring[m.pos]) continue;
+            PlayAt("piston", m.pos, 1.0f);
+            Block l;
+            if (!world->GetBlock(m.pos.x, m.pos.y, m.pos.z, l)) continue;
+            const glm::vec3 dir(l.Facing());
+            for (int i = 0; i < 10 && particles.size() < 3000; i++) {
+                Particle p;
+                p.position = glm::vec3(m.pos) + glm::vec3(0.5f) + dir * 0.6f + glm::vec3(unit(puffRng) - 0.5f, unit(puffRng) - 0.5f, unit(puffRng) - 0.5f) * 0.5f;
+                p.velocity = dir * (2.0f + 3.0f * unit(puffRng)) + glm::vec3(unit(puffRng) - 0.5f, unit(puffRng) - 0.5f, unit(puffRng) - 0.5f);
+                p.maxLife = p.life = 0.5f + 0.4f * unit(puffRng);
+                p.size = 0.25f + 0.2f * unit(puffRng);
+                p.uv = glm::vec4(s0, s1);
+                p.mist = true;
+                particles.push_back(p);
+            }
+        }
+        launchersFiring.swap(firing);
+    }
 
     // Pressure gauges, their needles easing towards the pressure the server last sent.
     std::unordered_map<glm::ivec3, uint8_t, Coords::IVec3Hash> readings;
@@ -3482,7 +3513,7 @@ void Application::OnMouseButton(int button, int action) {
         if (placeBlock == BlockType::SIGN) OpenSign(place); // and write on it
         // Signal blocks: set their channels straight away.
         const Signals::Kind placedKind = Signals::KindOf(placeBlock);
-        if (placeBlock == BlockType::LEVER || placeBlock == BlockType::LOGIC_GATE || placeBlock == BlockType::SIGNAL_LAMP || placedKind == Signals::Kind::Piston ||
+        if (placeBlock == BlockType::LEVER || placeBlock == BlockType::LOGIC_GATE || placeBlock == BlockType::SIGNAL_LAMP || placedKind == Signals::Kind::Piston || placedKind == Signals::Kind::Launcher ||
             Signals::IsSensor(placedKind))
             OpenSignalEditor(place, placeBlock);
     }
@@ -3519,7 +3550,7 @@ void Application::DrawSignalEditor() {
                             ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowBgAlpha(0.9f);
     const char* titles[] = { "Signal", "Lever", "Pressure plate", "Logic gate", "Signal lamp", "Valve", "Sluice gate", "Piston",
-                             "Water sensor", "Pressure sensor", "Daylight sensor", "Player sensor", "Machine sensor" };
+                             "Water sensor", "Pressure sensor", "Daylight sensor", "Player sensor", "Machine sensor", "Air launcher" };
     static_assert(IM_ARRAYSIZE(titles) == static_cast<int>(Signals::Kind::Count), "a signal kind has no title");
     bool open = true;
     if (ImGui::Begin(titles[std::clamp(signalKind, 0, static_cast<int>(Signals::Kind::Count) - 1)], &open,
@@ -3582,6 +3613,8 @@ void Application::DrawSignalEditor() {
             if (kind == Signals::Kind::Lamp) ImGui::TextDisabled("Lights while the channel is on.");
             if (kind == Signals::Kind::Valve) ImGui::TextDisabled("Opens while the channel is on. With none, right-click (empty-handed) opens and shuts it.");
             if (kind == Signals::Kind::Sluice) ImGui::TextDisabled("Opens while the channel is on, and closes again when it's off.");
+            if (kind == Signals::Kind::Launcher)
+                ImGui::TextDisabled("Throws what's in front of it each time the channel comes on. It runs on air: join it to air pipes.");
             if (kind == Signals::Kind::Piston)
                 ImGui::TextDisabled("Pushes out while the channel is on and pulls back when it's off. It runs on air: join it to air pipes.");
         }

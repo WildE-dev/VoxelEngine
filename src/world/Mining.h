@@ -123,6 +123,7 @@ inline float DefaultHardness(BlockType type) {
     case BlockType::FLUID_VALVE_OPEN:
     case BlockType::LOGIC_GATE:
     case BlockType::PISTON:
+    case BlockType::LAUNCHER:
     case BlockType::PISTON_HEAD:
     case BlockType::PRESSURE_SENSOR:
     case BlockType::ITEM_PIPE:
@@ -227,6 +228,7 @@ inline Tool DefaultBestTool(BlockType type) {
     case BlockType::FLUID_VALVE_OPEN:
     case BlockType::LOGIC_GATE:
     case BlockType::PISTON:
+    case BlockType::LAUNCHER:
     case BlockType::PISTON_HEAD:
     case BlockType::WATER_SENSOR:
     case BlockType::MACHINE_SENSOR:

@@ -26,6 +26,7 @@
 //    on channels of their own: Dungeons::FloodChamberSignals.)
 //  - a piston pushes out while its channel is on, and pulls back when it's off (it
 //    runs on air: see world/Power.h);
+//  - an air launcher throws what's in front of it each time its channel comes on;
 //  - a logic gate's inputs.
 // Logic gates work out their output from what they hear on their inputs (a and b),
 // each update, and send it on their output channel from the next: AND, OR, XOR, NOT
@@ -49,7 +50,7 @@ constexpr double kClockSeconds = 1.0;
 constexpr int kPlayerRange = 4;
 constexpr int kMaxPlayerRange = 16;
 
-enum class Kind : uint8_t { None, Lever, Plate, Gate, Lamp, Valve, Sluice, Piston, WaterSensor, PressureSensor, DaylightSensor, PlayerSensor, MachineSensor, Count };
+enum class Kind : uint8_t { None, Lever, Plate, Gate, Lamp, Valve, Sluice, Piston, WaterSensor, PressureSensor, DaylightSensor, PlayerSensor, MachineSensor, Launcher, Count };
 // What a machine sensor watches for (kept in its config's mode).
 enum class Watch : uint8_t { Working, Stopped, NoAir, HasItems, Empty, Level, Count };
 inline const char* WatchName(Watch w) {
@@ -79,6 +80,7 @@ inline Kind KindOf(BlockType t) {
     case BlockType::FLUID_VALVE_OPEN: return Kind::Valve;
     case BlockType::SLUICE: return Kind::Sluice;
     case BlockType::PISTON: return Kind::Piston;
+    case BlockType::LAUNCHER: return Kind::Launcher;
     case BlockType::WATER_SENSOR: return Kind::WaterSensor;
     case BlockType::PRESSURE_SENSOR: return Kind::PressureSensor;
     case BlockType::DAYLIGHT_SENSOR: return Kind::DaylightSensor;
@@ -101,7 +103,7 @@ inline bool IsSensor(Kind k) {
     return k == Kind::WaterSensor || k == Kind::PressureSensor || k == Kind::DaylightSensor || k == Kind::PlayerSensor || k == Kind::MachineSensor;
 }
 inline bool Sends(Kind k) { return k == Kind::Lever || k == Kind::Plate || k == Kind::Gate || IsSensor(k); }
-inline bool Listens(Kind k) { return k == Kind::Lamp || k == Kind::Valve || k == Kind::Sluice || k == Kind::Gate || k == Kind::Piston; }
+inline bool Listens(Kind k) { return k == Kind::Lamp || k == Kind::Valve || k == Kind::Sluice || k == Kind::Gate || k == Kind::Piston || k == Kind::Launcher; }
 // A player sensor whose mode is Or senses hostile dwarves too.
 inline bool SensesCreatures(const Config& c) { return c.kind == Kind::PlayerSensor && c.mode == Mode::Or; }
 // Whether a kind has a setting in b (besides a gate's second input).
