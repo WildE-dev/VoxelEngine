@@ -959,6 +959,26 @@ int Block::ModelBoxes(unsigned joined, glm::vec3 lo[kMaxModelBoxes], glm::vec3 h
         return n;
     }
     switch (type) {
+    case BlockType::DOOR: {
+        // Shut: its panel across the back of the cell.
+        glm::vec3 a, b;
+        DoorPanel(a, b);
+        box(a, b);
+        return n;
+    }
+    case BlockType::DOOR_OPEN: {
+        // Open: swung a quarter turn about its hinge, its panel along the cell's side to
+        // the left of the way it faces (as the door models draw it).
+        const glm::ivec3 f = Facing();
+        constexpr float t = kDoorThickness;
+        glm::vec3 a(0.0f), b(1.0f);
+        if (f.x > 0) a.z = 1.0f - t;      // facing +x: along +z
+        else if (f.x < 0) b.z = t;        // facing -x: along -z
+        else if (f.z < 0) a.x = 1.0f - t; // facing -z: along +x
+        else b.x = t;                     // facing +z: along -x
+        box(a, b);
+        return n;
+    }
     case BlockType::SHAFT:
         rod(GrainAxis(), 0.0f, 1.0f, 0.15f); // the rod and its band
         return n;
@@ -1026,7 +1046,7 @@ std::vector<glm::vec3> Block::OutlineSegments(const glm::ivec3& cell, unsigned j
         for (int i = 0; i < count; i++) box(lo[i], hi[i]);
         return lines;
     }
-    if (IsPlant() && !IsLeverType(type)) {
+    if (IsPlant() && !IsLeverType(type) && type != BlockType::DOOR_OPEN) {
         // Round its picture (its two crossed sprites, as far as they have anything solid).
         const float drop = PlantDrop();
         float u0 = 0.15f, u1 = 0.85f, height = 0.9f;

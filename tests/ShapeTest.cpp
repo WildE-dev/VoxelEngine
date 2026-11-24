@@ -569,6 +569,20 @@ int main() {
                   "a chisel aimed down onto a low step's far half works on that quarter (where the view lands, z " +
                       std::to_string(down ? down->point.z - 12.0f : -1.0f) + ")");
             Check(step.QuarterOutline(0, 0).size() == 24, "and the quarter it works on can be outlined (12 edges)");
+            // A door is aimed at (and outlined) as its panel, not its whole cell: shut, across
+            // the back (facing +z: the -z side); open, along its hinge side (-x).
+            const Block shut = Block(BlockType::DOOR).Turned(4), open = Block(BlockType::DOOR_OPEN).Turned(4);
+            cells.blocks[{ 0, 3, 20 }] = shut;
+            const auto atPanel = Raycast(cells, glm::vec3(0.5f, 3.5f, 23.0f), glm::vec3(0.0f, 0.0f, -1.0f), 6.0f);
+            Check(atPanel && atPanel->block == glm::ivec3(0, 3, 20) && std::abs(atPanel->point.z - (20.0f + Block::kDoorThickness)) < 0.01f,
+                  "a shut door is hit on its panel (at z " + std::to_string(atPanel ? atPanel->point.z - 20.0f : -1.0f) + "), not the front of its cell");
+            Check(shut.OutlineSegments().size() == 24, "and outlined as that panel");
+            cells.blocks[{ 0, 3, 20 }] = open;
+            const auto pastOpen = Raycast(cells, glm::vec3(0.5f, 3.5f, 23.0f), glm::vec3(0.0f, 0.0f, -1.0f), 6.0f);
+            const auto atOpen = Raycast(cells, glm::vec3(0.05f, 3.5f, 23.0f), glm::vec3(0.0f, 0.0f, -1.0f), 6.0f);
+            Check((!pastOpen || pastOpen->block != glm::ivec3(0, 3, 20)) && atOpen && atOpen->block == glm::ivec3(0, 3, 20),
+                  "an open door is aimed at along its hinge side, and through the doorway past it");
+            cells.blocks.erase({ 0, 3, 20 });
             // Turned on its side (its top facing +x), the same step: aimed at from -x, the
             // face hit faces -x (it used to be the turned top, +x: the far side).
             Block turned = step;
