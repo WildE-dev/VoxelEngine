@@ -1,2 +1,21 @@
 // pipe: a block (the format is in README.md, here)
-{ "name": "Pipe", "textures": { "all": "pipe_end" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }
+{
+  "name": "Pipe",
+  "textures": { "all": "pipe_end" },
+  "hardness": 3,
+  "tool": "pickaxe",
+  "sound": "hard",
+  "light": 0,
+  "map": "#707070",
+  "collision": {
+    "boxes": [
+      { "from": [0.25, 0.25, 0.25], "to": [0.75, 0.75, 0.75] },
+      { "from": [0.75, 0.25, 0.25], "to": [1, 0.75, 0.75], "joined": ["+x"] },
+      { "from": [0, 0.25, 0.25], "to": [0.25, 0.75, 0.75], "joined": ["-x"] },
+      { "from": [0.25, 0.75, 0.25], "to": [0.75, 1, 0.75], "joined": ["+y"] },
+      { "from": [0.25, 0, 0.25], "to": [0.75, 0.25, 0.75], "joined": ["-y"] },
+      { "from": [0.25, 0.25, 0.75], "to": [0.75, 0.75, 1], "joined": ["+z"] },
+      { "from": [0.25, 0.25, 0], "to": [0.75, 0.75, 0.25], "joined": ["-z"] }
+    ]
+  }
+}

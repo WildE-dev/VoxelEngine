@@ -23,9 +23,31 @@ void CellRange(float lo, float hi, int& first, int& last) {
 
 // An upright slope (natural ground, or a chiselled one): a surface to stand on, which
 // doesn't block sideways (MoveHorizontal stops at one rising more than a step).
-bool IsUprightSlope(const Block& b) { return b.IsPartial() && !b.IsStepped() && b.ShapeDir() == 0; }
+bool IsUprightSlope(const Block& b) { return b.IsPartial() && !b.IsStepped() && b.ShapeDir() == 0 && b.Collides(); }
+
+// A box overlaps [lo, hi] (touching doesn't count).
+bool Overlaps(const AABB& box, const glm::vec3& lo, const glm::vec3& hi) {
+    return box.min.x < hi.x - kEpsilon && box.max.x > lo.x + kEpsilon && box.min.y < hi.y - kEpsilon && box.max.y > lo.y + kEpsilon &&
+           box.min.z < hi.z - kEpsilon && box.max.z > lo.z + kEpsilon;
+}
 
 } // namespace
+
+bool BlockOverlaps(const BlockAccess& world, const glm::ivec3& cell, const Block& block, const AABB& box, bool slopes) {
+    if (!block.Collides()) return false;
+    const glm::vec3 at(cell);
+    glm::vec3 lo[Block::kMaxModelBoxes], hi[Block::kMaxModelBoxes];
+    const int count = block.ModelBoxes(ModelBoxes::Joins(world, cell, block), lo, hi);
+    if (count >= 0) {
+        // Its boxes (a pipe, a shaft, a door's panel), not the whole cell.
+        for (int i = 0; i < count; i++)
+            if (Overlaps(box, lo[i] + at, hi[i] + at)) return true;
+        return false;
+    }
+    // Quarters and turned shapes block where they actually are; upright slopes only if asked.
+    if (block.IsPartial()) return (slopes || !IsUprightSlope(block)) && block.ShapeOverlaps(box.min - at, box.max - at);
+    return Overlaps(box, at, at + glm::vec3(1.0f));
+}
 
 bool BoxBlocked(const BlockAccess& world, const AABB& box) { return BoxBlocked(world, box, 1e30f); }
 
@@ -40,35 +62,7 @@ bool BoxBlocked(const BlockAccess& world, const AABB& box, float slopesFrom) {
             for (int z = z0; z <= z1; z++) {
                 Block block;
                 if (!world.GetBlock(x, y, z, block)) return true; // unloaded
-                const glm::vec3 cell(x, y, z);
-                if (block.type == BlockType::DOOR) {
-                    // A closed door blocks only its thin panel, not the whole cell.
-                    glm::vec3 lo, hi;
-                    block.DoorPanel(lo, hi);
-                    lo += cell;
-                    hi += cell;
-                    if (box.min.x < hi.x - kEpsilon && box.max.x > lo.x + kEpsilon && box.min.y < hi.y - kEpsilon && box.max.y > lo.y + kEpsilon &&
-                        box.min.z < hi.z - kEpsilon && box.max.z > lo.z + kEpsilon)
-                        return true;
-                    continue;
-                }
-                {
-                    // Drawn smaller than the cell (a pipe, a shaft, a gauge): its boxes.
-                    glm::vec3 lo[Block::kMaxModelBoxes], hi[Block::kMaxModelBoxes];
-                    const int count = block.IsPlant() ? -1 : block.ModelBoxes(ModelBoxes::Joins(world, glm::ivec3(x, y, z), block), lo, hi); // (a lever's passable)
-                    bool hit = false;
-                    for (int i = 0; i < count && !hit; i++) {
-                        const glm::vec3 l = lo[i] + cell, h = hi[i] + cell;
-                        hit = box.min.x < h.x - kEpsilon && box.max.x > l.x + kEpsilon && box.min.y < h.y - kEpsilon && box.max.y > l.y + kEpsilon &&
-                              box.min.z < h.z - kEpsilon && box.max.z > l.z + kEpsilon;
-                    }
-                    if (hit) return true;
-                    if (count >= 0) continue;
-                }
-                if (block.IsFullBlock()) return true;
-                // Quarters and turned shapes block where they actually are.
-                if (block.IsPartial() && (!IsUprightSlope(block) || cell.y >= slopesFrom - kEpsilon) && block.ShapeOverlaps(box.min - cell, box.max - cell))
-                    return true;
+                if (BlockOverlaps(world, glm::ivec3(x, y, z), block, box, static_cast<float>(y) >= slopesFrom - kEpsilon)) return true;
             }
     return false;
 }
@@ -128,12 +122,12 @@ std::optional<float> GroundHeight(const BlockAccess& world, const AABB& box, flo
                     unknown = true;
                     break;
                 }
-                if (block.type == BlockType::DOOR) continue; // (a thin panel: not something to stand on)
+                if (!block.StoodOn()) continue; // (not solid, or not something to stand on: a door's top)
                 {
                     // Drawn smaller than the cell: the tops of its boxes under the footprint
                     // (none there: look on down past it).
                     glm::vec3 lo[Block::kMaxModelBoxes], hi[Block::kMaxModelBoxes];
-                    const int count = block.IsPlant() ? -1 : block.ModelBoxes(ModelBoxes::Joins(world, glm::ivec3(x, y, z), block), lo, hi);
+                    const int count = block.ModelBoxes(ModelBoxes::Joins(world, glm::ivec3(x, y, z), block), lo, hi);
                     if (count >= 0) {
                         float highest = -1.0f;
                         for (int i = 0; i < count; i++)
@@ -147,11 +141,11 @@ std::optional<float> GroundHeight(const BlockAccess& world, const AABB& box, flo
                         continue;
                     }
                 }
-                if (block.IsFullBlock()) {
+                if (!block.IsPartial()) { // (a full block, or anything else solid: its cell)
                     consider(static_cast<float>(y + 1));
                     break;
                 }
-                if (!block.IsPartial() || IsUprightSlope(block)) continue;
+                if (IsUprightSlope(block)) continue;
                 const float shapeTop = block.ShapeTop(box.min.x - x, box.max.x - x, box.min.z - z, box.max.z - z);
                 if (shapeTop >= 0.0f) {
                     consider(static_cast<float>(y) + shapeTop);

@@ -1,2 +1,2 @@
 // filter_pipe: a block (the format is in README.md, here)
-{ "name": "Filter pipe", "textures": { "top": "filter_pipe_end", "bottom": "filter_pipe_end", "side": "filter_pipe" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }
+{ "name": "Filter pipe", "textures": { "top": "filter_pipe_end", "bottom": "filter_pipe_end", "side": "filter_pipe" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070", "collision": { "boxes": "pipe" } }

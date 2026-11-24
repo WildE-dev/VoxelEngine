@@ -32,6 +32,7 @@
 #include "client/ClientWorld.h"
 #include "server/Server.h"
 #include "world/BlockAccess.h"
+#include "world/BlockData.h"
 #include "world/Collision.h"
 #include "world/Coords.h"
 #include "world/Multiblocks.h"
@@ -119,6 +120,11 @@ bool Pump(std::initializer_list<TestClient*> clients, double seconds, const std:
 } // namespace
 
 int main() {
+    {
+        // (Pipes', shafts' and doors' collision boxes are in the block data.)
+        std::string error;
+        if (!BlockData::Load(BlockData::kPath, error)) std::cout << "  (no block data: " << error << ")" << std::endl;
+    }
     std::cout << "Shapes" << std::endl;
     {
         Check(StyleOf(BlockType::DIRT) == ShapeStyle::Sloped && StyleOf(BlockType::SNOW) == ShapeStyle::Sloped &&

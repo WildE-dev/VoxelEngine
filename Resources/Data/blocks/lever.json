@@ -1,2 +1,2 @@
 // lever: a block (the format is in README.md, here)
-{ "name": "Lever", "textures": { "all": "lever" }, "hardness": 0.4, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }
+{ "name": "Lever", "textures": { "all": "lever" }, "hardness": 0.4, "tool": "none", "sound": "soft", "light": 0, "map": "#707070", "collision": { "turns": true, "solid": false, "boxes": [{ "from": [0.25, 0.25, 0], "to": [0.75, 0.75, 0.6] }] } }

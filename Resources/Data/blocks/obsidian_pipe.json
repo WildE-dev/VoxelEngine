@@ -1,2 +1,2 @@
 // obsidian_pipe: a block (the format is in README.md, here)
-{ "name": "Obsidian pipe", "textures": { "top": "obsidian_pipe_end", "bottom": "obsidian_pipe_end", "side": "obsidian_pipe" }, "hardness": 6, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#1c1028" }
+{ "name": "Obsidian pipe", "textures": { "top": "obsidian_pipe_end", "bottom": "obsidian_pipe_end", "side": "obsidian_pipe" }, "hardness": 6, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#1c1028", "collision": { "boxes": "pipe" } }

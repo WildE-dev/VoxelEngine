@@ -5,13 +5,16 @@
 #include <glm/glm.hpp>
 
 class BlockAccess;
+struct Block;
 
 // Collision queries used by player physics (client) and movement checks (server).
 //
-// Full blocks collide as unit boxes; quarters (built blocks chiselled) and shapes
-// turned sideways or upside down as exactly what they fill. Upright slopes (natural
-// ground) are a height field: they never block sideways, but things stand on the
-// highest point of their surface under them. Plants don't collide at all. Space in
+// Full blocks collide as unit boxes; blocks with collision boxes (pipes, shafts, doors:
+// their "collision" in Resources/Data/blocks, see BlockData.h) as those boxes; quarters
+// (built blocks chiselled) and shapes turned sideways or upside down as exactly what
+// they fill. Upright slopes (natural ground) are a height field: they never block
+// sideways, but things stand on the highest point of their surface under them. Blocks
+// that aren't solid (plants, open doors, levers, or as the data says) don't collide. Space in
 // chunks that aren't loaded yet counts as solid, so nothing falls out of the world
 // while terrain streams in.
 namespace Collision {
@@ -19,6 +22,11 @@ namespace Collision {
 struct AABB {
     glm::vec3 min, max;
 };
+
+// True if the box overlaps what one block fills (nothing, if it isn't solid): its
+// collision boxes, its quarters or turned shape, or its cell; an upright slope only
+// with `slopes`.
+bool BlockOverlaps(const BlockAccess& world, const glm::ivec3& cell, const Block& block, const AABB& box, bool slopes);
 
 // True if the box overlaps any block's solid (not an upright slope's) or unloaded space.
 // With `slopesFrom`, upright slopes in cells starting at or above that height block too,

@@ -1,2 +1,11 @@
 // valve: a block (the format is in README.md, here)
-{ "name": "Valve (closed)", "textures": { "top": "valve_handle", "bottom": "valve_handle", "side": "valve_icon" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }
+{
+  "name": "Valve (closed)",
+  "textures": { "top": "valve_handle", "bottom": "valve_handle", "side": "valve_icon" },
+  "hardness": 3,
+  "tool": "pickaxe",
+  "sound": "hard",
+  "light": 0,
+  "map": "#707070",
+  "collision": { "boxes": ["pipe", { "from": [0.75, 0.125, 0.125], "to": [1, 0.875, 0.875], "joinedAny": ["+y", "-y"], "joinedNone": ["+x", "-x", "+z", "-z"] }, { "from": [0.125, 0.75, 0.125], "to": [0.875, 1, 0.875], "otherwise": true }] }
+}

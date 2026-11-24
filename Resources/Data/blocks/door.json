@@ -1,2 +1,2 @@
 // door: a block (the format is in README.md, here)
-{ "name": "Door", "textures": { "top": "planks", "bottom": "planks", "side": "door" }, "hardness": 1, "tool": "axe", "sound": "wood", "light": 0, "map": "#8a5c2e" }
+{ "name": "Door", "textures": { "top": "planks", "bottom": "planks", "side": "door" }, "hardness": 1, "tool": "axe", "sound": "wood", "light": 0, "map": "#8a5c2e", "collision": { "turns": true, "floor": false, "boxes": [{ "from": [0, 0, 0], "to": [1, 1, 0.1875] }] } }

@@ -1,2 +1,2 @@
 // door_open: a block (the format is in README.md, here)
-{ "name": "Open door", "textures": { "all": "door_open" }, "hardness": 1, "tool": "axe", "sound": "wood", "light": 0, "map": "#707070" }
+{ "name": "Open door", "textures": { "all": "door_open" }, "hardness": 1, "tool": "axe", "sound": "wood", "light": 0, "map": "#707070", "collision": { "turns": true, "mirrors": true, "solid": false, "boxes": [{ "from": [0, 0, 0], "to": [0.1875, 1, 1] }] } }

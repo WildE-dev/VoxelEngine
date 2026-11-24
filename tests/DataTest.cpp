@@ -14,6 +14,7 @@
 #include <string>
 
 #include "app/Settings.h"
+#include "world/Block.h"
 #include "world/BlockData.h"
 #include "world/Smelting.h"
 #include "world/Crafting.h"
@@ -57,6 +58,32 @@ int main() {
               "and its name and textures");
         Check(Mining::Hardness(BlockType::DIRT) == Mining::DefaultHardness(BlockType::DIRT) && !BlockData::Name(BlockType::DIRT),
               "blocks it doesn't mention keep the game's own");
+        // Collision: boxes turned the way the block points, pipe arms where it joins,
+        // another block's boxes taken over, and walked-through blocks.
+        std::ofstream(file) << R"({
+          "stone": { "collision": { "turns": true, "boxes": [{ "from": [0, 0, 0], "to": [1, 0.5, 0.25] }] } },
+          "pipe": { "collision": { "boxes": [{ "from": [0.25, 0.25, 0.25], "to": [0.75, 0.75, 0.75] },
+                                             { "from": [0.75, 0.25, 0.25], "to": [1, 0.75, 0.75], "joined": ["+x"] },
+                                             { "from": [0, 0, 0], "to": [1, 0.1, 1], "joinedNone": ["+x"] },
+                                             { "from": [0, 0.9, 0], "to": [1, 1, 1], "otherwise": true }] } },
+          "air_pipe": { "collision": { "boxes": "pipe" } },
+          "dirt": { "collision": { "solid": false } },
+          "lever": { "collision": { "solid": true, "floor": false } }
+        })";
+        Check(BlockData::Load(file.string(), error), "a blocks file with collisions loads" + (error.empty() ? "" : " (" + error + ")"));
+        glm::vec3 lo[Block::kMaxModelBoxes], hi[Block::kMaxModelBoxes];
+        Block turned(BlockType::STONE);
+        turned.axis = 0; // facing +x
+        const int stoneBoxes = turned.ModelBoxes(0, lo, hi);
+        Check(stoneBoxes == 1 && lo[0] == glm::vec3(0.0f, 0.0f, 0.0f) && hi[0] == glm::vec3(0.25f, 0.5f, 1.0f),
+              "a block's boxes turn the way it faces (+z to +x)");
+        const int joined = Block(BlockType::PIPE).ModelBoxes(1u << 0, lo, hi);
+        const bool armAndRoof = joined == 3 && hi[1].x == 1.0f && lo[2].y == 0.9f;
+        const int apart = Block(BlockType::AIR_PIPE).ModelBoxes(0, lo, hi);
+        Check(armAndRoof && apart == 2 && hi[1].y == 0.1f, "boxes count by the faces joined, \"otherwise\" when the one before didn't, and are shared by id");
+        Check(!Block(BlockType::DIRT).Collides() && Block(BlockType::STONE).Collides() && Block(BlockType::LEVER).Collides() &&
+                  !Block(BlockType::LEVER).StoodOn() && Block(BlockType::DIRT).ModelBoxes(0, lo, hi) == -1,
+              "\"solid\" and \"floor\" make a block walked through, or bumped into but not stood on");
         std::ofstream(file) << "{ }";
         Check(BlockData::Load(file.string(), error) && Mining::Hardness(BlockType::STONE) == Mining::DefaultHardness(BlockType::STONE) &&
                   GetLightEmission(BlockType::STONE) == 0,

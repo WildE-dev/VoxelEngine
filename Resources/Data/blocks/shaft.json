@@ -1,2 +1,2 @@
 // shaft: a block (the format is in README.md, here)
-{ "name": "Shaft", "textures": { "all": "shaft" }, "hardness": 2, "tool": "axe", "sound": "wood", "light": 0, "map": "#707070" }
+{ "name": "Shaft", "textures": { "all": "shaft" }, "hardness": 2, "tool": "axe", "sound": "wood", "light": 0, "map": "#707070", "collision": { "turns": true, "boxes": [{ "from": [0.35, 0.35, 0], "to": [0.65, 0.65, 1] }] } }

@@ -935,92 +935,49 @@ void Block::AddPebbleVertices(std::vector<uint32_t>& vertices, int x, int y, int
     }
 }
 
-int Block::ModelBoxes(unsigned joined, glm::vec3 lo[kMaxModelBoxes], glm::vec3 hi[kMaxModelBoxes]) const {
-    int n = 0;
-    auto box = [&](glm::vec3 a, glm::vec3 b) { lo[n] = a, hi[n] = b, n++; };
-    // A box along an axis (0 x, 1 y, 2 z): from..to along it, `half` either side of the
-    // middle across it.
-    auto rod = [&](int axisIndex, float from, float to, float half) {
-        glm::vec3 a(0.5f - half), b(0.5f + half);
-        a[axisIndex] = from, b[axisIndex] = to;
-        box(a, b);
-    };
-    if (IsPipe() || IsValveType(type)) {
-        // The core, and an arm out of each face it joins (as the mesher draws it); and a
-        // valve's handle on top.
-        constexpr float kHalf = 0.25f;
-        rod(0, 0.5f - kHalf, 0.5f + kHalf, kHalf);
-        for (int face = 0; face < kFaceCount; ++face) {
-            if (!(joined & (1u << face))) continue;
-            const int a = kFaceAxis[face];
-            const bool positive = kFaceOffsets[face][a] > 0;
-            rod(a, positive ? 0.5f + kHalf : 0.0f, positive ? 1.0f : 0.5f - kHalf, kHalf);
-        }
-        if (IsValveType(type)) {
-            // Round the handle, either way it's turned: on top, or on the +x side of a pipe
-            // running up and down (as the mesher draws it).
-            if ((joined & 0xCu) != 0 && (joined & 0x33u) == 0) box({ 0.75f, 0.125f, 0.125f }, { 1.0f, 0.875f, 0.875f });
-            else box({ 0.125f, 0.75f, 0.125f }, { 0.875f, 1.0f, 0.875f });
-        }
-        return n;
-    }
-    switch (type) {
-    case BlockType::DOOR: {
-        // Shut: its panel across the back of the cell.
-        glm::vec3 a, b;
-        DoorPanel(a, b);
-        box(a, b);
-        return n;
-    }
-    case BlockType::DOOR_OPEN: {
-        // Open: swung a quarter turn about its hinge, its panel along the cell's side to
-        // the left of the way it faces (mirrored: the right), as the door models draw it.
-        glm::ivec3 f = Facing();
-        if (DoorMirrored()) f = -f; // (the right of one facing is the left of the other)
-        constexpr float t = kDoorThickness;
-        glm::vec3 a(0.0f), b(1.0f);
-        if (f.x > 0) a.z = 1.0f - t;      // facing +x: along +z
-        else if (f.x < 0) b.z = t;        // facing -x: along -z
-        else if (f.z < 0) a.x = 1.0f - t; // facing -z: along +x
-        else b.x = t;                     // facing +z: along -x
-        box(a, b);
-        return n;
-    }
-    case BlockType::SHAFT:
-        rod(GrainAxis(), 0.0f, 1.0f, 0.15f); // the rod and its band
-        return n;
-    case BlockType::WATER_WHEEL:
-        rod(GrainAxis(), 0.0f, 1.0f, 0.12f);  // the axle
-        rod(GrainAxis(), 0.15f, 0.85f, 0.25f); // the hub
-        return n;
-    case BlockType::PRESSURE_GAUGE: {
-        // The housing and dial over the front of the back half, and the stem behind.
-        const int face = axis % 6, a = kFaceAxis[face];
-        const bool positive = kFaceOffsets[face][a] > 0; // it faces this way; the pipe is behind
-        rod(a, positive ? 0.23f : 0.47f, positive ? 0.53f : 0.77f, 0.26f);
-        rod(a, positive ? 0.0f : 0.77f, positive ? 0.23f : 1.0f, 0.07f);
-        return n;
-    }
-    case BlockType::LEVER:
-    case BlockType::LEVER_ON: {
-        // Its base on the block behind it and the handle out from it.
-        const glm::ivec3 f = LeverFacing();
-        const int a = f.x != 0 ? 0 : f.y != 0 ? 1 : 2;
-        const bool positive = f[a] > 0;
-        rod(a, positive ? 0.0f : 0.4f, positive ? 0.6f : 1.0f, 0.25f);
-        return n;
-    }
-    case BlockType::PISTON_HEAD: {
-        // A plate across the far end and a rod back through the rest.
-        const int face = axis % 6, a = kFaceAxis[face];
-        const bool positive = kFaceOffsets[face][a] > 0;
-        rod(a, positive ? 0.75f : 0.0f, positive ? 1.0f : 0.25f, 0.5f);
-        rod(a, positive ? 0.0f : 0.25f, positive ? 0.75f : 1.0f, 0.125f);
-        return n;
-    }
-    default: return -1;
-    }
+namespace {
+
+// A point in a shape drawn pointing +z, in the cell of a block pointing `d`.
+glm::vec3 TurnTo(const glm::ivec3& d, const glm::vec3& p) {
+    if (d.x > 0) return { p.z, p.y, 1.0f - p.x };
+    if (d.x < 0) return { 1.0f - p.z, p.y, p.x };
+    if (d.y > 0) return { p.x, p.z, 1.0f - p.y };
+    if (d.y < 0) return { p.x, 1.0f - p.z, p.y };
+    if (d.z < 0) return { 1.0f - p.x, p.y, 1.0f - p.z };
+    return p;
 }
+
+} // namespace
+
+int Block::ModelBoxes(unsigned joined, glm::vec3 lo[kMaxModelBoxes], glm::vec3 hi[kMaxModelBoxes]) const {
+    const BlockData::Shape& shape = BlockData::ShapeOf(type);
+    if (!shape.hasBoxes) return -1;
+    const glm::ivec3 d = shape.turns ? Pointing() : glm::ivec3(0, 0, 1);
+    const bool mirror = shape.mirrors && DoorMirrored();
+    int n = 0;
+    bool runKept = false; // (a box, or one of the "otherwise" ones after it, counted)
+    for (const BlockData::ShapeBox& b : shape.boxes) {
+        bool keep = (joined & b.joinedAll) == b.joinedAll && (!b.joinedAny || (joined & b.joinedAny)) && !(joined & b.joinedNone);
+        if (b.otherwise) {
+            keep = keep && !runKept;
+            runKept = runKept || keep;
+        } else runKept = keep;
+        if (!keep || n == kMaxModelBoxes) continue;
+        glm::vec3 a = b.lo, c = b.hi;
+        if (mirror) a.x = 1.0f - b.hi.x, c.x = 1.0f - b.lo.x;
+        a = TurnTo(d, a), c = TurnTo(d, c);
+        lo[n] = glm::min(a, c), hi[n] = glm::max(a, c);
+        n++;
+    }
+    return n;
+}
+
+bool Block::Collides() const {
+    if (IsAir() || IsLiquid() || IsLava()) return false;
+    return BlockData::ShapeOf(type).solid.value_or(!IsPlant());
+}
+
+bool Block::StoodOn() const { return Collides() && BlockData::ShapeOf(type).floor.value_or(true); }
 
 std::vector<glm::vec3> Block::OutlineSegments(const glm::ivec3& cell, unsigned joined) const {
     if (const int dir = ShapeDir(); dir != 0 && IsPartial()) {

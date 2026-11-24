@@ -1,2 +1,11 @@
 // pressure_gauge: a block (the format is in README.md, here)
-{ "name": "Pressure gauge", "textures": { "all": "pressure_gauge" }, "hardness": 0.5, "tool": "none", "sound": "hard", "light": 0, "map": "#707070" }
+{
+  "name": "Pressure gauge",
+  "textures": { "all": "pressure_gauge" },
+  "hardness": 0.5,
+  "tool": "none",
+  "sound": "hard",
+  "light": 0,
+  "map": "#707070",
+  "collision": { "turns": true, "boxes": [{ "from": [0.24, 0.24, 0.23], "to": [0.76, 0.76, 0.53] }, { "from": [0.43, 0.43, 0], "to": [0.57, 0.57, 0.23] }] }
+}

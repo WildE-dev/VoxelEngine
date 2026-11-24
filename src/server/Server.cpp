@@ -2,7 +2,6 @@
 #include "world/Fire.h"
 #include "world/Lava.h"
 #include "world/Trees.h"
-#include "world/ModelBoxes.h"
 #include <map>
 #include <unordered_set>
 #include <fstream>
@@ -125,19 +124,8 @@ bool InsideSolid(const ServerWorld& world, const Collision::AABB& box) {
             for (int z = lo.z; z <= hi.z; z++) {
                 Block block;
                 if (!world.GetBlock(x, y, z, block)) continue;
-                // (Quarters and turned shapes fill what they fill; upright slopes are ground.)
-                if (block.IsPartial() && !(block.ShapeDir() == 0 && !block.IsStepped())) {
-                    if (block.ShapeOverlaps(box.min - glm::vec3(x, y, z), box.max - glm::vec3(x, y, z))) return true;
-                    continue;
-                }
-                if (!block.IsFullBlock()) continue;
-                // A pipe, a shaft or a gauge fills only its boxes (as players collide with it).
-                glm::vec3 lo[Block::kMaxModelBoxes], hi[Block::kMaxModelBoxes];
-                const int count = block.ModelBoxes(ModelBoxes::Joins(world, glm::ivec3(x, y, z), block), lo, hi);
-                if (count < 0) return true;
-                const glm::vec3 cell(x, y, z);
-                for (int i = 0; i < count; i++)
-                    if (glm::all(glm::lessThan(box.min, hi[i] + cell)) && glm::all(glm::greaterThan(box.max, lo[i] + cell))) return true;
+                // (As players collide with it; upright slopes are ground.)
+                if (Collision::BlockOverlaps(world, glm::ivec3(x, y, z), block, box, false)) return true;
             }
     return false;
 }

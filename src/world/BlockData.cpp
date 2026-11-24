@@ -23,6 +23,7 @@ struct Entry {
     std::optional<uint32_t> map;
 };
 std::array<Entry, kCount> entries;
+std::array<Shape, kCount> shapes;
 
 struct LightInit {
     LightInit() {
@@ -39,6 +40,94 @@ std::optional<Tool> ToolFrom(const std::string& s) {
     return std::nullopt;
 }
 
+// "+x" .. "-z": the face's bit (0 if it isn't one).
+uint8_t FaceBit(const std::string& s) {
+    static const char* names[kFaceCount] = { "+x", "-x", "+y", "-y", "+z", "-z" };
+    for (int f = 0; f < kFaceCount; f++)
+        if (s == names[f]) return static_cast<uint8_t>(1u << f);
+    return 0;
+}
+
+bool Vec3(const Json::Value* v, glm::vec3& out) {
+    if (!v || !v->IsArray() || v->array.size() != 3) return false;
+    for (int i = 0; i < 3; i++) {
+        if (!v->array[static_cast<size_t>(i)].IsNumber()) return false;
+        out[i] = static_cast<float>(v->array[static_cast<size_t>(i)].number);
+    }
+    return true;
+}
+
+// A block's "collision", but for its references to other blocks' boxes (left in
+// `refs`, by where they go in the list).
+struct RawShape {
+    Shape shape;
+    std::vector<std::pair<size_t, BlockType>> refs;
+};
+
+RawShape ReadShape(const std::string& path, const std::string& id, const Json::Value& c) {
+    RawShape raw;
+    Shape& s = raw.shape;
+    auto warn = [&](const std::string& what) { std::cerr << "[data] " << path << ": " << id << ": collision: " << what << std::endl; };
+    s.turns = c.BoolOr("turns", false);
+    s.mirrors = c.BoolOr("mirrors", false);
+    if (const auto* v = c.Find("solid"); v && v->type == Json::Value::Type::Bool) s.solid = v->boolean;
+    if (const auto* v = c.Find("floor"); v && v->type == Json::Value::Type::Bool) s.floor = v->boolean;
+    const Json::Value* boxes = c.Find("boxes");
+    if (!boxes) return raw;
+    std::vector<const Json::Value*> list;
+    if (boxes->IsArray())
+        for (const auto& b : boxes->array) list.push_back(&b);
+    else list.push_back(boxes);
+    s.hasBoxes = true;
+    for (const Json::Value* b : list) {
+        if (b->IsString()) {
+            const BlockType other = BlockFromId(b->string);
+            if (other == BlockType::COUNT) warn("no block called '" + b->string + "' to take boxes from");
+            else raw.refs.emplace_back(s.boxes.size(), other);
+            continue;
+        }
+        ShapeBox box;
+        if (!b->IsObject() || !Vec3(b->Find("from"), box.lo) || !Vec3(b->Find("to"), box.hi)) {
+            warn("a box needs \"from\" and \"to\", each [x, y, z]");
+            continue;
+        }
+        box.lo = glm::clamp(glm::min(box.lo, box.hi), 0.0f, 1.0f);
+        box.hi = glm::clamp(glm::max(box.lo, box.hi), 0.0f, 1.0f);
+        auto faces = [&](const char* key) {
+            uint8_t bits = 0;
+            if (const auto* f = b->Find(key); f && f->IsArray())
+                for (const auto& name : f->array) {
+                    const uint8_t bit = name.IsString() ? FaceBit(name.string) : 0;
+                    if (!bit) warn(std::string(key) + ": faces are \"+x\", \"-x\", \"+y\", \"-y\", \"+z\" or \"-z\"");
+                    bits |= bit;
+                }
+            return bits;
+        };
+        box.joinedAll = faces("joined");
+        box.joinedAny = faces("joinedAny");
+        box.joinedNone = faces("joinedNone");
+        box.otherwise = b->BoolOr("otherwise", false);
+        s.boxes.push_back(box);
+    }
+    return raw;
+}
+
+// The boxes of `t`, with its references followed (not round in a circle).
+std::vector<ShapeBox> Resolve(std::array<RawShape, kCount>& raw, BlockType t, int depth) {
+    const RawShape& r = raw[static_cast<size_t>(t)];
+    if (depth > 8) return r.shape.boxes;
+    std::vector<ShapeBox> out;
+    size_t ref = 0;
+    for (size_t i = 0; i <= r.shape.boxes.size(); i++) {
+        for (; ref < r.refs.size() && r.refs[ref].first == i; ref++) {
+            const auto more = Resolve(raw, r.refs[ref].second, depth + 1);
+            out.insert(out.end(), more.begin(), more.end());
+        }
+        if (i < r.shape.boxes.size()) out.push_back(r.shape.boxes[i]);
+    }
+    return out;
+}
+
 } // namespace
 
 bool Load(const std::string& path, std::string& error) {
@@ -51,6 +140,7 @@ bool Load(const std::string& path, std::string& error) {
     std::array<Entry, kCount> loaded;
     int8_t light[kCount];
     for (auto& l : light) l = -1;
+    std::array<RawShape, kCount> rawShapes;
     for (const auto& [id, v] : root.object) {
         const BlockType t = id == "air" ? BlockType::AIR : BlockFromId(id);
         if (t == BlockType::COUNT || !v.IsObject()) {
@@ -79,8 +169,15 @@ bool Load(const std::string& path, std::string& error) {
             const uint32_t rgb = static_cast<uint32_t>(std::strtoul(m->string.c_str() + 1, nullptr, 16));
             e.map = 0xFF000000u | ((rgb >> 16) & 0xFF) | (rgb & 0xFF00) | ((rgb & 0xFF) << 16);
         }
+        if (const auto* c = v.Find("collision"); c && c->IsObject()) rawShapes[static_cast<size_t>(t)] = ReadShape(path, id, *c);
+    }
+    std::array<Shape, kCount> resolved;
+    for (size_t i = 0; i < kCount; i++) {
+        resolved[i] = rawShapes[i].shape;
+        if (!rawShapes[i].refs.empty()) resolved[i].boxes = Resolve(rawShapes, static_cast<BlockType>(i), 0);
     }
     entries = std::move(loaded);
+    shapes = std::move(resolved);
     for (size_t i = 0; i < kCount; i++) gLight[i] = light[i];
     return true;
 }
@@ -93,6 +190,8 @@ const char* SoundOr(BlockType t, const char* fallback) {
     const auto& s = entries[static_cast<size_t>(t) % kCount].sound;
     return s ? s->c_str() : fallback;
 }
+
+const Shape& ShapeOf(BlockType t) { return shapes[static_cast<size_t>(t) % kCount]; }
 
 std::optional<std::string> Name(BlockType t) { return entries[static_cast<size_t>(t) % kCount].name; }
 std::optional<std::string> Texture(BlockType t, int face) { return entries[static_cast<size_t>(t) % kCount].textures[static_cast<size_t>(face) % 6]; }

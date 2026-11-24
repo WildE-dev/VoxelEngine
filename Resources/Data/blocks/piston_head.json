@@ -1,2 +1,11 @@
 // piston_head: a block (the format is in README.md, here)
-{ "name": "Piston head", "textures": { "top": "piston_face", "bottom": "piston_face", "side": "piston_rod" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#707070" }
+{
+  "name": "Piston head",
+  "textures": { "top": "piston_face", "bottom": "piston_face", "side": "piston_rod" },
+  "hardness": 3,
+  "tool": "pickaxe",
+  "sound": "hard",
+  "light": 0,
+  "map": "#707070",
+  "collision": { "turns": true, "boxes": [{ "from": [0, 0, 0.75], "to": [1, 1, 1] }, { "from": [0.375, 0.375, 0], "to": [0.625, 0.625, 0.75] }] }
+}

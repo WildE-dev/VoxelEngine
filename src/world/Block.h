@@ -587,6 +587,21 @@ struct Block {
         const int f = (axis + 2) % 6;
         return glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]);
     }
+    // The way it points, which its collision boxes turn to: a lever out of its face, a
+    // log or shaft along its grain, anything else the way it faces.
+    glm::ivec3 Pointing() const {
+        if (IsLeverType(type)) return LeverFacing();
+        if (IsOrientable(type)) {
+            glm::ivec3 d(0);
+            d[GrainAxis()] = 1;
+            return d;
+        }
+        return Facing();
+    }
+    // Whether things bump into it (its "collision" says; else anything but plants,
+    // liquids and air), and whether things stand on it ("floor").
+    bool Collides() const;
+    bool StoodOn() const;
     static uint8_t LeverAxisFor(int face) { return static_cast<uint8_t>((face + 4) % 6); }
     // Whether a block holds a lever up: a solid, whole block (not a pipe, valve or model).
     static bool HoldsLever(const Block& b) { return b.IsFullBlock() && !IsModelType(b.type) && !IsPipeType(b.type) && !IsValveType(b.type); }
@@ -705,11 +720,13 @@ struct Block {
     // it over a footprint (x0..x1, z0..z1; -1 if none of it is over that footprint). Exact
     // for quarters and slopes alike.
     bool ShapeOverlaps(const glm::vec3& lo, const glm::vec3& hi) const;
-    // A solid block drawn smaller than its cell (a pipe, a shaft, a wheel's hub, a
-    // pressure gauge, a piston's head): the boxes (0..1 in the cell, up to kMaxModelBoxes)
-    // roughly matching how it's drawn, which it collides and is aimed at as. -1 for any
-    // other block. `joined`: the faces a pipe reaches out of (ModelBoxes::Joins).
-    static constexpr int kMaxModelBoxes = 7;
+    // A block drawn smaller than its cell (a pipe, a shaft, a wheel's hub, a pressure
+    // gauge, a piston's head, a door): the boxes (0..1 in the cell, up to kMaxModelBoxes)
+    // roughly matching how it's drawn, which it collides (if solid), is stood on and is
+    // aimed at as, from its "collision" in Resources/Data/blocks (see BlockData.h),
+    // turned the way it points. -1 for a block with none. `joined`: the faces a pipe
+    // reaches out of (ModelBoxes::Joins).
+    static constexpr int kMaxModelBoxes = 8;
     int ModelBoxes(unsigned joined, glm::vec3 lo[kMaxModelBoxes], glm::vec3 hi[kMaxModelBoxes]) const;
     float ShapeTop(float x0, float x1, float z0, float z1) const;
     // The highest point of an upright slope's surface over a footprint (the footprint
@@ -887,19 +904,8 @@ struct Block {
     // Drawn as a thin tube joining its neighbours (still solid as a whole block).
     bool IsPipe() const { return IsPipeType(type); }
     bool IsShell() const { return type == BlockType::LADDER || type == BlockType::DOOR_OPEN; }
-    // A closed door's panel within its cell (0..1 each way): kDoorThickness thick, at the
-    // back of the cell (away from the way it faces). Collision is this box, not the cell.
+    // How thick a door's panel is (its boxes, in Resources/Data/blocks, match).
     static constexpr float kDoorThickness = 3.0f / 16.0f;
-    void DoorPanel(glm::vec3& lo, glm::vec3& hi) const {
-        const glm::ivec3 f = Facing();
-        constexpr float t = kDoorThickness;
-        lo = glm::vec3(0.0f);
-        hi = glm::vec3(1.0f);
-        if (f.x > 0) hi.x = t;
-        else if (f.x < 0) lo.x = 1.0f - t;
-        else if (f.z < 0) lo.z = 1.0f - t;
-        else hi.z = t; // +z (and any other)
-    }
     // Wild growth that a block placed on it simply replaces (aiming at a tuft of grass
     // puts the block where the tuft was, not on top of it).
     bool IsReplaceablePlant() const { return type == BlockType::TALL_GRASS || type == BlockType::DEAD_BUSH; }
