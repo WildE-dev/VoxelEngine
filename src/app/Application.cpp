@@ -800,6 +800,9 @@ void Application::Run() {
             Block target;
             if (world->GetBlock(hit->block.x, hit->block.y, hit->block.z, target)) params.highlightOutline = target.OutlineSegments(hit->block, ModelBoxes::Joins(*world, hit->block, target));
         }
+        // With the chisel: the quarter it would cut (or build up) picked out in gold.
+        params.chiselOutline.clear();
+        if (const auto aim = AimChisel(); aim && params.highlightedBlock == aim->block) params.chiselOutline = aim->target.QuarterOutline(aim->shapeDir, aim->edge);
         if (mining && mineProgress > 0.0f) {
             // Cracks over the box the block's shape fills.
             glm::vec3 lo(1.0f), hi(0.0f);
@@ -3227,32 +3230,27 @@ void Application::DrawChest() {
     if (!keepOpen) SetInventoryOpen(false);
 }
 
-void Application::ChiselTarget(bool raise) {
-    // Only with the chisel in hand (made, in survival).
-    if (SelectedTool() != Tool::Chisel || !client->HasTool(Tool::Chisel)) return;
-    auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach());
-    if (!hit) return;
-    // Where the view ray enters the block's cube decides the quarter (in x and z).
-    const glm::vec3 origin = camera.GetPosition(), dir = camera.GetDirection();
-    const glm::vec3 lo(hit->block), hi = lo + glm::vec3(1.0f);
-    float tNear = 0.0f, tFar = 1e9f;
-    for (int a = 0; a < 3; a++) {
-        if (std::abs(dir[a]) < 1e-6f) continue;
-        float t0 = (lo[a] - origin[a]) / dir[a], t1 = (hi[a] - origin[a]) / dir[a];
-        if (t0 > t1) std::swap(t0, t1);
-        tNear = std::max(tNear, t0);
-        tFar = std::min(tFar, t1);
-    }
+std::optional<Application::ChiselAim> Application::AimChisel() {
+    // Only with the chisel in hand (made, in survival), at something it can shape.
+    if (SelectedTool() != Tool::Chisel || !client->HasTool(Tool::Chisel)) return std::nullopt;
+    const glm::vec3 dir = camera.GetDirection();
+    auto hit = Raycast(*world, camera.GetPosition(), dir, Reach());
+    if (!hit) return std::nullopt;
+    ChiselAim aim;
+    aim.block = hit->block;
+    if (!world->GetBlock(hit->block.x, hit->block.y, hit->block.z, aim.target) || !aim.target.CanChisel()) return std::nullopt;
     // A full block is chiselled from the side looked at (that side becomes its top); a
-    // shaped one in its own direction. The quarter goes by where the view meets it, seen
-    // in the shape's own upright frame.
-    Block target;
-    if (!world->GetBlock(hit->block.x, hit->block.y, hit->block.z, target)) return;
-    const int shapeDir = target.IsFullBlock() && Block::CanTurnShape(target.type) ? Block::ShapeDirFacing(hit->normal) : target.ShapeDir();
-    const glm::vec3 p = Block::CellToShape(shapeDir, origin + dir * std::min(tNear, tFar) - lo);
-    const bool highX = p.x >= 0.5f, highZ = p.z >= 0.5f;
-    const int edge = highX ? (highZ ? 3 : 1) : (highZ ? 0 : 2); // EdgeData order
-    client->Chisel(hit->block, edge, raise, shapeDir, chiselStep);
+    // shaped one in its own direction. The quarter is the one the view meets: where it
+    // touches the shape (a hair on into it, so a quarter's side counts as that quarter),
+    // across the shape's own upright frame.
+    aim.shapeDir = aim.target.IsFullBlock() && Block::CanTurnShape(aim.target.type) ? Block::ShapeDirFacing(hit->normal) : aim.target.ShapeDir();
+    const glm::vec3 p = glm::clamp(hit->point + dir * 0.002f - glm::vec3(hit->block), glm::vec3(0.0f), glm::vec3(1.0f));
+    aim.edge = Block::ChiselEdgeAt(aim.shapeDir, p);
+    return aim;
+}
+
+void Application::ChiselTarget(bool raise) {
+    if (const auto aim = AimChisel()) client->Chisel(aim->block, aim->edge, raise, aim->shapeDir, chiselStep);
 }
 
 void Application::OnMouseButton(int button, int action) {

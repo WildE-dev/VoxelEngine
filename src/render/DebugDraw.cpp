@@ -21,19 +21,20 @@ DebugDraw::~DebugDraw() {
 }
 
 void DebugDraw::DrawOutline(Shader& shader, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position,
-                            const std::vector<glm::vec3>& segments) {
+                            const std::vector<glm::vec3>& segments, const glm::vec4& color, float scale) {
     if (segments.empty()) return;
     // Pushed out a hair from the block's centre so the lines sit just in front of the
     // faces they trace (and win the depth test against them), while anything really in
     // front of the block still hides them.
     const glm::vec3 centre = position + glm::vec3(0.5f);
     glm::mat4 model = glm::translate(glm::mat4(1.0f), centre);
-    model = glm::scale(model, glm::vec3(1.004f));
+    model = glm::scale(model, glm::vec3(scale));
     model = glm::translate(model, -glm::vec3(0.5f));
     shader.Use();
     shader.SetUniform("model", model);
     shader.SetUniform("view", view);
     shader.SetUniform("projection", projection);
+    shader.SetUniform("color", color);
 
     glBindVertexArray(outlineVao);
     glBindBuffer(GL_ARRAY_BUFFER, outlineVbo);

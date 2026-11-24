@@ -560,6 +560,15 @@ int main() {
                   "over a low step, the tall step's side is hit on its side, not its top");
             const auto onStep = Raycast(cells, glm::vec3(0.25f, 5.0f, 12.5f), glm::vec3(0.0f, -1.0f, 0.0f), 6.0f);
             Check(onStep && onStep->normal == glm::ivec3(0, 1, 0), "and from above, the low step's top");
+            // Chiselling it: aimed in over the low step from its -z side, down onto that
+            // step's far half, the quarter is the one the view lands on (+z), not the one
+            // over which it came into the cell (-z).
+            const auto down = Raycast(cells, glm::vec3(0.25f, 4.0f, 11.9f), glm::normalize(glm::vec3(0.0f, -1.0f, 1.0f)), 6.0f);
+            Check(down && down->block == glm::ivec3(0, 3, 12) && down->normal == glm::ivec3(0, 1, 0) &&
+                      Block::ChiselEdgeAt(0, down->point + glm::normalize(glm::vec3(0.0f, -1.0f, 1.0f)) * 0.002f - glm::vec3(0, 3, 12)) == 0,
+                  "a chisel aimed down onto a low step's far half works on that quarter (where the view lands, z " +
+                      std::to_string(down ? down->point.z - 12.0f : -1.0f) + ")");
+            Check(step.QuarterOutline(0, 0).size() == 24, "and the quarter it works on can be outlined (12 edges)");
             // Turned on its side (its top facing +x), the same step: aimed at from -x, the
             // face hit faces -x (it used to be the turned top, +x: the far side).
             Block turned = step;

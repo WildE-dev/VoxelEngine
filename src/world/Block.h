@@ -756,6 +756,27 @@ struct Block {
         default: return v;
         }
     }
+    // The quarter (EdgeData order) a chisel aimed at point `p` in the cell (0..1 each way)
+    // works on, for a shape turned `dir` (its quarters are across its own upright frame).
+    static int ChiselEdgeAt(int dir, const glm::vec3& p) {
+        const glm::vec3 q = CellToShape(dir, p);
+        const bool highX = q.x >= 0.5f, highZ = q.z >= 0.5f;
+        return highX ? (highZ ? 3 : 1) : (highZ ? 0 : 2);
+    }
+    // That quarter's column, as line segments in the cell (0..1): from its bottom to its
+    // top in the shape's frame (a full block: right through), turned into place.
+    std::vector<glm::vec3> QuarterOutline(int dir, int edge) const {
+        const float x0 = edge == 1 || edge == 3 ? 0.5f : 0.0f, z0 = edge == 0 || edge == 3 ? 0.5f : 0.0f;
+        float y0 = 0.0f, y1 = 1.0f;
+        if (!IsFullBlock()) y0 = edgeData.GetBottomY(edge) / 8.0f, y1 = std::max(edgeData.GetTopY(edge) / 8.0f, y0 + 0.02f);
+        const glm::vec3 lo(x0, y0, z0), hi(x0 + 0.5f, y1, z0 + 0.5f);
+        std::vector<glm::vec3> lines;
+        auto corner = [&](int i) { return ShapeToCell(dir, glm::vec3(i & 1 ? hi.x : lo.x, i & 2 ? hi.y : lo.y, i & 4 ? hi.z : lo.z)); };
+        for (int i = 0; i < 8; i++)
+            for (int bit : { 1, 2, 4 })
+                if (!(i & bit)) lines.push_back(corner(i)), lines.push_back(corner(i | bit));
+        return lines;
+    }
     // The box (in the cell, 0..1) a shape fills, turned (round it: ShapeOverlaps is exact).
     void ShapeBounds(glm::vec3& lo, glm::vec3& hi) const {
         int top = 0, bottom = 8;

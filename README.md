@@ -685,6 +685,10 @@ and stone). With it in hand, right-click lowers the quarter you're looking
 at, and Shift+right-click raises it again. **V** sets how far each stroke
 goes: an eighth of a block (as fine as natural slopes), a quarter, or a half. Raising every quarter to the top
 makes the block whole; lowering them all removes it.
+The quarter you're looking at is the one your view actually lands on (a low step
+seen past a taller one, the side of a quarter, the underside of one chiselled from
+below), and while the chisel's in hand it's outlined in gold, so you can see which
+one a stroke will take before you make it.
 
 Chiselling a whole block on a side, or underneath, turns it that way first: that side
 becomes its top, and the shape is cut down from there. A log keeps its grain running

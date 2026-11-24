@@ -40,6 +40,7 @@ struct FrameParams {
     float breakProgress = 0.0f;
     glm::vec3 breakBoxMin{0.0f}, breakBoxSize{1.0f};
     std::vector<glm::vec3> highlightOutline; // the block's shape (Block::OutlineSegments)
+    std::vector<glm::vec3> chiselOutline;    // with the chisel: the quarter it would work on (in the highlighted block's cell)
     std::vector<PlayerModel> players; // other players
     std::vector<CreatureModel> creatures;
     std::vector<StructureModel> structures;

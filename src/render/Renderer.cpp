@@ -278,6 +278,9 @@ void Renderer::RenderFrame(ClientWorld& world, const FrameParams& params) {
     // front hide it, and seen through water (which refracts what's behind it).
     if (params.highlightedBlock) {
         debugDraw.DrawOutline(debugShader, params.view, params.projection, glm::vec3(*params.highlightedBlock), params.highlightOutline);
+        if (!params.chiselOutline.empty())
+            debugDraw.DrawOutline(debugShader, params.view, params.projection, glm::vec3(*params.highlightedBlock), params.chiselOutline,
+                                  glm::vec4(1.0f, 0.85f, 0.25f, 1.0f), 1.008f);
     }
 
     DrawWater(world, params);

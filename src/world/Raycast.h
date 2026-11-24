@@ -10,6 +10,7 @@ class BlockAccess;
 struct RaycastHit {
     glm::ivec3 block;  // the solid block that was hit
     glm::ivec3 normal; // face normal of the side that was entered (zero if the ray started inside it)
+    glm::vec3 point{ 0.0f }; // where the ray met the block's shape (on the face it went in by)
 };
 
 // First block along the ray that isn't air or water and whose actual shape the ray

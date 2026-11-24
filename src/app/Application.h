@@ -123,6 +123,14 @@ private:
     void DrawInventory();
     // C / Shift+C: lower / raise the quarter of the block in view.
     void ChiselTarget(bool raise);
+    // With the chisel in hand: the block and quarter it's aimed at (and which way the
+    // block would be shaped), from where the view meets the block's shape.
+    struct ChiselAim {
+        glm::ivec3 block{ 0 };
+        int edge = 0, shapeDir = 0;
+        Block target;
+    };
+    std::optional<ChiselAim> AimChisel();
     void SetInventoryOpen(bool open);
     void LoadHotbar();
     // What was typed in the chat before (oldest first), kept in chat_history.txt: Up and
