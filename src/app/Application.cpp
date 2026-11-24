@@ -14,8 +14,11 @@
 #include <ctime>
 #include <iostream>
 #include <iterator>
+#include <memory>
+#include <mutex>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <glad/glad.h>
@@ -1611,19 +1614,30 @@ void Application::LoadMapCache() {
     mapCacheChanged = false;
 }
 
-void Application::SaveMapCache() {
+void Application::SaveMapCache(bool background) {
     if (mapCacheFile.empty() || !mapCacheChanged) return;
-    std::error_code ec;
-    const std::filesystem::path path(mapCacheFile);
-    if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path(), ec);
-    std::ofstream out(mapCacheFile, std::ios::binary | std::ios::trunc);
+    // The bytes, gathered here (quick); written out here or on a thread of their own.
+    auto bytes = std::make_shared<std::vector<char>>();
     const uint32_t count = static_cast<uint32_t>(mapCache.size());
-    out.write(reinterpret_cast<const char*>(&count), sizeof count);
+    bytes->reserve(sizeof count + count * (sizeof(int64_t) + 256 * sizeof(uint32_t)));
+    auto put = [&](const void* p, size_t n) { bytes->insert(bytes->end(), static_cast<const char*>(p), static_cast<const char*>(p) + n); };
+    put(&count, sizeof count);
     for (const auto& [key, tile] : mapCache) {
-        out.write(reinterpret_cast<const char*>(&key), sizeof key);
-        out.write(reinterpret_cast<const char*>(tile.data()), sizeof(uint32_t) * tile.size());
+        put(&key, sizeof key);
+        put(tile.data(), sizeof(uint32_t) * tile.size());
     }
     mapCacheChanged = false;
+    auto write = [file = mapCacheFile, bytes] {
+        static std::mutex writing; // (one write at a time)
+        std::lock_guard<std::mutex> lock(writing);
+        std::error_code ec;
+        const std::filesystem::path path(file);
+        if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path(), ec);
+        std::ofstream out(file, std::ios::binary | std::ios::trunc);
+        out.write(bytes->data(), static_cast<std::streamsize>(bytes->size()));
+    };
+    if (background) std::thread(write).detach();
+    else write();
 }
 
 // The whole picture from the cache at once (dark where nothing's been seen), before
@@ -1674,7 +1688,8 @@ void Application::DrawMinimap() {
     const float dt = mapLastTime > 0.0 ? static_cast<float>(std::min(0.25, now - mapLastTime)) : 0.0f;
     mapLastTime = now;
     const float seconds = mapFreshRows < kMapSize ? 0.75f : 3.0f;
-    mapRowsDue = std::min(mapRowsDue + dt * kMapSize / seconds, static_cast<float>(kMapSize));
+    // (At most a few rows a frame: a slow frame doesn't make the next one slower catching up.)
+    mapRowsDue = std::min(mapRowsDue + dt * kMapSize / seconds, 6.0f);
     const int top = static_cast<int>(feet.y) + 24, bottom = static_cast<int>(feet.y) - 40;
     auto ground = [](const Block& b) { return !b.IsAir() && (!b.IsPlant() || b.type == BlockType::CROP || b.type == BlockType::RIPE_WHEAT); };
     auto solid = [](const Block& b) { return !b.IsAir() && !b.IsPlant(); };
@@ -1715,7 +1730,7 @@ void Application::DrawMinimap() {
     // (Saved now and then too, not only at the end of the game.)
     if (mapCacheChanged && now - mapCacheSavedAt > 30.0) {
         mapCacheSavedAt = now;
-        SaveMapCache();
+        SaveMapCache(true);
     }
     // Shown in the top-right corner, north up, with an arrow for the player.
     ImDrawList* draw = ImGui::GetForegroundDrawList();

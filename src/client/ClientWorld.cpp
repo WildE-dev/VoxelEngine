@@ -1,6 +1,7 @@
 #include "client/ClientWorld.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <unordered_set>
 
@@ -278,13 +279,21 @@ void ClientWorld::WorkerLoop() {
 }
 
 void ClientWorld::PrepareDraw() {
+    // New meshes go to the GPU a few milliseconds' worth a frame (a big change, like an
+    // explosion or a /fill, remeshes dozens of chunks at once: spread over a few frames
+    // rather than one long one). The rest wait their turn, oldest first.
     {
         std::lock_guard<std::mutex> lock(uploadMutex);
-        uploading.swap(uploadQueue);
+        uploading.insert(uploading.end(), std::make_move_iterator(uploadQueue.begin()), std::make_move_iterator(uploadQueue.end()));
+        uploadQueue.clear();
     }
-    for (const auto& chunk : uploading)
-        if (chunk->UploadPendingMesh()) drawListDirty = true;
-    uploading.clear();
+    const auto start = std::chrono::steady_clock::now();
+    size_t done = 0;
+    while (done < uploading.size()) {
+        if (uploading[done++]->UploadPendingMesh()) drawListDirty = true;
+        if (std::chrono::steady_clock::now() - start > std::chrono::microseconds(kUploadBudgetMicros)) break;
+    }
+    uploading.erase(uploading.begin(), uploading.begin() + static_cast<std::ptrdiff_t>(done));
 
     if (!drawListDirty) return;
     drawListDirty = false;

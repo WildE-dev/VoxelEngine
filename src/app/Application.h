@@ -387,7 +387,8 @@ private:
     bool mapCacheChanged = false;
     double mapCacheSavedAt = 0.0;
     void LoadMapCache();
-    void SaveMapCache();
+    // (In the background, so a big cache doesn't stall a frame; else before returning.)
+    void SaveMapCache(bool background = false);
     void FillMapFromCache();
     void DrawMinimap();
     // The newest achievement toast (from chat), shown for a few seconds.

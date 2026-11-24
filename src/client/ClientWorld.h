@@ -154,7 +154,8 @@ private:
     // Chunks the worker has new meshes for, waiting for the main thread to upload them.
     std::mutex uploadMutex;
     std::vector<ChunkPtr> uploadQueue;
-    std::vector<ChunkPtr> uploading; // main thread scratch
+    std::vector<ChunkPtr> uploading; // main thread: meshes still to upload (a budget a frame)
+    static constexpr long kUploadBudgetMicros = 2500;
 
     // Main thread. Uploads queued meshes and rebuilds the draw list if it changed.
     void PrepareDraw();
