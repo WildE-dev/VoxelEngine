@@ -1006,7 +1006,8 @@ the Dwarf Slayer achievement.
 
 **Horde nights.** One night in four (decided at dusk, and announced: "The ground
 stirs... a horde is coming tonight"), a dwarf **war band** comes for the players:
-warriors and crossbowmen turning up on open ground 24 to 40 blocks from each player,
+warriors and crossbowmen turning up on open ground under the sky (never in the caves
+below, however high or low the ground is there) 24 to 40 blocks from each player,
 up to fifteen at a time, with no home to go back to, hunting from 32 blocks off. It
 ends at dawn. Walls, gates, traps and lamps are worth having. `/horde` says whether
 tonight is one; operators can start or end one with `/horde on` and `/horde off`.

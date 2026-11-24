@@ -51,6 +51,19 @@ bool CanStand(const BlockAccess& world, const glm::ivec3& feet, int height, bool
     return true;
 }
 
+// Whether there's open sky over a spot (nothing solid for kSkyCheck blocks above its
+// head; leaves are let through, so a war band can come out of a wood): on the surface,
+// not in a cave under it.
+constexpr int kSkyCheck = 64;
+bool OpenSky(const BlockAccess& world, const glm::ivec3& feet) {
+    for (int y = feet.y + 2; y < feet.y + kSkyCheck; y++) {
+        Block b;
+        if (!world.GetBlock(feet.x, y, feet.z, b)) return true; // (above what's loaded: the sky)
+        if (!b.IsPassable() && !IsLeavesType(b.type)) return false;
+    }
+    return true;
+}
+
 } // namespace
 
 uint16_t CreatureSystem::Spawn(CreatureType type, const glm::vec3& feet) {
@@ -155,7 +168,9 @@ void CreatureSystem::SpawnDwarves(ServerWorld& world, const std::vector<Player>&
         }
     if (siteRefill.size() > 4096) siteRefill.clear();
 
-    // A war band on a horde night: raiders on open ground round each player.
+    // A war band on a horde night: raiders on open ground round each player, under the
+    // open sky (the first place to stand coming down from well above them, so on a hill
+    // as well, and never down in a cave).
     if (!horde) return;
     for (const auto& player : players) {
         int raiders = 0;
@@ -164,9 +179,10 @@ void CreatureSystem::SpawnDwarves(ServerWorld& world, const std::vector<Player>&
         for (int attempt = 0; attempt < 6 && raiders < 3 * kMaxHostilesNear; attempt++) {
             const float a = unit(rng) * 6.2831853f, d = 24.0f + 16.0f * unit(rng);
             const int x = static_cast<int>(std::floor(player.feet.x + std::cos(a) * d)), z = static_cast<int>(std::floor(player.feet.z + std::sin(a) * d));
-            for (int y = static_cast<int>(player.feet.y) + 16; y > static_cast<int>(player.feet.y) - 24; y--) {
+            for (int y = static_cast<int>(player.feet.y) + 40; y > static_cast<int>(player.feet.y) - 24; y--) {
                 bool grass = false;
                 if (!CanStand(world, { x, y, z }, 2, grass)) continue;
+                if (!OpenSky(world, { x, y, z })) break; // (under something: a cave, or indoors)
                 const glm::vec3 at(x + 0.5f, static_cast<float>(y), z + 0.5f);
                 if (!nearPlayer(at, kMinSpawnDistance) && Spawn(unit(rng) < 0.3f ? CreatureType::DwarfCrossbow : CreatureType::DwarfWarrior, at)) raiders++;
                 break;
@@ -231,9 +247,10 @@ int CreatureSystem::StartRaid(ServerWorld& world, const glm::vec3& bed) {
         const float a = (attempt < 20 ? 0.0f : unit(rng) * 6.2831853f) + static_cast<float>(nextId % 7) + unit(rng) * 0.6f;
         const float d = 20.0f + 10.0f * unit(rng);
         const int x = static_cast<int>(std::floor(bed.x + std::cos(a) * d)), z = static_cast<int>(std::floor(bed.z + std::sin(a) * d));
-        for (int y = static_cast<int>(bed.y) + 12; y > static_cast<int>(bed.y) - 16; y--) {
+        for (int y = static_cast<int>(bed.y) + 40; y > static_cast<int>(bed.y) - 16; y--) {
             bool grass = false;
             if (!CanStand(world, { x, y, z }, 2, grass)) continue;
+            if (!OpenSky(world, { x, y, z })) break; // (on the surface, not in a cave under it)
             const uint16_t id = Spawn(party[came], glm::vec3(x + 0.5f, static_cast<float>(y), z + 0.5f));
             if (!id) return came;
             for (auto& c : creatures)

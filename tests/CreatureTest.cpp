@@ -13,6 +13,7 @@
 //    and /pvp off stops it,
 //  - archery: an arrow hits a player ten blocks off, a bow's shots are spaced out,
 //    and arrows stick in the ground.
+#include <algorithm>
 #include <chrono>
 #include <optional>
 #include <cstdio>
@@ -558,6 +559,37 @@ int main(int argc, char** argv) {
         server.QueueConsoleCommand("gamemode creative Wanderer");
         server.QueueConsoleCommand("time noon");
         Check(Pump({ &a }, 60.0, [&] { return a.Find(CreatureType::Deer) != nullptr; }), "deer turn up by themselves around the player");
+        {
+            // A horde night: the war band comes over the ground under the open sky, never
+            // up out of the caves below (the terrain here is hills, with caves under them).
+            server.QueueConsoleCommand("time midnight");
+            server.QueueConsoleCommand("horde on");
+            auto openSky = [&](const glm::vec3& feet) {
+                const glm::ivec3 f(glm::floor(feet + glm::vec3(0.0f, 0.1f, 0.0f)));
+                for (int y = f.y + 2; y < f.y + 64; y++) {
+                    Block b;
+                    if (!a.world.GetBlock(f.x, y, f.z, b)) return true;
+                    if (!b.IsPassable() && !IsLeavesType(b.type)) return false;
+                }
+                return true;
+            };
+            std::vector<uint16_t> seen;
+            int underground = 0;
+            Pump({ &a }, 40.0, [&] {
+                for (const auto& c : a.client.GetCreatures()) {
+                    if (c.type != CreatureType::DwarfWarrior && c.type != CreatureType::DwarfCrossbow) continue;
+                    if (std::find(seen.begin(), seen.end(), c.id) != seen.end()) continue;
+                    seen.push_back(c.id);
+                    if (!openSky(c.feet)) underground++;
+                }
+                return seen.size() >= 6;
+            });
+            Check(!seen.empty() && underground == 0,
+                  "on a horde night the war band comes over the open ground (" + std::to_string(seen.size()) + " seen, " + std::to_string(underground) + " under cover)");
+            server.QueueConsoleCommand("horde off");
+            server.QueueConsoleCommand("creatures clear");
+            server.QueueConsoleCommand("time noon");
+        }
         // The nearest dwarf camp or mine: dwarves come out there when a player's near.
         const TerrainGenerator terrain(TerrainGenerator::Type::Normal);
         std::optional<Dwarves::Site> site;
