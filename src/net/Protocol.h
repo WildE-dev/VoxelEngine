@@ -29,7 +29,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 58;
+constexpr uint32_t kProtocolVersion = 59;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -590,7 +590,7 @@ struct Correction {
 struct Knockback {
     glm::vec3 velocity{0.0f};
 };
-constexpr float kMaxKnockback = 20.0f; // blocks a second; anything faster is refused
+constexpr float kMaxKnockback = 40.0f; // blocks a second (an air launcher's hardest throw, and its lift); anything faster is refused
 
 std::vector<uint8_t> Encode(const Hello& m);
 std::vector<uint8_t> Encode(const Welcome& m);

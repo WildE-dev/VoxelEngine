@@ -107,7 +107,7 @@ inline bool Listens(Kind k) { return k == Kind::Lamp || k == Kind::Valve || k ==
 // A player sensor whose mode is Or senses hostile dwarves too.
 inline bool SensesCreatures(const Config& c) { return c.kind == Kind::PlayerSensor && c.mode == Mode::Or; }
 // Whether a kind has a setting in b (besides a gate's second input).
-inline bool HasSetting(Kind k) { return k == Kind::PressureSensor || k == Kind::PlayerSensor || k == Kind::MachineSensor; }
+inline bool HasSetting(Kind k) { return k == Kind::PressureSensor || k == Kind::PlayerSensor || k == Kind::MachineSensor || k == Kind::Launcher; }
 // A player sensor's range for its setting.
 inline int PlayerRange(uint8_t b) { return b == 0 ? kPlayerRange : b > kMaxPlayerRange ? kMaxPlayerRange : b; }
 // How many inputs a gate in this mode uses.

@@ -1432,9 +1432,11 @@ The machines:
   the pipes too, and sends while the pressure is high enough.
 - The **air launcher** faces the way you were looking when you placed it, like a
   piston. Give it a channel and join it to air pipes: each time the channel comes on
-  it fires once, for 12 units of air (it needs the running pressure), throwing whatever
-  is in the cell in front of it (players, creatures and items lying there) that way at
-  18 blocks a second, with a little lift if it's fired sideways so it carries. It
+  it fires once (it needs the running pressure), throwing whatever is in the cell in
+  front of it (players, creatures and items lying there) that way, with a little lift
+  if it's fired sideways so it carries. Its power, set in its signal window, is how
+  hard it throws: 4 to 32 blocks a second (0, the default, is 18). A throw at 18 takes
+  12 units of air, and harder throws take more in proportion. It
   fires with a pneumatic thunk and a puff of air. To fire again, switch the channel
   off and on. The server gives a thrown player a few seconds' leeway in its movement
   checks, but they land as hard as they land.
@@ -1653,7 +1655,7 @@ channel is heard by everything listening to it within **64 blocks**.
 | **Valve** | opens while its channel is on (with no channel, right-click opens and shuts it); see [Air power](#air-power) |
 | **Sluice gate** | with a channel, opens out of the way while it's on, letting water through, and closes when it's off, pushing any water in its cell up or aside (it waits if there's nowhere for it to go); with none, it stays shut |
 | **Piston** | pushes out while its channel is on and pulls back when it's off; runs on air (see [Air power](#air-power)) |
-| **Air launcher** | throws what's in front of it once each time its channel comes on; runs on air (see [Air power](#air-power)) |
+| **Air launcher** | throws what's in front of it once each time its channel comes on, as hard as its power setting (4 to 32 blocks a second; 0 is 18); runs on air (see [Air power](#air-power)) |
 | **Water sensor** | sends while water touches it (an eighth of a block or more, on any side) |
 | **Pressure sensor** | joined to air pipes, sends while their pressure is at least its setting (a percentage; 0 for any air at all) |
 | **Daylight sensor** | sends by day, while the sky is open above it |
@@ -1694,7 +1696,7 @@ about each block's channels and state as they change (`SignalInfo`, protocol 46)
   stays put, a chest in the row stops it, and breaking a piston takes its head;
 - an air launcher without air doesn't fire; with air it throws the player standing in
   front of it along its facing, only once while its channel stays on, and again after
-  the channel goes off and on;
+  the channel goes off and on, and set to 30 it throws at 30 blocks a second;
 - player, water, pressure and daylight sensors each come on and go off when they
   should;
 - a dwarf penned on a pressure plate presses it, a player sensor set to sense

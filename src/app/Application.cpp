@@ -1238,7 +1238,9 @@ void Application::DrawCrosshair() {
                           info.a ? ("listens to " + ch(info.a)).c_str() : "by hand");
             break;
         case Signals::Kind::Piston: std::snprintf(text, sizeof text, "Piston - %s", info.a ? ("listens to " + ch(info.a)).c_str() : "no channel"); break;
-        case Signals::Kind::Launcher: std::snprintf(text, sizeof text, "Air launcher - %s", info.a ? ("fires on " + ch(info.a)).c_str() : "no channel"); break;
+        case Signals::Kind::Launcher:
+            std::snprintf(text, sizeof text, "Air launcher (%d blocks/s) - %s", static_cast<int>(Power::LaunchSpeed(info.b)), info.a ? ("fires on " + ch(info.a)).c_str() : "no channel");
+            break;
         case Signals::Kind::WaterSensor:
         case Signals::Kind::PressureSensor:
         case Signals::Kind::DaylightSensor:
@@ -3638,8 +3640,13 @@ void Application::DrawSignalEditor() {
             if (kind == Signals::Kind::Lamp) ImGui::TextDisabled("Lights while the channel is on.");
             if (kind == Signals::Kind::Valve) ImGui::TextDisabled("Opens while the channel is on. With none, right-click (empty-handed) opens and shuts it.");
             if (kind == Signals::Kind::Sluice) ImGui::TextDisabled("Opens while the channel is on, and closes again when it's off.");
-            if (kind == Signals::Kind::Launcher)
-                ImGui::TextDisabled("Throws what's in front of it each time the channel comes on. It runs on air: join it to air pipes.");
+            if (kind == Signals::Kind::Launcher) {
+                ImGui::SetNextItemWidth(160.0f);
+                if (ImGui::InputInt("Power (blocks/s)", &signalB)) signalB = signalB <= 0 ? 0 : std::clamp(signalB, Power::kMinLaunchSpeed, Power::kMaxLaunchSpeed);
+                ImGui::TextDisabled("Throws what's in front of it each time the channel comes on (power 0: %d; %d to %d).", static_cast<int>(Power::kLaunchSpeed),
+                                    Power::kMinLaunchSpeed, Power::kMaxLaunchSpeed);
+                ImGui::TextDisabled("It runs on air (harder throws take more): join it to air pipes.");
+            }
             if (kind == Signals::Kind::Piston)
                 ImGui::TextDisabled("Pushes out while the channel is on and pulls back when it's off. It runs on air: join it to air pipes.");
         }

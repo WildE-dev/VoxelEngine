@@ -46,6 +46,7 @@ constexpr float kMoveSlack = 1.5f;
 // boat (a boat sprints at 9), creative flying (sprinting at 20), and anyone for a moment
 // after a knock (kKnockSeconds).
 constexpr float kSurvivalSpeed = 11.0f, kCreativeSpeed = 24.0f, kKnockedSpeed = 26.0f;
+constexpr float kLaunchedSpeed = 36.0f; // (the hardest air launcher throw, Power::kMaxLaunchSpeed, and a little)
 constexpr double kKnockSeconds = 1.5;
 // Survival players in the air: how far above where they were last held up they may rise
 // (a jump onto a step, a hop out of water), and how long they may stay up without
@@ -644,7 +645,8 @@ void Server::HandlePlayerState(ClientState& client, const net::PlayerState& stat
     else if (!client.noclip) {
         // Across the ground (falling isn't limited): as fast as the mode allows, faster for
         // a moment after a knock.
-        const float limit = now < client.knockedUntil ? kKnockedSpeed : Creative(client) ? kCreativeSpeed : kSurvivalSpeed;
+        // (Thrown by an air launcher: as fast as the hardest throw, while they fly.)
+        const float limit = now < client.launchedUntil ? kLaunchedSpeed : now < client.knockedUntil ? kKnockedSpeed : Creative(client) ? kCreativeSpeed : kSurvivalSpeed;
         const glm::vec2 across(state.feet.x - client.lastValid.x, state.feet.z - client.lastValid.z);
         if (glm::length(across) > limit * dt + kMoveSlack) return correct(client.lastValid, "moved too fast");
     }

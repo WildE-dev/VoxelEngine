@@ -299,9 +299,10 @@ void Server::UpdatePower() {
             auto sig = signalBlocks.find(p);
             const bool want = sig != signalBlocks.end() && sig->second.on;
             bool& armed = launcherArmed[p];
-            if (want && !armed && net.Pressure() >= Power::kMinPressure && net.air >= Power::kLaunchAir) {
-                net.air -= Power::kLaunchAir;
-                Launch(p, blockAt(p));
+            const float speed = Power::LaunchSpeed(sig != signalBlocks.end() ? sig->second.config.b : 0);
+            if (want && !armed && net.Pressure() >= Power::kMinPressure && net.air >= Power::LaunchAir(speed)) {
+                net.air -= Power::LaunchAir(speed);
+                Launch(p, blockAt(p), speed);
             }
             armed = want;
         }
@@ -812,12 +813,12 @@ bool Server::DrillDig(const glm::ivec3& pos, Drill& drill) {
     return false;
 }
 
-void Server::Launch(const glm::ivec3& pos, const Block& launcher) {
+void Server::Launch(const glm::ivec3& pos, const Block& launcher, float speed) {
     const double now = Now();
     launcherFired[pos] = now;
     const glm::vec3 dir(launcher.Facing());
     // (Straight along its facing; a sideways throw gets a little lift, so it carries.)
-    const glm::vec3 velocity = dir * Power::kLaunchSpeed + (dir.y == 0.0f ? glm::vec3(0.0f, 5.0f, 0.0f) : glm::vec3(0.0f));
+    const glm::vec3 velocity = dir * speed + (dir.y == 0.0f ? glm::vec3(0.0f, 5.0f * speed / Power::kLaunchSpeed, 0.0f) : glm::vec3(0.0f));
     const glm::vec3 lo = glm::vec3(pos + launcher.Facing()), hi = lo + glm::vec3(1.0f);
     auto inFront = [&](const glm::vec3& a, const glm::vec3& b) { return glm::all(glm::lessThan(a, hi)) && glm::all(glm::greaterThan(b, lo)); };
     for (auto& [peer, client] : clients) {
@@ -1230,7 +1231,8 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
         else if (b.type == BlockType::LAUNCHER) {
             auto sig = signalBlocks.find(pos);
             text += std::string("Air launcher: throws what's in front of it each time its channel comes on (") +
-                    (sig != signalBlocks.end() && sig->second.config.a ? "channel " + std::to_string(sig->second.config.a) : std::string("no channel yet")) + "). ";
+                    (sig != signalBlocks.end() && sig->second.config.a ? "channel " + std::to_string(sig->second.config.a) : std::string("no channel yet")) + "), at " +
+                    std::to_string(static_cast<int>(Power::LaunchSpeed(sig != signalBlocks.end() ? sig->second.config.b : 0))) + " blocks a second. ";
         }
         else if (b.type == BlockType::PISTON) {
             const Power::DrillState st = pistonStates.count(pos) ? pistonStates[pos] : Power::DrillState::Idle;

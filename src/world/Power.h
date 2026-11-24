@@ -50,8 +50,8 @@
 //       nearest. Things nothing can take stay put; it
 //       goes through what the chest has in turn.
 //     . An air launcher (facing) throws what's in the cell in front of it (players,
-//       creatures, items lying there) that way at kLaunchSpeed, each time its channel
-//       comes on, for kLaunchAir. A player thrown is given leeway by the server's
+//       creatures, items lying there) that way at its set speed (LaunchSpeed), each
+//       time its channel comes on, for LaunchAir of that. A player thrown is given leeway by the server's
 //       movement checks while they fly (but they land as hard as they land).
 //     . A filter pipe passes only its type (none set: anything). Right-click one
 //       with something in hand to set it to that (empty-handed: anything). Drills and
@@ -98,8 +98,15 @@ constexpr float kPumpGain = 3.0f;
 constexpr float kPumpAir = kWheelMaxAir / (kWheelFullFlow * 3.0f * kPumpGain);
 constexpr int kMaxNetwork = 4096;             // pipes and machines in one network, at most
 constexpr float kPistonAir = 4.0f;            // air for each push (pulling back is free)
-constexpr float kLaunchAir = 12.0f;           // air for each throw of an air launcher
-constexpr float kLaunchSpeed = 18.0f;         // how hard it throws (blocks a second)
+constexpr float kLaunchAir = 12.0f;           // air for each throw of an air launcher (at kLaunchSpeed)
+constexpr float kLaunchSpeed = 18.0f;         // how hard it throws (blocks a second) unless set
+constexpr int kMinLaunchSpeed = 4, kMaxLaunchSpeed = 32;
+// A launcher's speed for its setting (its signal config's b; 0: kLaunchSpeed), and the
+// air a throw that hard takes (harder, more).
+inline float LaunchSpeed(uint8_t setting) {
+    return setting == 0 ? kLaunchSpeed : static_cast<float>(setting < kMinLaunchSpeed ? kMinLaunchSpeed : setting > kMaxLaunchSpeed ? kMaxLaunchSpeed : setting);
+}
+inline float LaunchAir(float speed) { return kLaunchAir * speed / kLaunchSpeed; }
 constexpr int kPushLimit = 12;                // blocks a piston can push in a row, at most
 constexpr float kSmeltAir = 6.0f;             // air for each block smelted
 constexpr double kSmeltInterval = 2.0;        // seconds per block smelted

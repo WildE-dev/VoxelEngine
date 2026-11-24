@@ -371,6 +371,20 @@ int main() {
             pump(5.0, [&] { thrown += a.client.TakeKnockback(); return thrown.x > 0.0f; });
             Check(thrown.x > 15.0f, "off and on again, it fires again");
             flip(lever4, false);
+            // Set harder: it throws harder.
+            goTo(27.5f, 42.5f);
+            if (blockAt(lever4) == BlockType::LEVER_ON) flip(lever4, false);
+            Check(configure(launcher, Signals::Kind::Launcher, 12, 30, 0) &&
+                      pump(5.0, [&] { auto it = a.client.GetSignals().find(launcher); return it != a.client.GetSignals().end() && it->second.b == 30; }),
+                  "set to 30 blocks a second");
+            server.QueueConsoleCommand("pressurise 26 0 42");
+            wait(0.6);
+            thrown = glm::vec3(0.0f);
+            flip(lever4, true);
+            pump(5.0, [&] { thrown += a.client.TakeKnockback(); return thrown.x > 0.0f; });
+            Check(thrown.x > 28.0f && thrown.x < 32.0f, "set harder, it throws harder (" + std::to_string(thrown.x) + ")");
+            goTo(27.5f, 42.5f);
+            if (blockAt(lever4) == BlockType::LEVER_ON) flip(lever4, false);
         }
 
         std::cout << "Sensors" << std::endl;
