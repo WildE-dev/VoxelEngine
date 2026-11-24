@@ -1,4 +1,5 @@
 #include "app/Application.h"
+#include "app/PlayerNames.h"
 #include "world/ModelBoxes.h"
 #include "world/Trees.h"
 #include "world/Trades.h"
@@ -336,6 +337,12 @@ Application::~Application() {
 
 bool Application::Init(const ClientOptions& options) {
     settings.Load(kSettingsFile);
+    // The first time the game is opened (no name yet, or the old default): a name of
+    // its own, kept from now on (servers won't take two players of one name).
+    if (settings.name.empty() || settings.name == "Player") {
+        settings.name = PlayerNames::Random();
+        settings.Save(kSettingsFile);
+    }
     vsync = settings.vsync;
     glfwSetErrorCallback(GlfwErrorCallback);
     if (!glfwInit()) {

@@ -553,6 +553,17 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
     client.viewDistance = hello.viewDistance > 0 ? std::clamp(static_cast<int>(hello.viewDistance), 2, most) : most;
     client.verticalViewDistance = std::min(world->GetVerticalRenderDistance(), std::max(client.viewDistance, 4));
     client.name = hello.name.empty() ? "Player " + std::to_string(client.id) : hello.name;
+    // One player of a name at a time (whatever its capitals): their saved place and
+    // things go by it.
+    {
+        auto lower = [](std::string s) {
+            for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return s;
+        };
+        for (const auto& [peer, other] : clients)
+            if (&other != &client && other.welcomed && lower(other.name) == lower(client.name))
+                return Kick(client, "someone called " + other.name + " is already playing here: choose another name");
+    }
     client.welcomed = true;
 
     // Spread players out a little so they don't spawn inside each other. The client

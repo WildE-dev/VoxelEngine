@@ -2261,6 +2261,11 @@ Run with no options, the game opens at a title screen:
 - **Settings**: your name, render distance (2 to 12 chunks), field of view, mouse
   sensitivity, vsync and volume. They're kept in `settings.txt` in the working directory.
 
+The first time you open the game it makes up a name for you (two words and a number,
+such as "BraveOtter42"), which you can change in the settings. A server won't let in a
+second player with a name someone there is already using (whatever its capitals): it
+says so, and you can pick another.
+
 In a game, Esc opens the pause menu: back to the game, settings, save and quit to the
 title screen (or disconnect), or quit. A singleplayer world keeps running while
 paused, as a server does. If the server drops you, the menu says why and takes you

@@ -25,6 +25,7 @@
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "server/Server.h"
+#include "app/PlayerNames.h"
 
 // Test clients ask for a short view (chunks): plenty for the checks, and light enough
 // to run every suite at once.
@@ -96,6 +97,17 @@ int main() {
     Check(b.client.Connect("127.0.0.1", server.GetPort(), "Bob", error, kTestViewDistance), "Bob connects");
     Check(Pump({ &a, &b }, 20.0, [&] { return Has(a, "Bob joined the game", kInfo); }), "Alice sees Bob join");
     auto both = [&](double s, const std::function<bool()>& done) { return Pump({ &a, &b }, s, done); };
+    {
+        // A second "alice" (any capitals) is turned away, told why; Alice plays on.
+        TestClient twin;
+        twin.client.Connect("127.0.0.1", server.GetPort(), "alice", error, kTestViewDistance);
+        Pump({ &a, &b, &twin }, 20.0, [&] { return !twin.client.GetDisconnectReason().empty(); });
+        const std::string why = twin.client.GetDisconnectReason();
+        Check(!twin.client.IsWelcomed() && why.find("already playing here") != std::string::npos && a.client.IsConnected(),
+              "a second player with a name in use is turned away (" + why + ")");
+        const std::string made = PlayerNames::Random(7), again = PlayerNames::Random(7), other = PlayerNames::Random(8);
+        Check(!made.empty() && made.size() <= 32 && made == again && made != other, "a new player's name is made up (" + made + ", " + other + ")");
+    }
 
     std::cout << "Chat" << std::endl;
     a.client.SendChat("hello there");
