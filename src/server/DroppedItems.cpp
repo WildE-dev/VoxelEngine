@@ -34,6 +34,9 @@ glm::vec3 DroppedItems::Pop() {
 }
 
 void DroppedItems::DropUnits(BlockType type, uint32_t units, const glm::ivec3& cell, uint16_t owner) {
+    // (Fire, lava and the like are never anything to pick up: knocked off what held
+    // them, or broken, they're just gone.)
+    if (IsCreativeOnlyType(type)) return;
     const ItemId item = Items::OfBlock(type);
     if (!Items::IsBlock(item) || units == 0) return;
     const glm::vec3 middle = glm::vec3(cell) + glm::vec3(0.5f);

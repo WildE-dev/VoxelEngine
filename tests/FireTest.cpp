@@ -219,6 +219,23 @@ int main() {
               "an item thrown into fire is lost");
     }
 
+    std::cout << "Fire is never an item" << std::endl;
+    {
+        // A fire on a log: take the log away from under it and the fire goes, dropping
+        // nothing (it used to drop as an item, like a flower knocked off its block).
+        server.QueueConsoleCommand("tp Warden 70.5 0 74.5");
+        Pump(a, 5.0, [&] { return std::abs(a.feet.z - 74.5f) < 0.1f; });
+        fill({ 70, 0, 70 }, { 70, 0, 70 }, "log");
+        fill({ 70, 1, 70 }, { 70, 1, 70 }, "fire");
+        Pump(a, 5.0, [&] { return at({ 70, 1, 70 }) == BlockType::FIRE; });
+        fill({ 70, 0, 70 }, { 70, 0, 70 }, "air");
+        Pump(a, 5.0, [&] { return at({ 70, 1, 70 }) != BlockType::FIRE; });
+        Pump(a, 1.0, [] { return false; });
+        bool fireItem = false;
+        for (const auto& i : a.client.GetItems()) fireItem |= i.item == Items::OfBlock(BlockType::FIRE);
+        Check(at({ 70, 1, 70 }) != BlockType::FIRE && !fireItem, "a fire knocked off the block under it drops nothing");
+    }
+
     std::cout << "Sprinklers and heat sensors" << std::endl;
     {
         auto signalOn = [&](const glm::ivec3& p) {
