@@ -186,6 +186,23 @@ int main() {
         Check(both(20.0, [&] { return typeAt(doorAt) == BlockType::AIR && typeAt(upper) == BlockType::AIR; }), "breaking either half removes the whole door");
         server.QueueConsoleCommand("gamemode survival Sleeper");
         both(20.0, [&] { return !a.client.IsCreative(); });
+        // Two doors side by side (both facing +x, as /fill puts them) open and shut together.
+        server.QueueConsoleCommand("fill 17 0 26 17 1 27 door");
+        both(20.0, [&] { return typeAt({ 17, 1, 27 }) == BlockType::DOOR && typeAt({ 17, 0, 26 }) == BlockType::DOOR; });
+        a.client.UseBed({ 17, 0, 26 });
+        Check(both(20.0, [&] { return typeAt({ 17, 0, 26 }) == BlockType::DOOR_OPEN && typeAt({ 17, 1, 26 }) == BlockType::DOOR_OPEN && typeAt({ 17, 0, 27 }) == BlockType::DOOR_OPEN &&
+                                      typeAt({ 17, 1, 27 }) == BlockType::DOOR_OPEN; }),
+              "two doors side by side open together");
+        a.client.UseBed({ 17, 1, 27 });
+        Check(both(20.0, [&] { return typeAt({ 17, 0, 26 }) == BlockType::DOOR && typeAt({ 17, 0, 27 }) == BlockType::DOOR; }), "and shut together");
+        // A door stands only on a whole solid block: not on nothing, not on a pipe.
+        server.QueueConsoleCommand("fill 21 0 22 21 0 22 air_pipe");
+        server.QueueConsoleCommand("give door 2 Sleeper");
+        both(20.0, [&] { return typeAt({ 21, 0, 22 }) == BlockType::AIR_PIPE && a.client.GetResources(BlockType::DOOR) == 2 * kBlock; });
+        const bool onPipe = a.client.PlaceBlock({ 21, 1, 22 }, BlockType::DOOR), inAir = a.client.PlaceBlock({ 19, 3, 22 }, BlockType::DOOR);
+        both(1.0, [] { return false; });
+        Check(!onPipe && !inAir && typeAt({ 21, 1, 22 }) == BlockType::AIR && typeAt({ 19, 3, 22 }) == BlockType::AIR && a.client.GetResources(BlockType::DOOR) == 2 * kBlock,
+              "a door can't be put on a pipe or in mid air");
 
         std::cout << "Respawning" << std::endl;
         auto kill = [&](TestClient& victim, const std::string& name, TestClient& killer, const std::string& killerName) {

@@ -1608,13 +1608,30 @@ void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
 }
 
 void Server::ToggleDoor(const glm::ivec3& pos, bool open) {
-    // This half and the one above or below it.
+    // This half and the one above or below it; and a door beside it (a double door: the
+    // next cell along the doorway, facing the same way or the other) likewise.
     const BlockType from = open ? BlockType::DOOR : BlockType::DOOR_OPEN, to = open ? BlockType::DOOR_OPEN : BlockType::DOOR;
-    std::vector<glm::ivec3> halves{ pos };
-    for (const int dy : { 1, -1 }) {
-        Block other;
-        if (world->GetBlock(pos.x, pos.y + dy, pos.z, other) && other.type == from) {
-            halves.push_back(pos + glm::ivec3(0, dy, 0));
+    Block door;
+    if (!world->GetBlock(pos.x, pos.y, pos.z, door)) return;
+    std::vector<glm::ivec3> halves;
+    auto addDoor = [&](const glm::ivec3& at) {
+        halves.push_back(at);
+        for (const int dy : { 1, -1 }) {
+            Block other;
+            if (world->GetBlock(at.x, at.y + dy, at.z, other) && other.type == from) {
+                halves.push_back(at + glm::ivec3(0, dy, 0));
+                break;
+            }
+        }
+    };
+    addDoor(pos);
+    const glm::ivec3 facing = door.Facing();
+    const glm::ivec3 along(facing.z, 0, facing.x); // (across the way it faces: along the doorway)
+    for (const int side : { 1, -1 }) {
+        const glm::ivec3 at = pos + along * side;
+        Block beside;
+        if (world->GetBlock(at.x, at.y, at.z, beside) && beside.type == from && std::abs(beside.Facing().x * facing.x + beside.Facing().z * facing.z) == 1) {
+            addDoor(at);
             break;
         }
     }

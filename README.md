@@ -1334,11 +1334,15 @@ cook one on the spot, no crafting needed. Standing in it burns (half a heart eve
 ## Doors
 
 A **door** (2 planks) stands two blocks tall: placing one needs room above for its
-upper half, and costs one door. Right-click either half (within 6 blocks) to open
+upper half and a whole solid block under it (not a slab, a slope or a pipe), and costs
+one door. Right-click either half (within 6 blocks) to open
 it, which turns both halves into an open frame you can walk through, and again to
-shut it. It won't shut on someone standing in the doorway. Breaking either half takes
+shut it. Two doors side by side in a doorway (facing the same way or each other's)
+are a double door: opening or shutting either does both. It won't shut on someone
+standing in the doorway. Breaking either half takes
 the whole door, and gives it back. `BedTest` checks placing, opening, not shutting on
-someone, closing from the other half, and breaking.
+someone, closing from the other half, double doors, refusing a door on a pipe or in
+mid air, and breaking.
 
 ## Chests
 

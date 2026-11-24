@@ -43,8 +43,10 @@ public:
         if (!GetBlock(pos.x, pos.y, pos.z, existing) || !existing.IsPassable()) return false;
         if (InsideStructure(pos)) return false;
         if (type == BlockType::DOOR) {
-            Block upper;
+            // Two tall, standing on a whole solid block (not a slab, a slope, a pipe...).
+            Block upper, below;
             if (!GetBlock(pos.x, pos.y + 1, pos.z, upper) || !upper.IsPassable() || upper.type == BlockType::DOOR_OPEN) return false;
+            if (!GetBlock(pos.x, pos.y - 1, pos.z, below) || !Block::HoldsLever(below)) return false;
         }
         if (type == BlockType::CROP || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING) {
             Block soil;
