@@ -756,6 +756,12 @@ void Server::UpdateFall(ClientState& client, const net::PlayerState& state, bool
             }
         }
     }
+    // A hay bale is soft to land on.
+    {
+        const glm::ivec3 under(glm::floor(state.feet - glm::vec3(0.0f, 0.05f, 0.0f)));
+        Block landed;
+        if (world->GetBlock(under.x, under.y, under.z, landed) && landed.type == BlockType::HAY_BALE) fall = 0.0f;
+    }
     client.falling = false;
     client.fallPeak = state.feet.y;
     if (fall > kSafeFall + 0.5f) Hurt(client, static_cast<int>(std::lround(fall - kSafeFall)), "fell from a high place", false);

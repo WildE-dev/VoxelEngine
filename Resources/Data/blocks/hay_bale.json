@@ -1,0 +1,2 @@
+// hay_bale: a block (the format is in README.md, here)
+{ "name": "Hay bale", "textures": { "top": "hay_bale_top", "bottom": "hay_bale_top", "side": "hay_bale_side" }, "hardness": 0.6, "tool": "none", "sound": "soft", "light": 0, "map": "#d8b840" }

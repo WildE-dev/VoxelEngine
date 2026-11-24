@@ -44,7 +44,8 @@ inline float Flammability(BlockType t) {
     case BlockType::RIPE_WHEAT:
     case BlockType::SAPLING:
     case BlockType::PINE_SAPLING: return 1.0f;
-    case BlockType::BED: return 0.8f;
+    case BlockType::BED:
+    case BlockType::HAY_BALE: return 0.8f;
     case BlockType::PLANKS:
     case BlockType::DOOR:
     case BlockType::DOOR_OPEN:
@@ -66,6 +67,7 @@ inline float BurnRate(BlockType t) {
     if (IsLeavesType(t)) return 0.35f;
     if (t == BlockType::LOG) return 0.05f;
     if (t == BlockType::CACTUS) return 0.08f;
+    if (t == BlockType::HAY_BALE) return 0.25f;
     return 0.15f;
 }
 // Whether a fire can be in this cell: open (air, or a plant it burns up), dry.

@@ -24,6 +24,7 @@
   { "id": "bed", "name": "Bed", "takes": { "planks": 3, "hide": 1 }, "makes": { "bed": 1 } },
   { "id": "spikes", "name": "Spikes", "takes": { "stone": 1 }, "makes": { "spikes": 1 } },
   { "id": "bread", "name": "Bread", "takes": { "wheat": 3 }, "makes": { "bread": 1 } },
+  { "id": "hay_bale", "name": "Hay bale", "takes": { "wheat": 4 }, "makes": { "hay_bale": 1 } },
   { "id": "cooked_fish", "name": "Cooked fish", "takes": { "raw_fish": 1, "log": 0.25 }, "makes": { "cooked_fish": 1 } },
   { "id": "cooked_venison", "name": "Cooked venison", "takes": { "raw_venison": 1, "log": 0.25 }, "makes": { "cooked_venison": 1 } },
   { "id": "pickaxe", "name": "Pickaxe", "takes": { "planks": 1, "stone": 1.5 }, "tool": "pickaxe" },

@@ -93,6 +93,7 @@ inline float DefaultHardness(BlockType type) {
     case BlockType::SAND:
     case BlockType::SNOW: return 0.6f;
     case BlockType::CACTUS: return 0.6f;
+    case BlockType::HAY_BALE: return 0.6f;
     case BlockType::ICE:
     case BlockType::LAMP:
     case BlockType::CRUMBLING_BRICK: return 1.0f;

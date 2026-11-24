@@ -845,7 +845,7 @@ work the same for everyone:
   spreads to the crumbling bricks touching them, so a whole pit cover falls in.
 - **Pressure plates** send on their channel while they're stood on (see [Signals](#signals)): a sluice gate listening to it opens.
 - **Falls** of more than 3 blocks cost half a heart for each block beyond that (an
-  11-block drop is four hearts). Landing in water is safe. The server measures the
+  11-block drop is four hearts). Landing in water, or on a **hay bale**, is safe. The server measures the
   fall from the highest point since you were last on the ground, deciding "on the
   ground" from the world rather than from what your client says. Teleports, respawns,
   flying and creative start the count afresh. Armour doesn't help. Running or bounding
@@ -1207,7 +1207,8 @@ comes up, and ripens into **wheat** on its own, after about a minute and a half 
 average (while its chunk is loaded, which it is near a player). Break ripe wheat to
 harvest it: you get the wheat and one or two seeds to plant again. Breaking a young
 crop just gives its seed back, and water washes crops away. Three wheat bake into
-**bread** (6 food). Breaking leaves now and then gives a **sapling** (a pine sapling from pine
+**bread** (6 food), and four bind into a **hay bale**: soft to land on (a fall onto one
+doesn't hurt, from any height), though it burns as readily as a bed. Breaking leaves now and then gives a **sapling** (a pine sapling from pine
 needles); planted on dirt or grass it grows into a tree after about two minutes: a
 trunk four to six logs tall with a round crown of leaves, or a cone of needles for a
 pine, if there's room above it. So wood grows back. The server keeps a list of growing crops, saved with the world

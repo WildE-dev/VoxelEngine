@@ -70,6 +70,7 @@ inline std::vector<Recipe> Defaults() {
         { "bed", "Bed", { { BlockType::PLANKS, 3 * kBlock }, { BlockType::HIDE, kBlock } }, BlockType::BED, kBlock },
         { "spikes", "Spikes", { { BlockType::STONE, kBlock } }, BlockType::SPIKES, kBlock },
         { "bread", "Bread", { { BlockType::WHEAT, 3 * kBlock } }, BlockType::BREAD, kBlock },
+        { "hay_bale", "Hay bale", { { BlockType::WHEAT, 4 * kBlock } }, BlockType::HAY_BALE, kBlock },
         { "cooked_fish", "Cooked fish", { { BlockType::RAW_FISH, kBlock }, { BlockType::LOG, kBlock / 4 } }, BlockType::COOKED_FISH, kBlock },
         // Cooked over a little wood.
         { "cooked_venison", "Cooked venison", { { BlockType::RAW_VENISON, kBlock }, { BlockType::LOG, kBlock / 4 } }, BlockType::COOKED_VENISON, kBlock },

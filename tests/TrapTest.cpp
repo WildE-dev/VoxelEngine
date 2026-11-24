@@ -200,6 +200,14 @@ int main(int argc, char** argv) {
         Check(std::abs(a.client.GetHealth() - (beforeFall - 8)) <= 1, "an 11-block fall costs 4 hearts (health " + std::to_string(a.client.GetHealth()) + ")");
         server.QueueConsoleCommand("food 20 Tester"); // (healing needs food)
         both(40.0, [&] { return a.client.GetHealth() == 20; }); // (healed again before the checks below)
+        // Onto a hay bale: soft, it doesn't hurt.
+        server.QueueConsoleCommand("fill 63 -1 7 63 -1 7 hay_bale");
+        both(5.0, [&] { return TypeAt(b, { 63, -1, 7 }) == BlockType::HAY_BALE; });
+        server.QueueConsoleCommand("tp Tester 63.5 14 7.5");
+        both(20.0, [&] { return a.player.GetFeetPosition().y < 0.5f && a.player.IsOnGround(); });
+        both(1.0, [] { return false; });
+        Check(a.client.GetHealth() == 20 && std::abs(a.player.GetFeetPosition().x - 63.5f) < 0.3f,
+              "a 14-block fall onto a hay bale doesn't hurt (health " + std::to_string(a.client.GetHealth()) + ")");
         // Down a mountainside: twelve one-block steps, run down sprinting: no single drop is
         // more than a step, so it doesn't hurt (it used to count as one twelve-block fall).
         for (int i = 0; i < 12; i++)

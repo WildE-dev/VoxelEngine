@@ -324,6 +324,8 @@ enum class BlockType : uint8_t {
     // air network; each time its channel comes on it throws whatever's in front of it
     // (players, creatures, items) hard that way, for kLaunchAir.
     LAUNCHER,
+    // A hay bale: soft to land on (no fall damage), and it burns readily.
+    HAY_BALE,
     COUNT
 };
 // Machines with an inventory of their own (opened like a chest, empty-handed): what
