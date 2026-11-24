@@ -982,7 +982,7 @@ bool Decode(ByteReader& in, EditPlace& m) {
     uint8_t type;
     if (!in.IVec3(m.pos) || !in.U8(type) || type >= static_cast<uint8_t>(BlockType::COUNT)) return false;
     m.type = static_cast<BlockType>(type);
-    return in.U8(m.height) && m.height >= 1 && m.height <= 8 && in.U8(m.faceAxis) && m.faceAxis <= 5;
+    return in.U8(m.height) && m.height >= 1 && m.height <= 8 && in.U8(m.faceAxis) && (m.faceAxis & 7) <= 5 && m.faceAxis < 16; // (8: a door hinged on the right)
 }
 
 bool Decode(ByteReader& in, EditCarve& m) {

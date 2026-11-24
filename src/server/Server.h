@@ -369,6 +369,7 @@ private:
     // Right-clicked a block that does something: a bed (respawn, sleep) or a door.
     void HandleUseBed(ClientState& client, const glm::ivec3& pos);
     void ToggleDoor(const glm::ivec3& pos, bool open); // both halves (not shut on anyone)
+    void MirrorDoor(const glm::ivec3& pos);             // its hinge to the other side (both halves)
     // Fall damage, from each accepted position: landing far below the highest point
     // since last on the ground hurts. `reset`: start counting from here (teleports,
     // the first position, flying).

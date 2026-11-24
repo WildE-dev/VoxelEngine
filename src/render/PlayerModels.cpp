@@ -357,9 +357,11 @@ void PlayerModels::DrawDoors(Shader& shader, const glm::mat4& view, const glm::m
         // corner itself would swing it out into the block beside the doorway).
         glm::mat4 frame = glm::translate(glm::mat4(1.0f), centre);
         frame = glm::rotate(frame, std::atan2(static_cast<float>(d.facing.x), static_cast<float>(d.facing.z)), glm::vec3(0, 1, 0));
-        frame = glm::translate(frame, glm::vec3(-0.5f + t * 0.5f, 0.0f, -0.5f + t * 0.5f));
-        frame = glm::rotate(frame, -glm::half_pi<float>() * std::clamp(d.open, 0.0f, 1.0f), glm::vec3(0, 1, 0));
-        shader.SetUniform("model", glm::scale(glm::translate(frame, glm::vec3(0.5f - t * 0.5f, 0.0f, 0.0f)), glm::vec3(1.0f, 1.0f, t)));
+        // (Mirrored: the hinge at its right end, and it turns the other way.)
+        const float side = d.mirrored ? -1.0f : 1.0f;
+        frame = glm::translate(frame, glm::vec3(side * (-0.5f + t * 0.5f), 0.0f, -0.5f + t * 0.5f));
+        frame = glm::rotate(frame, -side * glm::half_pi<float>() * std::clamp(d.open, 0.0f, 1.0f), glm::vec3(0, 1, 0));
+        shader.SetUniform("model", glm::scale(glm::translate(frame, glm::vec3(side * (0.5f - t * 0.5f), 0.0f, 0.0f)), glm::vec3(1.0f, 1.0f, t)));
         glDrawArrays(GL_TRIANGLES, 0, 36);
     }
     shader.SetUniform("textured", 0.0f);

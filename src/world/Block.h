@@ -572,7 +572,14 @@ struct Block {
     // A filter pipe's type (AIR: it lets anything through).
     BlockType FilterType() const { return axis < static_cast<uint8_t>(BlockType::COUNT) ? static_cast<BlockType>(axis) : BlockType::AIR; }
     // A facing block's direction (a unit step).
-    glm::ivec3 Facing() const { return glm::ivec3(kFaceOffsets[axis % 6][0], kFaceOffsets[axis % 6][1], kFaceOffsets[axis % 6][2]); }
+    glm::ivec3 Facing() const {
+        const int f = (axis & 7) % 6;
+        return glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]);
+    }
+    // A door's hinge: on the left of the way it faces, or (mirrored, this bit of its axis)
+    // on the right. Placing one, kDoorMirrored in the face axis asks for it.
+    static constexpr uint8_t kDoorMirrored = 8;
+    bool DoorMirrored() const { return (axis & kDoorMirrored) != 0; }
     // A lever is fixed to the face of a solid block and sticks out from it: the way it
     // points (out of that face). Kept in `axis` so that 0 is a lever on the floor (all
     // the old ones were): the Face is (axis + 2) % 6. The block it's fixed to is behind it.
@@ -937,7 +944,12 @@ inline Block Block::Placed(BlockType t, int heightEighths, int faceAxis) {
     if (t == BlockType::WATER) return Water(kMaxWaterVolume);
     if (t == BlockType::PRESSURE_PLATE) return PressurePlate();
     if (t == BlockType::BED) return Bed();
-    if (t == BlockType::LADDER || t == BlockType::DOOR_OPEN) return Block(t).Turned(faceAxis); // (a panel, not a sprite's drop)
+    if (t == BlockType::DOOR || t == BlockType::DOOR_OPEN) { // (a panel, not a sprite's drop; hinged left or right)
+        Block door = Block(t).Turned(faceAxis & 7);
+        if (faceAxis & kDoorMirrored) door.axis = static_cast<uint8_t>(door.axis | kDoorMirrored);
+        return door;
+    }
+    if (t == BlockType::LADDER) return Block(t).Turned(faceAxis); // (a panel, not a sprite's drop)
     if (IsLeverType(t)) { // (pointing out of the face it's put on)
         Block lever(t);
         lever.axis = LeverAxisFor(faceAxis >= 0 && faceAxis < 6 ? faceAxis : 2);

@@ -41,13 +41,14 @@ struct TestClient {
     Client client{ world };
     glm::vec3 feet{ 0.0f };
     bool joined = false;
+    bool crouching = false;
     void Update() {
         client.Poll();
         if (!joined && client.IsWelcomed()) joined = true, feet = client.GetSpawn();
         if (auto c = client.TakeCorrection()) feet = *c;
         if (!joined) return;
         world.Update(feet + glm::vec3(0.0f, 1.62f, 0.0f));
-        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround);
+        client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, static_cast<uint8_t>(net::kFlagOnGround | (crouching ? net::kFlagCrouching : 0)));
     }
 };
 
@@ -203,6 +204,33 @@ int main() {
         both(1.0, [] { return false; });
         Check(!onPipe && !inAir && typeAt({ 21, 1, 22 }) == BlockType::AIR && typeAt({ 19, 3, 22 }) == BlockType::AIR && a.client.GetResources(BlockType::DOOR) == 2 * kBlock,
               "a door can't be put on a pipe or in mid air");
+        // A door falls when the block under it goes, both halves, dropped as one door.
+        server.QueueConsoleCommand("fill 25 0 22 25 1 22 door");
+        both(20.0, [&] { return typeAt({ 25, 1, 22 }) == BlockType::DOOR; });
+        server.QueueConsoleCommand("fill 25 -1 22 25 -1 22 air");
+        Check(both(20.0, [&] {
+                  if (typeAt({ 25, 0, 22 }) != BlockType::AIR || typeAt({ 25, 1, 22 }) != BlockType::AIR) return false;
+                  int doors = 0;
+                  for (const auto& i : a.client.GetItems()) doors += i.item == Items::OfBlock(BlockType::DOOR) ? i.count : 0;
+                  return doors == 1;
+              }),
+              "with the block under it gone, a door falls (both halves) and drops as one door");
+        // Mirrored: hinged on the right. Put up so, both halves are; crouching and
+        // right-clicking it swaps the hinge back (and doesn't open it).
+        auto mirroredAt = [&](const glm::ivec3& p) { Block t; return a.world.GetBlock(p.x, p.y, p.z, t) && t.DoorMirrored(); };
+        a.client.PlaceBlock({ 21, 0, 25 }, BlockType::DOOR, 8, 4 | Block::kDoorMirrored);
+        Check(both(20.0, [&] { return typeAt({ 21, 1, 25 }) == BlockType::DOOR && mirroredAt({ 21, 0, 25 }) && mirroredAt({ 21, 1, 25 }); }) &&
+                  facingOf({ 21, 0, 25 }) == glm::ivec3(0, 0, 1),
+              "a door put up mirrored is hinged on the right, both halves (facing as asked)");
+        a.crouching = true;
+        both(0.5, [] { return false; });
+        a.client.UseBed({ 21, 1, 25 });
+        Check(both(20.0, [&] { return !mirroredAt({ 21, 0, 25 }) && !mirroredAt({ 21, 1, 25 }); }) && typeAt({ 21, 0, 25 }) == BlockType::DOOR,
+              "crouching and right-clicking it swaps its hinge to the left (and leaves it shut)");
+        a.crouching = false;
+        both(0.5, [] { return false; });
+        a.client.UseBed({ 21, 0, 25 });
+        Check(both(20.0, [&] { return typeAt({ 21, 0, 25 }) == BlockType::DOOR_OPEN && !mirroredAt({ 21, 0, 25 }); }), "standing, it opens as before, keeping its hinge");
 
         std::cout << "Respawning" << std::endl;
         auto kill = [&](TestClient& victim, const std::string& name, TestClient& killer, const std::string& killerName) {

@@ -582,6 +582,13 @@ int main() {
             const auto atOpen = Raycast(cells, glm::vec3(0.05f, 3.5f, 23.0f), glm::vec3(0.0f, 0.0f, -1.0f), 6.0f);
             Check((!pastOpen || pastOpen->block != glm::ivec3(0, 3, 20)) && atOpen && atOpen->block == glm::ivec3(0, 3, 20),
                   "an open door is aimed at along its hinge side, and through the doorway past it");
+            Block mirrored = open;
+            mirrored.axis = static_cast<uint8_t>(mirrored.axis | Block::kDoorMirrored);
+            cells.blocks[{ 0, 3, 20 }] = mirrored;
+            const auto atRight = Raycast(cells, glm::vec3(0.95f, 3.5f, 23.0f), glm::vec3(0.0f, 0.0f, -1.0f), 6.0f);
+            const auto pastLeft = Raycast(cells, glm::vec3(0.05f, 3.5f, 23.0f), glm::vec3(0.0f, 0.0f, -1.0f), 6.0f);
+            Check(mirrored.Facing() == open.Facing() && atRight && atRight->block == glm::ivec3(0, 3, 20) && (!pastLeft || pastLeft->block != glm::ivec3(0, 3, 20)),
+                  "a mirrored open door lies along its right side instead (facing the same way)");
             cells.blocks.erase({ 0, 3, 20 });
             // Turned on its side (its top facing +x), the same step: aimed at from -x, the
             // face hit faces -x (it used to be the turned top, +x: the far side).

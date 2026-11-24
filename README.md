@@ -1339,11 +1339,15 @@ upper half and a whole solid block under it (not a slab, a slope or a pipe), and
 one door. Right-click either half (within 6 blocks) to open
 it, which turns both halves into an open frame you can walk through, and again to
 shut it. Two doors side by side in a doorway (facing the same way or each other's)
-are a double door: opening or shutting either does both. It won't shut on someone
+are a double door: opening or shutting either does both. A door is hinged on one side:
+put up beside another door it takes the far side from it (so a pair swings apart like
+real double doors), and otherwise the side of the doorway you clicked nearer. Crouch
+and right-click it (with no block in hand) to swap its hinge to the other side. If the
+block under it goes, the door falls and drops as a door. It won't shut on someone
 standing in the doorway. Breaking either half takes
 the whole door, and gives it back. `BedTest` checks placing, opening, not shutting on
 someone, closing from the other half, double doors, refusing a door on a pipe or in
-mid air, and breaking.
+mid air, a door falling when its block goes, mirroring, and breaking.
 
 ## Chests
 

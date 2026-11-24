@@ -974,8 +974,9 @@ int Block::ModelBoxes(unsigned joined, glm::vec3 lo[kMaxModelBoxes], glm::vec3 h
     }
     case BlockType::DOOR_OPEN: {
         // Open: swung a quarter turn about its hinge, its panel along the cell's side to
-        // the left of the way it faces (as the door models draw it).
-        const glm::ivec3 f = Facing();
+        // the left of the way it faces (mirrored: the right), as the door models draw it.
+        glm::ivec3 f = Facing();
+        if (DoorMirrored()) f = -f; // (the right of one facing is the left of the other)
         constexpr float t = kDoorThickness;
         glm::vec3 a(0.0f), b(1.0f);
         if (f.x > 0) a.z = 1.0f - t;      // facing +x: along +z

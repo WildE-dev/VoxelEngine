@@ -135,18 +135,25 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
         changedBlocks.emplace_back(x, y, z);
     }
 
-    // Plants need the block under them: any change there uproots them. An open door
-    // counts as one, but its upper half stays on as long as there's a door half under
-    // it (opening or closing a door changes the halves one at a time).
+    // Plants need the block under them: any change there uproots them (dropped as an
+    // item, by the server). Doors go by their own rule, below.
     Block above;
-    const bool doorBelow = block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN;
-    if (GetBlock(x, y + 1, z, above) && above.IsPlant() && !IsLeverType(above.type) && !(above.type == BlockType::DOOR_OPEN && doorBelow)) {
+    auto isDoor = [](BlockType t) { return t == BlockType::DOOR || t == BlockType::DOOR_OPEN; };
+    if (GetBlock(x, y + 1, z, above) && above.IsPlant() && !IsLeverType(above.type) && !isDoor(above.type)) {
         SetBlock(x, y + 1, z, Block());
-        // (Dropped as an item, by the server; not a door's upper half: its worth is the door's.)
-        if (above.type != BlockType::DOOR_OPEN) {
-            std::lock_guard<std::mutex> lock(logMutex);
-            knockedOff.emplace_back(glm::ivec3(x, y + 1, z), above);
-        }
+        std::lock_guard<std::mutex> lock(logMutex);
+        knockedOff.emplace_back(glm::ivec3(x, y + 1, z), above);
+    }
+    // A door stands on a whole solid block: with that gone (not just the door's own other
+    // half changing, as it opens and shuts or is broken), it falls, both halves, and is
+    // dropped as the one door.
+    if (GetBlock(x, y + 1, z, above) && isDoor(above.type) && !isDoor(previous.type) && !isDoor(block.type) && !Block::HoldsLever(block)) {
+        Block top;
+        const bool twoHigh = GetBlock(x, y + 2, z, top) && isDoor(top.type);
+        SetBlock(x, y + 1, z, Block());
+        if (twoHigh) SetBlock(x, y + 2, z, Block());
+        std::lock_guard<std::mutex> lock(logMutex);
+        knockedOff.emplace_back(glm::ivec3(x, y + 1, z), Block(BlockType::DOOR));
     }
     // Levers fixed to this block fall off if it no longer holds them.
     if (Block::HoldsLever(previous) && !Block::HoldsLever(block))

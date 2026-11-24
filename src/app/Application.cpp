@@ -1414,7 +1414,7 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
         glm::vec2 light(0.0f);
         if (!(eased < 0.05f && cellLight(ourSide, light)) && !cellLight(pos, light)) light = lightAt(centre);
         for (const auto& h : params.handLights) light.y = std::max(light.y, h.w - glm::distance(centre, glm::vec3(h)));
-        params.doors.push_back({ glm::vec3(pos), facing, eased, glm::vec4(door0, door1), light });
+        params.doors.push_back({ glm::vec3(pos), facing, eased, glm::vec4(door0, door1), light, d.DoorMirrored() });
     }
     doorSwings.swap(swings);
 
@@ -3290,6 +3290,12 @@ void Application::OnMouseButton(int button, int action) {
     const auto aimedHit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
     const bool atSignalBlock = aimedHit && world->GetBlock(aimedHit->block.x, aimedHit->block.y, aimedHit->block.z, aimedAt) &&
                                Signals::KindOf(aimedAt.type) != Signals::Kind::None;
+    // (Crouching at a door with no block in hand: it swaps which side it's hinged.)
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && CrouchHeld() && aimedHit && (aimedAt.type == BlockType::DOOR || aimedAt.type == BlockType::DOOR_OPEN) &&
+        (SelectedTool() != Tool::None || SelectedBlock() == BlockType::AIR || IsItemType(SelectedBlock()))) {
+        client->UseBed(aimedHit->block);
+        return;
+    }
     if (button == GLFW_MOUSE_BUTTON_RIGHT && (!CrouchHeld() || atSignalBlock)) {
         Block target;
         // The engineer's hammer: strike a structure's block to form it (the server
@@ -3545,6 +3551,22 @@ void Application::OnMouseButton(int button, int action) {
                         if (glm::ivec3(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]) == hit->normal) faceAxis = f;
                 if (aimed.type == BlockType::LADDER && hit->normal.y != 0) faceAxis = aimed.axis;
             }
+        }
+        // A door's hinge: beside another door, on the far side from it (a double door);
+        // else on the side of the doorway clicked nearer.
+        if (placeBlock == BlockType::DOOR) {
+            const glm::ivec3 f(kFaceOffsets[faceAxis][0], 0, kFaceOffsets[faceAxis][2]), right(f.z, 0, -f.x);
+            auto doorAt = [&](const glm::ivec3& p, bool& mirrored) {
+                Block d;
+                if (!world->GetBlock(p.x, p.y, p.z, d) || (d.type != BlockType::DOOR && d.type != BlockType::DOOR_OPEN) || d.Facing() != f) return false;
+                mirrored = d.DoorMirrored();
+                return true;
+            };
+            bool otherMirrored = false, mirror;
+            if (doorAt(place - right, otherMirrored) && !otherMirrored) mirror = true;      // one on its left, hinged left: this one on the right
+            else if (doorAt(place + right, otherMirrored) && otherMirrored) mirror = false; // one on its right, hinged right
+            else mirror = glm::dot(hit->point - (glm::vec3(place) + glm::vec3(0.5f)), glm::vec3(right)) > 0.0f;
+            if (mirror) faceAxis |= Block::kDoorMirrored;
         }
         if (!client->PlaceBlock(place, placeBlock, height, faceAxis)) return; // (refused, as the server would: no sound, no editor)
         PlayAt("place", place, 0.8f);

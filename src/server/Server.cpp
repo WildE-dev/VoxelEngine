@@ -1518,7 +1518,11 @@ void Server::DropOnDeath(ClientState& client) {
 void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
     Block block;
     if (!InReach(client, pos, kChestReach) || !world->GetBlock(pos.x, pos.y, pos.z, block)) return;
-    if (block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN) return ToggleDoor(pos, block.type == BlockType::DOOR);
+    if (block.type == BlockType::DOOR || block.type == BlockType::DOOR_OPEN) {
+        // Crouching: its hinge swaps sides; else it opens or shuts.
+        if (client.flags & net::kFlagCrouching) return MirrorDoor(pos);
+        return ToggleDoor(pos, block.type == BlockType::DOOR);
+    }
     if (block.type == BlockType::TNT) return LightTnt(pos, kTntFuse);
     // A lever flips; a valve with no channel opens or shuts by hand.
     if (block.type == BlockType::LEVER || block.type == BlockType::LEVER_ON) {
@@ -1662,6 +1666,15 @@ void Server::ToggleDoor(const glm::ivec3& pos, bool open) {
         if (!world->GetBlock(h.x, h.y, h.z, half)) continue;
         half.type = to;
         world->SetBlock(h.x, h.y, h.z, half);
+    }
+}
+
+void Server::MirrorDoor(const glm::ivec3& pos) {
+    for (const int dy : { 0, 1, -1 }) {
+        Block half;
+        if (!world->GetBlock(pos.x, pos.y + dy, pos.z, half) || (half.type != BlockType::DOOR && half.type != BlockType::DOOR_OPEN)) continue;
+        half.axis = static_cast<uint8_t>(half.axis ^ Block::kDoorMirrored);
+        world->SetBlock(pos.x, pos.y + dy, pos.z, half);
     }
 }
 

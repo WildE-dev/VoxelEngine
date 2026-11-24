@@ -121,6 +121,7 @@ struct DoorModel {
     float open = 0.0f;
     glm::vec4 uv{ 0.0f };         // the door's atlas tile
     glm::vec2 light{ 15.0f, 0.0f };
+    bool mirrored = false; // hinged on the right (of the way it faces), not the left
 };
 
 // A lever: a stone base on the block it's fixed to (behind it), and a wooden handle with
