@@ -69,6 +69,11 @@ constexpr float kOutletVentRate = 64.0f; // and out of each fluid outlet (the wa
 constexpr int kSteamGas = 10;      // steam in the air from each unit let out
 constexpr float kLavaIntake = 32.0f; // lava an obsidian pipe draws in from lava it touches, a second
 constexpr float kLavaBurn = 4.0f;    // lava a boiler burns a second (instead of coal)
+// A sprinkler: the water it sprays a second, and how far: fires within kSprinklerReach
+// across and from kSprinklerDrop below it to a block above are put out, and players
+// there are put out too.
+constexpr float kSprinklerWater = 16.0f;
+constexpr int kSprinklerReach = 4, kSprinklerDrop = 6;
 
 inline bool IsPart(BlockType t) { return t == BlockType::FLUID_PIPE || t == BlockType::FLUID_TANK || t == BlockType::FLUID_VALVE_OPEN || t == BlockType::OBSIDIAN_PIPE; }
 inline int CapacityOf(BlockType t) {
@@ -77,7 +82,7 @@ inline int CapacityOf(BlockType t) {
 // Machines that join fluid networks from beside them.
 inline bool IsMachine(BlockType t) {
     return t == BlockType::OIL_DERRICK || t == BlockType::REFINERY || t == BlockType::ENGINE || t == BlockType::DRAIN || t == BlockType::FLUID_OUTLET ||
-           t == BlockType::BOILER || t == BlockType::TURBINE;
+           t == BlockType::BOILER || t == BlockType::TURBINE || t == BlockType::SPRINKLER;
 }
 // What a fluid pipe draws a tube to.
 inline bool PipeJoins(BlockType other) { return IsPart(other) || IsMachine(other) || other == BlockType::FLUID_VALVE; } // (a shut valve too: it closes the pipe)

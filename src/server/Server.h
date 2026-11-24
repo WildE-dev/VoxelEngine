@@ -560,6 +560,11 @@ private:
     std::unordered_map<glm::ivec3, bool, Coords::IVec3Hash> launcherArmed;
     std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> launcherFired;
     void Launch(const glm::ivec3& pos, const Block& launcher, float speed);
+    // Fire (or, with lava, lava too) within `range` of a point (a sphere; below: down to `down`).
+    bool HeatNear(const glm::ivec3& pos, int range, int down, bool lava) const;
+    // A sprinkler at pos sprays (douse): fires round and below it out, and players there.
+    // Returns whether there was fire there (with douse false, only looks).
+    bool Sprinkle(const glm::ivec3& pos, bool douse);
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> air; // air held in each part of a network
     std::vector<AirNetwork> networks;                             // as of the last update
     std::unordered_map<glm::ivec3, int, Coords::IVec3Hash> networkOf; // each part's network, as of the last update

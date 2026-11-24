@@ -1,0 +1,2 @@
+// sprinkler: a block (the format is in README.md, here)
+{ "name": "Sprinkler", "textures": { "top": "sprinkler_side", "bottom": "sprinkler_head", "side": "sprinkler_side" }, "hardness": 3, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#b09040" }

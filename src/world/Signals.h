@@ -27,6 +27,8 @@
 //  - a piston pushes out while its channel is on, and pulls back when it's off (it
 //    runs on air: see world/Power.h);
 //  - an air launcher throws what's in front of it each time its channel comes on;
+//  - a sprinkler sprays while its channel is on (with none, while it senses fire);
+//  - a heat sensor sends while fire or lava is within its range;
 //  - a logic gate's inputs.
 // Logic gates work out their output from what they hear on their inputs (a and b),
 // each update, and send it on their output channel from the next: AND, OR, XOR, NOT
@@ -49,8 +51,10 @@ constexpr double kPlateSeconds = 1.0;
 constexpr double kClockSeconds = 1.0;
 constexpr int kPlayerRange = 4;
 constexpr int kMaxPlayerRange = 16;
+constexpr int kHeatRange = 4;      // a heat sensor's range unless set
+constexpr int kMaxHeatRange = 8;
 
-enum class Kind : uint8_t { None, Lever, Plate, Gate, Lamp, Valve, Sluice, Piston, WaterSensor, PressureSensor, DaylightSensor, PlayerSensor, MachineSensor, Launcher, Count };
+enum class Kind : uint8_t { None, Lever, Plate, Gate, Lamp, Valve, Sluice, Piston, WaterSensor, PressureSensor, DaylightSensor, PlayerSensor, MachineSensor, Launcher, HeatSensor, Sprinkler, Count };
 // What a machine sensor watches for (kept in its config's mode).
 enum class Watch : uint8_t { Working, Stopped, NoAir, HasItems, Empty, Level, Count };
 inline const char* WatchName(Watch w) {
@@ -86,6 +90,8 @@ inline Kind KindOf(BlockType t) {
     case BlockType::DAYLIGHT_SENSOR: return Kind::DaylightSensor;
     case BlockType::PLAYER_SENSOR: return Kind::PlayerSensor;
     case BlockType::MACHINE_SENSOR: return Kind::MachineSensor;
+    case BlockType::HEAT_SENSOR: return Kind::HeatSensor;
+    case BlockType::SPRINKLER: return Kind::Sprinkler;
     default: return Kind::None;
     }
 }
@@ -100,16 +106,18 @@ struct Config {
 };
 
 inline bool IsSensor(Kind k) {
-    return k == Kind::WaterSensor || k == Kind::PressureSensor || k == Kind::DaylightSensor || k == Kind::PlayerSensor || k == Kind::MachineSensor;
+    return k == Kind::WaterSensor || k == Kind::PressureSensor || k == Kind::DaylightSensor || k == Kind::PlayerSensor || k == Kind::MachineSensor || k == Kind::HeatSensor;
 }
 inline bool Sends(Kind k) { return k == Kind::Lever || k == Kind::Plate || k == Kind::Gate || IsSensor(k); }
-inline bool Listens(Kind k) { return k == Kind::Lamp || k == Kind::Valve || k == Kind::Sluice || k == Kind::Gate || k == Kind::Piston || k == Kind::Launcher; }
+inline bool Listens(Kind k) { return k == Kind::Lamp || k == Kind::Valve || k == Kind::Sluice || k == Kind::Gate || k == Kind::Piston || k == Kind::Launcher || k == Kind::Sprinkler; }
 // A player sensor whose mode is Or senses hostile dwarves too.
 inline bool SensesCreatures(const Config& c) { return c.kind == Kind::PlayerSensor && c.mode == Mode::Or; }
 // Whether a kind has a setting in b (besides a gate's second input).
-inline bool HasSetting(Kind k) { return k == Kind::PressureSensor || k == Kind::PlayerSensor || k == Kind::MachineSensor || k == Kind::Launcher; }
+inline bool HasSetting(Kind k) { return k == Kind::PressureSensor || k == Kind::PlayerSensor || k == Kind::MachineSensor || k == Kind::Launcher || k == Kind::HeatSensor; }
 // A player sensor's range for its setting.
 inline int PlayerRange(uint8_t b) { return b == 0 ? kPlayerRange : b > kMaxPlayerRange ? kMaxPlayerRange : b; }
+// A heat sensor's range for its setting.
+inline int HeatRange(uint8_t b) { return b == 0 ? kHeatRange : b > kMaxHeatRange ? kMaxHeatRange : b; }
 // How many inputs a gate in this mode uses.
 inline int Inputs(Mode m) { return m == Mode::And || m == Mode::Or || m == Mode::Xor || m == Mode::Latch ? 2 : 1; }
 

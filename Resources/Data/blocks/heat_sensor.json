@@ -1,0 +1,2 @@
+// heat_sensor: a block (the format is in README.md, here)
+{ "name": "Heat sensor", "textures": { "top": "heat_sensor", "bottom": "sensor_bottom", "side": "heat_sensor" }, "hardness": 1, "tool": "pickaxe", "sound": "soft", "light": 0, "map": "#a04020" }

@@ -500,6 +500,24 @@ void Server::UpdatePower() {
                 }
             }
         }
+        else if (t == BlockType::SPRINKLER) {
+            // Sprays while its channel's on, or (with no channel) while there's fire in
+            // its reach, as long as its pipes have the water.
+            Worker& w = workers[pos];
+            auto sig = signalBlocks.find(pos);
+            const bool wired = sig != signalBlocks.end() && sig->second.config.a != 0;
+            const bool want = wired ? sig->second.on : Sprinkle(pos, false); // (fire where it would spray)
+            const int use = std::max(1, static_cast<int>(Fluids::kSprinklerWater * Power::kInterval));
+            FluidNet* from = FluidNetBeside(pos, Fluids::Kind::Water, true);
+            if (!want) w.state = Power::DrillState::Idle;
+            else if (!from || from->kind != Fluids::Kind::Water || from->amount < use) w.state = Power::DrillState::NoPressure; // (no water)
+            else {
+                from->amount -= use;
+                Sprinkle(pos, true);
+                w.state = Power::DrillState::Working;
+                w.last = now;
+            }
+        }
         else if (t == BlockType::FLUID_OUTLET) {
             if (FluidNet* from = FluidNetBeside(pos, Fluids::Kind::Water, true)) {
                 from->amount = std::max(0, from->amount - water.TakeDrainUse(pos));
@@ -835,6 +853,41 @@ void Server::Launch(const glm::ivec3& pos, const Block& launcher, float speed) {
     for (const uint16_t id : thrown) creatures.Launch(id, velocity);
     for (auto& d : dropped.All())
         if (inFront(d.position - glm::vec3(DroppedItems::kHalf), d.position + glm::vec3(DroppedItems::kHalf))) d.velocity = velocity, d.onGround = false;
+}
+
+bool Server::HeatNear(const glm::ivec3& pos, int range, int down, bool lava) const {
+    const glm::vec3 centre(pos);
+    for (int dy = -down; dy <= range; dy++)
+        for (int dx = -range; dx <= range; dx++)
+            for (int dz = -range; dz <= range; dz++) {
+                if (dx * dx + dz * dz + (dy > 0 ? dy * dy : 0) > range * range) continue;
+                Block b;
+                if (!world->GetBlock(pos.x + dx, pos.y + dy, pos.z + dz, b)) continue;
+                if (b.type == BlockType::FIRE || (lava && b.IsLava())) return true;
+            }
+    return false;
+}
+
+bool Server::Sprinkle(const glm::ivec3& pos, bool douse) {
+    const int reach = Fluids::kSprinklerReach;
+    bool found = false;
+    for (int dy = -Fluids::kSprinklerDrop; dy <= 1; dy++)
+        for (int dx = -reach; dx <= reach; dx++)
+            for (int dz = -reach; dz <= reach; dz++) {
+                if (dx * dx + dz * dz > reach * reach + 1) continue;
+                const glm::ivec3 c = pos + glm::ivec3(dx, dy, dz);
+                Block b;
+                if (!world->GetBlock(c.x, c.y, c.z, b) || b.type != BlockType::FIRE) continue;
+                found = true;
+                if (!douse) return true;
+                world->SetBlock(c.x, c.y, c.z, Block());
+            }
+    if (!douse) return false;
+    for (auto& [peer, client] : clients) {
+        const glm::vec3 d = client.feet - (glm::vec3(pos) + glm::vec3(0.5f, 0.0f, 0.5f));
+        if (glm::length(glm::vec2(d.x, d.z)) <= reach + 0.5f && d.y <= 1.0f && d.y >= -Fluids::kSprinklerDrop - 1.0f) client.burningUntil = 0.0;
+    }
+    return found;
 }
 
 void Server::BuildFluidNets() {
@@ -1227,6 +1280,13 @@ void Server::HandleInspect(ClientState& client, const glm::ivec3& pos) {
         }
         else if (b.type == BlockType::VALVE || b.type == BlockType::VALVE_OPEN) {
             text += b.type == BlockType::VALVE_OPEN ? "Valve: open. " : "Valve: shut (the pipes either side are kept apart). ";
+        }
+        else if (b.type == BlockType::SPRINKLER) {
+            auto sig = signalBlocks.find(pos);
+            text += std::string("Sprinkler: sprays the fires round and below it out (") +
+                    (sig != signalBlocks.end() && sig->second.config.a ? "while channel " + std::to_string(sig->second.config.a) + " is on"
+                                                                         : std::string("whenever it senses fire: no channel")) +
+                    "), from the water in the fluid pipes beside it. ";
         }
         else if (b.type == BlockType::LAUNCHER) {
             auto sig = signalBlocks.find(pos);

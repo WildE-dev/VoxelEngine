@@ -78,6 +78,7 @@ const char* DefaultMaterial(BlockType type) {
     case BlockType::TURBINE:
     case BlockType::AIR_DIFFUSER:
     case BlockType::FLUID_OUTLET:
+    case BlockType::SPRINKLER:
     case BlockType::STEEL_FRAME:
     case BlockType::MACHINE_CASING:
     case BlockType::FIRE_BRICK:

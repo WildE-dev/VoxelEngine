@@ -6,7 +6,10 @@
 //  - a bucket scoops up a block of water, and poured on a fire puts out the fires round it;
 //  - a survival player standing in fire is burned, and goes on burning after stepping
 //    out, until they get into water;
-//  - items lying in fire are lost.
+//  - items lying in fire are lost;
+//  - a sprinkler on a tank of water puts out the fires round and below it by itself;
+//    one with a channel waits for it, and a heat sensor on that channel, seeing fire,
+//    sets it off.
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -214,6 +217,66 @@ int main() {
                   return true;
               }),
               "an item thrown into fire is lost");
+    }
+
+    std::cout << "Sprinklers and heat sensors" << std::endl;
+    {
+        auto signalOn = [&](const glm::ivec3& p) {
+            auto it = a.client.GetSignals().find(p);
+            return it != a.client.GetSignals().end() && it->second.on != 0;
+        };
+        auto configure = [&](const glm::ivec3& p, Signals::Kind kind, uint8_t listen, uint8_t b, uint8_t out) {
+            net::SignalInfo info;
+            info.pos = p;
+            info.kind = static_cast<uint8_t>(kind);
+            info.a = listen;
+            info.b = b;
+            info.out = out;
+            a.client.ConfigureSignal(info);
+            return Pump(a, 5.0, [&] {
+                auto it = a.client.GetSignals().find(p);
+                return it != a.client.GetSignals().end() && it->second.a == listen && it->second.b == b && it->second.out == out;
+            });
+        };
+        // On its own: a sprinkler under a tank of water, over a burning log and leaves.
+        fill({ 78, -1, 78 }, { 108, -1, 108 }, "stone");
+        fill({ 84, 5, 84 }, { 84, 5, 84 }, "fluid_tank");
+        fill({ 84, 4, 84 }, { 84, 4, 84 }, "sprinkler");
+        fill({ 82, 0, 84 }, { 82, 0, 84 }, "log");
+        fill({ 86, 0, 84 }, { 86, 0, 84 }, "leaves");
+        Pump(a, 5.0, [&] { return at({ 84, 4, 84 }) == BlockType::SPRINKLER && at({ 86, 0, 84 }) == BlockType::LEAVES; });
+        server.QueueConsoleCommand("fluid 84 5 84 water");
+        server.QueueConsoleCommand("tp Warden 84.5 0 88.5");
+        Pump(a, 5.0, [&] { return std::abs(a.feet.z - 88.5f) < 0.1f; });
+        fill({ 82, 1, 84 }, { 82, 1, 84 }, "fire");
+        fill({ 86, 1, 84 }, { 86, 1, 84 }, "fire");
+        Check(Pump(a, 3.0, [&] { return count({ 80, 0, 82 }, { 88, 2, 86 }, BlockType::FIRE) == 0; }) && at({ 82, 0, 84 }) == BlockType::LOG,
+              "a sprinkler with water puts out the fires below it by itself, before the log burns");
+        fill({ 86, 1, 84 }, { 86, 1, 84 }, "fire");
+        Check(Pump(a, 3.0, [&] { return at({ 86, 1, 84 }) != BlockType::FIRE; }), "and again when fire comes back");
+
+        // On a channel: it waits for it. A heat sensor on that channel, seeing fire,
+        // sets it off.
+        const glm::ivec3 sprinkler{ 100, 4, 100 }, sensor{ 100, 0, 95 };
+        fill(sprinkler + glm::ivec3(0, 1, 0), sprinkler + glm::ivec3(0, 1, 0), "fluid_tank");
+        fill(sprinkler, sprinkler, "sprinkler");
+        fill(sensor, sensor, "heat_sensor");
+        fill({ 102, 0, 100 }, { 102, 0, 100 }, "log");
+        fill({ 100, 0, 96 }, { 100, 0, 96 }, "log");
+        server.QueueConsoleCommand("tp Warden 98.5 0 98.5");
+        Pump(a, 5.0, [&] { return std::abs(a.feet.z - 98.5f) < 0.1f && at(sensor) == BlockType::HEAT_SENSOR && at(sprinkler) == BlockType::SPRINKLER; });
+        server.QueueConsoleCommand("fluid 100 5 100 water");
+        Check(configure(sprinkler, Signals::Kind::Sprinkler, 5, 0, 0) && configure(sensor, Signals::Kind::HeatSensor, 0, 2, 0),
+              "a sprinkler listens to 5; a heat sensor (range 2) sends on nothing yet");
+        Check(!signalOn(sensor), "with no fire near, the heat sensor is off");
+        fill({ 102, 1, 100 }, { 102, 1, 100 }, "fire");
+        fill({ 100, 1, 96 }, { 100, 1, 96 }, "fire");
+        Check(Pump(a, 3.0, [&] { return signalOn(sensor); }), "fire near the heat sensor turns it on");
+        Pump(a, 1.0, [] { return false; });
+        Check(count({ 96, 0, 96 }, { 104, 3, 104 }, BlockType::FIRE) > 0, "on a channel that's off, the sprinkler leaves fire in its reach alone");
+        Check(configure(sensor, Signals::Kind::HeatSensor, 0, 2, 5), "the heat sensor now sends on 5");
+        Check(Pump(a, 3.0, [&] { return count({ 96, 0, 96 }, { 104, 3, 104 }, BlockType::FIRE) == 0; }), "which sets the sprinkler off, putting the fires out");
+        Check(Pump(a, 3.0, [&] { return !signalOn(sensor); }), "and with the fire out, the sensor goes off");
     }
 
     a.client.Disconnect();

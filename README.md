@@ -633,12 +633,29 @@ It's hard to put out. You can't punch it out, since aiming passes through flames
   open a sluice.
 - **Smothering.** Put any block that doesn't burn (sand, dirt, stone) where a fire is.
 - **A firebreak.** Clear or chop what burns in its path, and it dies down at the gap.
+- **A sprinkler** (a fluid pipe and a copper ingot). Fix it under a ceiling, joined to
+  fluid pipes or a tank of water. While it sprays it puts out every fire within 4
+  blocks across and from 6 below it to 1 above, and puts out anyone burning there. Each
+  second of spraying uses 16 units of water. With no channel, it sprays by itself
+  whenever there's fire in that area. Give it a channel (see [Signals](#signals)) and it
+  sprays only while that channel is on.
+- **A heat sensor** (half an iron ingot, half a copper ingot and half a glass) sends on
+  its channel while fire or lava is within its range (4 blocks unless set, up to 8). Put
+  one where a fire would start and wire it to sprinklers (or a sluice gate, or a lamp
+  as an alarm) further off.
+
+While you're on fire, flames lick up round the edges of your screen with a crackle,
+and other players see flames up your body.
 
 Flames are drawn as glowing licks of fire shooting up from each burning cell, with
 smoke, a crackle, and the light of a lamp. `FireTest` checks that a fire spreads
 through a little wood and burns it down, dies out on bare stone, leaves stone and
 obsidian alone, is put out by water, by smothering and by a bucket, burns a survival
-player who keeps burning until in water, and destroys items thrown into it.
+player who keeps burning until in water (their client told so), and destroys items
+thrown into it. It also checks that a sprinkler on a tank of water puts out the fires
+below it by itself; that a sprinkler on a channel waits for it; and that a heat sensor
+turns on near fire, sets the sprinkler off on its channel, and goes off once the fire
+is out.
 
 ## Player
 
@@ -1661,11 +1678,13 @@ channel is heard by everything listening to it within **64 blocks**.
 | **Pressure sensor** | joined to air pipes, sends while their pressure is at least its setting (a percentage; 0 for any air at all) |
 | **Daylight sensor** | sends by day, while the sky is open above it |
 | **Player sensor** | sends while a player is within its range (4 blocks unless set, up to 16); tick "Hostile creatures too" and hostile dwarves count as well |
+| **Heat sensor** | sends while fire or lava is within its range (4 blocks unless set, up to 8) |
+| **Sprinkler** | sprays the fires round and below it out while its channel is on (with no channel, whenever there's fire in its reach); see [Fire](#fire) |
 
-Placing a lever, a logic gate, a signal lamp, a piston, an air launcher or a sensor opens a small
-window to set its channels (and a pressure or player sensor's setting); right-click a gate or a lamp (with an empty hand or a tool), or crouch and
+Placing a lever, a logic gate, a signal lamp, a piston, an air launcher, a sprinkler or a sensor opens a small
+window to set its channels (and a sensor's or launcher's setting); right-click a gate or a lamp (with an empty hand or a tool), or crouch and
 right-click any signal block
-(lever, plate, gate, lamp, valve, sluice gate, piston, launcher or sensor), to change them. Looking at one shows
+(lever, plate, gate, lamp, valve, sluice gate, piston, launcher, sprinkler or sensor), to change them. Looking at one shows
 its channels (and a lever's, gate's or valve's state) under the crosshair. Gates work
 out their answer from what they heard and send it from the next update, a tenth of
 a second later, so a loop of gates steps along instead of locking up.

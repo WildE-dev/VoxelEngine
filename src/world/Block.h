@@ -326,6 +326,12 @@ enum class BlockType : uint8_t {
     LAUNCHER,
     // A hay bale: soft to land on (no fall damage), and it burns readily.
     HAY_BALE,
+    // A heat sensor (world/Signals.h): sends while fire or lava is near it.
+    HEAT_SENSOR,
+    // A sprinkler (world/Fluids.h): on fluid pipes of water, it sprays the fires
+    // round and below it out, while its channel is on (with none, whenever it
+    // senses fire itself).
+    SPRINKLER,
     COUNT
 };
 // Machines with an inventory of their own (opened like a chest, empty-handed): what

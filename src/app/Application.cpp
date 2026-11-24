@@ -67,7 +67,7 @@ constexpr BlockType kInventoryBlocks[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::LAVA, BlockType::OBSIDIAN, BlockType::HAY_BALE, BlockType::FIRE, BlockType::BUCKET, BlockType::WATER_BUCKET, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP,
-    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::CREATIVE_AIR_TANK, BlockType::VALVE, BlockType::FLUID_VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::OBSIDIAN_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::BOILER, BlockType::TURBINE, BlockType::AIR_DIFFUSER, BlockType::DRILL, BlockType::SMELTER, BlockType::STEEL_FRAME, BlockType::MACHINE_CASING, BlockType::FIRE_BRICK, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LAUNCHER, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
+    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::CREATIVE_AIR_TANK, BlockType::VALVE, BlockType::FLUID_VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::OBSIDIAN_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::BOILER, BlockType::TURBINE, BlockType::AIR_DIFFUSER, BlockType::DRILL, BlockType::SMELTER, BlockType::STEEL_FRAME, BlockType::MACHINE_CASING, BlockType::FIRE_BRICK, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LAUNCHER, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::HEAT_SENSOR, BlockType::SPRINKLER, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
     BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::GLASS, BlockType::CHEST, BlockType::MINING_POST, BlockType::CRUSHER, BlockType::GLOW_FUNGUS, BlockType::MAGMA, BlockType::GOLD_ORE, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::COPPER_ORE, BlockType::OIL_SHALE, BlockType::TAR, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::IRON_INGOT, BlockType::COPPER_INGOT, BlockType::STEEL_INGOT, BlockType::HAMMER, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
@@ -189,6 +189,8 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::WATER_BUCKET: return "Water bucket";
     case BlockType::LAUNCHER: return "Air launcher";
     case BlockType::HAY_BALE: return "Hay bale";
+    case BlockType::HEAT_SENSOR: return "Heat sensor";
+    case BlockType::SPRINKLER: return "Sprinkler";
     case BlockType::PUMP:  return "Pump";
     case BlockType::PIPE:  return "Pipe";
     case BlockType::WATER_WHEEL: return "Water wheel";
@@ -1245,16 +1247,22 @@ void Application::DrawCrosshair() {
         case Signals::Kind::WaterSensor:
         case Signals::Kind::PressureSensor:
         case Signals::Kind::DaylightSensor:
+        case Signals::Kind::Sprinkler:
+            std::snprintf(text, sizeof text, "Sprinkler - %s", info.a ? ("sprays on " + ch(info.a)).c_str() : "no channel (sprays when it senses fire)");
+            break;
         case Signals::Kind::MachineSensor:
+        case Signals::Kind::HeatSensor:
         case Signals::Kind::PlayerSensor: {
             const auto k = Signals::KindOf(target.type);
             const char* what = k == Signals::Kind::WaterSensor ? "Water sensor" : k == Signals::Kind::PressureSensor ? "Pressure sensor"
-                             : k == Signals::Kind::DaylightSensor ? "Daylight sensor" : k == Signals::Kind::MachineSensor ? "Machine sensor" : "Player sensor";
+                             : k == Signals::Kind::DaylightSensor ? "Daylight sensor" : k == Signals::Kind::MachineSensor ? "Machine sensor"
+                             : k == Signals::Kind::HeatSensor ? "Heat sensor" : "Player sensor";
             std::string setting;
             if (k == Signals::Kind::PressureSensor) setting = info.b ? " at " + std::to_string(info.b) + "%" : " (any air)";
             if (k == Signals::Kind::MachineSensor)
                 setting = std::string(" (") + Signals::WatchName(static_cast<Signals::Watch>(std::min<uint8_t>(info.mode, 5))) +
                           (info.mode == static_cast<uint8_t>(Signals::Watch::Level) ? ": " + std::to_string(info.b) + "%" : "") + ")";
+            if (k == Signals::Kind::HeatSensor) setting = " within " + std::to_string(Signals::HeatRange(info.b)) + " blocks";
             if (k == Signals::Kind::PlayerSensor)
                 setting = (info.mode == static_cast<uint8_t>(Signals::Mode::Or) ? " (and creatures) within " : " within ") + std::to_string(Signals::PlayerRange(info.b)) + " blocks";
             std::snprintf(text, sizeof text, "%s%s: %s - sends on %s", what, setting.c_str(), info.on ? "on" : "off", ch(info.out).c_str());
@@ -1405,6 +1413,33 @@ void Application::UpdateMachines(FrameParams& params, const std::function<glm::v
             }
         }
         launchersFiring.swap(firing);
+        // Sprinklers spraying: drops raining down round them, and a hiss of water.
+        const double nowSecs = glfwGetTime();
+        const float sprayDt = static_cast<float>(std::min(0.1, nowSecs - lastSprinklerSpray));
+        lastSprinklerSpray = nowSecs;
+        bool hiss = false;
+        for (const auto& m : client->GetMachines()) {
+            if (m.type != static_cast<uint8_t>(BlockType::SPRINKLER) || m.state != static_cast<uint8_t>(Power::DrillState::Working)) continue;
+            if (glm::distance(glm::vec3(m.pos), camera.GetPosition()) > 48.0f) continue;
+            float rate = sprayDt * 120.0f;
+            while (rate > 0.0f && particles.size() < 3000) {
+                if (rate < 1.0f && unit(puffRng) >= rate) break;
+                rate -= 1.0f;
+                const float angle = unit(puffRng) * 6.2831853f, out = 1.5f + 3.5f * unit(puffRng);
+                Particle p;
+                p.position = glm::vec3(m.pos) + glm::vec3(0.5f, -0.05f, 0.5f);
+                p.velocity = glm::vec3(std::cos(angle) * out, -0.5f - unit(puffRng), std::sin(angle) * out);
+                p.maxLife = p.life = 0.8f + 0.6f * unit(puffRng);
+                p.size = 0.06f + 0.05f * unit(puffRng);
+                p.uv = glm::vec4(s0, s1);
+                particles.push_back(p);
+            }
+            if (!hiss && nowSecs >= nextSprinklerHiss) {
+                PlayAt("splash", m.pos, 0.35f);
+                hiss = true;
+            }
+        }
+        if (hiss) nextSprinklerHiss = nowSecs + 0.5;
     }
 
     // Pressure gauges, their needles easing towards the pressure the server last sent.
@@ -1588,6 +1623,8 @@ uint32_t DefaultMapColour(BlockType type) {
     case BlockType::GLASS: return 0xFFE0E0D0u;
     case BlockType::BED: return 0xFF3030C0u;
     case BlockType::HAY_BALE: return 0xFF40B8D8u;
+    case BlockType::HEAT_SENSOR: return 0xFF2040A0u;
+    case BlockType::SPRINKLER: return 0xFF4090B0u;
     case BlockType::CROP:
     case BlockType::RIPE_WHEAT: return 0xFF46B4C8u;
     default: return 0xFF707070u;
@@ -3542,7 +3579,7 @@ void Application::OnMouseButton(int button, int action) {
         if (placeBlock == BlockType::SIGN) OpenSign(place); // and write on it
         // Signal blocks: set their channels straight away.
         const Signals::Kind placedKind = Signals::KindOf(placeBlock);
-        if (placeBlock == BlockType::LEVER || placeBlock == BlockType::LOGIC_GATE || placeBlock == BlockType::SIGNAL_LAMP || placedKind == Signals::Kind::Piston || placedKind == Signals::Kind::Launcher ||
+        if (placeBlock == BlockType::LEVER || placeBlock == BlockType::LOGIC_GATE || placeBlock == BlockType::SIGNAL_LAMP || placedKind == Signals::Kind::Piston || placedKind == Signals::Kind::Launcher || placedKind == Signals::Kind::Sprinkler ||
             Signals::IsSensor(placedKind))
             OpenSignalEditor(place, placeBlock);
     }
@@ -3579,7 +3616,7 @@ void Application::DrawSignalEditor() {
                             ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowBgAlpha(0.9f);
     const char* titles[] = { "Signal", "Lever", "Pressure plate", "Logic gate", "Signal lamp", "Valve", "Sluice gate", "Piston",
-                             "Water sensor", "Pressure sensor", "Daylight sensor", "Player sensor", "Machine sensor", "Air launcher" };
+                             "Water sensor", "Pressure sensor", "Daylight sensor", "Player sensor", "Machine sensor", "Air launcher", "Heat sensor", "Sprinkler" };
     static_assert(IM_ARRAYSIZE(titles) == static_cast<int>(Signals::Kind::Count), "a signal kind has no title");
     bool open = true;
     if (ImGui::Begin(titles[std::clamp(signalKind, 0, static_cast<int>(Signals::Kind::Count) - 1)], &open,
@@ -3625,6 +3662,11 @@ void Application::DrawSignalEditor() {
                 ImGui::TextDisabled("Place it touching a machine, a chest, a fluid tank or pipe, or air pipes.");
                 break;
             }
+            case Signals::Kind::HeatSensor:
+                ImGui::SetNextItemWidth(160.0f);
+                if (ImGui::InputInt("Range (blocks)", &signalB)) signalB = std::clamp(signalB, 0, Signals::kMaxHeatRange);
+                ImGui::TextDisabled("Sends while fire or lava is this near (0: %d blocks).", Signals::kHeatRange);
+                break;
             case Signals::Kind::PlayerSensor:
                 ImGui::SetNextItemWidth(160.0f);
                 if (ImGui::InputInt("Range (blocks)", &signalB)) signalB = std::clamp(signalB, 0, Signals::kMaxPlayerRange);
@@ -3642,6 +3684,8 @@ void Application::DrawSignalEditor() {
             if (kind == Signals::Kind::Lamp) ImGui::TextDisabled("Lights while the channel is on.");
             if (kind == Signals::Kind::Valve) ImGui::TextDisabled("Opens while the channel is on. With none, right-click (empty-handed) opens and shuts it.");
             if (kind == Signals::Kind::Sluice) ImGui::TextDisabled("Opens while the channel is on, and closes again when it's off.");
+            if (kind == Signals::Kind::Sprinkler)
+                ImGui::TextDisabled("Sprays the fires round and below it out while the channel is on. With no channel it sprays whenever it senses fire. It needs water in the fluid pipes beside it.");
             if (kind == Signals::Kind::Launcher) {
                 ImGui::SetNextItemWidth(160.0f);
                 if (ImGui::InputInt("Power (blocks/s)", &signalB)) signalB = signalB <= 0 ? 0 : std::clamp(signalB, Power::kMinLaunchSpeed, Power::kMaxLaunchSpeed);

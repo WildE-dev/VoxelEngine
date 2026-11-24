@@ -199,6 +199,7 @@ private:
     double nextBurnCrackle = 0.0;
     double nextCrackle = 0.0; // fires near us crackle now and then
     std::unordered_map<glm::ivec3, bool, Coords::IVec3Hash> launchersFiring; // (to catch each throw: a thunk and a puff)
+    double lastSprinklerSpray = 0.0, nextSprinklerHiss = 0.0;
     std::vector<glm::ivec3> campfires; // near the player, for smoke
     // Shallow water running downhill near the player, for spray (found by the same
     // look round as the campfires): the cell, where its surface is, which way it runs

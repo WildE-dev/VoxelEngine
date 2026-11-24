@@ -56,6 +56,7 @@ void Server::HandleConfigureSignal(ClientState& client, const net::SignalInfo& m
     if (kind == Signals::Kind::MachineSensor)
         s.config.mode = static_cast<Signals::Mode>(std::min<uint8_t>(m.mode, static_cast<uint8_t>(Signals::Watch::Count) - 1));
     if (kind == Signals::Kind::PlayerSensor) s.config.b = std::min<uint8_t>(s.config.b, Signals::kMaxPlayerRange);
+    if (kind == Signals::Kind::HeatSensor) s.config.b = std::min<uint8_t>(s.config.b, Signals::kMaxHeatRange);
     s.config.out = Signals::Sends(kind) ? m.out : 0;
     if (kind == Signals::Kind::Gate) s.on = false;
     BroadcastSignal(m.pos);
@@ -176,6 +177,10 @@ bool Server::Senses(const glm::ivec3& pos, const Signals::Config& c) const {
         }
         return true;
     }
+    case Signals::Kind::HeatSensor: {
+        const int range = Signals::HeatRange(c.b);
+        return HeatNear(pos, range, range, true);
+    }
     case Signals::Kind::PlayerSensor: {
         const float range = static_cast<float>(Signals::PlayerRange(c.b));
         const glm::vec3 centre = glm::vec3(pos) + 0.5f;
@@ -230,6 +235,7 @@ void Server::UpdateSignals() {
         case Signals::Kind::PressureSensor:
         case Signals::Kind::DaylightSensor:
         case Signals::Kind::MachineSensor:
+        case Signals::Kind::HeatSensor:
         case Signals::Kind::PlayerSensor: {
             // (A sensor's `on` is what it senses, shown to players whether or not it
             // has a channel to send it on.)
@@ -285,6 +291,7 @@ void Server::UpdateSignals() {
             if (a != IsOpenValve(b.type)) world->SetBlock(pos.x, pos.y, pos.z, Block(ValveSetTo(b.type, a)));
             break;
         case Signals::Kind::Launcher:
+        case Signals::Kind::Sprinkler:
         case Signals::Kind::Piston:
             // (UpdatePower moves it, or fires it, when it has the air.)
             if (a != s.on) {
