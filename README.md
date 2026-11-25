@@ -2249,7 +2249,9 @@ Ctrl Z and Ctrl Shift Z undo and redo, and Revert reads the file again.
 `DataTest` checks the JSON reader (comments, trailing commas, an error's line), that a
 blocks file overrides just what it gives and loading another puts the rest back, and
 that the shipped files read cleanly and `blocks.json` matches the game's own details,
-and that the model files written out by the editor's writer read back the same.
+that the model files written out by the editor's writer read back the same, and that
+the item panel's list (`src/app/ItemPalette.h`) offers every block and item there is to
+carry, so a new one can't be left out of it by forgetting.
 
 ## Block textures
 
@@ -2396,7 +2398,8 @@ row it drew before, and looks each chunk up once per column instead of every blo
 src/
   main.cpp  command line: singleplayer, --server, --connect, --world
   app/      Application (window, input, main loop), Menu (title screen, pause menu),
-            Settings, Camera, Player (movement and physics)
+            Settings, Bindings (keys), Camera, Player (movement and physics),
+            ItemPalette (the item panel's list)
   client/   Client (connection), ClientWorld (received chunks, mesh worker),
             ClientChunk (meshes and GL buffers), ChunkMesher
   server/   Server (clients, streaming, validation), ServerCommands (chat and
@@ -2415,7 +2418,7 @@ src/
 tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, WeatherTest,
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
             BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest, ChestTest, BedTest,
-            PowerTest, SignalTest, FactoryTest, DataTest
+            PowerTest, SignalTest, FactoryTest, DataTest, SyncTest, SteamTest, FireTest
 tools/      convert_sounds.py and sound_prompts.txt (sound effects), make_item_textures.py (item icons),
             bake_ui_font.py (the interface's font)
 ```

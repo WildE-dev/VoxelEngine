@@ -1,4 +1,5 @@
 #include "app/Application.h"
+#include "app/ItemPalette.h"
 #include "app/PlayerNames.h"
 #include "world/ModelBoxes.h"
 #include "world/Trees.h"
@@ -63,15 +64,6 @@ constexpr const char* kGlslVersion = "#version 330 core";
 constexpr float kCreativeReach = 50.0f, kSurvivalReach = 6.0f;
 constexpr float kLaserRange = 100.0f;
 constexpr int kLaserRadius = 4;
-// Everything the inventory (Tab) offers, in the order it shows them.
-// Every block and item the creative palette offers.
-const ItemRef kInventoryItems[] = {
-    BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::DEEPSTONE, BlockType::SAND,
-    BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
-    BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::LAVA, BlockType::OBSIDIAN, BlockType::HAY_BALE, BlockType::FIRE, ItemType::BUCKET, ItemType::WATER_BUCKET, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP,
-    BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::CREATIVE_AIR_TANK, BlockType::VALVE, BlockType::FLUID_VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::OBSIDIAN_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::BOILER, BlockType::TURBINE, BlockType::AIR_DIFFUSER, BlockType::DRILL, BlockType::SMELTER, BlockType::STEEL_FRAME, BlockType::MACHINE_CASING, BlockType::FIRE_BRICK, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LAUNCHER, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::HEAT_SENSOR, BlockType::SPRINKLER, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::ASPHALT, BlockType::CONCRETE, BlockType::REINFORCED_CONCRETE, BlockType::LIMESTONE, BlockType::GRAVEL, BlockType::GLASS, BlockType::CHEST, BlockType::MINING_POST, BlockType::CRUSHER, BlockType::GLOW_FUNGUS, BlockType::MAGMA, BlockType::GOLD_ORE, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::COPPER_ORE, BlockType::OIL_SHALE, BlockType::TAR, ItemType::RAW_VENISON, ItemType::COOKED_VENISON, ItemType::HIDE, ItemType::COAL, ItemType::BITUMEN, ItemType::CEMENT, ItemType::IRON_INGOT, ItemType::COPPER_INGOT, ItemType::STEEL_INGOT, ItemType::HAMMER, ItemType::SEEDS, ItemType::WHEAT, ItemType::BREAD, ItemType::ARROW, ItemType::RAW_FISH, ItemType::COOKED_FISH, ItemType::BOAT,
-};
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
 constexpr const char* kChatHistoryFile = "chat_history.txt";
@@ -105,8 +97,7 @@ const char* ChiselStepName(int eighths) {
     }
 }
 
-// The tools the inventory offers, and the icon (atlas tile) for one.
-constexpr Tool kInventoryTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel, Tool::Sword, Tool::Bow, Tool::Rod, Tool::Chisel };
+// A tool's icon (its atlas tile).
 int ToolTile(const TextureAtlas& atlas, Tool tool) {
     const char* name = Mining::ToolTexture(tool);
     return name ? atlas.GetIndex(name) : 0;
@@ -2621,7 +2612,7 @@ void Application::LoadHotbar() {
     std::ifstream file(kHotbarFile);
     for (int i = 0, type; i < kHotbarSlots && file >> type; i++) {
         const ItemId item = type >= 0 && type < 256 ? Legacy::ItemFromV16Block(static_cast<uint8_t>(type)) : Items::kNone;
-        if (std::any_of(std::begin(kInventoryItems), std::end(kInventoryItems), [&](ItemId i) { return i == item; })) creativeHotbar[i] = item;
+        if (std::any_of(std::begin(ItemPalette::kItems), std::end(ItemPalette::kItems), [&](ItemId i) { return i == item; })) creativeHotbar[i] = item;
     }
     // A second line: the tool in each slot (0 none).
     for (int i = 0, tool; i < kHotbarSlots && file >> tool; i++)
@@ -2844,8 +2835,8 @@ void Application::DrawInventory() {
 
 void Application::DrawItemPanel() {
     if (allItems.empty()) {
-        for (ItemId item : kInventoryItems) allItems.push_back(item);
-        for (Tool t : kInventoryTools)
+        for (ItemId item : ItemPalette::kItems) allItems.push_back(item);
+        for (Tool t : ItemPalette::kTools)
             for (int tier = 0; tier < Items::kTiers; tier++) allItems.push_back(Items::OfTool(t, tier));
         for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++) allItems.push_back(Items::OfArmour(static_cast<ArmourPiece>(p)));
     }

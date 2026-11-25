@@ -6,14 +6,18 @@
 //  - the shipped data folders (a file per block or model) read cleanly, each file writes
 //    back the same, recipes.json and smelting.json match the game's own recipes, a
 //    recipes file of one's own is used and a bad one refused; and blocks match
-//    the game's own details.
+//    the game's own details,
+//  - the item panel's list offers every block and item there is to carry.
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 
+#include "app/ItemPalette.h"
 #include "app/Settings.h"
 #include "world/Block.h"
 #include "world/BlockData.h"
@@ -199,6 +203,32 @@ int main() {
         Json::Parser p(Json::Write(v));
         Check(p.Parse(back, error) && back.StringOr("name", "") == "say \"hi\"\\" && Json::Write(v).find("0.3") != std::string::npos,
               "quotes are escaped and numbers written short");
+    }
+
+    std::cout << "The item panel" << std::endl;
+    {
+        // Every block and item type is either in the panel's list or one nobody carries
+        // as itself, so a new type can't be left out of it by forgetting (the machine
+        // sensor, coke, gold ingots, crushed iron, the crossbow and the forge core were).
+        auto offered = [](ItemId id) { return std::count_if(std::begin(ItemPalette::kItems), std::end(ItemPalette::kItems), [&](ItemId i) { return i == id; }); };
+        std::string leftOut, wrong;
+        for (int i = 0; i < static_cast<int>(BlockType::COUNT); i++) {
+            const BlockType t = static_cast<BlockType>(i);
+            const std::string id = i == 0 ? "air" : BlockId(t);
+            const auto times = offered(Items::Of(t));
+            if (times == 0 && !ItemPalette::NotCarried(t)) leftOut += " " + id;
+            if (times > 1 || (times > 0 && ItemPalette::NotCarried(t))) wrong += " " + id;
+        }
+        for (int i = 1; i < static_cast<int>(ItemType::COUNT); i++) {
+            const ItemType t = static_cast<ItemType>(i);
+            const auto times = offered(Items::Of(t));
+            if (times == 0) leftOut += std::string(" ") + ItemTypeId(t);
+            if (times > 1) wrong += std::string(" ") + ItemTypeId(t);
+        }
+        for (const ItemId item : ItemPalette::kItems)
+            if (!Items::IsStackable(item)) wrong += " (not a block or an item: " + std::to_string(item) + ")";
+        Check(leftOut.empty(), "every block and item there is to carry is in it" + (leftOut.empty() ? "" : " (left out:" + leftOut + ")"));
+        Check(wrong.empty(), "each once, and nothing that's never carried as itself" + (wrong.empty() ? "" : " (wrong:" + wrong + ")"));
     }
 
     std::cout << "Key bindings" << std::endl;
