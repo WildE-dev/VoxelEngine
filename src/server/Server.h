@@ -130,8 +130,10 @@ public:
         // Creatures spawn by themselves around players (normal worlds only; /summon
         // works anywhere).
         bool creatures = true;
-        // Survival players who die leave half of what they carry in a chest there.
+        // Survival players who die leave what they carry (and wear) in a chest there.
         bool dropOnDeath = true;
+        // One night in this many is a horde night (tests make it every night).
+        int hordeOdds = 4;
         // How fast fish bite (1: normal, 4 to 14 seconds; tests speed it up).
         float fishingRate = 1.0f;
         // How fast crops ripen (1: normal, a minute and a half on average; tests speed it up).
@@ -649,10 +651,11 @@ private:
     // dungeon flood chamber's gets its wiring the first time.
     void PressPlate(const glm::ivec3& pos, double now);
     std::unordered_map<uint16_t, double> creatureSpikeAt; // creatures' next spike hits
-    // Horde nights (see CreatureSystem::SetHorde): one night in kHordeOdds, announced
+    // Horde nights (see CreatureSystem::SetHorde): one night in options.hordeOdds (never the first), announced
     // at dusk; operators can start one with /horde.
-    static constexpr int kHordeOdds = 4;
     bool wasNight = false;
+    // Nights begun in this world (saved): the first has no horde and no raids.
+    uint32_t nights = 0;
     void UpdateHorde();
     // Night falls: roll for a horde (or raids). Once a night, at dusk or when someone
     // gets into bed before that, so sleeping early can't dodge the roll.

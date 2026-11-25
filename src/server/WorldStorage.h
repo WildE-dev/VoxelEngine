@@ -41,7 +41,7 @@ public:
     // in place of units by type, tool and upgrade masks (older ones are converted); ...;
     // 17: items their own types, not blocks (block numbers and ItemIds saved before are
     // turned into today's: see world/Legacy.h)
-    static constexpr uint32_t kFormatVersion = 17;
+    static constexpr uint32_t kFormatVersion = 18;
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
@@ -133,6 +133,9 @@ public:
     // before it was recorded start in the morning.
     float GetTimeOfDay() const;
     void SetTimeOfDay(float timeOfDay);
+    // How many nights have begun in the world (format 18; older worlds: past their first).
+    uint32_t GetNights() const;
+    void SetNights(uint32_t nights);
     // The game mode new players start in (net::GameMode). Worlds saved before modes
     // existed were played as creative.
     uint8_t GetDefaultMode() const;
@@ -193,6 +196,7 @@ private:
     bool isNew = true;
     uint8_t worldType = 0;
     float timeOfDay = 0.05f;
+    uint32_t nights = 0;
     uint8_t defaultMode = 1; // creative, for worlds saved before modes
     Chests chests;
     std::vector<glm::ivec3> crops;

@@ -906,10 +906,10 @@ seconds with "You died!" and how it happened. Hearts come back one every 4 secon
 nothing has hurt you for 5, as long as you're well fed (see
 [Food and hunger](#food-and-hunger)). With none left, everyone hears how you died and you
 respawn at the spawn point (or your bed: see [Beds](#beds)) with full health (and three seconds' grace). In survival,
-half of every kind of block and item you carry (rounded down) is left behind in a
+everything you carry and wear (blocks, items, tools and armour) is left behind in a
 chest placed where you died (or just beside or above, in the nearest open cell), and
-the chat tells you where; anyone can open it, so a killer can take it. Your tools and
-armour aren't dropped. In no-clip
+you come back empty-handed; the chat tells you where it is. Anyone can open it, so a
+killer can take it. In no-clip
 nothing can hurt you. All four blocks are in the inventory, for building traps of
 your own. `TrapTest` checks spikes, death and respawn, crumbling floors, pressure
 plates and sluice gates, falls (safe from 3 blocks, four hearts from 11), and that
@@ -1029,7 +1029,8 @@ about three times a second, and the server checks the reach. A deer has 4 hearts
 Aiming at a creature doesn't mine the block behind it. Defeating a hostile dwarf is
 the Dwarf Slayer achievement.
 
-**Horde nights.** One night in four (decided at dusk, and announced: "The ground
+**Horde nights.** The world's first night is always quiet (no horde and no raids,
+time to build). After that, one night in four (decided at dusk, and announced: "The ground
 stirs... a horde is coming tonight"), a dwarf **war band** comes for the players:
 warriors and crossbowmen turning up on open ground under the sky (never in the caves
 below, however high or low the ground is there) 24 to 40 blocks from each player,
@@ -1101,7 +1102,7 @@ palisade, and mines their open shaft, ladder, tunnels and chests.
 
 ### Raids
 
-Dwarves don't only wait in their camps. On a night that isn't a horde night, now and
+Dwarves don't only wait in their camps. On a night that isn't a horde night (nor the world's first), now and
 then (one night in four, for each survival player within 48 blocks of their bed) a
 **raid** comes: "War drums in the dark... a dwarf raid is coming for your home!" Three
 warriors and a crossbowman come out of the dark 20 to 30 blocks off, all from one
@@ -1198,7 +1199,7 @@ and `/pvp` shows which. With it off, a hit just tells you so. Someone slain leav
 half of what they carried in a chest where they fell (see
 [Health and traps](#health-and-traps)). `CreatureTest` checks
 names, held items and armour reaching other players, reach, damage, the red flash,
-knockback, `/pvp off`, being slain, and the killer finding half the victim's things in
+knockback, `/pvp off`, being slain, and the killer finding all the victim's things in
 a chest where they died.
 
 ## Bows and arrows

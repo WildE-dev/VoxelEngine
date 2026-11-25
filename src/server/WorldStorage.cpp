@@ -125,6 +125,11 @@ bool WorldStorage::ReadWorldFile() {
         std::cerr << "[storage] " << path.string() << " has a bad game mode" << std::endl;
         return false;
     }
+    nights = 2; // (a world from before the count: well past its first night)
+    if (version >= 18 && !r.VarU32(nights)) {
+        std::cerr << "[storage] " << path.string() << " is truncated" << std::endl;
+        return false;
+    }
     if (!r.VarU32(count)) count = 0;
     for (uint32_t i = 0; i < count; i++) {
         std::string name;
@@ -414,6 +419,17 @@ float WorldStorage::GetTimeOfDay() const {
     return timeOfDay;
 }
 
+uint32_t WorldStorage::GetNights() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return nights;
+}
+
+void WorldStorage::SetNights(uint32_t n) {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (n != nights) playersDirty = true;
+    nights = n;
+}
+
 void WorldStorage::SetTimeOfDay(float t) {
     std::lock_guard<std::mutex> lock(mutex);
     timeOfDay = t;
@@ -556,6 +572,7 @@ bool WorldStorage::Flush() {
             w.U8(worldType);
             w.F32(timeOfDay);
             w.U8(defaultMode);
+            w.VarU32(nights);
             w.VarU32(static_cast<uint32_t>(players.size()));
             for (const auto& [name, p] : players) {
                 w.Str(name);

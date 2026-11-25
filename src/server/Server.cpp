@@ -185,7 +185,7 @@ bool Server::Start(const Options& opts) {
     }
     terrain.SetType(storage ? static_cast<TerrainGenerator::Type>(storage->GetWorldType()) : options.worldType);
     creatures.SetNaturalSpawning(options.creatures && terrain.GetType() == TerrainGenerator::Type::Normal);
-    if (storage) timeOfDay = storage->GetTimeOfDay();
+    if (storage) timeOfDay = storage->GetTimeOfDay(), nights = storage->GetNights();
     defaultMode = storage ? static_cast<net::GameMode>(storage->GetDefaultMode()) : options.defaultMode;
     LoadOperators();
     for (const auto& name : options.operators) SetOperator(name, true);
@@ -308,6 +308,7 @@ void Server::Save(bool shuttingDown) {
     const double start = Now();
     for (const auto& [peer, client] : clients) StorePlayer(client);
     storage->SetTimeOfDay(static_cast<float>(timeOfDay));
+    storage->SetNights(nights);
     storage->SetChests({ chests.begin(), chests.end() });
     storage->SetCrops({ crops.begin(), crops.end() });
     // (Placed leaves that are gone now are forgotten; those in unloaded chunks kept.)
@@ -1562,7 +1563,7 @@ void Server::Hurt(ClientState& client, int amount, const std::string& deathMessa
     client.nextRegen = now + kRegenDelay;
     if (client.health > 0) return SendHealth(client, true);
 
-    // Dead: half of what they carry is left where they died, then back to the spawn
+    // Dead: what they carry is left where they died, then back to the spawn
     // point, healed, and briefly safe.
     Broadcast(net::ChatMessage::Kind::Info, client.name + " " + deathMessage);
     DropOnDeath(client);
@@ -1580,15 +1581,15 @@ void Server::Hurt(ClientState& client, int amount, const std::string& deathMessa
 
 void Server::DropOnDeath(ClientState& client) {
     if (!options.dropOnDeath || Creative(client)) return;
-    // Half of each kind of block or item (whole ones, rounded down: the other half's
-    // theirs to keep; tools and armour they keep).
+    // Everything they carry and wear goes into the chest (blocks and items, their offcuts,
+    // tools, armour); they come back with nothing, and can go and fetch it.
     Inventory dropped(Inventory::kChestSlots);
-    std::vector<std::pair<ItemId, uint32_t>> halves;
     for (const Stack& st : client.inventory.slots)
-        if (!st.Empty() && Items::IsStackable(st.item) && std::none_of(halves.begin(), halves.end(), [&](const auto& h) { return h.first == st.item; }))
-            if (const uint32_t half = client.inventory.Count(st.item) / 2) halves.emplace_back(st.item, half);
-    if (halves.empty()) return;
-    for (const auto& [item, n] : halves) dropped.Add(item, n, true);
+        if (!st.Empty()) dropped.Add(st.item, st.count, true);
+    dropped.offcuts = client.inventory.offcuts;
+    for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++)
+        if (client.armour & Armour::Bit(static_cast<ArmourPiece>(p))) dropped.Add(Items::OfArmour(static_cast<ArmourPiece>(p)), 1, true);
+    if (dropped == Inventory(Inventory::kChestSlots)) return; // (nothing to leave)
     // Into a chest in the nearest open cell where they died: their feet's cell, or one
     // around or just above it (air first; water or a wild plant will do, not a trap).
     const glm::ivec3 at(glm::floor(client.feet + glm::vec3(0.0f, 0.1f, 0.0f)));
@@ -1608,11 +1609,12 @@ void Server::DropOnDeath(ClientState& client) {
     if (!spot) return; // nowhere to put it: they keep it all
     world->SetBlock(spot->x, spot->y, spot->z, Block(BlockType::CHEST));
     chests[*spot] = dropped;
-    for (const auto& [item, n] : halves) client.inventory.Take(item, n);
+    client.inventory = Inventory(Inventory::kPlayerSlots);
+    client.armour = 0;
     SendInventory(client);
     char where[64];
     std::snprintf(where, sizeof where, "%d, %d, %d", spot->x, spot->y, spot->z);
-    SendChat(client, net::ChatMessage::Kind::Info, std::string("Half your things are in a chest where you died (") + where + ")");
+    SendChat(client, net::ChatMessage::Kind::Info, std::string("Your things are in a chest where you died (") + where + ")");
 }
 
 void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
@@ -2817,9 +2819,12 @@ void Server::UpdateHorde() {
 }
 
 void Server::BeginNight() {
+    // The world's first night is a quiet one: no horde, no raids (time to build).
+    nights++;
+    if (nights <= 1) return;
     if (creatures.NaturalSpawning()) {
         weatherSeed = weatherSeed * 1664525u + 1013904223u;
-        if ((weatherSeed >> 8) % kHordeOdds == 0) SetHorde(true);
+        if ((weatherSeed >> 8) % static_cast<uint32_t>(std::max(1, options.hordeOdds)) == 0) SetHorde(true);
         // Not a horde: now and then a raid on a survival player at home (by their bed).
         else
             for (auto& [peer, client] : clients) {

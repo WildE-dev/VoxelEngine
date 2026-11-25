@@ -456,8 +456,8 @@ int main(int argc, char** argv) {
         }
         Check(both(5.0, [&] { return Has(b, "Rival was slain by Duelist"); }), "enough axe hits slay them (and everyone's told)");
         Check(both(5.0, [&] { return b.client.GetHealth() == 20; }), "and they're back at full health");
-        Check(both(5.0, [&] { return b.client.GetResources(BlockType::STONE) == 2 * 64 && Has(b, "in a chest where you died"); }),
-              "keeping half their stone; the other half is left where they died");
+        Check(both(5.0, [&] { return b.client.GetResources(BlockType::STONE) == 0 && Has(b, "in a chest where you died"); }),
+              "keeping none of their stone: it's all left where they died");
         glm::ivec3 grave(0);
         for (const auto& line : b.client.GetChat())
             if (const size_t at = line.text.find("died ("); at != std::string::npos)
@@ -468,7 +468,7 @@ int main(int argc, char** argv) {
         server.QueueConsoleCommand("tp Duelist " + std::to_string(grave.x - 1.5f) + " 0 " + std::to_string(grave.z + 0.5f));
         both(20.0, [&] { return std::abs(a.feet.x - (grave.x - 1.5f)) < 0.1f; });
         a.client.OpenChest(grave);
-        Check(both(20.0, [&] { return a.client.GetChestUnits(BlockType::STONE) == 2 * 64; }), "and open, with the 2 stone in it");
+        Check(both(20.0, [&] { return a.client.GetChestUnits(BlockType::STONE) == 4 * 64; }), "and open, with all 4 stone in it");
         a.client.CloseChest();
         server.QueueConsoleCommand("give sword Duelist");
         for (const char* piece : { "cap", "tunic", "boots" }) server.QueueConsoleCommand(std::string("give ") + piece + " Rival");
@@ -556,7 +556,9 @@ int main(int argc, char** argv) {
     if (sections.Run("spawning")) {
         std::cout << "Natural spawning" << std::endl;
         Server server;
-        if (!server.Start(BaseOptions(TerrainGenerator::Type::Normal))) return EXIT_FAILURE;
+        Server::Options spawningOptions = BaseOptions(TerrainGenerator::Type::Normal);
+        spawningOptions.hordeOdds = 1; // (every night a horde night, but the first)
+        if (!server.Start(spawningOptions)) return EXIT_FAILURE;
         server.RunInBackground();
         TestClient a;
         std::string error;
@@ -565,6 +567,20 @@ int main(int argc, char** argv) {
         server.QueueConsoleCommand("gamemode creative Wanderer");
         server.QueueConsoleCommand("time noon");
         Check(Pump({ &a }, 60.0, [&] { return a.Find(CreatureType::Deer) != nullptr; }), "deer turn up by themselves around the player");
+        {
+            // The world's first night is quiet: no horde (even when every other night is
+            // one), no raids. The second brings the horde.
+            server.QueueConsoleCommand("time midnight");
+            Pump({ &a }, 3.0, [] { return false; });
+            const bool quietFirst = !Has(a, "horde is coming");
+            server.QueueConsoleCommand("time noon");
+            Pump({ &a }, 1.0, [] { return false; });
+            server.QueueConsoleCommand("time midnight");
+            Check(quietFirst && Pump({ &a }, 10.0, [&] { return Has(a, "horde is coming"); }), "the first night is quiet (no horde, no raids); the second brings the horde");
+            server.QueueConsoleCommand("horde off");
+            server.QueueConsoleCommand("time noon");
+            Pump({ &a }, 2.0, [] { return false; });
+        }
         {
             // A horde night: the war band comes over the ground under the open sky, never
             // up out of the caves below (the terrain here is hills, with caves under them).
