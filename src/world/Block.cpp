@@ -1117,6 +1117,8 @@ bool Block::CanChisel() const {
     case BlockType::DOOR:
     case BlockType::TNT:
     case BlockType::TNT_LIT:
+    case BlockType::OIL_SHALE:   // (its axis counts what a derrick has drawn, not a shape's turn)
+    case BlockType::MINING_POST: // (it holds things, like a chest)
     case BlockType::BED: return false;
     default: return true;
     }
@@ -1135,6 +1137,7 @@ Block Block::Chiselled(int edge, int deltaEighths) const {
     for (int e = 0; e < 4; e++) remaining += b.edgeData.GetTopY(e);
     if (remaining == 0) return HasWater() ? Water(water) : Block(); // nothing left: its water stays
     b.SetEdgeData(b.edgeData);
+    if (b.IsAir()) return HasWater() ? Water(water) : Block(); // (too little left to stand: as above)
     return b;
 }
 

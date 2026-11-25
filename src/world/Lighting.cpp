@@ -179,9 +179,13 @@ void LightPropagator::PropagateChannel(LightChannel channel, ChunkSet& dirty) {
 
             const bool dependent = level < r.level ||
                 (channel == LightChannel::Sky && d == kDown && r.level == kMaxLight && level == kMaxLight);
-            if (dependent && Emission(channel, n.chunk->GetBlock(n.local.x, n.local.y, n.local.z)) == 0) {
-                SetLight(channel, np, n, 0, dirty);
+            // (A cell that gives light of its own, glow fungus by a lamp say, goes back to
+            // its own light, not stays at the brighter light it had from what's gone.)
+            const uint8_t own = Emission(channel, n.chunk->GetBlock(n.local.x, n.local.y, n.local.z));
+            if (dependent && level > own) {
+                SetLight(channel, np, n, own, dirty);
                 q.removal.push_back({ np, level });
+                if (own > 0) q.addition.push_back(np);
                 // It may still get light straight from unloaded space above; restore
                 // that once removal is done (doing it now could loop).
                 if (channel == LightChannel::Sky && n.local.y == S - 1) clearedSkySources.push_back(np);

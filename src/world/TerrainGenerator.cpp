@@ -189,7 +189,7 @@ float TerrainGenerator::GetBaseHeight(int x, int z) const {
 }
 
 const TerrainGenerator::Lake& TerrainGenerator::LakeIn(int cx, int cz) const {
-    const int64_t key = (static_cast<int64_t>(cx) << 32) ^ static_cast<uint32_t>(cz);
+    const int64_t key = static_cast<int64_t>((static_cast<uint64_t>(static_cast<uint32_t>(cx)) << 32) | static_cast<uint32_t>(cz)); // (unsigned: shifting a negative is undefined)
     {
         std::lock_guard<std::mutex> lock(lakeCache->mutex);
         auto it = lakeCache->lakes.find(key);
@@ -314,7 +314,7 @@ std::vector<glm::ivec2> TerrainGenerator::SpringsIn(int chunkX, int chunkZ) cons
 }
 
 std::shared_ptr<const std::vector<glm::vec3>> TerrainGenerator::RiverPointsNear(int chunkX, int chunkZ) const {
-    const int64_t key = (static_cast<int64_t>(chunkX) << 32) ^ static_cast<uint32_t>(chunkZ);
+    const int64_t key = static_cast<int64_t>((static_cast<uint64_t>(static_cast<uint32_t>(chunkX)) << 32) | static_cast<uint32_t>(chunkZ));
     {
         std::lock_guard<std::mutex> lock(riverCache->mutex);
         auto it = riverCache->near.find(key);
