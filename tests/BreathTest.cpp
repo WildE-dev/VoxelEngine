@@ -19,6 +19,7 @@
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "server/Server.h"
+#include "world/Bodies.h"
 #include "world/Breathing.h"
 #include "world/Crafting.h"
 #include "world/Armour.h"
@@ -52,7 +53,7 @@ struct HoldingClient {
         }
         if (auto c = client.TakeCorrection()) feet = *c;
         if (!joined) return;
-        world.Update(feet + glm::vec3(0.0f, Breathing::kEyeHeight, 0.0f));
+        world.Update(feet + glm::vec3(0.0f, Bodies::PlayerBody().eyeHeight, 0.0f));
         client.SendPlayerState(feet, glm::vec3(0.0f), 0.0f, 0.0f, net::kFlagOnGround);
     }
 };

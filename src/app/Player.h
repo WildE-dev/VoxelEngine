@@ -3,6 +3,7 @@
 
 #include <glm/glm.hpp>
 
+#include "world/Bodies.h"
 #include "world/Collision.h"
 
 class BlockAccess;
@@ -23,13 +24,15 @@ struct PlayerInput {
 class Player
 {
 public:
-    static constexpr float kWidth = 0.6f;
-    static constexpr float kHeight = 1.8f;
-    static constexpr float kEyeHeight = 1.62f;
-    static constexpr float kStepHeight = 0.6f; // climb ledges this high without jumping
-    // Crouching: a shorter body (fits under 1.5-high gaps) with the eyes lower.
-    static constexpr float kCrouchHeight = 1.45f; // (a little under 1.5, so a 1.5 gap fits)
-    static constexpr float kCrouchEyeHeight = 1.27f;
+    // Its body (Resources/Data/bodies.json, see world/Bodies.h): a square footprint
+    // Width() across, its eyes, the ledges it climbs without jumping, and crouching (a
+    // shorter body, fitting under 1.5-high gaps, with the eyes lower).
+    static float Width() { return Bodies::PlayerBody().width; }
+    static float Height() { return Bodies::PlayerBody().height; }
+    static float EyeHeight() { return Bodies::PlayerBody().eyeHeight; }
+    static float StepHeight() { return Bodies::PlayerBody().stepHeight; }
+    static float CrouchHeight() { return Bodies::PlayerBody().crouchHeight; }
+    static float CrouchEyeHeight() { return Bodies::PlayerBody().crouchEyeHeight; }
 
     explicit Player(const glm::vec3& feetPosition) : feet(feetPosition) {}
 
@@ -78,7 +81,7 @@ public:
     glm::vec3 GetVelocity() const { return velocity; }
     Collision::AABB GetBounds() const { return BoundsAt(feet, height); }
 
-    static Collision::AABB BoundsAt(const glm::vec3& feet, float height = kHeight);
+    static Collision::AABB BoundsAt(const glm::vec3& feet, float height = Height());
 
 private:
     void Step(const BlockAccess& world, const PlayerInput& input, float dt);
@@ -106,6 +109,6 @@ private:
     bool blockedHorizontally = false; // set by MoveHorizontal during a step
     float accumulator = 0.0f;
     bool crouching = false;
-    float height = kHeight;         // the body's height now (kCrouchHeight crouching)
-    float eyeHeight = kEyeHeight;   // eased toward the standing or crouching eye height
+    float height = Height();         // the body's height now (CrouchHeight() crouching)
+    float eyeHeight = EyeHeight();   // eased toward the standing or crouching eye height
 };

@@ -10,6 +10,7 @@
 
 #include "render/Shader.h"
 #include "render/TextureAtlas.h"
+#include "world/Bodies.h"
 #include "world/Block.h"
 #include "world/Creatures.h"
 #include "world/Json.h"
@@ -58,7 +59,8 @@ glm::mat4 FrameOf(const glm::mat4& parent, const PlayerModels::ShapePart& p, flo
     return f;
 }
 
-constexpr float kWidth = 0.6f, kEyeHeight = 1.62f;
+// (Drawn the size of the body it collides as: Resources/Data/bodies.json.)
+float BodyWidth() { return Bodies::PlayerBody().width; }
 constexpr float kHead = 0.5f;
 
 } // namespace
@@ -115,9 +117,9 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
         const glm::mat4 base = glm::rotate(glm::translate(glm::mat4(1.0f), p.feet), -glm::radians(p.yaw), glm::vec3(0, 1, 0));
 
         // Crouching: everything lower, the head a little forward over the knees.
-        const float eye = p.crouching ? 1.27f : kEyeHeight;
+        const float eye = p.crouching ? Bodies::PlayerBody().crouchEyeHeight : Bodies::PlayerBody().eyeHeight;
         const float bodyHeight = eye - kHead * 0.5f;
-        box(glm::scale(glm::translate(base, glm::vec3(0, bodyHeight * 0.5f, 0)), glm::vec3(kWidth * 0.5f, bodyHeight, kWidth)), color);
+        box(glm::scale(glm::translate(base, glm::vec3(0, bodyHeight * 0.5f, 0)), glm::vec3(BodyWidth() * 0.5f, bodyHeight, BodyWidth())), color);
 
         const glm::mat4 head = glm::rotate(glm::translate(base, glm::vec3(p.crouching ? 0.12f : 0.0f, eye, 0)), glm::radians(p.pitch), glm::vec3(0, 0, 1));
         box(glm::scale(head, glm::vec3(kHead)), color * 1.1f);
@@ -140,29 +142,29 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
             box(glm::scale(glm::translate(head, glm::vec3(kHead * 0.5f, kHead * 0.14f, 0)), glm::vec3(0.12f, 0.04f, kHead * 1.08f)), tint(hideDark)); // brim
         }
         if (p.armour & Armour::Bit(ArmourPiece::Tunic))
-            box(glm::scale(glm::translate(base, glm::vec3(0, bodyHeight * 0.68f, 0)), glm::vec3(kWidth * 0.5f + 0.04f, bodyHeight * 0.55f, kWidth + 0.04f)),
+            box(glm::scale(glm::translate(base, glm::vec3(0, bodyHeight * 0.68f, 0)), glm::vec3(BodyWidth() * 0.5f + 0.04f, bodyHeight * 0.55f, BodyWidth() + 0.04f)),
                 tint(hide));
         if (p.armour & Armour::Bit(ArmourPiece::Boots))
-            box(glm::scale(glm::translate(base, glm::vec3(0.02f, 0.11f, 0)), glm::vec3(kWidth * 0.5f + 0.06f, 0.22f, kWidth + 0.04f)), tint(hideDark));
+            box(glm::scale(glm::translate(base, glm::vec3(0.02f, 0.11f, 0)), glm::vec3(BodyWidth() * 0.5f + 0.06f, 0.22f, BodyWidth() + 0.04f)), tint(hideDark));
         // A steel plate over the chest, and a shield on the left side.
         if (p.armour & Armour::Bit(ArmourPiece::Plate))
-            box(glm::scale(glm::translate(base, glm::vec3(0.01f, bodyHeight * 0.72f, 0)), glm::vec3(kWidth * 0.5f + 0.07f, bodyHeight * 0.42f, kWidth + 0.06f)),
+            box(glm::scale(glm::translate(base, glm::vec3(0.01f, bodyHeight * 0.72f, 0)), glm::vec3(BodyWidth() * 0.5f + 0.07f, bodyHeight * 0.42f, BodyWidth() + 0.06f)),
                 tint(glm::vec3(0.62f, 0.65f, 0.7f)));
         if (p.armour & Armour::Bit(ArmourPiece::OxygenTank)) {
             // Two cylinders (boxes) on the back, with a valve between.
             for (const float z : { -0.12f, 0.12f })
-                box(glm::scale(glm::translate(base, glm::vec3(-(kWidth * 0.25f + 0.12f), bodyHeight * 0.7f, z)), glm::vec3(0.18f, 0.5f, 0.2f)),
+                box(glm::scale(glm::translate(base, glm::vec3(-(BodyWidth() * 0.25f + 0.12f), bodyHeight * 0.7f, z)), glm::vec3(0.18f, 0.5f, 0.2f)),
                     tint(glm::vec3(0.75f, 0.78f, 0.8f)));
-            box(glm::scale(glm::translate(base, glm::vec3(-(kWidth * 0.25f + 0.12f), bodyHeight * 0.7f + 0.3f, 0)), glm::vec3(0.08f, 0.08f, 0.3f)),
+            box(glm::scale(glm::translate(base, glm::vec3(-(BodyWidth() * 0.25f + 0.12f), bodyHeight * 0.7f + 0.3f, 0)), glm::vec3(0.08f, 0.08f, 0.3f)),
                 tint(glm::vec3(0.85f, 0.65f, 0.2f)));
         }
         if (p.armour & Armour::Bit(ArmourPiece::Shield)) {
-            box(glm::scale(glm::translate(base, glm::vec3(0.05f, bodyHeight * 0.6f, -(kWidth * 0.5f + 0.14f))), glm::vec3(0.5f, 0.6f, 0.06f)), tint(glm::vec3(0.5f, 0.36f, 0.2f)));
-            box(glm::scale(glm::translate(base, glm::vec3(0.05f, bodyHeight * 0.6f, -(kWidth * 0.5f + 0.18f))), glm::vec3(0.14f, 0.14f, 0.04f)), tint(glm::vec3(0.6f, 0.62f, 0.66f)));
+            box(glm::scale(glm::translate(base, glm::vec3(0.05f, bodyHeight * 0.6f, -(BodyWidth() * 0.5f + 0.14f))), glm::vec3(0.5f, 0.6f, 0.06f)), tint(glm::vec3(0.5f, 0.36f, 0.2f)));
+            box(glm::scale(glm::translate(base, glm::vec3(0.05f, bodyHeight * 0.6f, -(BodyWidth() * 0.5f + 0.18f))), glm::vec3(0.14f, 0.14f, 0.04f)), tint(glm::vec3(0.6f, 0.62f, 0.66f)));
         }
 
         // The right arm, held forward a little, and what's in its hand.
-        const glm::mat4 shoulder = glm::rotate(glm::translate(base, glm::vec3(0.0f, bodyHeight * 0.85f, kWidth * 0.5f + 0.08f)), glm::radians(35.0f),
+        const glm::mat4 shoulder = glm::rotate(glm::translate(base, glm::vec3(0.0f, bodyHeight * 0.85f, BodyWidth() * 0.5f + 0.08f)), glm::radians(35.0f),
                                                glm::vec3(0, 0, 1));
         box(glm::scale(glm::translate(shoulder, glm::vec3(0, -0.3f, 0)), glm::vec3(0.14f, 0.6f, 0.14f)), color * 0.85f);
         if (p.held != PlayerModel::Held::Nothing) {

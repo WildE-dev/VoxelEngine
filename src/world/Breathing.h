@@ -20,7 +20,6 @@
 
 namespace Breathing {
 
-constexpr float kEyeHeight = 1.62f;           // above the feet (as Player::kEyeHeight)
 constexpr float kMaxAir = 20.0f;              // units; a bubble is two
 constexpr float kDrownSeconds = 15.0f;        // a full breath under water
 constexpr float kRecoverPerSecond = 4.0f;     // back to full in five seconds

@@ -90,7 +90,7 @@ int main() {
         DroppedItems items;
         const uint32_t id = items.Drop(Items::OfBlock(BlockType::DIRT), 3, 0, { 0.5f, 3.0f, 0.5f }, glm::vec3(0.0f), 0.0f);
         for (int i = 0; i < 60; i++) items.Update(stone, 0.05f);
-        Check(id && items.Count() == 1 && items.All()[0].onGround && std::abs(items.All()[0].position.y - DroppedItems::kHalf) < 1e-3f,
+        Check(id && items.Count() == 1 && items.All()[0].onGround && std::abs(items.All()[0].position.y - DroppedItems::Half()) < 1e-3f,
               "an item falls and lies on the ground");
         items.Drop(Items::OfBlock(BlockType::DIRT), 2, 32, { 0.8f, 0.5f, 0.6f }, glm::vec3(0.0f), 0.0f);
         items.Drop(Items::OfBlock(BlockType::SAND), 1, 0, { 0.6f, 0.5f, 0.4f }, glm::vec3(0.0f), 0.0f);
@@ -103,14 +103,14 @@ int main() {
             Floor f;
             f.floor = floor;
             DroppedItems one;
-            one.Drop(Items::OfBlock(BlockType::DIRT), 1, 0, { 0.5f, DroppedItems::kHalf, 0.5f }, { 4.0f, 0.0f, 0.0f }, 0.0f);
+            one.Drop(Items::OfBlock(BlockType::DIRT), 1, 0, { 0.5f, DroppedItems::Half(), 0.5f }, { 4.0f, 0.0f, 0.0f }, 0.0f);
             for (int i = 0; i < 100; i++) one.Update(f, 0.05f);
             return one.All()[0].position.x - 0.5f;
         };
         const float onStone = slide(BlockType::STONE), onIce = slide(BlockType::ICE);
         Check(onStone < 1.0f && onIce > 3.0f, "it slides farther on ice (" + std::to_string(onIce) + " blocks, on stone " + std::to_string(onStone) + ")");
         DroppedItems old;
-        old.Drop(Items::OfBlock(BlockType::DIRT), 1, 0, { 0.5f, DroppedItems::kHalf, 0.5f }, glm::vec3(0.0f), 0.0f);
+        old.Drop(Items::OfBlock(BlockType::DIRT), 1, 0, { 0.5f, DroppedItems::Half(), 0.5f }, glm::vec3(0.0f), 0.0f);
         for (int i = 0; i < 6100; i++) old.Update(stone, 0.05f);
         Check(old.Count() == 0, "and it's gone after five minutes");
     }
@@ -337,7 +337,7 @@ int main() {
         Check(both(20.0, [&] { return grassOn(a.client).size() == 1 && grassOn(builder.client).size() == 1; }), "and everyone sees it lying there");
         wait(2.5);
         const auto lying = grassOn(a.client);
-        Check(lying.size() == 1 && a.client.GetResources(BlockType::GRASS) == 0 && lying[0].position.x > 12.5f && std::abs(lying[0].position.y - DroppedItems::kHalf) < 0.05f,
+        Check(lying.size() == 1 && a.client.GetResources(BlockType::GRASS) == 0 && lying[0].position.x > 12.5f && std::abs(lying[0].position.y - DroppedItems::Half()) < 0.05f,
               "it flies off ahead and lands on the ground (not straight back to them)");
         if (!lying.empty()) {
             char tp[96];

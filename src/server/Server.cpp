@@ -11,6 +11,7 @@
 #include "world/Smelting.h"
 #include <filesystem>
 #include "world/BlockData.h"
+#include "world/Bodies.h"
 #include "world/Dwarves.h"
 
 #include <algorithm>
@@ -56,10 +57,8 @@ constexpr float kMaxRise = 1.9f, kKnockedRise = 3.0f;
 constexpr double kMaxHover = 2.0;
 constexpr int kBlockedStatesBeforeCorrection = 4;
 
-// Body size, matching Player (app/Player.h).
-constexpr float kPlayerWidth = 0.6f;
-constexpr float kPlayerHeight = 1.8f;
-constexpr float kEyeHeight = 1.62f;
+// A player's body (Resources/Data/bodies.json, as the client's Player has it).
+const Bodies::Player& Body() { return Bodies::PlayerBody(); }
 
 // Edit reach, matching the client's raycast (50) and laser (100 + radius), plus slack
 // for movement while the request is in flight.
@@ -92,10 +91,9 @@ constexpr double kTntFuse = 3.0;
 constexpr int kTntRadius = 3;
 
 // A player's body; a crouching player's is shorter (net::kFlagCrouching).
-constexpr float kCrouchHeight = 1.45f; // as Player::kCrouchHeight
 Collision::AABB BodyAt(const glm::vec3& feet, float shrink = 0.0f, bool crouching = false) {
-    const float half = kPlayerWidth * 0.5f - shrink;
-    const float height = crouching ? kCrouchHeight : kPlayerHeight;
+    const float half = Body().width * 0.5f - shrink;
+    const float height = crouching ? Body().crouchHeight : Body().height;
     return { feet - glm::vec3(half, -shrink, half), feet + glm::vec3(half, height - shrink, half) };
 }
 
@@ -155,6 +153,7 @@ bool Server::Start(const Options& opts) {
         std::string error;
         if (std::filesystem::exists(BlockData::kPath) && !BlockData::Load(BlockData::kPath, error)) Log("[data] " + error);
         if (std::filesystem::exists(ItemData::kPath) && !ItemData::Load(ItemData::kPath, error)) Log("[data] " + error); // (items' names, for messages)
+        if (std::filesystem::exists(Bodies::kPath) && !Bodies::Load(Bodies::kPath, error)) Log("[data] " + error);
         if (std::filesystem::exists(Crafting::kRecipesPath) && !Crafting::Load(Crafting::kRecipesPath, error)) Log("[data] " + error);
         if (std::filesystem::exists(Smelting::kPath) && !Smelting::Load(Smelting::kPath, error)) Log("[data] " + error);
     }
@@ -779,7 +778,7 @@ float Server::EditReach(const ClientState& client) const {
 }
 
 bool Server::InReach(const ClientState& client, const glm::ivec3& pos, float reach) const {
-    const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
+    const glm::vec3 eye = client.feet + glm::vec3(0.0f, Body().eyeHeight, 0.0f);
     return glm::distance(eye, glm::vec3(pos) + glm::vec3(0.5f)) <= reach;
 }
 
@@ -939,7 +938,7 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
     if (now < client.nextAttack) return;
     client.nextAttack = now + Combat::kCooldown * 0.8; // (a little slack for timing)
     bool killed = false;
-    const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
+    const glm::vec3 eye = client.feet + glm::vec3(0.0f, Body().eyeHeight, 0.0f);
     const CreatureSystem::Creature* target = creatures.Find(creature);
     const CreatureType type = target ? target->type : CreatureType::Count;
     const bool raider = target && target->raider;
@@ -980,7 +979,7 @@ void Server::HandleInteract(ClientState& client, uint16_t creature) {
     // A trader: its prices (the trade window opens on the player's side).
     if (c && c->type == CreatureType::DwarfTrader) return SendTradePrices(client, creature);
     if (!c || c->type != CreatureType::Wolf || c->owner != 0) return;
-    const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
+    const glm::vec3 eye = client.feet + glm::vec3(0.0f, Body().eyeHeight, 0.0f);
     const Collision::AABB box = CreatureSystem::Box(*c);
     if (glm::distance(eye, glm::clamp(eye, box.min, box.max)) > Combat::kReach + 0.5f) return;
     // Raw venison in hand tames it.
@@ -1086,8 +1085,9 @@ void Server::HandleAttackPlayer(ClientState& client, uint16_t player, Tool tool)
         if (!target.welcomed || !target.hasState || (target.noclip && (target.flags & net::kFlagFlying))) return;
         // Within reach: from the hitter's eye to the target's box (with slack for
         // movement in flight).
-        const glm::vec3 eye = client.feet + glm::vec3(0.0f, kEyeHeight, 0.0f);
-        const glm::vec3 lo = target.feet - glm::vec3(0.3f, 0.0f, 0.3f), hi = target.feet + glm::vec3(0.3f, 1.8f, 0.3f);
+        const glm::vec3 eye = client.feet + glm::vec3(0.0f, Body().eyeHeight, 0.0f);
+        const Collision::AABB body = Bodies::PlayerBox(target.feet, (target.flags & net::kFlagCrouching) != 0);
+        const glm::vec3 lo = body.min, hi = body.max;
         if (glm::distance(eye, glm::clamp(eye, lo, hi)) > Combat::kReach + 0.5f) return;
         // Knocked back, away from the hitter and a little up (as creatures are). The
         // target moves itself, so it's told to; a slain player respawns instead.
@@ -1767,7 +1767,7 @@ void Server::UpdateBreath(ClientState& client, float dt) {
     Air air;
     // In creative or no-clip, nothing takes your breath away.
     if (!Creative(client) && !(client.noclip && (client.flags & net::kFlagFlying))) {
-        const glm::vec3 eye = client.feet + glm::vec3(0.0f, Breathing::kEyeHeight, 0.0f);
+        const glm::vec3 eye = client.feet + glm::vec3(0.0f, Body().eyeHeight, 0.0f);
         const glm::ivec3 cell(glm::floor(eye));
         Block block;
         const bool underWater = world->GetBlock(cell.x, cell.y, cell.z, block) && UnderWater(block, eye.y - cell.y);
@@ -1945,7 +1945,7 @@ void Server::HandleShoot(ClientState& client, const glm::vec3& direction) {
     }
     client.nextShot = now + (crossbow ? kCrossbowInterval : kShotInterval) * 0.8; // (a little slack for timing)
     const glm::vec3 dir = glm::normalize(direction);
-    const glm::vec3 eye = client.feet + glm::vec3(0.0f, (client.flags & net::kFlagCrouching) ? 1.27f : kEyeHeight, 0.0f);
+    const glm::vec3 eye = client.feet + glm::vec3(0.0f, (client.flags & net::kFlagCrouching) ? Body().crouchEyeHeight : Body().eyeHeight, 0.0f);
     arrows.push_back({ eye + dir * 0.4f, dir * (crossbow ? kBoltSpeed : kArrowSpeed), client.id, now, -1.0, crossbow ? kBoltDamage : kArrowDamage });
     if (arrows.size() > 256) arrows.erase(arrows.begin()); // (the oldest go first)
 }
@@ -2187,7 +2187,7 @@ void Server::HandleDropItem(ClientState& client, const net::DropItem& m) {
     // the throw for.
     const glm::vec3 dir = glm::length(m.direction) > 1e-3f ? glm::normalize(m.direction) : glm::vec3(0.0f, 0.0f, -1.0f);
     const bool crouching = (client.flags & net::kFlagCrouching) != 0;
-    const glm::vec3 eye = client.feet + glm::vec3(0.0f, crouching ? kCrouchHeight - 0.2f : kPlayerHeight - 0.2f, 0.0f);
+    const glm::vec3 eye = client.feet + glm::vec3(0.0f, (crouching ? Body().crouchHeight : Body().height) - 0.2f, 0.0f);
     const float speed = net::kThrowSpeed + (net::kThrowSpeedMax - net::kThrowSpeed) * (m.strength / 255.0f);
     dropped.Drop(item, n, 0, eye + dir * 0.3f - glm::vec3(0.0f, 0.3f, 0.0f), dir * speed + glm::vec3(0.0f, 1.5f, 0.0f), DroppedItems::kThrowDelay);
     SendInventory(client);

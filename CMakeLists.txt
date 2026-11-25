@@ -49,6 +49,8 @@ add_library(voxel_common STATIC
     src/world/Legacy.h
     src/world/Recipes.cpp
     src/world/BlockData.cpp
+    src/world/Bodies.cpp
+    src/world/Bodies.h
     src/world/Multiblocks.cpp
     src/world/Dungeons.h
     src/world/Features.cpp

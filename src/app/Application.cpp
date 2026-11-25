@@ -44,6 +44,7 @@
 #include "world/Hunger.h"
 #include "world/Legacy.h"
 #include "world/BlockData.h"
+#include "world/Bodies.h"
 #include "world/Multiblocks.h"
 #include "world/Power.h"
 #include "world/Signals.h"
@@ -631,6 +632,7 @@ void Application::LoadData() {
     std::string error;
     if (!BlockData::Load(BlockData::kPath, error)) std::cerr << "[data] " << error << " (using the game's own block details)" << std::endl;
     if (!ItemData::Load(ItemData::kPath, error)) std::cerr << "[data] " << error << " (using the game's own item details)" << std::endl;
+    if (std::filesystem::exists(Bodies::kPath) && !Bodies::Load(Bodies::kPath, error)) std::cerr << "[data] " << error << " (the game's own body sizes)" << std::endl;
     if (!renderer->LoadCreatureModels(error)) std::cerr << "[data] " << error << " (creatures drawn as plain boxes)" << std::endl;
     if (!renderer->LoadStructureModels(error)) std::cerr << "[data] " << error << " (structures not drawn)" << std::endl;
     if (std::filesystem::exists(Crafting::kRecipesPath) && !Crafting::Load(Crafting::kRecipesPath, error)) std::cerr << "[data] " << error << " (the game's own recipes)" << std::endl;
@@ -641,7 +643,7 @@ void Application::WatchData(double now) {
     if (now - dataCheckedAt < 1.0) return;
     dataCheckedAt = now;
     std::vector<std::string> changed;
-    for (const char* path : { BlockData::kPath, ItemData::kPath, PlayerModels::kCreatureModelsPath, PlayerModels::kStructureModelsPath, Crafting::kRecipesPath, Smelting::kPath }) {
+    for (const char* path : { BlockData::kPath, ItemData::kPath, Bodies::kPath, PlayerModels::kCreatureModelsPath, PlayerModels::kStructureModelsPath, Crafting::kRecipesPath, Smelting::kPath }) {
         const std::string stamp = Json::DataStamp(path);
         auto it = dataTimes.find(path);
         if (it == dataTimes.end()) dataTimes[path] = stamp; // (the first look: as loaded)
@@ -661,6 +663,8 @@ void Application::WatchData(double now) {
             world->RebuildAllChunks();
         } else if (path == ItemData::kPath)
             ok = ItemData::Load(ItemData::kPath, error);
+        else if (path == Bodies::kPath)
+            ok = Bodies::Load(Bodies::kPath, error);
         else if (path == Crafting::kRecipesPath)
             ok = Crafting::Load(Crafting::kRecipesPath, error);
         else if (path == Smelting::kPath)
@@ -3767,7 +3771,8 @@ Application::FightTarget Application::TargetInView() const {
         if (t >= 0.0f && t < bestT) bestT = t, best = FightTarget{ c.id, -1 };
     }
     for (const auto& p : client->GetRemotePlayers()) {
-        const float t = enters(p.feet - glm::vec3(0.3f, 0.0f, 0.3f), p.feet + glm::vec3(0.3f, 1.8f, 0.3f));
+        const Collision::AABB body = Bodies::PlayerBox(p.feet, (p.flags & net::kFlagCrouching) != 0);
+        const float t = enters(body.min, body.max);
         if (t >= 0.0f && t < bestT) bestT = t, best = FightTarget{ 0, p.id };
     }
     return best;

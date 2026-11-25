@@ -7,6 +7,7 @@
 //    back the same, recipes.json and smelting.json match the game's own recipes, a
 //    recipes file of one's own is used and a bad one refused; and blocks match
 //    the game's own details.
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -16,6 +17,8 @@
 #include "app/Settings.h"
 #include "world/Block.h"
 #include "world/BlockData.h"
+#include "world/Bodies.h"
+#include "world/Creatures.h"
 #include "world/Smelting.h"
 #include "world/Crafting.h"
 #include "world/Json.h"
@@ -89,12 +92,36 @@ int main() {
                   GetLightEmission(BlockType::STONE) == 0,
               "loading another file puts them back");
     }
+    std::cout << "Bodies" << std::endl;
+    {
+        const fs::path file = dir / "bodies.json";
+        std::ofstream(file) << R"({ "player": { "width": 0.8, "crouchHeight": 1.2 }, "item": { "size": 0.5 },
+                                   "creatures": { "wolf": { "width": 1.0 }, "bat": { "height": -1 }, "unicorn": { "width": 1 } } })";
+        std::string error;
+        Check(Bodies::Load(file.string(), error), "a bodies file loads" + (error.empty() ? "" : " (" + error + ")"));
+        const Collision::AABB crouched = Bodies::PlayerBox(glm::vec3(0.0f), true);
+        Check(Bodies::PlayerBody().width == 0.8f && Bodies::PlayerBody().height == 1.8f && crouched.max.y == 1.2f && crouched.max.x == 0.4f,
+              "the player's box takes the sizes it gives, the rest the game's own");
+        Check(Bodies::ItemSize() == 0.5f && SpecOf(CreatureType::Wolf).halfWidth == 0.5f && SpecOf(CreatureType::Wolf).height == DefaultSpecOf(CreatureType::Wolf).height &&
+                  SpecOf(CreatureType::Bat).height == DefaultSpecOf(CreatureType::Bat).height,
+              "and items and creatures theirs (a size below zero left as it was)");
+        std::ofstream(file) << "{ }";
+        Check(Bodies::Load(file.string(), error) && Bodies::PlayerBody().width == 0.6f && SpecOf(CreatureType::Wolf).halfWidth == DefaultSpecOf(CreatureType::Wolf).halfWidth,
+              "loading another file puts them back");
+    }
     fs::remove_all(dir);
 
     std::cout << "The shipped files" << std::endl;
     {
         std::string error;
         Check(BlockData::Load(BlockData::kPath, error), "Resources/Data/blocks (a file per block) reads cleanly" + (error.empty() ? "" : " (" + error + ")"));
+        Check(Bodies::Load(Bodies::kPath, error), "Resources/Data/bodies.json reads cleanly" + (error.empty() ? "" : " (" + error + ")"));
+        bool sizes = Bodies::PlayerBody().width == 0.6f && Bodies::PlayerBody().height == 1.8f && Bodies::ItemSize() == 0.25f;
+        for (int t = 0; t < static_cast<int>(CreatureType::Count); t++) {
+            const CreatureSpec &now = SpecOf(static_cast<CreatureType>(t)), &own = DefaultSpecOf(static_cast<CreatureType>(t));
+            sizes = sizes && std::abs(now.halfWidth - own.halfWidth) < 1e-5f && std::abs(now.height - own.height) < 1e-5f;
+        }
+        Check(sizes, "and its sizes are the game's own");
         bool same = true;
         for (int i = 0; i < static_cast<int>(BlockType::COUNT); i++) {
             const BlockType t = static_cast<BlockType>(i);
