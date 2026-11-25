@@ -240,7 +240,6 @@ pauses. The menus can be driven with the pad as well.
 | P | Toggle the list of players online, with how far off each is and which way |
 | M | Toggle the minimap (top right): the ground around you from above, north up, with you as an arrow and other players as dots |
 | F12 | Save a screenshot (`screenshot-<date>-<time>.png` in the working directory) |
-| N | Skip to the next dusk (by day) or dawn (at night), for everyone on the server. A horde night can't be skipped, any more than slept through |
 | T / Enter | Open chat (Enter sends, Esc closes). While it's open the view stays still and the cursor is free |
 | / | Open chat with a command started |
 | Esc | Pause menu: resume, settings, back to the title screen, quit (or close the chat) |
@@ -1991,6 +1990,7 @@ ones you're allowed to use:
 | `/spawn` | everyone | back to the spawn point |
 | `/time`, `/weather`, `/ops` | everyone | show the time, the weather, the operators |
 | `/time <day\|noon\|dusk\|night\|midnight\|dawn\|HH:MM>` | operators | set the time (sunrise is 06:00) |
+| `/time <pause\|resume>` | operators | stop the clock where it is (the day stands still; the weather goes on), or start it again. Kept with the world |
 | `/weather <clear\|rain\|storm\|auto>` | operators | set the weather |
 | `/tp <x> <y> <z>`, `/tp <player>`, `/tp <player> <x> <y> <z>` | operators | teleport; `~` means relative (`/tp ~ ~10 ~`) |
 | `/save` | operators | save the world now |
@@ -2072,7 +2072,7 @@ call one with `/weather storm`.
 `--day-length SECONDS` and `--weather clear|rain|storm|auto` change these, on `VoxelEngine`
 (singleplayer or `--server`) and `VoxelServer`. `WeatherTest` checks thin water, that
 rain fills a drained pool to the brim and no further while leaving full, covered and
-dry-ground water alone, that the clock runs, saves, resumes and can be skipped, and
+dry-ground water alone, that the clock runs, saves, resumes and can be paused, and
 that a storm reaches the client and strikes near the player.
 
 

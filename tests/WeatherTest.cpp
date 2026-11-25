@@ -245,10 +245,18 @@ int main() {
         Check(standing(10.0, [&] { return said("The drought breaks"); }), "rain breaks the drought");
         standing(20.0, [&] { return !client.IsStorm(); });
 
-        client.SkipTime();
-        Check(pump(20.0, [&] { return client.GetTimeOfDay() >= 0.6f && client.GetTimeOfDay() < 0.7f; }), "skipping by day jumps to the evening");
-        client.SkipTime();
-        Check(pump(20.0, [&] { return client.GetTimeOfDay() >= 0.1f && client.GetTimeOfDay() < 0.2f; }), "and at night to the morning");
+        // /time pause holds the day still (for operators: here, the console), and
+        // /time resume lets it go on.
+        client.SendChat("/time pause");
+        Check(pump(10.0, [&] { return said("Only operators can do that"); }), "players can't stop the clock");
+        server->QueueConsoleCommand("time pause");
+        Check(pump(10.0, [&] { return said("paused the clock"); }), "/time pause stops it, and everyone's told");
+        pump(0.5, [] { return false; });
+        const float held = client.GetTimeOfDay();
+        pump(1.5, [] { return false; });
+        Check(client.GetTimeOfDay() == held, "the time of day stands still while it's paused");
+        server->QueueConsoleCommand("time resume");
+        Check(pump(10.0, [&] { return said("started the clock again") && client.GetTimeOfDay() != held; }), "/time resume starts it again");
 
         const float beforeStop = client.GetTimeOfDay();
         client.Disconnect();

@@ -481,10 +481,6 @@ void Client::SendChat(const std::string& text) {
     if (welcomed && !text.empty()) net.Send(net::kChannelReliable, net::Encode(net::ChatSend{ text.substr(0, net::kMaxChatLength) }));
 }
 
-void Client::SkipTime() {
-    if (welcomed) net.Send(net::kChannelReliable, net::Encode(net::SkipTime{}));
-}
-
 void Client::Carve(const std::vector<glm::ivec3>& centers, int radius) {
     if (!welcomed || centers.empty()) return;
     radius = std::clamp(radius, 0, net::EditCarve::kMaxRadius);

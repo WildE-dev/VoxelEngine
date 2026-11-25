@@ -326,7 +326,6 @@ private:
     // anything else left be). Survival: what's taken off is given back, what's filled costs.
     void HandleFlatten(ClientState& client, const glm::ivec3& pos, int radius);
     void HandleCarve(ClientState& client, const net::EditCarve& carve);
-    void HandleSkipTime(ClientState& client);
     void HandleChat(ClientState& client, const std::string& text);
 
     // Commands (ServerCommands.cpp). `sender` is null for the console; `reply` answers
@@ -688,6 +687,7 @@ private:
     double lastTrapsTime = 0.0; // last UpdateTraps (breath runs on real time)
 
     double timeOfDay = 0.05;     // 0..1, see net::PlayerSnapshot
+    bool clockPaused = false;    // /time pause: the day stands still (saved with the world)
     net::GameMode defaultMode = net::GameMode::Survival; // new players' (from the save, or the options)
     Options::Weather weatherMode = Options::Weather::Auto; // starts as options.weather; /weather changes it
     bool raining = false;

@@ -12,7 +12,7 @@
 
 enum class Action : uint8_t {
     Forward, Back, Left, Right, Jump, Crouch, Sprint, FlyUp, FlyDown,
-    Inventory, Chat, Command, Map, Players, PlaceHeight, SkipTime, Reload, Drop, Count
+    Inventory, Chat, Command, Map, Players, PlaceHeight, Reload, Drop, Count
 };
 constexpr int kActionCount = static_cast<int>(Action::Count);
 
@@ -35,7 +35,6 @@ inline int Default(Action a) {
     case Action::Map: return GLFW_KEY_M;
     case Action::Players: return GLFW_KEY_P;
     case Action::PlaceHeight: return GLFW_KEY_V;
-    case Action::SkipTime: return GLFW_KEY_N;
     case Action::Reload: return GLFW_KEY_R;
     case Action::Drop: return GLFW_KEY_G;
     default: return GLFW_KEY_UNKNOWN;
@@ -44,7 +43,7 @@ inline int Default(Action a) {
 
 inline const char* Id(Action a) {
     static const char* ids[] = { "forward", "back", "left", "right", "jump", "crouch", "sprint", "fly_up", "fly_down",
-                                 "inventory", "chat", "command", "map", "players", "place_height", "skip_time", "reload", "drop" };
+                                 "inventory", "chat", "command", "map", "players", "place_height", "reload", "drop" };
     static_assert(sizeof(ids) / sizeof(ids[0]) == kActionCount, "an action has no id");
     return ids[static_cast<int>(a)];
 }
@@ -52,7 +51,7 @@ inline const char* Id(Action a) {
 inline const char* Name(Action a) {
     static const char* names[] = { "Walk forward", "Walk back", "Step left", "Step right", "Jump (swim up)", "Crouch (get out of a boat)", "Sprint",
                                    "Fly up", "Fly down", "Inventory", "Chat", "Command (/)", "Map", "Player names",
-                                   "Placement height", "Skip to dusk or dawn", "Reload textures and data",
+                                   "Placement height", "Reload textures and data",
                                    "Drop the item in hand (with Crouch: the stack)" };
     static_assert(sizeof(names) / sizeof(names[0]) == kActionCount, "an action has no name");
     return names[static_cast<int>(a)];

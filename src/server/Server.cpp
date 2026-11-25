@@ -185,7 +185,7 @@ bool Server::Start(const Options& opts) {
     }
     terrain.SetType(storage ? static_cast<TerrainGenerator::Type>(storage->GetWorldType()) : options.worldType);
     creatures.SetNaturalSpawning(options.creatures && terrain.GetType() == TerrainGenerator::Type::Normal);
-    if (storage) timeOfDay = storage->GetTimeOfDay(), nights = storage->GetNights();
+    if (storage) timeOfDay = storage->GetTimeOfDay(), nights = storage->GetNights(), clockPaused = storage->GetClockPaused();
     defaultMode = storage ? static_cast<net::GameMode>(storage->GetDefaultMode()) : options.defaultMode;
     LoadOperators();
     for (const auto& name : options.operators) SetOperator(name, true);
@@ -309,6 +309,7 @@ void Server::Save(bool shuttingDown) {
     for (const auto& [peer, client] : clients) StorePlayer(client);
     storage->SetTimeOfDay(TimeOfDayFloat());
     storage->SetNights(nights);
+    storage->SetClockPaused(clockPaused);
     storage->SetChests({ chests.begin(), chests.end() });
     storage->SetCrops({ crops.begin(), crops.end() });
     // (Placed leaves that are gone now are forgotten; those in unloaded chunks kept.)
@@ -513,10 +514,6 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
         if ((ok = net::Decode(in, m))) HandleCarve(client, m);
         break;
     }
-    case net::MsgType::SkipTime:
-        ok = in.AtEnd();
-        if (ok) HandleSkipTime(client);
-        break;
     case net::MsgType::ChatSend: {
         net::ChatSend m;
         if ((ok = net::Decode(in, m))) HandleChat(client, m.text);
@@ -1431,19 +1428,9 @@ void Server::HandleCarve(ClientState& client, const net::EditCarve& carve) {
     }
 }
 
-void Server::HandleSkipTime(ClientState& client) {
-    // By day, on to the evening (just after dark); at night, on to the morning.
-    const bool day = timeOfDay < 0.5;
-    // A horde night can't be skipped any more than slept through (HandleUseBed): the
-    // horde would simply fade with the dawn that brought.
-    if (!day && creatures.Horde()) return SendChat(client, net::ChatMessage::Kind::Info, "You can't skip a horde night: survive it");
-    timeOfDay = day ? 0.6 : 0.1;
-    Log(client.name + " skipped to " + (day ? "night" : "morning"));
-}
-
 void Server::UpdateSky() {
     const double dt = 1.0 / kTickRate;
-    timeOfDay += dt / std::max(1.0f, options.dayLengthSeconds);
+    if (!clockPaused) timeOfDay += dt / std::max(1.0f, options.dayLengthSeconds); // (/time pause holds the day still; the weather goes on)
     timeOfDay -= std::floor(timeOfDay);
 
     auto randomRange = [&](double lo, double hi) {
@@ -2081,6 +2068,21 @@ void Server::HandleWriteSign(ClientState& client, const glm::ivec3& pos, const s
         if (c >= 32 && c < 127) text += c;
     signs[pos] = text.substr(0, net::kMaxSignLength);
     BroadcastSign(pos);
+}
+
+void Server::ForgetLostSigns() {
+    const double now = Now();
+    if (now < nextSignSweep) return;
+    nextSignSweep = now + 1.0;
+    std::vector<glm::ivec3> gone;
+    for (const auto& [pos, text] : signs) {
+        Block b;
+        if (world->GetBlock(pos.x, pos.y, pos.z, b) && b.type != BlockType::SIGN) gone.push_back(pos); // (not loaded: kept)
+    }
+    for (const auto& pos : gone) {
+        signs.erase(pos);
+        BroadcastSign(pos);
+    }
 }
 
 void Server::BroadcastSign(const glm::ivec3& pos) {

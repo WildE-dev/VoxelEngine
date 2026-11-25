@@ -149,11 +149,6 @@ int main() {
               "on a horde night, neither can get to sleep");
         both(1.0, [] { return false; });
         Check(Night(a.client) && Count(a, "Everyone slept: it's morning") == 1, "and it's still night");
-        // Nor skipped (the skip key, N), which would end the horde with the dawn it brought.
-        a.client.SkipTime();
-        Check(both(20.0, [&] { return Count(a, "can't skip a horde night") == 1; }), "nor can it be skipped");
-        both(1.0, [] { return false; });
-        Check(Night(a.client) && Count(a, "The horde fades") == 0, "it's still night, and the horde still coming");
         server.QueueConsoleCommand("horde off");
         both(20.0, [&] { return Count(a, "The horde fades") == 1; });
 

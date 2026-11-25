@@ -579,12 +579,6 @@ bool Decode(ByteReader& in, EditChisel& m) {
            Block::IsChiselStep(m.step) && in.AtEnd();
 }
 
-std::vector<uint8_t> Encode(const SkipTime&) {
-    ByteWriter w;
-    Begin(w, MsgType::SkipTime);
-    return std::move(w.data);
-}
-
 std::vector<uint8_t> Encode(const Abilities& m) {
     ByteWriter w;
     Begin(w, MsgType::Abilities);

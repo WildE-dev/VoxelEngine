@@ -29,7 +29,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 71;
+constexpr uint32_t kProtocolVersion = 72;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -42,7 +42,6 @@ enum class MsgType : uint8_t {
     EditBreak,     // break the block at a position
     EditPlace,     // place a block type at a position
     EditCarve,     // laser: clear spheres around a list of centres
-    SkipTime,      // jump to the next dawn (at night) or dusk (by day)
     ChatSend,      // a chat line, or a command if it starts with '/'
     EditChisel,    // lower (or raise) one quarter of a block by an eighth, a quarter or a half
     MineStart,     // started mining a block (survival: breaking it takes time)
@@ -444,8 +443,6 @@ struct Lightning {
     glm::ivec3 pos{0};
 };
 
-struct SkipTime {};
-
 // Creatures (world/Creatures.h): the client hits one; the server says where the ones
 // near each player are, every tick.
 struct Attack {
@@ -630,7 +627,6 @@ std::vector<uint8_t> Encode(const Craft& m);
 std::vector<uint8_t> Encode(const CreatureSnapshot& m);
 std::vector<uint8_t> Encode(const EditPlace& m);
 std::vector<uint8_t> Encode(const EditCarve& m);
-std::vector<uint8_t> Encode(const SkipTime& m);
 std::vector<uint8_t> Encode(const EditChisel& m);
 bool Decode(ByteReader& in, EditChisel& m);
 std::vector<uint8_t> Encode(const Abilities& m);

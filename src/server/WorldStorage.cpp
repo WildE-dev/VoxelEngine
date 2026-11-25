@@ -133,6 +133,12 @@ bool WorldStorage::ReadWorldFile() {
         std::cerr << "[storage] " << path.string() << " is truncated" << std::endl;
         return false;
     }
+    uint8_t paused = 0;
+    if (version >= 19 && !r.U8(paused)) {
+        std::cerr << "[storage] " << path.string() << " is truncated" << std::endl;
+        return false;
+    }
+    clockPaused = paused != 0;
     if (!r.VarU32(count)) count = 0;
     for (uint32_t i = 0; i < count; i++) {
         std::string name;
@@ -433,6 +439,17 @@ void WorldStorage::SetNights(uint32_t n) {
     nights = n;
 }
 
+bool WorldStorage::GetClockPaused() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return clockPaused;
+}
+
+void WorldStorage::SetClockPaused(bool paused) {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (paused != clockPaused) playersDirty = true;
+    clockPaused = paused;
+}
+
 void WorldStorage::SetTimeOfDay(float t) {
     std::lock_guard<std::mutex> lock(mutex);
     timeOfDay = t >= 0.0f && t < 1.0f ? t : 0.0f; // (only what ReadWorldFile will take back)
@@ -576,6 +593,7 @@ bool WorldStorage::Flush() {
             w.F32(timeOfDay);
             w.U8(defaultMode);
             w.VarU32(nights);
+            w.U8(clockPaused ? 1 : 0);
             w.VarU32(static_cast<uint32_t>(players.size()));
             for (const auto& [name, p] : players) {
                 w.Str(name);

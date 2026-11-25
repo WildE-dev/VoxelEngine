@@ -2369,7 +2369,7 @@ void Application::DrawDebugWindow(float deltaTime) {
         {
             const float t = client->GetTimeOfDay();
             const int minutes = static_cast<int>((t * 24.0f + 6.0f) * 60.0f) % (24 * 60); // sunrise at 06:00
-            ui::Text("Time %02d:%02d (N skips to dawn / dusk), rain %.0f%%%s", minutes / 60, minutes % 60, client->GetRain() * 100.0f,
+            ui::Text("Time %02d:%02d, rain %.0f%%%s", minutes / 60, minutes % 60, client->GetRain() * 100.0f,
                         sheltered ? ", sheltered" : "");
         }
         ui::Text("Placing: %s", BlockName(SelectedBlock()));
@@ -2504,7 +2504,6 @@ void Application::OnKey(int key, int action) {
         showPlayers = !showPlayers;
         return;
     }
-    if (is(Action::SkipTime)) return client->SkipTime();
     if (is(Action::Reload)) {
         renderer->ReloadShaders();
         renderer->ReloadTextures();

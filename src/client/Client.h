@@ -94,8 +94,6 @@ public:
     // server works it out, and what it costs or gives back).
     void Flatten(const glm::ivec3& pos, int radius = 1);
     void Carve(const std::vector<glm::ivec3>& centers, int radius);
-    // Asks the server to skip to the next dawn or dusk.
-    void SkipTime();
 
     // Chat: send a line (a command if it starts with '/'), and the lines received.
     struct ChatLine {

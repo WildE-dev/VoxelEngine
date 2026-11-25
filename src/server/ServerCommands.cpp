@@ -94,6 +94,7 @@ constexpr HelpLine kHelp[] = {
     { Level::Everyone, "/time, /weather - show the time and weather" },
     { Level::Everyone, "/ops - list the operators" },
     { Level::Operator, "/time <day|noon|dusk|night|midnight|dawn|HH:MM> - set the time of day" },
+    { Level::Operator, "/time <pause|resume> - stop the clock where it is, or start it again" },
     { Level::Operator, "/weather <clear|rain|storm|auto> - set the weather" },
     { Level::Operator, "/tp <x> <y> <z> | /tp <player> | /tp <player> <x> <y> <z> - teleport (~ for relative)" },
     { Level::Operator, "/save - save the world now" },
@@ -610,8 +611,15 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         reply(Kind::Private, "You whisper to " + target->name + ": " + text);
     }
     else if (command == "time") {
-        if (words.size() < 2) return reply(Kind::Info, "It's " + FormatTime(timeOfDay));
+        if (words.size() < 2) return reply(Kind::Info, "It's " + FormatTime(timeOfDay) + (clockPaused ? " (the clock is paused)" : ""));
         const std::string arg = Lower(words[1] == "set" && words.size() > 2 ? words[2] : words[1]);
+        // Stopping the clock, and starting it again (it's kept with the world).
+        if (arg == "pause" || arg == "stop" || arg == "freeze" || arg == "resume" || arg == "start" || arg == "unpause") {
+            const bool pause = arg == "pause" || arg == "stop" || arg == "freeze";
+            if (pause == clockPaused) return reply(Kind::Info, pause ? "The clock is already paused" : "The clock is already running");
+            clockPaused = pause;
+            return Broadcast(Kind::Info, who + (pause ? " paused the clock at " : " started the clock again at ") + FormatTime(timeOfDay));
+        }
         double t;
         if (arg == "day" || arg == "morning") t = 0.05;
         else if (arg == "noon") t = 0.25;
@@ -625,7 +633,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
             double hours = 0.0, minutes = 0.0;
             if (colon == std::string::npos || !ParseNumber(arg.substr(0, colon), hours) || !ParseNumber(arg.substr(colon + 1), minutes) ||
                 hours < 0 || hours >= 24 || minutes < 0 || minutes >= 60)
-                return usage("/time [day|noon|dusk|night|midnight|dawn|HH:MM]");
+                return usage("/time [day|noon|dusk|night|midnight|dawn|HH:MM|pause|resume]");
             t = (hours + minutes / 60.0 - 6.0) / 24.0;
         }
         SetTimeOfDay(t);
