@@ -2107,6 +2107,12 @@ entry, and a `README.md` there saying what goes in them. Add a model by adding a
 a model may still inherit from one in another file. (A single `blocks.json`, or
 `creatures.json`, of them all is still read if there's no folder.)
 
+**Collision is data.** A block's `"collision"` (in its file in `blocks`) gives the boxes
+it fills instead of its whole cell (a pipe's core and arms, a door's panel), turned
+the way it points, and whether it's walked through or stood on; `bodies.json` gives
+the sizes of the player's box (standing and crouching, its eyes, the ledges it steps
+up), a dropped item's and each creature's. Both say how in their own comments.
+
 **Recipes are data too**: `recipes.json` (crafting) and `smelting.json`, each a list in
 order. A crafting recipe is `{ "id": "planks", "name": "4 planks", "takes": { "log": 1 },
 "makes": { "planks": 4 } }`, amounts in blocks (or items: 0.25 is a quarter); instead of

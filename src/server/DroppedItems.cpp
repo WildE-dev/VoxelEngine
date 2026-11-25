@@ -116,7 +116,7 @@ void DroppedItems::Move(const BlockAccess& world, Item& item, float dt) {
     // Lying on the ground it slides to a stop, slowly on ice.
     if (item.onGround) {
         Block under;
-        const glm::ivec3 below(glm::floor(p - glm::vec3(0.0f, kHalf + 0.05f, 0.0f)));
+        const glm::ivec3 below(glm::floor(p - glm::vec3(0.0f, Half() + 0.05f, 0.0f)));
         const bool ice = world.GetBlock(below.x, below.y, below.z, under) && under.type == BlockType::ICE;
         const float k = std::exp(-(ice ? 0.6f : 10.0f) * dt);
         v.x *= k, v.z *= k;
@@ -145,9 +145,9 @@ void DroppedItems::Move(const BlockAccess& world, Item& item, float dt) {
         // little above its bottom, so it rides up a slope it slides into).
         bool unknown = false;
         const auto ground = Collision::GroundHeight(world, Box(p), 0.3f, -dy + 0.02f, unknown);
-        const float bottom = p.y - kHalf;
+        const float bottom = p.y - Half();
         if (ground && *ground >= bottom + dy - 1e-4f) {
-            p.y = *ground + kHalf;
+            p.y = *ground + Half();
             if (!item.onGround && v.y < -4.0f) v.y = -v.y * 0.15f; // (a little bounce when it lands hard)
             else v.y = 0.0f, item.onGround = true;
         }

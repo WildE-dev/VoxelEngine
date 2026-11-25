@@ -29,7 +29,7 @@ struct CreatureSpec {
     const char* name;  // "Deer"
     const char* id;    // "deer", for commands
     float halfWidth;   // collision box: square footprint, half its side...
-    float height;      // ...and its height
+    float height;      // ...and its height (both from bodies.json, see world/Bodies.h)
     int maxHealth;     // half hearts
     float walkSpeed;   // blocks per second, wandering
     float runSpeed;    // fleeing (deer) or chasing (ghouls)
@@ -38,7 +38,9 @@ struct CreatureSpec {
     float attackReach; // blocks, from the edge of its box
 };
 
-inline const CreatureSpec& SpecOf(CreatureType type) {
+// The game's own details. Sizes (halfWidth, height) are overridden by
+// Resources/Data/bodies.json (world/Bodies.h): SpecOf gives them as loaded.
+inline const CreatureSpec& DefaultSpecOf(CreatureType type) {
     static const CreatureSpec specs[] = {
         { "Deer", "deer", 0.45f, 1.3f, 8, 1.6f, 5.5f, false, 0, 0.0f },
         { "Dwarf warrior", "dwarf", 0.36f, 1.4f, 14, 1.1f, 3.3f, true, 3, 0.9f },
@@ -56,6 +58,8 @@ inline const CreatureSpec& SpecOf(CreatureType type) {
     const int t = static_cast<int>(type);
     return specs[t >= 0 && t < static_cast<int>(CreatureType::Count) ? t : 0];
 }
+
+const CreatureSpec& SpecOf(CreatureType type); // (world/Bodies.cpp)
 
 inline CreatureType CreatureFromId(const std::string& id) {
     for (int t = 0; t < static_cast<int>(CreatureType::Count); t++)

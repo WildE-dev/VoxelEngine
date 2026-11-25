@@ -1,0 +1,25 @@
+// The sizes of things that move and collide, in blocks (see src/world/Bodies.h).
+// Anything left out keeps the game's own size. The game loads this again when it changes.
+//   "player": its box (a square footprint "width" across, "height" tall), where its eyes
+//             are, crouching (a little under 1.5 high fits through a 1.5 gap), and the
+//             ledges it walks up without jumping ("stepHeight")
+//   "item": a dropped item's box (a cube "size" across)
+//   "creatures": each creature's box, by its id (a square footprint and a height)
+{
+  "player": { "width": 0.6, "height": 1.8, "eyeHeight": 1.62, "crouchHeight": 1.45, "crouchEyeHeight": 1.27, "stepHeight": 0.6 },
+  "item": { "size": 0.25 },
+  "creatures": {
+    "deer": { "width": 0.9, "height": 1.3 },
+    "dwarf": { "width": 0.72, "height": 1.4 },
+    "crossbow_dwarf": { "width": 0.72, "height": 1.4 },
+    "wolf": { "width": 0.64, "height": 0.85 },
+    "bat": { "width": 0.4, "height": 0.4 },
+    "dwarf_chief": { "width": 0.84, "height": 1.6 },
+    "dwarf_miner": { "width": 0.72, "height": 1.4 },
+    "dwarf_trader": { "width": 0.76, "height": 1.4 },
+    "dwarf_guard": { "width": 0.76, "height": 1.45 },
+    "dwarf_king": { "width": 1.1, "height": 2 },
+    "forge_golem": { "width": 1.2, "height": 2.2 },
+    "rock_grub": { "width": 0.76, "height": 0.55 }
+  }
+}

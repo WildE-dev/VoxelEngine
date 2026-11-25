@@ -6,6 +6,7 @@
 #include <unordered_set>
 
 #include "server/Server.h"
+#include "world/Bodies.h"
 #include "world/Breathing.h"
 #include "server/ServerWorld.h"
 #include "world/Crafting.h"
@@ -841,18 +842,21 @@ void Server::Launch(const glm::ivec3& pos, const Block& launcher, float speed) {
     auto inFront = [&](const glm::vec3& a, const glm::vec3& b) { return glm::all(glm::lessThan(a, hi)) && glm::all(glm::greaterThan(b, lo)); };
     for (auto& [peer, client] : clients) {
         if (!client.welcomed || !client.hasState) continue;
-        if (!inFront(client.feet - glm::vec3(0.3f, 0.0f, 0.3f), client.feet + glm::vec3(0.3f, 1.8f, 0.3f))) continue;
+        const Collision::AABB body = Bodies::PlayerBox(client.feet, (client.flags & net::kFlagCrouching) != 0);
+        if (!inFront(body.min, body.max)) continue;
         net.Send(peer, net::kChannelReliable, net::Encode(net::Knockback{ velocity }));
         client.knockedUntil = now + 3.0;
         client.launchedUntil = now + 3.0;
         client.fallPeak = std::max(client.fallPeak, client.feet.y);
     }
     std::vector<uint16_t> thrown;
-    for (const auto& c : creatures.All())
-        if (inFront(c.feet - glm::vec3(0.3f, 0.0f, 0.3f), c.feet + glm::vec3(0.3f, 1.0f, 0.3f))) thrown.push_back(c.id);
+    for (const auto& c : creatures.All()) {
+        const CreatureSpec& spec = SpecOf(c.type);
+        if (inFront(c.feet - glm::vec3(spec.halfWidth, 0.0f, spec.halfWidth), c.feet + glm::vec3(spec.halfWidth, spec.height, spec.halfWidth))) thrown.push_back(c.id);
+    }
     for (const uint16_t id : thrown) creatures.Launch(id, velocity);
     for (auto& d : dropped.All())
-        if (inFront(d.position - glm::vec3(DroppedItems::kHalf), d.position + glm::vec3(DroppedItems::kHalf))) d.velocity = velocity, d.onGround = false;
+        if (inFront(d.position - glm::vec3(DroppedItems::Half()), d.position + glm::vec3(DroppedItems::Half()))) d.velocity = velocity, d.onGround = false;
 }
 
 bool Server::HeatNear(const glm::ivec3& pos, int range, int down, bool lava) const {

@@ -216,7 +216,7 @@ enum PlayerFlags : uint8_t {
     kFlagOnGround = 1 << 1,
     kFlagSwimming = 1 << 2,
     kFlagHurt = 1 << 3, // (from the server, in snapshots) just took damage: flashes red
-    kFlagCrouching = 1 << 4, // crouching: a shorter body (Player::kCrouchHeight), drawn ducked
+    kFlagCrouching = 1 << 4, // crouching: a shorter body (bodies.json "crouchHeight"), drawn ducked
     kFlagBoat = 1 << 5,      // sitting in a boat (drawn in one; no fall damage)
     kFlagBurning = 1 << 6,   // (from the server, in snapshots) on fire: drawn in flames
 };

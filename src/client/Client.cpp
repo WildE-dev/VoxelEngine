@@ -1,4 +1,5 @@
 #include "client/Client.h"
+#include "world/Bodies.h"
 #include "world/Trees.h"
 
 #include "world/Crafting.h"
@@ -440,7 +441,8 @@ bool Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths
         for (const auto& other : GetRemotePlayers()) {
             const bool crouched = (other.flags & net::kFlagCrouching) != 0;
             const glm::vec3 lo(pos), hi = lo + glm::vec3(1.0f);
-            const glm::vec3 bodyLo = other.feet - glm::vec3(0.3f, 0.0f, 0.3f), bodyHi = other.feet + glm::vec3(0.3f, crouched ? 1.45f : 1.8f, 0.3f);
+            const Collision::AABB body = Bodies::PlayerBox(other.feet, crouched);
+            const glm::vec3 bodyLo = body.min, bodyHi = body.max;
             if (!glm::all(glm::lessThan(lo, bodyHi)) || !glm::all(glm::greaterThan(hi, bodyLo))) continue;
             if (!(other.flags & net::kFlagFlying)) return false;
             predict = false;

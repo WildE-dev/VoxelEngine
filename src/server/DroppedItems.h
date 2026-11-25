@@ -15,6 +15,7 @@
 
 #include <glm/glm.hpp>
 
+#include "world/Bodies.h"
 #include "world/Collision.h"
 #include "world/Inventory.h"
 
@@ -38,7 +39,7 @@ public:
         bool flying = false;      // flying to a player: through blocks, no gravity
     };
 
-    static constexpr float kHalf = 0.125f;      // its box: a quarter block across
+    static float Half() { return Bodies::ItemSize() * 0.5f; } // its box: half of bodies.json's "item" size
     static constexpr float kGravity = 20.0f;
     static constexpr float kLifetime = 300.0f;  // five minutes
     static constexpr float kBlockDelay = 0.25f; // what a broken block leaves
@@ -69,7 +70,7 @@ public:
     void Clear() { items.clear(); }
     size_t Count() const { return items.size(); }
 
-    static Collision::AABB Box(const glm::vec3& position) { return { position - glm::vec3(kHalf), position + glm::vec3(kHalf) }; }
+    static Collision::AABB Box(const glm::vec3& position) { return { position - glm::vec3(Half()), position + glm::vec3(Half()) }; }
 
 private:
     void Move(const BlockAccess& world, Item& item, float dt);
