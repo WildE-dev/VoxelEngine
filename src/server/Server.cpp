@@ -2701,10 +2701,7 @@ void Server::UpdateTraps() {
             if (world->GetBlock(f.x, f.y, f.z, b)) {
                 if (b.type == BlockType::SPIKES) spiked = true;
                 if (b.type == BlockType::CAMPFIRE) burning = true;
-                if (b.type == BlockType::PRESSURE_PLATE) {
-                    const bool fresh = !plateSignal.count(f);
-                    PressPlate(f, now);
-                }
+                if (b.type == BlockType::PRESSURE_PLATE) PressPlate(f, now);
             }
             const glm::ivec3& u = underCells[i];
             if (world->GetBlock(u.x, u.y, u.z, b) && b.type == BlockType::CRUMBLING_BRICK && !crumbling.count(u)) crumbling[u] = now + kCrumbleDelay;
