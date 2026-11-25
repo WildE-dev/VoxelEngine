@@ -26,6 +26,7 @@
 
 #include "world/Coords.h"
 #include "world/Dwarves.h"
+#include "world/Caves.h"
 #include "world/TerrainGenerator.h"
 
 namespace {
@@ -377,6 +378,35 @@ int main() {
                 }
             }
         Check(floors > 200 && sloped * 2 > floors, "cave floors are sloped stone, not flat blocks (" + std::to_string(sloped) + " of " + std::to_string(floors) + ")");
+    }
+    // Below the lava level: deepstone, not stone, and caves much rarer.
+    {
+        long above = 0, below = 0, samples = 0;
+        for (int x = -200; x < 200; x += 3)
+            for (int z = -200; z < 200; z += 3)
+                for (int dy = 0; dy < 30; dy += 3) {
+                    above += Caves::IsCave(x, -90 + dy, z, 0);  // (well under the ground, over the lava level)
+                    below += Caves::IsCave(x, -200 + dy, z, 0); // (under the Deep)
+                    samples++;
+                }
+        Check(below * 3 < above, "caves are far rarer under the lava level (" + std::to_string(below) + " cave samples against " + std::to_string(above) + " above it, of " + std::to_string(samples) + ")");
+        TerrainGenerator rock(TerrainGenerator::Type::Normal);
+        long deepstone = 0, stoneBelow = 0, deepstoneAbove = 0;
+        for (int cx = -1; cx < 1; cx++)
+            for (int cz = -1; cz < 1; cz++) {
+                TerrainGenerator::ColumnHeights h;
+                rock.ComputeColumnHeights(cx, cz, h);
+                for (const int cy : { -5, -12 }) { // (-80..-65 over it; -192..-177 under the Deep)
+                    TerrainGenerator::Blocks blocks;
+                    rock.GenerateChunk({ cx, cy, cz }, h, blocks);
+                    for (const Block& b : blocks) {
+                        if (cy == -12) deepstone += b.type == BlockType::DEEPSTONE, stoneBelow += b.type == BlockType::STONE;
+                        else deepstoneAbove += b.type == BlockType::DEEPSTONE;
+                    }
+                }
+            }
+        Check(deepstone > 1000 && stoneBelow == 0 && deepstoneAbove == 0,
+              "under the lava level the rock is deepstone (" + std::to_string(deepstone) + " blocks, " + std::to_string(stoneBelow) + " stone), and none above it");
     }
 
     // The Deep: open caverns with fungus, magma and gold ore far down, and no gold above.

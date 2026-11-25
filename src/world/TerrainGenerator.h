@@ -134,6 +134,11 @@ public:
     // The Deep: a band of huge caverns far down, lit by glowing fungus, with magma
     // and gold ore (and richer iron) in its rock.
     static constexpr int kDeepTop = -100, kDeepBottom = -160;
+    // Below the lava level (the Deep's top) the rock is deepstone, with a ragged edge up
+    // to kDeepstoneBlend blocks either side; and caves (but not the Deep's own caverns)
+    // thin out and grow rarer over the kCavesThinOut blocks below it (Caves.cpp).
+    static constexpr int kDeepstoneBlend = 4, kCavesThinOut = 40;
+    static bool DeepstoneAt(int x, int y, int z);
     // Whether a column's top is a tar seep (one in 40 of those over oil, on dry land).
     bool TarSeepAt(int x, int z) const;
     // The nearest column within `range` with oil under it (sampled every 8 blocks).

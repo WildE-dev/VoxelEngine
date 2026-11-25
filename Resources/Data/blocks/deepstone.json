@@ -1,0 +1,2 @@
+// deepstone: a block (the format is in README.md, here)
+{ "name": "Deepstone", "textures": { "all": "deepstone" }, "hardness": 9, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#3a3e4c" }

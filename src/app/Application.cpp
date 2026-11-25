@@ -66,7 +66,7 @@ constexpr int kLaserRadius = 4;
 // Everything the inventory (Tab) offers, in the order it shows them.
 // Every block and item the creative palette offers.
 const ItemRef kInventoryItems[] = {
-    BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
+    BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::DEEPSTONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
     BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::LAVA, BlockType::OBSIDIAN, BlockType::HAY_BALE, BlockType::FIRE, ItemType::BUCKET, ItemType::WATER_BUCKET, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP,
     BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::CREATIVE_AIR_TANK, BlockType::VALVE, BlockType::FLUID_VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::OBSIDIAN_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::BOILER, BlockType::TURBINE, BlockType::AIR_DIFFUSER, BlockType::DRILL, BlockType::SMELTER, BlockType::STEEL_FRAME, BlockType::MACHINE_CASING, BlockType::FIRE_BRICK, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LAUNCHER, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::HEAT_SENSOR, BlockType::SPRINKLER, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
@@ -177,6 +177,7 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::GRASS: return "Grass";
     case BlockType::DIRT:  return "Dirt";
     case BlockType::STONE: return "Stone";
+    case BlockType::DEEPSTONE: return "Deepstone";
     case BlockType::LAMP:  return "Lamp";
     case BlockType::LOG:   return "Log";
     case BlockType::LEAVES: return "Leaves";
@@ -1555,6 +1556,7 @@ uint32_t DefaultMapColour(BlockType type) {
     case BlockType::CONCRETE: return 0xFFAAA8A8u;
     case BlockType::GRAVEL: return 0xFF747A80u;
     case BlockType::REINFORCED_CONCRETE: return 0xFF888C90u;
+    case BlockType::DEEPSTONE: return 0xFF4C3E3Au;
     case BlockType::HEAT_SENSOR: return 0xFF2040A0u;
     case BlockType::SPRINKLER: return 0xFF4090B0u;
     case BlockType::CROP:

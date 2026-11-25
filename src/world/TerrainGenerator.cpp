@@ -43,7 +43,7 @@ BlockType OreAt(int x, int y, int z, int depth) {
         const float gold = Noise::Perlin3(x * 0.26f, y * 0.26f, z * 0.26f, 0x601Du);
         if (gold > 0.6f) return BlockType::GOLD_ORE;
     }
-    return BlockType::STONE;
+    return TerrainGenerator::DeepstoneAt(x, y, z) ? BlockType::DEEPSTONE : BlockType::STONE;
 }
 
 // The Deep's caverns: huge open pockets of low-frequency noise within its band,
@@ -77,6 +77,12 @@ TerrainGenerator::Column MakeColumn(float h00, float h10, float h01, float h11) 
 constexpr uint32_t kPlantSeed = 0x91A7C3E5u;
 
 } // namespace
+
+bool TerrainGenerator::DeepstoneAt(int x, int y, int z) {
+    // A ragged boundary: up or down by up to kDeepstoneBlend, by a slow noise.
+    const float n = Noise::Perlin3(x * 0.09f, y * 0.11f, z * 0.09f, 0xDEE5u);
+    return y < kDeepTop + static_cast<int>(std::lround(n * 2.0f * kDeepstoneBlend));
+}
 
 EdgeData TerrainGenerator::Column::EdgesAt(int row) const {
     EdgeData edges;
@@ -583,14 +589,14 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                     const int wy = coords.y * S + y;
                     if (wy >= m - 1) break; // (underground only: the surface is shaped already)
                     Block& cell = out[Index(x, y, z)];
-                    if (cell.type != BlockType::STONE || !cell.IsFullBlock() || !out[Index(x, y + 1, z)].IsAir()) continue;
+                    if ((cell.type != BlockType::STONE && cell.type != BlockType::DEEPSTONE) || !cell.IsFullBlock() || !out[Index(x, y + 1, z)].IsAir()) continue;
                     const int wx = coords.x * S + x, wz = coords.z * S + z;
                     // EdgeData order: 0 (x, z+1), 1 (x+1, z), 2 (x, z), 3 (x+1, z+1).
                     const int d[4] = { drop(wx, wy, wz + 1), drop(wx + 1, wy, wz), drop(wx, wy, wz), drop(wx + 1, wy, wz + 1) };
                     if (d[0] + d[1] + d[2] + d[3] == 0) continue;
                     EdgeData edges;
                     for (int e = 0; e < 4; e++) edges.SetTopY(e, static_cast<uint8_t>(8 - d[e]));
-                    cell = Block(BlockType::STONE, edges);
+                    cell = Block(cell.type, edges);
                 }
             }
     }

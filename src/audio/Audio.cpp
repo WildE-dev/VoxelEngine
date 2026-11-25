@@ -28,6 +28,7 @@ const char* Audio::Material(BlockType type) { return BlockData::SoundOr(type, De
 const char* DefaultMaterial(BlockType type) {
     switch (type) {
     case BlockType::STONE:
+    case BlockType::DEEPSTONE:
     case BlockType::STONE_BRICK:
     case BlockType::MOSSY_BRICK:
     case BlockType::CRUMBLING_BRICK:

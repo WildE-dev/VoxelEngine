@@ -312,6 +312,8 @@ enum class BlockType : uint8_t {
     // Reinforced concrete: concrete with steel bars through it. Takes a blast, like
     // obsidian, and is slow to break.
     REINFORCED_CONCRETE,
+    // Deepstone: the rock below the lava level (the Deep and under it), tougher than stone.
+    DEEPSTONE,
     COUNT
 };
 // Machines with an inventory of their own (opened like a chest, empty-handed): what
@@ -400,6 +402,7 @@ inline ShapeStyle StyleOf(BlockType type) {
     case BlockType::SAND:
     case BlockType::TAR:
     case BlockType::STONE:
+    case BlockType::DEEPSTONE:
     case BlockType::SNOW:
     case BlockType::DRY_GRASS:
     case BlockType::LUSH_GRASS:

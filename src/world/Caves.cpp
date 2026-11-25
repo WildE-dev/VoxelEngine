@@ -55,11 +55,13 @@ bool IsEntranceZone(int wx, int wz, int surfaceRow) {
     return Noise::Perlin2(wx / 64.0f - 4000.0f, wz / 64.0f + 9000.0f) > 0.32f;
 }
 
-bool IsCaveSample(const Sample& s, int depth, bool entranceZone) {
+bool IsCaveSample(const Sample& s, int depth, bool entranceZone, int wy) {
     if (depth < 0) return false; // above the ground: nothing to carve
+    // Below the lava level they thin out and grow rarer, to a third of their size.
+    const float deep = std::clamp(static_cast<float>(TerrainGenerator::kDeepTop - wy) / TerrainGenerator::kCavesThinOut, 0.0f, 1.0f);
     // Near the surface tunnels narrow to nothing, so they stay buried instead of
     // opening long trenches, unless this is an entrance zone.
-    float radius = kTunnelRadius;
+    float radius = kTunnelRadius * (1.0f - 0.65f * deep);
     if (!entranceZone && depth < kSurfaceCover) {
         float t = std::clamp((depth - 2.0f) / (kSurfaceCover - 2.0f), 0.0f, 1.0f);
         radius *= t * t * (3.0f - 2.0f * t);
@@ -68,7 +70,7 @@ bool IsCaveSample(const Sample& s, int depth, bool entranceZone) {
     // Caverns fade in with depth so they don't break through to the surface.
     if (depth >= kCavernMinDepth) {
         float fadeIn = std::min(1.0f, (depth - kCavernMinDepth) / 16.0f);
-        if (s.cavern > kCavernThreshold + (1.0f - fadeIn) * 0.2f) return true;
+        if (s.cavern > kCavernThreshold + (1.0f - fadeIn) * 0.2f + 0.15f * deep) return true;
     }
     return false;
 }
@@ -86,7 +88,7 @@ bool IsCave(int wx, int wy, int wz, int surfaceRow) {
     const float fx = static_cast<float>(wx - lx * kSpacing) / kSpacing;
     const float fy = static_cast<float>(wy - ly * kSpacing) / kSpacing;
     const float fz = static_cast<float>(wz - lz * kSpacing) / kSpacing;
-    return IsCaveSample(Interpolate(c, fx, fy, fz), surfaceRow - wy, IsEntranceZone(wx, wz, surfaceRow));
+    return IsCaveSample(Interpolate(c, fx, fy, fz), surfaceRow - wy, IsEntranceZone(wx, wz, surfaceRow), wy);
 }
 
 void Carve(const glm::ivec3& coords, const std::array<int, S * S>& rows, std::array<Block, Chunk::VOLUME>& blocks) {
@@ -121,7 +123,7 @@ void Carve(const glm::ivec3& coords, const std::array<int, S * S>& rows, std::ar
                     lattice[i][j][k], lattice[i + 1][j][k], lattice[i][j + 1][k], lattice[i + 1][j + 1][k],
                     lattice[i][j][k + 1], lattice[i + 1][j][k + 1], lattice[i][j + 1][k + 1], lattice[i + 1][j + 1][k + 1],
                 };
-                if (IsCaveSample(Interpolate(c, fx, fy, fz), surfaceRow - wy, entranceZone)) block = Block();
+                if (IsCaveSample(Interpolate(c, fx, fy, fz), surfaceRow - wy, entranceZone, wy)) block = Block();
             }
         }
     }
