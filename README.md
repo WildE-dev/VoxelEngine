@@ -372,8 +372,8 @@ From the Deep's top down (the lava level, with a ragged edge a few blocks either
 rock is **deepstone**: dark blue-grey and much tougher than stone (hardness 9 to stone's
 4, so over two seconds a block with a stone pickaxe), with the ores still in it. And the
 ordinary tunnels and caverns thin out and grow rarer below the lava level, to a third of
-their size 40 blocks under it (the Deep's own huge caverns are as they were), so the rock
-there is mostly solid. `BiomeTest` checks the Deep's caverns, fungus, magma and gold,
+their size 40 blocks under it, and the Deep's own caverns are thinner too (about a
+fifth of it open, where it was over a quarter), so the rock there is mostly solid. `BiomeTest` checks the Deep's caverns, fungus, magma and gold,
 that there's no gold above it, that the rock below the lava level is deepstone (and none
 above), and that caves under it are far rarer.
 

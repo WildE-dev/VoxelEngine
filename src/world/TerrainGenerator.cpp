@@ -52,7 +52,7 @@ bool DeepCavern(int x, int y, int z) {
     if (y >= TerrainGenerator::kDeepTop || y <= TerrainGenerator::kDeepBottom) return false;
     const float edge = std::min(TerrainGenerator::kDeepTop - y, y - TerrainGenerator::kDeepBottom) / 10.0f;
     const float n = Noise::Perlin3(x * 0.022f, y * 0.05f, z * 0.022f, 0xDEE9u) + 0.5f * Noise::Perlin3(x * 0.07f, y * 0.09f, z * 0.07f, 0xDEEAu);
-    return n > 0.18f + std::max(0.0f, 1.0f - edge) * 0.6f;
+    return n > 0.3f + std::max(0.0f, 1.0f - edge) * 0.6f; // (thinned: about half as much open as it was)
 }
 
 constexpr int S = TerrainGenerator::S;

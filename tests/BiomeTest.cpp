@@ -428,7 +428,7 @@ int main() {
                     }
                 }
             }
-        Check(open > cells / 10 && fungus > 50 && magma > 20 && goldDeep > 50 && goldHigh == 0,
+        Check(open > cells / 20 && open < cells / 5 && fungus > 50 && magma > 20 && goldDeep > 50 && goldHigh == 0,
               "the Deep has caverns (" + std::to_string(100 * open / std::max(1L, cells)) + "% open), glow fungus, magma and gold ore, and no gold above it");
         Check(lavaDeep > 20 && lavaHigh == 0, "and pools of lava on its floors (" + std::to_string(lavaDeep) + " cells), none above it");
     }
