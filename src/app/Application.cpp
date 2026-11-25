@@ -117,7 +117,7 @@ const char* ToolHint(Tool tool) {
     switch (tool) {
     case Tool::Pickaxe: return "fast on stone, bricks, ice and machines";
     case Tool::Axe: return "fast on wood";
-    case Tool::Shovel: return "fast on dirt, grass, sand and snow; right-click: flatten";
+    case Tool::Shovel: return "fast on dirt, grass, sand and snow; right-click: flatten (V: how wide)";
     case Tool::Sword: return "for fighting";
     case Tool::Bow: return "right-click to shoot (needs arrows)";
     case Tool::Rod: return "right-click water to cast";
@@ -2341,6 +2341,7 @@ void Application::DrawHotbar() {
         const bool survival = !client->IsCreative();
         std::string label = SelectedItem() != Items::kNone ? ItemName(SelectedItem()) : "Empty hand";
         if (selectedTool == Tool::Chisel) label += std::string(" - ") + ChiselStepName(chiselStep) + " a stroke (V)";
+        if (selectedTool == Tool::Shovel) label += " - flattens " + std::to_string(2 * flattenRadius + 1) + "x" + std::to_string(2 * flattenRadius + 1) + " (V)";
         if (selectedTool == Tool::None && Block::CanShape(selected))
             label += std::string(" - ") + HeightName(placeHeight) + (placeHeight < 8 ? " height" : " block") + " (V)";
         const bool affordable = SelectedItem() == Items::kNone || !Items::IsBlock(SelectedItem()) ||
@@ -2500,6 +2501,10 @@ void Application::OnKey(int key, int action) {
         // Placement height: full, 3/4, 1/2, 1/4 (crouching, back up). With the chisel in
         // hand, how fine it cuts instead: an eighth, a quarter, a half (crouching: back).
         const bool shift = CrouchHeld();
+        if (SelectedTool() == Tool::Shovel) {
+            flattenRadius = shift ? (flattenRadius <= 1 ? net::kMaxFlattenRadius : flattenRadius - 1) : (flattenRadius >= net::kMaxFlattenRadius ? 1 : flattenRadius + 1);
+            return;
+        }
         if (SelectedTool() == Tool::Chisel) {
             constexpr int kSteps = static_cast<int>(std::size(Block::kChiselSteps));
             int i = 0;
@@ -3364,7 +3369,7 @@ void Application::OnMouseButton(int button, int action) {
     // Right-click with the shovel: level the ground round the block looked at to its height.
     if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::Shovel) {
         if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
-            client->Flatten(hit->block);
+            client->Flatten(hit->block, flattenRadius);
             PlayAt("place", hit->block, 0.6f);
         }
         return;

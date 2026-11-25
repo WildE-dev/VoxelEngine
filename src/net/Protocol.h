@@ -29,7 +29,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 67;
+constexpr uint32_t kProtocolVersion = 68;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -410,7 +410,9 @@ struct ItemInfo {
 };
 struct Flatten {
     glm::ivec3 pos{0}; // the ground block clicked: the area round it goes to its height
+    uint8_t radius = 1; // how far round it: 1 (3 by 3) to kMaxFlattenRadius (7 by 7)
 };
+constexpr int kMaxFlattenRadius = 3;
 struct UseBucket {
     glm::ivec3 pos{ 0 };
     uint8_t pour = 0; // 0: scoop up the water there; 1: pour it out there

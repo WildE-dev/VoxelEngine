@@ -681,7 +681,8 @@ four corners, while anything built (bricks, logs, lamps and the rest) is four
 quarter-columns, each as high as its corner, like small steps.
 
 **Flattening with a shovel.** Right-click soft ground (dirt, grass, sand, snow or
-gravel) with a shovel and the 3 by 3 area round it is levelled to that block's top:
+gravel) with a shovel and the area round it (3 by 3; **V** makes it 5 by 5 or 7 by 7,
+Crouch+V back) is levelled to that block's top:
 soft ground above it is shaved off (down to a slope, or away), and empty cells below it
 are filled with what you clicked. Stone, wood, buildings and water are left as they
 are. In survival it balances like the chisel: what's shaved off comes back to you, and

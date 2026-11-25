@@ -945,6 +945,14 @@ int main() {
         Check(Pump({ &a, &b }, 20.0, [&] { return at(20, 0, 20).IsAir() && at(22, -1, 20).IsFullBlock() && at(20, 0, 21).IsAir(); }),
               "a shovel's right-click flattens the ground round it: the bump and the slab shaved off, the dip filled");
         Check(at(21, 0, 21).type == BlockType::STONE, "but stone is left be");
+        // Wider (radius 2: 5 by 5), a bump two blocks off goes too.
+        server.QueueConsoleCommand("fill 23 0 22 23 0 22 dirt");
+        Pump({ &a, &b }, 20.0, [&] { return at(23, 0, 22).type == BlockType::DIRT; });
+        a.client.Flatten({ 21, -1, 20 }, 1);
+        Pump({ &a, &b }, 1.0, [] { return false; });
+        const bool keptNarrow = at(23, 0, 22).type == BlockType::DIRT;
+        a.client.Flatten({ 21, -1, 20 }, 2);
+        Check(keptNarrow && Pump({ &a, &b }, 20.0, [&] { return at(23, 0, 22).IsAir(); }), "set wider, it flattens a 5 by 5 (a 3 by 3 doesn't reach that far)");
         // Survival: what's shaved off comes back (as dirt); filling in costs it, and with
         // nothing to fill with, nothing changes.
         server.QueueConsoleCommand("gamemode survival Mason");

@@ -504,7 +504,7 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     }
     case net::MsgType::Flatten: {
         net::Flatten m;
-        if ((ok = net::Decode(in, m))) HandleFlatten(client, m.pos);
+        if ((ok = net::Decode(in, m))) HandleFlatten(client, m.pos, m.radius);
         break;
     }
     case net::MsgType::EditCarve: {
@@ -1315,7 +1315,8 @@ void Server::HandleChisel(ClientState& client, const net::EditChisel& chisel) {
     world->SetBlock(p.x, p.y, p.z, after);
 }
 
-void Server::HandleFlatten(ClientState& client, const glm::ivec3& pos) {
+void Server::HandleFlatten(ClientState& client, const glm::ivec3& pos, int radius) {
+    radius = std::clamp(radius, 1, net::kMaxFlattenRadius);
     Block clicked;
     if (Usable(client, Tool::Shovel) != Tool::Shovel || !InReach(client, pos, EditReach(client)) || !world->GetBlock(pos.x, pos.y, pos.z, clicked)) return;
     // Soft ground: what a shovel digs (dirt, grass, sand, snow, gravel), whole or shaped.
@@ -1336,8 +1337,8 @@ void Server::HandleFlatten(ClientState& client, const glm::ivec3& pos) {
     };
     std::vector<Change> changes;
     std::map<ItemId, long> cost; // units, by what they're made of: + taken, - given back
-    for (int dx = -kFlattenRadius; dx <= kFlattenRadius; dx++)
-        for (int dz = -kFlattenRadius; dz <= kFlattenRadius; dz++)
+    for (int dx = -radius; dx <= radius; dx++)
+        for (int dz = -radius; dz <= radius; dz++)
             for (int y = pos.y - 1; y <= pos.y + 2; y++) {
                 const glm::ivec3 at(pos.x + dx, y, pos.z + dz);
                 Block b;

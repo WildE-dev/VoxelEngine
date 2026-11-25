@@ -92,7 +92,7 @@ public:
     void Chisel(const glm::ivec3& pos, int edge, bool raise, int dir = 0, int step = 2);
     // A shovel's right-click: level the ground round this block to its height (the
     // server works it out, and what it costs or gives back).
-    void Flatten(const glm::ivec3& pos);
+    void Flatten(const glm::ivec3& pos, int radius = 1);
     void Carve(const std::vector<glm::ivec3>& centers, int radius);
     // Asks the server to skip to the next dawn or dusk.
     void SkipTime();
