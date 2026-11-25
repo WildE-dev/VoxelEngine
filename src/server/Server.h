@@ -348,6 +348,13 @@ private:
     // Moves a player (they're told with a correction, like a rejected move).
     void Teleport(ClientState& client, const glm::vec3& feet);
     void SetTimeOfDay(double t) { timeOfDay = t - std::floor(t); }
+    // The time of day as it's sent and saved, a float. The last sliver of a day rounds
+    // up to 1 as a float, which is out of range for both (a client drops that snapshot,
+    // and a world saved just then would refuse to load): that's 0, the next sunrise.
+    float TimeOfDayFloat() const {
+        const float t = static_cast<float>(timeOfDay);
+        return t < 1.0f ? t : 0.0f;
+    }
     // Tells a client what it may do (after joining, /op, /deop, /noclip).
     void SendAbilities(ClientState& client);
     // Survival bookkeeping: tells the client its mode / what it holds.

@@ -117,10 +117,13 @@ bool WorldStorage::ReadWorldFile() {
         std::cerr << "[storage] " << path.string() << " is truncated" << std::endl;
         return false;
     }
-    if (version >= 3 && (!r.F32(timeOfDay) || !std::isfinite(timeOfDay) || timeOfDay < 0.0f || timeOfDay >= 1.0f)) {
+    if (version >= 3 && (!r.F32(timeOfDay) || !std::isfinite(timeOfDay) || timeOfDay < 0.0f || timeOfDay > 1.0f)) {
         std::cerr << "[storage] " << path.string() << " has a bad time of day" << std::endl;
         return false;
     }
+    // (Exactly 1: the very end of a day, saved before the server rounded that to the
+    // next sunrise itself. It's the same moment.)
+    if (timeOfDay >= 1.0f) timeOfDay = 0.0f;
     if (version >= 4 && (!r.U8(defaultMode) || defaultMode > 1)) {
         std::cerr << "[storage] " << path.string() << " has a bad game mode" << std::endl;
         return false;
@@ -432,7 +435,7 @@ void WorldStorage::SetNights(uint32_t n) {
 
 void WorldStorage::SetTimeOfDay(float t) {
     std::lock_guard<std::mutex> lock(mutex);
-    timeOfDay = t;
+    timeOfDay = t >= 0.0f && t < 1.0f ? t : 0.0f; // (only what ReadWorldFile will take back)
     playersDirty = true; // world.dat needs writing
 }
 

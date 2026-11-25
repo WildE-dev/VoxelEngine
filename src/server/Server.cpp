@@ -307,7 +307,7 @@ void Server::Save(bool shuttingDown) {
     if (shuttingDown) world->GetWater().Stop();
     const double start = Now();
     for (const auto& [peer, client] : clients) StorePlayer(client);
-    storage->SetTimeOfDay(static_cast<float>(timeOfDay));
+    storage->SetTimeOfDay(TimeOfDayFloat());
     storage->SetNights(nights);
     storage->SetChests({ chests.begin(), chests.end() });
     storage->SetCrops({ crops.begin(), crops.end() });
@@ -3077,7 +3077,7 @@ void Server::StreamWorld(ClientState& client) {
 void Server::BroadcastPlayers() {
     net::PlayerSnapshot snapshot;
     snapshot.tick = tickCount;
-    snapshot.timeOfDay = static_cast<float>(timeOfDay);
+    snapshot.timeOfDay = TimeOfDayFloat();
     snapshot.rain = static_cast<uint8_t>(std::lround(rainLevel * 255.0f));
     snapshot.storm = storm ? 1 : 0;
     for (const auto& [peer, client] : clients) {
