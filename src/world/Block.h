@@ -309,6 +309,9 @@ enum class BlockType : uint8_t {
     CONCRETE,
     // Gravel: pockets of it under the topsoil; it goes into asphalt and concrete.
     GRAVEL,
+    // Reinforced concrete: concrete with steel bars through it. Takes a blast, like
+    // obsidian, and is slow to break.
+    REINFORCED_CONCRETE,
     COUNT
 };
 // Machines with an inventory of their own (opened like a chest, empty-handed): what

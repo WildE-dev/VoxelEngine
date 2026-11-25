@@ -96,6 +96,7 @@ inline std::vector<Recipe> Defaults() {
         { "pressure_gauge", "Pressure gauge", { { BlockType::GLASS, kBlock / 4 }, { ItemType::IRON_INGOT, kBlock / 4 } }, BlockType::PRESSURE_GAUGE, kBlock },
         { "valve", "Valve", { { ItemType::IRON_INGOT, kBlock / 2 }, { BlockType::STONE, kBlock } }, BlockType::VALVE, kBlock },
         { "cement", "Cement", { { BlockType::LIMESTONE, 2 * kBlock }, { ItemType::COAL, kBlock / 2 } }, ItemType::CEMENT, kBlock },
+        { "reinforced_concrete", "Reinforced concrete", { { BlockType::CONCRETE, 4 * kBlock }, { ItemType::IRON_INGOT, kBlock } }, BlockType::REINFORCED_CONCRETE, 4 * kBlock },
         { "concrete", "Concrete", { { ItemType::CEMENT, kBlock }, { BlockType::GRAVEL, 2 * kBlock }, { BlockType::SAND, kBlock } }, BlockType::CONCRETE, 4 * kBlock },
         { "asphalt", "Asphalt", { { ItemType::BITUMEN, kBlock }, { BlockType::GRAVEL, 2 * kBlock }, { BlockType::SAND, kBlock } }, BlockType::ASPHALT, 4 * kBlock },
         { "heat_sensor", "Heat sensor", { { ItemType::IRON_INGOT, kBlock / 2 }, { ItemType::COPPER_INGOT, kBlock / 2 }, { BlockType::GLASS, kBlock / 2 } }, BlockType::HEAT_SENSOR, kBlock },

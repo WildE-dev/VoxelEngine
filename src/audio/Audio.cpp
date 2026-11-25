@@ -67,6 +67,7 @@ const char* DefaultMaterial(BlockType type) {
     case BlockType::COAL_ORE:
     case BlockType::LIMESTONE:
     case BlockType::CONCRETE:
+    case BlockType::REINFORCED_CONCRETE:
     case BlockType::SPRING:
     case BlockType::DRAIN:
     case BlockType::SINKHOLE:

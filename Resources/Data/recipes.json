@@ -46,6 +46,7 @@
   { "id": "pressure_gauge", "name": "Pressure gauge", "takes": { "glass": 0.25, "iron_ingot": 0.25 }, "makes": { "pressure_gauge": 1 } },
   { "id": "valve", "name": "Valve", "takes": { "iron_ingot": 0.5, "stone": 1 }, "makes": { "valve": 1 } },
   { "id": "cement", "name": "Cement", "takes": { "limestone": 2, "coal": 0.5 }, "makes": { "cement": 1 } },
+  { "id": "reinforced_concrete", "name": "Reinforced concrete", "takes": { "concrete": 4, "iron_ingot": 1 }, "makes": { "reinforced_concrete": 4 } },
   { "id": "concrete", "name": "Concrete", "takes": { "cement": 1, "gravel": 2, "sand": 1 }, "makes": { "concrete": 4 } },
   { "id": "asphalt", "name": "Asphalt", "takes": { "bitumen": 1, "gravel": 2, "sand": 1 }, "makes": { "asphalt": 4 } },
   { "id": "heat_sensor", "name": "Heat sensor", "takes": { "iron_ingot": 0.5, "copper_ingot": 0.5, "glass": 0.5 }, "makes": { "heat_sensor": 1 } },

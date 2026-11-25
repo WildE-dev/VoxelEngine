@@ -1237,7 +1237,9 @@ from 3 to 48 blocks down: pale, banded, and mined with a pickaxe. Burnt, it's
 **cement** (an item): a smelter turns a limestone into a cement, or by hand two
 limestone and half a coal make one. A cement, two gravel and a sand make four
 **concrete**, a smooth grey building block that's slow to break (hardness 6) and can
-be chiselled like any building block. `CraftTest` checks the smelting and both recipes;
+be chiselled like any building block. Four concrete and an iron ingot make four
+**reinforced concrete**: steel bars through it, slower still to break (hardness 12), and
+like obsidian it takes a TNT blast (`SteamTest` checks it stands). `CraftTest` checks the smelting and both recipes;
 `BiomeTest` that limestone is in beds in the rock and none far down, and gravel in pockets.
 
 **Gravel** lies in small pockets just under the topsoil (2 to 30 blocks down), dug with a

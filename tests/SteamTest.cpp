@@ -300,10 +300,12 @@ int main() {
     server.QueueConsoleCommand("fill 30 0 30 30 0 30 tnt");
     server.QueueConsoleCommand("fill 31 0 30 31 0 30 obsidian");
     server.QueueConsoleCommand("fill 29 0 30 29 0 30 stone");
+    server.QueueConsoleCommand("fill 30 0 31 30 0 31 reinforced_concrete");
     Pump(a, 5.0, [&] { return at({ 31, 0, 30 }).type == BlockType::OBSIDIAN && at({ 30, 0, 30 }).type == BlockType::TNT; });
     a.client.UseBed({ 30, 0, 30 });
     Check(Pump(a, 8.0, [&] { return at({ 29, 0, 30 }).IsAir() && at({ 30, 0, 30 }).IsAir(); }) && at({ 31, 0, 30 }).type == BlockType::OBSIDIAN,
           "TNT blows the stone away, but the obsidian stands");
+    Check(at({ 30, 0, 31 }).type == BlockType::REINFORCED_CONCRETE, "and so does reinforced concrete");
 
     // A boiler fired by lava: obsidian pipes from a pool of lava to its side, water under
     // it and a tank for steam over it, and no coal.
