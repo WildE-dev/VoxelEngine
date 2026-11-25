@@ -11,6 +11,7 @@
 //  - pump rooms have a pump under water with a pipe beside it.
 #include <algorithm>
 #include <chrono>
+#include <climits>
 #include <cstdlib>
 #include <deque>
 #include <iostream>
@@ -83,6 +84,32 @@ int main() {
     Check(dungeons.size() * 100 >= static_cast<size_t>(regions) * 15 && dungeons.size() * 100 <= static_cast<size_t>(regions) * 45,
           std::to_string(dungeons.size()) + " of " + std::to_string(regions) + " regions have a dungeon (about 30% wanted)");
     Check(types.size() == static_cast<size_t>(Dungeons::RoomType::Count), std::to_string(types.size()) + " room types appear");
+    {
+        // Over a wider sweep (layouts only, nothing generated): no entrance comes up in
+        // or beside a lake or a river, which would pour down it; and a lever vault's
+        // chest pit is within the dungeon's bounds (or a chunk holding only it is skipped).
+        bool dry = true, pitsInside = true;
+        int shafts = 0;
+        for (int rx = -30; rx <= 30; rx++)
+            for (int rz = -30; rz <= 30; rz++) {
+                const auto layout = Dungeons::LayoutFor(world.terrain, rx, rz);
+                if (!layout.exists) continue;
+                for (const auto& r : layout.rooms)
+                    if (r.type == Dungeons::RoomType::LeverVault) {
+                        const glm::ivec3 c = (r.inner.min + r.inner.max) / 2;
+                        pitsInside &= layout.bounds.Contains({ c.x, r.inner.min.y - 3, c.z });
+                    }
+                if (!layout.hasShaft) continue;
+                shafts++;
+                const glm::ivec2 e = layout.shaft;
+                if (world.terrain.InRiver(e.x, e.y, TerrainGenerator::kRiverBanks)) dry = false;
+                for (int dx = -3; dx <= 3; dx++)
+                    for (int dz = -3; dz <= 3; dz++)
+                        if (world.terrain.LakeLevelAt(e.x + dx, e.y + dz) != INT_MIN) dry = false;
+            }
+        Check(dry && shafts > 100, "no entrance shaft comes up in a lake or a river (" + std::to_string(shafts) + " looked at)");
+        Check(pitsInside, "a lever vault's chest pit is within its dungeon's bounds");
+    }
     {
         std::map<std::string, int> all;
         for (const auto& [region, layout] : dungeons)
@@ -224,11 +251,11 @@ int main() {
                 for (unsigned other = 0; other < 16; other++)
                     if (other != v.pattern && opens(other)) logicRight = false;
                 if (!logicRight) leverVaultsWired = false;
-                // A lamp over each lever that should be on (where there's wall).
+                // A lamp in the ceiling over each lever that should be on, and none over
+                // the rest (every time: a doorway can't take its place).
                 for (int i = 0; i < 4; i++) {
-                    const BlockType over = world.Get(v.levers[i] + glm::ivec3(0, 2, -1)).type;
-                    const bool lit = over == BlockType::LAMP;
-                    if (((v.pattern >> i) & 1u) ? !(lit || over == BlockType::AIR) : lit) leverVaultsHinted = false;
+                    const bool lit = world.Get({ v.levers[i].x, hi.y + 1, v.levers[i].z }).type == BlockType::LAMP;
+                    if (lit != (((v.pattern >> i) & 1u) != 0)) leverVaultsHinted = false;
                 }
             }
             // Well below the ground at the room's corners.

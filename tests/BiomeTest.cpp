@@ -248,6 +248,35 @@ int main() {
     Check(drains >= 16 && drainsRight == drains, "rivers end in sinkholes (natural drains) in their beds (" + std::to_string(drainsRight) + " of " + std::to_string(drains) + ")");
     Check(riverColumns > 50 && riverRight * 10 >= riverColumns * 9,
           "river pools have sand beds with water over them (" + std::to_string(riverRight) + " of " + std::to_string(riverColumns) + " pool columns looked at)");
+    {
+        // No river runs into a lake (its own, back over the rim, or another's), which it
+        // would drain; and none ends in a sinkhole under the sea, which would drain that:
+        // a river that reaches the sea just runs into it.
+        int inRiver = 0, inLake = 0;
+        for (int x = -900; x < 900; x += 2)
+            for (int z = -900; z < 900; z += 2) {
+                if (!t.InRiver(x, z)) continue;
+                inRiver++;
+                if (t.LakeLevelAt(x, z) != INT_MIN) inLake++;
+            }
+        Check(inRiver > 500 && inLake == 0, "no river runs into a lake (" + std::to_string(inLake) + " of " + std::to_string(inRiver) + " river columns looked at)");
+        int sinkholes = 0, underSea = 0;
+        for (int cx = -40; cx <= 40; cx++)
+            for (int cz = -40; cz <= 40; cz++)
+                for (const glm::ivec2& d : t.DrainsIn(cx, cz)) {
+                    sinkholes++;
+                    // (At the sea's edge, much of the ground round it is under the sea. River
+                    // channels, its own and others', don't count: they're cut below it.)
+                    int wet = 0;
+                    for (int k = 0; k < 32; k++) {
+                        const float a = k * 6.2831853f / 32.0f;
+                        const int x = d.x + static_cast<int>(std::lround(10.0f * std::cos(a))), z = d.y + static_cast<int>(std::lround(10.0f * std::sin(a)));
+                        wet += t.GetHeight(x, z) < TerrainGenerator::kSeaLevel && !t.InRiver(x, z, TerrainGenerator::kRiverBanks);
+                    }
+                    if (wet >= 8) underSea++;
+                }
+        Check(sinkholes > 16 && underSea == 0, "no sinkhole is out in the sea (" + std::to_string(underSea) + " of " + std::to_string(sinkholes) + ")");
+    }
     std::cout << "        " << world.generated << " chunks generated, " << world.seconds * 1000.0 / world.generated << " ms each" << std::endl;
 
     // Dwarf camps and mines: a camp's fire, chest and palisade; a mine's open shaft with

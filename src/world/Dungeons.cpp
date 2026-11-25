@@ -100,6 +100,12 @@ glm::ivec3 VaultLever(const Room& r, int i) {
     const glm::ivec3 c = Centre(r.inner);
     return { c.x - 3 + 2 * i, r.inner.min.y, r.inner.min.z };
 }
+// The lamp over a lever that should be on: in the ceiling straight above it (no
+// corridor reaches a room's ceiling, so it's always there).
+glm::ivec3 VaultHint(const Room& r, int i) {
+    const glm::ivec3 lever = VaultLever(r, i);
+    return { lever.x, r.inner.max.y + 1, lever.z };
+}
 glm::ivec3 VaultGate(const Room& r) {
     const glm::ivec3 c = Centre(r.inner);
     return { c.x, r.inner.min.y - 1, c.z };
@@ -317,13 +323,14 @@ void Furnish(Stamper& s, const Room& r, const std::vector<Box>& corridors) {
     }
 
     case RoomType::LeverVault: {
-        // The levers, a lamp over each that should be on; the floor gate over the pit
+        // The levers, a lamp in the ceiling over each that should be on; the floor gate over the pit
         // and its chest; the logic in the ceiling (wired: LeverVaultAt).
         const unsigned pattern = VaultPattern(r);
         for (int i = 0; i < 4; i++) {
             const glm::ivec3 lever = VaultLever(r, i);
             s.Set(lever, Block::Plant(BlockType::LEVER, 0));
-            if (pattern & (1u << i)) s.SetIfWall(lever + glm::ivec3(0, 2, -1), kLamp);
+            // (In the ceiling straight over it: the wall behind may be a doorway.)
+            if (pattern & (1u << i)) s.SetIfWall(VaultHint(r, i), kLamp);
         }
         const glm::ivec3 gate = VaultGate(r), chest = gate - glm::ivec3(0, 1, 0);
         for (const glm::ivec3 d : { glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0), glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1), glm::ivec3(0, -1, 0) })
@@ -561,10 +568,14 @@ Layout LayoutFor(const TerrainGenerator& terrain, int regionX, int regionZ) {
         if (clear) layout.pits.push_back({ open, covered });
     }
 
-    // The entrance reaches the surface, unless it's under the sea or a beach.
+    // The entrance reaches the surface, unless it's under the sea or a beach, or would
+    // come up in (or beside) a lake or a river, which would pour down it.
     const glm::ivec3 e = Centre(layout.rooms[0].inner);
     const auto column = terrain.ColumnAt(e.x, e.z);
-    if (column.surfaceRow > TerrainGenerator::kSeaLevel + 1) {
+    bool dry = !terrain.InRiver(e.x, e.z, TerrainGenerator::kRiverBanks + 3.0f);
+    for (int dx = -3; dx <= 3 && dry; dx++)
+        for (int dz = -3; dz <= 3 && dry; dz++) dry = terrain.LakeLevelAt(e.x + dx, e.z + dz) == INT_MIN;
+    if (column.surfaceRow > TerrainGenerator::kSeaLevel + 1 && dry) {
         layout.hasShaft = true;
         layout.shaft = { e.x, e.z };
         layout.shaftTop = column.FirstOpenRow();
@@ -579,6 +590,12 @@ Layout LayoutFor(const TerrainGenerator& terrain, int regionX, int regionZ) {
     }
     for (const auto& c : layout.corridors) layout.bounds = Union(layout.bounds, Expand(c, 1));
     for (const auto& pit : layout.pits) layout.bounds = Union(layout.bounds, Expand(pit.open, 1));
+    // (A lever vault's chest lies in a pit under its floor, below the room's shell.)
+    for (const auto& room : layout.rooms)
+        if (room.type == RoomType::LeverVault) {
+            const glm::ivec3 gate = VaultGate(room);
+            layout.bounds = Union(layout.bounds, { gate - glm::ivec3(1, 2, 1), gate + glm::ivec3(1, 0, 1) });
+        }
     if (layout.hasShaft)
         layout.bounds = Union(layout.bounds, { { e.x - 2, fy, e.z - 2 }, { e.x + 2, layout.shaftTop + kShaftClearance, e.z + 2 } });
     layout.exists = true;

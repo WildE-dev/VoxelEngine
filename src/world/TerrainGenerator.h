@@ -124,8 +124,10 @@ public:
     // below the ground and never rising, with banks easing up into the land. Its bed is
     // sand over dirt, it's generated full of water a block deep, and it ends, after at
     // most kMaxRiverLength blocks, where it reaches the sea or would have to cut deeper
-    // than kRiverMaxCut, at a sinkhole (BlockType::SINKHOLE, a natural drain) in its
-    // bed that takes the water away. The drains in a chunk's columns, or none.
+    // than kRiverMaxCut, or before it would come to another lake (which it would
+    // drain), at a sinkhole (BlockType::SINKHOLE, a natural drain) in its bed that
+    // takes the water away. One that reaches the sea simply runs into it, with no
+    // sinkhole (one there would drain the sea). The drains in a chunk's columns, or none.
     std::vector<glm::ivec2> DrainsIn(int chunkX, int chunkZ) const;
     // Oil: pockets of oil shale in a band deep underground (kOilBottom..kOilTop), in
     // broad oil fields covering a part of the world. A function of position alone.
@@ -185,7 +187,11 @@ private:
         // ending at its drain.
         std::vector<glm::vec3> river;
         glm::ivec2 drain{ 0 };
+        bool hasDrain = false; // (a river that runs into the sea ends there, with none)
     };
+    // A lake's shape alone (where, how big, its level and spring), without its river:
+    // what a river from a neighbouring cell needs to keep clear of it. Not kept.
+    Lake LakeShapeIn(int cx, int cz) const;
     // The river points near a chunk's columns (from the lakes around), worked out once
     // and kept (any thread).
     std::shared_ptr<const std::vector<glm::vec3>> RiverPointsNear(int chunkX, int chunkZ) const;
@@ -197,13 +203,13 @@ private:
     };
     std::shared_ptr<RiverCache> riverCache = std::make_shared<RiverCache>();
     // The lake in grid cell (cx, cz), worked out once and kept (any thread).
-    const Lake& LakeIn(int cx, int cz) const;
+    std::shared_ptr<const Lake> LakeIn(int cx, int cz) const;
     // The land before lakes are carved into it, and with them (before rivers).
     float GetBaseHeight(int x, int z) const;
     float GetLakeHeight(int x, int z) const;
     struct LakeCache {
         std::mutex mutex;
-        std::unordered_map<int64_t, Lake> lakes;
+        std::unordered_map<int64_t, std::shared_ptr<const Lake>> lakes;
     };
     std::shared_ptr<LakeCache> lakeCache = std::make_shared<LakeCache>();
 

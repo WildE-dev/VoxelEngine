@@ -345,8 +345,10 @@ across the channel, and each pool is generated half a block deep, full to the we
 top and still: the spring's water tips each one over into the next all the way down,
 so the river keeps flowing (water deeper than its weirs would just stand still) and
 lies flat in its pools instead of spreading in a thin film down a slope.
-Its bed is sand over dirt, and no trees grow in it or on its banks. It ends where it reaches the sea, or where it would
-have to cut more than seven blocks deep, at a **sinkhole**: a dark opening in wet
+Its bed is sand over dirt, and no trees grow in it or on its banks. One that reaches the
+sea simply runs into it. Otherwise it ends where it would have to cut more than seven
+blocks deep, or before it would come to another lake (whose rim it would cut through, or
+whose bowl it would drain), at a **sinkhole**: a dark opening in wet
 rock in its bed (a natural drain) that takes water away twice as fast as the spring
 gives it, so the river keeps
 running from spring to drain without flooding the land beyond. Rivers make ready-made
@@ -384,7 +386,8 @@ regions and about three in ten hold one: 7 to 12 rooms on one level, linked by a
 spanning tree of 3-wide corridors plus a few extra loops, with lamps set into the
 corridor walls. Each dungeon's first room is its entrance: a spiral staircase climbs
 a shaft from it to the surface, marked by a ring of bricks on the ground (unless the
-entrance is under the sea or a beach). Otherwise you'll have to dig.
+entrance is under the sea or a beach, or would come up in or beside a lake or a river,
+which would pour down it). Otherwise you'll have to dig.
 
 The other rooms work through the room types in a shuffled order, so a dungeon only
 repeats one once it has used them all:
@@ -402,7 +405,7 @@ repeats one once it has used them all:
 | Pump room | a pump in a sunken basin with a fluid pipe up into a raised tub (it stands idle until someone brings it air) |
 | Shrine | a lamp on a plinth, pews facing it |
 | Flood chamber | a pressure plate in the floor sets a latch gate in the ceiling, which opens the sluice gates beside it and keeps them open: the reservoir above pours in, and goes on pouring after you step off. A lever hidden in a wall by a corner resets the latch (and, left on, disarms the trap) |
-| Lever vault | four levers in a row by one wall, with a lamp in the wall over some of them; set the ones under lamps on and the rest off, and a gate in the middle of the floor opens over a pit with a chest of vault loot in it. Logic gates in the ceiling do the sums (NOT for the levers that should be off, AND for all four), and the gate closes again if you change them |
+| Lever vault | four levers in a row by one wall, with a lamp in the ceiling over some of them; set the ones under lamps on and the rest off, and a gate in the middle of the floor opens over a pit with a chest of vault loot in it. Logic gates in the ceiling do the sums (NOT for the levers that should be off, AND for all four), and the gate closes again if you change them |
 
 **Traps.** Some long corridors have a spike pit across them: either hidden under
 crumbling bricks (three long; they're cracked, if you look) or open (two long, so you
@@ -434,13 +437,15 @@ with the mouse wheel). Empty worlds (`--empty-world`) have no dungeons.
 
 `DungeonTest` lays out 225 regions and generates 16 dungeons chunk by chunk. It checks
 that every room type turns up, layouts and chunks are deterministic, every room can
-be reached from the entrance across chunk borders, shafts reach the surface, water
+be reached from the entrance across chunk borders, shafts reach the surface (and,
+over 3,700 regions, never come up in a lake or a river), water
 can't spill, rooms stay deep, gardens and archives are furnished all over regardless
 of chunk borders, pump rooms are wired up, and vault and archive chests are there with
 loot in them (and none for a chest outside a dungeon). For lever vaults, it checks
 the levers, floor gate and chest are there, works the wiring through for all 16 ways
 the levers can be set (the gate opens for the room's pattern and no other), and
-checks the lamps match the pattern.
+checks the lamps match the pattern exactly, and that the chest's pit is inside the
+dungeon's bounds (so a chunk holding only the pit still gets it).
 
 ## Water
 
@@ -530,8 +535,8 @@ slowly raise it. `PumpTest` checks that a spring fills the cell above it at that
 and stops when it's full, keeps the water coming once there's somewhere for it to
 go, and stops when broken, and that a sinkhole empties a cup at its rate; `BiomeTest`
 that lakes overflow from springs, each in the ground, open above and below a lake's
-level, that rivers end in sinkholes in their beds, and that their pools have sand
-beds with water over them.
+level, that rivers end in sinkholes in their beds, never in or beside the sea, that no
+river runs into a lake, and that their pools have sand beds with water over them.
 
 **Evaporation**: shallow puddles that have stopped flowing dry up. Every water tick,
 8 random cells of each chunk near a player are looked at (random ticks), and a resting
