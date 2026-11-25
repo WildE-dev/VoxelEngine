@@ -467,7 +467,7 @@ bool Application::StartGame(const ClientOptions& options) {
         host = "127.0.0.1";
         port = localServer->GetPort();
         serverLabel = "singleplayer";
-        mapCacheFile = options.worldDirectory + "/map_cache.bin";
+        mapCacheFile = options.worldDirectory.empty() ? std::string() : options.worldDirectory + "/map_cache.bin"; // (--no-save: no map kept either)
     }
     else {
         serverLabel = host + ":" + std::to_string(port);
@@ -524,6 +524,10 @@ void Application::StopGame() {
     }
     paused = pauseSettings = false;
     chatOpen = inventoryOpen = false;
+    // (Per game: the next one starts afresh.)
+    hotbarSeeded = false;
+    chatSeen = 0;
+    rebinding = -1;
     landedAt = 0.0;
     player = Player(glm::vec3(7.0f, 7.0f, 7.0f));
     camera = Camera();
@@ -769,7 +773,7 @@ void Application::Run() {
             const glm::vec3 jolt = glm::vec3(std::sin(t * 47.0f), std::sin(t * 53.0f) * 0.6f, std::cos(t * 41.0f)) * 0.12f * shake * shake;
             camera.SetPosition(player.GetEyePosition() + bob * bobAmount + jolt);
         }
-        world->Update(camera.GetPosition());
+        world->Update(player.GetFeetPosition() + glm::vec3(0.0f, 0.1f, 0.0f)); // (the chunk the server streams round: the feet's, not the eye's)
         lap(1);
 
         FrameParams params;
@@ -1875,10 +1879,14 @@ void Application::DrawToast() {
     // as a banner under the compass for four seconds, sliding in and fading out.
     const auto& chat = client->GetChat();
     const std::string mark = Achievements::kToastMark;
-    if (chat.size() < chatSeen) chatSeen = 0;
-    for (; chatSeen < chat.size(); chatSeen++)
-        if (chat[chatSeen].text.rfind(mark, 0) == 0) {
-            toastText = chat[chatSeen].text.substr(mark.size());
+    // (Counted by lines ever received: the log keeps only the last hundred, so an index
+    // into it stopped finding new ones once it was full.)
+    const size_t total = client->GetChatCount(), first = total - chat.size();
+    if (total < chatSeen) chatSeen = 0;
+    chatSeen = std::max(chatSeen, first);
+    for (; chatSeen < total; chatSeen++)
+        if (chat[chatSeen - first].text.rfind(mark, 0) == 0) {
+            toastText = chat[chatSeen - first].text.substr(mark.size());
             toastUntil = Client::Now() + 4.0;
             audio->PlayHere("craft", 0.7f);
         }
@@ -2161,7 +2169,7 @@ void Application::DrawChat() {
     ui::PopTextWrapPos();
 
     if (chatOpen) {
-        if (chatOpenFrames < 2) ui::SetKeyboardFocusHere();
+        if (chatOpenFrames == 0) ui::SetKeyboardFocusHere();
         ui::SetNextItemWidth(-1.0f);
         // Just opened: the key that opened it may also arrive as a typed character (drop
         // the 't', keep a single '/'). Up and Down step back and forward through what was
@@ -2178,7 +2186,8 @@ void Application::DrawChat() {
             const std::string& text = chatHistoryAt == -1 ? chatDraft : chatHistory[static_cast<size_t>(chatHistoryAt)];
             std::snprintf(chatInput, sizeof chatInput, "%s", text.c_str());
         }
-        const bool send = ui::InputText("##chat", chatInput, sizeof chatInput, ui::InputTextFlags_EnterReturnsTrue);
+        const bool opening = chatOpenFrames == 0; // (Enter opening it mustn't also send it, empty)
+        const bool send = ui::InputText("##chat", chatInput, sizeof chatInput, ui::InputTextFlags_EnterReturnsTrue) && !opening;
         if (chatOpenFrames < 3) {
             const std::string text = chatInput;
             if (chatOpenedWith == 't' && (text == "t" || text == "T")) chatInput[0] = '\0';

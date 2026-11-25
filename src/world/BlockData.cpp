@@ -92,8 +92,9 @@ RawShape ReadShape(const std::string& path, const std::string& id, const Json::V
             warn("a box needs \"from\" and \"to\", each [x, y, z]");
             continue;
         }
-        box.lo = glm::clamp(glm::min(box.lo, box.hi), 0.0f, 1.0f);
-        box.hi = glm::clamp(glm::max(box.lo, box.hi), 0.0f, 1.0f);
+        const glm::vec3 from = box.lo, to = box.hi; // (either way round)
+        box.lo = glm::clamp(glm::min(from, to), 0.0f, 1.0f);
+        box.hi = glm::clamp(glm::max(from, to), 0.0f, 1.0f);
         auto faces = [&](const char* key) {
             uint8_t bits = 0;
             if (const auto* f = b->Find(key); f && f->IsArray())

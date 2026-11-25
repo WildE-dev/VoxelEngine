@@ -134,6 +134,7 @@ void Application::DrawMenu() {
                 ui::TableSetupColumn("World", ui::TableColumnFlags_WidthStretch);
                 ui::TableSetupColumn("Kind", ui::TableColumnFlags_WidthFixed, 130.0f);
                 ui::TableSetupColumn("", ui::TableColumnFlags_WidthFixed, 120.0f);
+                bool deleted = false; // (the list is read again once the loop over it is done)
                 for (const auto& w : worlds) {
                     ui::PushID(w.directory.c_str());
                     ui::TableNextRow();
@@ -156,7 +157,7 @@ void Application::DrawMenu() {
                             fs::remove_all(deleteCandidate, ec);
                             if (ec) menuMessage = "Couldn't delete " + deleteCandidate + ": " + ec.message();
                             deleteCandidate.clear();
-                            RefreshWorlds();
+                            deleted = true;
                             ui::CloseCurrentPopup();
                         }
                         ui::SameLine();
@@ -167,9 +168,10 @@ void Application::DrawMenu() {
                         ui::EndPopup();
                     }
                     ui::PopID();
-                    if (client) break; // a world started: the list is gone
+                    if (client || deleted) break; // a world started: the list is gone
                 }
                 ui::EndTable();
+                if (deleted) RefreshWorlds();
             }
             ui::Spacing();
             if (!menuMessage.empty()) ui::TextColored(ui::Vec4(1.0f, 0.5f, 0.45f, 1.0f), "%s", menuMessage.c_str());
@@ -296,6 +298,7 @@ void Application::DrawSettingsPage(bool inGame) {
         }
         ui::Spacing();
         if (WideButton("Done")) {
+            rebinding = -1; // (a key asked for and not given isn't taken from the next one pressed in the game)
             settings.Clamp();
             settings.Save(kSettingsFile);
             if (inGame) pauseSettings = false;

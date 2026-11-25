@@ -36,6 +36,9 @@ struct Settings {
         sensitivity = std::clamp(sensitivity, kMinSensitivity, kMaxSensitivity);
         volume = std::clamp(volume, 0.0f, 1.0f);
         padLook = std::clamp(padLook, kMinPadLook, kMaxPadLook);
+        // (As a server will know it: no spaces round it.)
+        name.erase(0, name.find_first_not_of(' '));
+        name.erase(name.find_last_not_of(' ') + 1);
         if (name.empty()) name = "Player";
     }
 

@@ -148,6 +148,7 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
             break;
         }
         chat.push_back({ m.kind, m.text, Now() });
+        chatCount++;
         while (chat.size() > kMaxChatLines) chat.pop_front();
         break;
     }

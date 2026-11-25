@@ -323,6 +323,7 @@ struct Context {
     bool nextItemOpenSet = false, nextItemOpen = false;
     int nextItemOpenCond = 0;
     bool focusNextText = false;
+    bool editDrawn = false; // the box with the keyboard was drawn this frame
     // Items.
     uint32_t activeId = 0, hotId = 0;
     uint32_t lastItemId = 0;
@@ -1020,17 +1021,19 @@ bool EditText(uint32_t id, const Rect& frame, char* buffer, size_t size, const c
     held = false;
     NavAdd(id, frame);
     bool focused = g->edit.id == id;
-    if ((hovered && g->mouseClicked[0]) || (g->navActivate && g->navFocus == id) || (g->focusNextText && !focused)) {
+    const bool asked = g->focusNextText;
+    g->focusNextText = false; // (asked of this box, whether or not it had the keyboard already)
+    if ((hovered && g->mouseClicked[0]) || (g->navActivate && g->navFocus == id) || (asked && !focused)) {
         g->edit.id = id;
         g->edit.text = buffer;
         g->edit.cursor = g->edit.text.size();
         g->clickedAnItem = true;
-        g->focusNextText = false;
         if (g->navFocus == id) g->navActivate = false;
         focused = true;
     }
     bool changed = false, entered = false;
     if (focused) {
+        g->editDrawn = true;
         TextEdit& e = g->edit;
         if (e.text != buffer) e.text = buffer, e.cursor = e.text.size(); // (changed by the caller: the cursor to its end)
         e.cursor = std::min(e.cursor, e.text.size());
@@ -1361,6 +1364,11 @@ void CloseCurrentPopup() {
 void Render(Vec2 framebufferSize) {
     // Clicking off every box takes the keyboard from the one that had it.
     if (g->mouseClicked[0] && !g->clickedAnItem) g->edit.id = 0;
+    // A box that's no longer shown (its window closed) gives the keyboard up, and a
+    // focus asked for that no box took isn't kept for whichever comes next.
+    if (!g->editDrawn) g->edit.id = 0;
+    g->editDrawn = false;
+    g->focusNextText = false;
     if (g->edit.id == 0) g->io.WantTextInput = false;
     // The tooltip, by the mouse.
     if (!g->tooltip.empty()) {
@@ -1428,6 +1436,7 @@ void Render(Vec2 framebufferSize) {
         }
     }
     glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_BLEND); // (left on, the next frame's world was drawn blended, and the block outline, whose alpha is 0, not at all)
     glBindVertexArray(0);
 }
 

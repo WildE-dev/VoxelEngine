@@ -344,6 +344,10 @@ private:
     // Operators (names compared without case). `sender` null means the console.
     bool IsOperator(const ClientState* sender) const;
     bool IsOperatorName(const std::string& name) const;
+    // A name as players are known by: nothing unprintable, no spaces round it.
+    static std::string CleanName(const std::string& raw);
+    // What killing a creature gives the player who did it (by hand or by arrow).
+    void RewardKill(ClientState& client, CreatureType type, bool raider);
     // Adds or removes a name; returns false if nothing changed. Saves ops.txt.
     bool SetOperator(const std::string& name, bool op);
     void LoadOperators();

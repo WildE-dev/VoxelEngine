@@ -341,6 +341,8 @@ bool Decode(ByteReader& in, SteamNear& m) {
         uint16_t x, y, z;
         if (!in.U16(x) || !in.U16(y) || !in.U16(z) || !in.U8(c.density)) return false;
         c.dx = static_cast<int16_t>(x), c.dy = static_cast<int16_t>(y), c.dz = static_cast<int16_t>(z);
+        // (Near the player, as the server sends it: the client draws a grid over them all.)
+        if (std::abs(c.dx) > 128 || std::abs(c.dy) > 128 || std::abs(c.dz) > 128) return false;
     }
     return in.AtEnd();
 }
@@ -924,7 +926,7 @@ bool Decode(ByteReader& in, Hello& m) {
 bool Decode(ByteReader& in, Welcome& m) {
     return in.U16(m.playerId) && in.Vec3(m.spawn) && in.I32(m.renderDistance) && in.I32(m.verticalRenderDistance) &&
            in.U8(m.flags) && in.F32(m.yaw) && in.F32(m.pitch) && Finite(m.spawn) && std::isfinite(m.yaw) && std::isfinite(m.pitch) &&
-           m.renderDistance > 0 && m.renderDistance <= 64 && m.verticalRenderDistance > 0 && m.verticalRenderDistance <= 64;
+           m.renderDistance > 0 && m.renderDistance <= 16 && m.verticalRenderDistance > 0 && m.verticalRenderDistance <= 16; // (servers send 12 at most; far more would be millions of chunks)
 }
 
 bool Decode(ByteReader& in, Kick& m) {

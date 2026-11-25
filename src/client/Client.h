@@ -103,6 +103,8 @@ public:
     };
     void SendChat(const std::string& text);
     const std::deque<ChatLine>& GetChat() const { return chat; }
+    // How many chat lines have ever arrived (GetChat keeps only the last of them).
+    size_t GetChatCount() const { return chatCount; }
     // Machines' descriptions, as the server answered Inspect (newest last), kept apart from
     // the chat.
     const std::deque<ChatLine>& GetInspections() const { return inspections; }
@@ -113,6 +115,7 @@ public:
     // A line in this player's chat only (not sent anywhere).
     void Note(const std::string& text, net::ChatMessage::Kind kind = net::ChatMessage::Kind::Info) {
         chat.push_back({ kind, text, Now() });
+        chatCount++;
         while (chat.size() > kMaxChatLines) chat.pop_front();
     }
     static double Now();
@@ -358,6 +361,7 @@ private:
     uint8_t armour = 0;
     double lastHurt = -1000.0;
     std::deque<ChatLine> chat; // the last kMaxChatLines
+    size_t chatCount = 0;
     static constexpr size_t kMaxChatLines = 100;
     std::deque<ChatLine> inspections; // the last kMaxInspections
     static constexpr size_t kMaxInspections = 32;

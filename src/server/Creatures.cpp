@@ -656,7 +656,7 @@ void CreatureSystem::SpawnNaturally(ServerWorld& world, const std::vector<Player
     for (const auto& player : players) {
         int animals = 0;
         for (const auto& c : creatures)
-            if (glm::distance(c.feet, player.feet) < kNearRange && !SpecOf(c.type).hostile && !IsDwarf(c.type) && c.type != CreatureType::Bat) animals++;
+            if (glm::distance(c.feet, player.feet) < kNearRange && !SpecOf(c.type).hostile && !IsDwarf(c.type) && c.type != CreatureType::Bat && c.owner == 0) animals++; // (tame wolves aren't wildlife)
 
         // A herd of deer on grass somewhere around, with room to stand: a few tries.
         for (int attempt = 0; attempt < 4 && animals < kMaxAnimalsNear; attempt++) {

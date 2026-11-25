@@ -158,6 +158,7 @@ bool Server::Start(const Options& opts) {
         if (std::filesystem::exists(Smelting::kPath) && !Smelting::Load(Smelting::kPath, error)) Log("[data] " + error);
     }
     options = opts;
+    options.ownerName = CleanName(options.ownerName); // (as their name will be when they join)
     if (!net.Listen(options.bindHost, options.port, kMaxClients)) {
         std::cerr << "[server] could not listen on " << options.bindHost << ":" << options.port << std::endl;
         return false;
@@ -239,6 +240,15 @@ bool Server::Start(const Options& opts) {
         std::to_string(world->GetRenderDistance()) + ")");
     Log("listening on " + (options.bindHost.empty() ? std::string("0.0.0.0") : options.bindHost) + ":" + std::to_string(GetPort()));
     return true;
+}
+
+std::string Server::CleanName(const std::string& raw) {
+    std::string name;
+    for (const unsigned char c : raw.substr(0, 32)) // (as much of it as a Hello carries)
+        if (c >= 0x20 && c != 0x7F) name.push_back(static_cast<char>(c));
+    name.erase(0, name.find_first_not_of(' '));
+    name.erase(name.find_last_not_of(' ') + 1);
+    return name;
 }
 
 uint16_t Server::GetPort() const {
@@ -550,11 +560,7 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
     // Their name as sent, less anything that isn't printable (a line break in a name
     // would let it write lines of its own into everyone's chat and the log) and any
     // spaces round it.
-    client.name.clear();
-    for (const unsigned char c : hello.name)
-        if (c >= 0x20 && c != 0x7F) client.name.push_back(static_cast<char>(c));
-    client.name.erase(0, client.name.find_first_not_of(' '));
-    client.name.erase(client.name.find_last_not_of(' ') + 1);
+    client.name = CleanName(hello.name);
     if (client.name.empty()) client.name = "Player" + std::to_string(client.id);
     // One player of a name at a time (whatever its capitals): their saved place and
     // things go by it.
@@ -988,25 +994,27 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
     const bool raider = target && target->raider;
     const bool landed = creatures.Attack(creature, eye, tool, ToolTier(client, tool), now, killed);
     if (landed && !killed) creatures.Provoke(creature, client.id, now);
-    if (landed && killed) {
-        // A deer gives venison (one or two).
-        if (type == CreatureType::Deer) {
-            const uint32_t venison = 1 + static_cast<uint32_t>(tickCount % 2);
-            Give(client, ItemType::RAW_VENISON, venison * Block::kUnitsPerBlock);
-            Give(client, ItemType::HIDE, Block::kUnitsPerBlock); // and its hide
-            SendInventory(client);
-        }
-        // A crossbowman leaves some of its bolts (arrows).
-        if (type == CreatureType::DwarfCrossbow) {
-            Give(client, ItemType::ARROW, 2 * Block::kUnitsPerBlock);
-            SendInventory(client);
-        }
-        if (type == CreatureType::DwarfKing) KingSlain(client);
-        if (type == CreatureType::ForgeGolem) GolemSlain(client);
-        if (raider) Award(client, Achievement::Defender);
-        if (type == CreatureType::Deer) Award(client, Achievement::Hunter);
-        else if (SpecOf(type).hostile) Award(client, Achievement::DwarfSlayer);
+    if (landed && killed) RewardKill(client, type, raider);
+}
+
+void Server::RewardKill(ClientState& client, CreatureType type, bool raider) {
+    // A deer gives venison (one or two).
+    if (type == CreatureType::Deer) {
+        const uint32_t venison = 1 + static_cast<uint32_t>(tickCount % 2);
+        Give(client, ItemType::RAW_VENISON, venison * Block::kUnitsPerBlock);
+        Give(client, ItemType::HIDE, Block::kUnitsPerBlock); // and its hide
+        SendInventory(client);
     }
+    // A crossbowman leaves some of its bolts (arrows).
+    if (type == CreatureType::DwarfCrossbow) {
+        Give(client, ItemType::ARROW, 2 * Block::kUnitsPerBlock);
+        SendInventory(client);
+    }
+    if (type == CreatureType::DwarfKing) KingSlain(client);
+    if (type == CreatureType::ForgeGolem) GolemSlain(client);
+    if (raider) Award(client, Achievement::Defender);
+    if (type == CreatureType::Deer) Award(client, Achievement::Hunter);
+    else if (SpecOf(type).hostile) Award(client, Achievement::DwarfSlayer);
 }
 
 void Server::SendTradePrices(ClientState& client, uint16_t trader) {
@@ -1061,8 +1069,13 @@ void Server::LoadFallenKings() {
     if (options.worldDirectory.empty()) return;
     std::ifstream in(std::filesystem::path(options.worldDirectory) / "kings.txt");
     std::unordered_set<int64_t> fallen;
-    int x, z;
-    while (in >> x >> z) fallen.insert(CreatureSystem::SiteKey({ x, 0, z }));
+    // (Line by line: the file starts with a comment, which reading numbers straight
+    // through stopped at, so no fallen king was ever remembered past a restart.)
+    for (std::string line; std::getline(in, line);) {
+        int x, z;
+        if (line.empty() || line[0] == '#' || std::sscanf(line.c_str(), "%d %d", &x, &z) != 2) continue;
+        fallen.insert(CreatureSystem::SiteKey({ x, 0, z }));
+    }
     creatures.SetFallenKings(fallen);
     fallenKingsSaved = fallen.size();
 }
@@ -2166,16 +2179,14 @@ void Server::UpdateArrows() {
                 bool killed = false;
                 const uint16_t id = c.id;
                 const CreatureType type = c.type;
+                const bool raider = c.raider;
                 creatures.Damage(id, a.damage, a.position - a.velocity * 0.05f, now, killed);
                 if (!killed && a.shooter != kCreatureShooter) creatures.Provoke(id, a.shooter, now);
                 if (killed)
                     for (auto& [peer, shooter] : clients)
                         if (shooter.id == a.shooter) {
-                            if (type == CreatureType::DwarfKing) KingSlain(shooter);
-                            if (type == CreatureType::ForgeGolem) GolemSlain(shooter);
+                            RewardKill(shooter, type, raider); // (what a kill by hand gives: venison, bolts, a hoard)
                             Award(shooter, Achievement::Marksman);
-                            if (type == CreatureType::Deer) Award(shooter, Achievement::Hunter);
-                            else if (SpecOf(type).hostile) Award(shooter, Achievement::DwarfSlayer);
                         }
                 gone = true;
                 break;
