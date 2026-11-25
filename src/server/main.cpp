@@ -3,6 +3,8 @@
 //               [--weather clear|rain|auto] [--day-length SECONDS] [--op NAME]...
 //               [--mode creative|survival]
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
@@ -17,6 +19,18 @@ Server* runningServer = nullptr;
 void StopServer(int) {
     if (runningServer) runningServer->Stop();
 }
+
+// The console window closed (or Ctrl+Break, logging off, shutting down), on Windows:
+// the process is ended as soon as this returns, so it stops the server and waits here
+// (on the thread Windows runs it on) for the last save, a little short of the five
+// seconds Windows allows.
+#ifdef SIGBREAK
+std::atomic<bool> serverDone{false};
+void StopServerAndWait(int) {
+    if (runningServer) runningServer->Stop();
+    for (int i = 0; i < 450 && !serverDone; i++) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+}
+#endif
 // Reads commands typed into the console and hands them to the server. Detached: it may
 // still be waiting on input when the server stops.
 void StartConsole(Server& server) {
@@ -104,7 +118,14 @@ int main(int argc, char** argv) {
     std::cout << "[server] type commands here (help lists them)" << std::endl;
     std::signal(SIGINT, StopServer);
     std::signal(SIGTERM, StopServer);
+#ifdef SIGBREAK
+    std::signal(SIGBREAK, StopServerAndWait);
+#endif
     server.Run();
+    runningServer = nullptr;
+#ifdef SIGBREAK
+    serverDone = true;
+#endif
     std::cout << "[server] stopped" << std::endl;
     return EXIT_SUCCESS;
 }

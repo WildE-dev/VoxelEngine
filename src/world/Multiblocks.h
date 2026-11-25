@@ -12,7 +12,7 @@
 // to what it was (the one broken gives itself up as usual).
 //
 //  - Oil derrick: steel frames round an oil derrick block, a tower above. It pumps
-//    crude oil out of the shale under its 3 x 3 footprint, down to kWellDepth, into the
+//    crude oil out of the shale under its 3 x 3 footprint, down to Server::kStructureWellDepth, into the
 //    fluid pipes at its crude port, three times as fast as a derrick block alone did.
 //  - Refinery: machine casings round a refinery block, with fluid tanks and a column.
 //    Crude oil in at one fluid port, fuel out of the other, three times as fast.

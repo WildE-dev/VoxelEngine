@@ -993,55 +993,16 @@ void Server::StoreFluids() {
     }
 }
 
-bool Server::PumpOil(const glm::ivec3& pos, Worker& w) {
+bool Server::PumpOil(const glm::ivec3&, Worker& w) {
     // (A lone derrick block does nothing now: it's built into an oil derrick structure.)
     w.state = Power::DrillState::Blocked;
     return false;
-    FluidNet* out = FluidNetBeside(pos, Fluids::Kind::Crude, false);
-    if (!out || out->Room() < Fluids::kDerrickUnits) {
-        w.state = Power::DrillState::NoChest; // (nowhere to put it)
-        return false;
-    }
-    // The nearest shale under it, in a 3 x 3 column down to its well's depth.
-    for (int depth = 1; depth <= Fluids::kWellDepth; depth++)
-        for (int dx = -1; dx <= 1; dx++)
-            for (int dz = -1; dz <= 1; dz++) {
-                const glm::ivec3 p = pos + glm::ivec3(dx, -depth, dz);
-                Block b;
-                if (!world->GetBlock(p.x, p.y, p.z, b) || b.type != BlockType::OIL_SHALE) continue;
-                Block drawn = b;
-                if (drawn.axis >= 254) drawn = Block(BlockType::STONE); // spent
-                else drawn.axis++;
-                world->SetBlock(p.x, p.y, p.z, drawn);
-                out->amount += Fluids::kDerrickUnits;
-                out->kind = Fluids::Kind::Crude;
-                w.state = Power::DrillState::Working;
-                return true;
-            }
-    w.state = Power::DrillState::Done; // (no oil under it)
-    return false;
 }
 
-bool Server::Refine(const glm::ivec3& pos, const Block& refinery, Worker& w) {
+bool Server::Refine(const glm::ivec3&, const Block&, Worker& w) {
     // (Likewise a lone refinery block: it's built into a refinery structure.)
     w.state = Power::DrillState::Blocked;
     return false;
-    FluidNet* in = FluidNetAt(pos - refinery.Facing());
-    FluidNet* out = FluidNetAt(pos + refinery.Facing());
-    if (!in || !out || in == out) {
-        w.state = Power::DrillState::NoChest; // (needs pipes at its back and its front)
-        return false;
-    }
-    if (in->kind != Fluids::Kind::Crude || in->amount <= 0 || !out->Takes(Fluids::Kind::Fuel) || out->Room() <= 0) {
-        w.state = Power::DrillState::Idle;
-        return false;
-    }
-    const int units = std::min({ Fluids::kRefineUnits, in->amount, out->Room() });
-    in->amount -= units;
-    out->amount += units;
-    out->kind = Fluids::Kind::Fuel;
-    w.state = Power::DrillState::Working;
-    return true;
 }
 
 bool Server::Movable(const glm::ivec3& pos, const Block& b) const {

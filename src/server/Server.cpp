@@ -353,6 +353,7 @@ void Server::HandleEvent(const net::NetEvent& event) {
     switch (event.type) {
     case net::NetEvent::Type::Connect:
         clients[event.peer].peer = event.peer;
+        clients[event.peer].connectedAt = Now();
         break;
     case net::NetEvent::Type::Disconnect: {
         auto it = clients.find(event.peer);
@@ -2879,6 +2880,8 @@ void Server::Tick() {
         mark = t;
     };
     RunConsoleCommands();
+    for (auto& [peer, client] : clients)
+        if (!client.welcomed && !client.kicked && Now() - client.connectedAt > kHelloSeconds) Kick(client, "no Hello");
     UpdateSky();
     UpdateHorde();
     UpdateTraps();
@@ -2894,6 +2897,7 @@ void Server::Tick() {
     UpdateFire();
     UpdateFishing();
     UpdateTnt();
+    ForgetLostSigns();
     section(2);
     UpdatePower();
     UpdateMiningPosts();

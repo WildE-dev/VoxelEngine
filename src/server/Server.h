@@ -98,6 +98,9 @@ class Server
 public:
     static constexpr int kTickRate = 20;
     static constexpr size_t kMaxClients = 16;
+    // A connection has this long to say Hello, or it's dropped: silent ones would
+    // otherwise hold the few places there are for as long as they liked.
+    static constexpr double kHelloSeconds = 10.0;
 
     static constexpr int kMaxHealth = 20;           // half hearts
     static constexpr int kSpikeDamage = 4;          // two hearts...
@@ -178,6 +181,7 @@ private:
         glm::vec3 lastValid{0.0f};
         double lastStateTime = 0.0;
         double lastHeard = 0.0; // when it last sent anything (a live game: many times a second)
+        double connectedAt = 0.0; // (one that never says Hello is let go: kHelloSeconds)
         float yaw = 0.0f, pitch = 0.0f;
         uint8_t flags = 0;
         uint32_t lastSequence = 0;
@@ -479,6 +483,10 @@ private:
     void UpdateTnt();
     void Explode(const glm::ivec3& pos, int radius);
     void BroadcastSign(const glm::ivec3& pos);
+    // Signs go in many ways besides being broken (washed away, lasered, filled over,
+    // knocked off): once a second, texts whose sign is gone are forgotten, and clients told.
+    void ForgetLostSigns();
+    double nextSignSweep = 0.0;
     void UpdateFishing(); // bites, and lines snapped by walking off
 
     // Air power (world/Power.h; the code is in Power.cpp).
