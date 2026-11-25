@@ -240,7 +240,7 @@ pauses. The menus can be driven with the pad as well.
 | P | Toggle the list of players online, with how far off each is and which way |
 | M | Toggle the minimap (top right): the ground around you from above, north up, with you as an arrow and other players as dots |
 | F12 | Save a screenshot (`screenshot-<date>-<time>.png` in the working directory) |
-| N | Skip to the next dusk (by day) or dawn (at night), for everyone on the server |
+| N | Skip to the next dusk (by day) or dawn (at night), for everyone on the server. A horde night can't be skipped, any more than slept through |
 | T / Enter | Open chat (Enter sends, Esc closes). While it's open the view stays still and the cursor is free |
 | / | Open chat with a command started |
 | Esc | Pause menu: resume, settings, back to the title screen, quit (or close the chat) |

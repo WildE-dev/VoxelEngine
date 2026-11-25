@@ -1426,6 +1426,9 @@ void Server::HandleCarve(ClientState& client, const net::EditCarve& carve) {
 void Server::HandleSkipTime(ClientState& client) {
     // By day, on to the evening (just after dark); at night, on to the morning.
     const bool day = timeOfDay < 0.5;
+    // A horde night can't be skipped any more than slept through (HandleUseBed): the
+    // horde would simply fade with the dawn that brought.
+    if (!day && creatures.Horde()) return SendChat(client, net::ChatMessage::Kind::Info, "You can't skip a horde night: survive it");
     timeOfDay = day ? 0.6 : 0.1;
     Log(client.name + " skipped to " + (day ? "night" : "morning"));
 }

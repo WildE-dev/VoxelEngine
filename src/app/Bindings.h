@@ -52,7 +52,7 @@ inline const char* Id(Action a) {
 inline const char* Name(Action a) {
     static const char* names[] = { "Walk forward", "Walk back", "Step left", "Step right", "Jump (swim up)", "Crouch (get out of a boat)", "Sprint",
                                    "Fly up", "Fly down", "Inventory", "Chat", "Command (/)", "Map", "Player names",
-                                   "Placement height", "Skip the night (in bed)", "Reload textures and data",
+                                   "Placement height", "Skip to dusk or dawn", "Reload textures and data",
                                    "Drop the item in hand (with Crouch: the stack)" };
     static_assert(sizeof(names) / sizeof(names[0]) == kActionCount, "an action has no name");
     return names[static_cast<int>(a)];
