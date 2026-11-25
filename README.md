@@ -777,9 +777,13 @@ you wear (see [Swords and armour](#swords-and-armour)).
 of its kind you carry (see [Ores and iron](#ores-and-iron)). Without one, it's a bare
 hand.
 
-In **creative** the inventory also shows every block and item, every tool in each
-tier, and every piece of armour: click one to take a full stack (right-click: one),
-and put a stack back there to get rid of it. Crouch-click puts a stack in the selected
+Beside the inventory (and a chest) is the **item panel**: every block and item, every
+tool in each tier and every piece of armour, with a search box. In survival, click one
+to see how to get it (what tool breaks it, the recipes that make it and whether you can
+make it now, what smelts into it) and what it goes into. The inventory's crafting list
+shows only what you can make now from what you carry. In **creative**, click one in the
+panel to take a full stack (right-click: one), and put a stack back there to get rid of
+it. Crouch-click puts a stack in the selected
 hotbar slot. Nothing you build with runs out. A creative player who joins with an
 empty hotbar gets the usual building blocks in it (or what an older `hotbar.txt`
 chose).

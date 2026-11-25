@@ -122,6 +122,12 @@ private:
     void SelectSlot(int slot);
     // Inventory (Tab): pick which block goes in each hotbar slot; kept in hotbar.txt.
     void DrawInventory();
+    // The item panel, at the right while the inventory or a chest is open: every block
+    // and item, searchable. Creative: take stacks from it. Survival: click one to see
+    // how to get it and what it's for (under the grid).
+    void DrawItemPanel();
+    void DrawItemInfo(ItemId item);
+    static constexpr float kItemPanelWidth = 360.0f;
     // C / Shift+C: lower / raise the quarter of the block in view.
     void ChiselTarget(bool raise);
     // The crouch key (or the pad's B) held: the modifier (build against, chisel up, back a step, move a stack across).
@@ -372,7 +378,10 @@ private:
     std::optional<HeldStack> heldStack;
     bool draggingStack = false;
     std::optional<std::pair<SlotBox, int>> hoveredSlot;
-    std::vector<ItemId> paletteItems; // (filled the first time it's drawn)
+    std::vector<ItemId> paletteItems; // the item panel's slots: what matches the search
+    std::vector<ItemId> allItems;     // (filled the first time it's drawn)
+    char itemSearch[48] = "";
+    ItemId itemInfo = Items::kNone; // the item whose details the panel shows
     Stack StackIn(SlotBox box, int slot) const;
     void DrawSlot(SlotBox box, int slot, float size, bool selected = false);
     void DrawSlotGrid(SlotBox box, int first, int count, int columns, float size);

@@ -421,6 +421,8 @@ bool Application::Init(const ClientOptions& options) {
     LoadChatHistory();
     // VOXEL_OPEN_INVENTORY=1 starts with the inventory open (for screenshots).
     if (std::getenv("VOXEL_OPEN_INVENTORY")) SetInventoryOpen(true);
+    // VOXEL_ITEM_INFO="iron_ingot": the item panel starts out describing that (for unattended checks).
+    if (const char* info = std::getenv("VOXEL_ITEM_INFO")) itemInfo = Items::FromId(info);
     ApplySettings();
     if (options.showMenu) {
         // The title screen first: nothing to connect to yet.
@@ -2763,7 +2765,7 @@ void Application::DrawInventory() {
     if (tradeMode) return DrawTrade();
     constexpr float kIcon = 38.0f;
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f - kItemPanelWidth * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
                             ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowBgAlpha(0.85f);
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
@@ -2798,30 +2800,20 @@ void Application::DrawInventory() {
             ImGui::PopTextWrapPos();
         }
 
-        if (!survival) {
-            // Creative: every block and item, to take as many of as you like (put a stack
-            // back here to get rid of it).
-            if (paletteItems.empty()) {
-                for (ItemId item : kInventoryItems) paletteItems.push_back(item);
-                for (Tool t : kInventoryTools)
-                    for (int tier = 0; tier < Items::kTiers; tier++) paletteItems.push_back(Items::OfTool(t, tier));
-                for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++) paletteItems.push_back(Items::OfArmour(static_cast<ArmourPiece>(p)));
-            }
-            ImGui::SeparatorText("Every block and item (creative: take a stack; drop one here to get rid of it)");
-            ImGui::BeginChild("palette", ImVec2(10 * (kIcon + 10.0f), 190.0f), true);
-            DrawSlotGrid(SlotBox::Palette, 0, static_cast<int>(paletteItems.size()), 10, kIcon - 6.0f);
-            ImGui::EndChild();
-        }
-        else {
-            // Crafting: what each recipe takes, and buttons to make it (into your slots).
+        if (survival) {
+            // Crafting: what you can make now from what you carry (and the tool in hand),
+            // and buttons to make it (into your slots). (Everything else: the item panel.)
             ImGui::SeparatorText("Crafting");
             const auto& recipes = Crafting::Recipes();
             const Tool inHand = SelectedTool();
             // In a scrolling box, so the window stays on screen.
             ImGui::BeginChild("crafting", ImVec2(10 * (kIcon + 10.0f), 170.0f), true);
+            int shown = 0;
             if (ImGui::BeginTable("recipes", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
                 for (int r = 0; r < static_cast<int>(recipes.size()); r++) {
                     const Recipe& recipe = recipes[r];
+                    if (!client->CanCraft(r, 1, inHand)) continue;
+                    shown++;
                     ImGui::PushID(r);
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
@@ -2864,13 +2856,122 @@ void Application::DrawInventory() {
                 }
                 ImGui::EndTable();
             }
+            if (shown == 0) ImGui::TextDisabled("Nothing you can make with what you carry (the item panel shows what everything takes).");
             ImGui::EndChild();
         }
     }
     ImGui::End();
+    DrawItemPanel();
     HandleSlotClicks();
     DrawHeldStack();
     if (!open) SetInventoryOpen(false);
+}
+
+void Application::DrawItemPanel() {
+    if (allItems.empty()) {
+        for (ItemId item : kInventoryItems) allItems.push_back(item);
+        for (Tool t : kInventoryTools)
+            for (int tier = 0; tier < Items::kTiers; tier++) allItems.push_back(Items::OfTool(t, tier));
+        for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++) allItems.push_back(Items::OfArmour(static_cast<ArmourPiece>(p)));
+    }
+    // What matches the search (by name, any case).
+    auto lower = [](std::string s) {
+        for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return s;
+    };
+    const std::string search = lower(itemSearch);
+    paletteItems.clear();
+    for (ItemId item : allItems)
+        if (search.empty() || lower(ItemName(item)).find(search) != std::string::npos) paletteItems.push_back(item);
+
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - 10.0f, viewport->WorkPos.y + 200.0f), ImGuiCond_Always, ImVec2(1.0f, 0.0f)); // (under the minimap)
+    ImGui::SetNextWindowSize(ImVec2(kItemPanelWidth, std::max(260.0f, viewport->WorkSize.y - 330.0f)), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.85f);
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize;
+    if (ImGui::Begin("Items", nullptr, flags)) {
+        const bool creative = client->IsCreative();
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputTextWithHint("##search", "Search", itemSearch, sizeof itemSearch);
+        ImGui::TextDisabled(creative ? "Take a stack; put one here to get rid of it." : "Click one to see how to get it.");
+        constexpr float kSlot = 30.0f;
+        const int columns = std::max(1, static_cast<int>((kItemPanelWidth - 40.0f) / (kSlot + 6.0f + ImGui::GetStyle().ItemSpacing.x)));
+        const float infoHeight = itemInfo != Items::kNone ? 170.0f : 0.0f;
+        ImGui::BeginChild("items", ImVec2(0.0f, -infoHeight), true);
+        DrawSlotGrid(SlotBox::Palette, 0, static_cast<int>(paletteItems.size()), columns, kSlot);
+        if (paletteItems.empty()) ImGui::TextDisabled("Nothing called that.");
+        ImGui::EndChild();
+        if (itemInfo != Items::kNone) {
+            ImGui::BeginChild("info", ImVec2(0.0f, 0.0f), false);
+            DrawItemInfo(itemInfo);
+            ImGui::EndChild();
+        }
+    }
+    ImGui::End();
+}
+
+void Application::DrawItemInfo(ItemId item) {
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kItemPanelWidth - 30.0f);
+    ImGui::SeparatorText(ItemName(item).c_str());
+    if (Items::IsTool(item)) ImGui::TextUnformatted(ToolHint(Items::ToolOf(item)));
+    if (Items::IsArmour(item)) ImGui::Text("%d%% less damage", static_cast<int>(std::lround(Armour::Protection(Items::ArmourOf(item)) * 100.0f)));
+    if (Items::IsBlock(item)) {
+        const BlockType type = Items::BlockOf(item);
+        const float hardness = Mining::Hardness(type);
+        const Tool best = Mining::BestTool(type);
+        if (hardness <= 0.0f) ImGui::TextDisabled("Breaks at once.");
+        else ImGui::TextDisabled("Hardness %g%s%s.", hardness, best != Tool::None ? ", faster with a " : "", best != Tool::None ? Mining::ToolName(best) : "");
+    }
+    auto inputs = [](const std::vector<Ingredient>& ins) {
+        std::string s;
+        for (const auto& in : ins) s += (s.empty() ? "" : " + ") + FormatBlocks(in.units) + " " + ItemName(in.item);
+        return s;
+    };
+    // How it's made: the recipes that make it, and what smelts into it.
+    const auto& recipes = Crafting::Recipes();
+    const Tool inHand = SelectedTool();
+    bool any = false;
+    for (int r = 0; r < static_cast<int>(recipes.size()); r++) {
+        const Recipe& recipe = recipes[r];
+        bool makes = false;
+        if (recipe.tool != Tool::None) makes = Items::IsTool(item) && Items::ToolOf(item) == recipe.tool && Items::TierOf(item) == (recipe.steelUpgrade ? 2 : recipe.ironUpgrade ? 1 : 0);
+        else if (recipe.armour != ArmourPiece::Count) makes = Items::ArmourOf(item) == recipe.armour;
+        else makes = !recipe.Upgrade() && static_cast<ItemId>(recipe.output) == item;
+        if (!makes) continue;
+        if (!any) ImGui::TextUnformatted("Made from:");
+        any = true;
+        std::string line = "  " + inputs(recipe.inputs);
+        if (recipe.Upgrade()) line += recipe.steelUpgrade ? ", an iron one in hand" : ", a stone one in hand";
+        if (recipe.outputUnits > Block::kUnitsPerBlock) line += " (makes " + FormatBlocks(recipe.outputUnits) + ")";
+        if (!client->IsCreative() && client->CanCraft(r, 1, inHand)) ImGui::TextColored(ImVec4(0.6f, 1.0f, 0.6f, 1.0f), "%s (you can make it)", line.c_str());
+        else ImGui::TextUnformatted(line.c_str());
+    }
+    for (const auto& s : Smelting::Recipes()) {
+        if (static_cast<ItemId>(s.output) != item) continue;
+        if (!any) ImGui::TextUnformatted("Made from:");
+        any = true;
+        std::string line = "  " + FormatBlocks(s.inputUnits) + " " + ItemName(s.input);
+        if (static_cast<ItemId>(s.extra) != Items::kNone) line += " + " + FormatBlocks(s.extraUnits) + " " + ItemName(s.extra);
+        if (s.outputUnits > Block::kUnitsPerBlock) line += " (makes " + FormatBlocks(s.outputUnits) + ")";
+        ImGui::Text("%s, in a smelter", line.c_str());
+    }
+    if (!any && Items::IsBlock(item)) ImGui::TextDisabled("Found in the world (it can't be made).");
+    else if (!any) ImGui::TextDisabled("Found, traded or dropped (it can't be made).");
+    // What it's for: the recipes it goes into.
+    std::string uses;
+    for (const auto& recipe : recipes)
+        for (const auto& in : recipe.inputs)
+            if (static_cast<ItemId>(in.item) == item) {
+                uses += (uses.empty() ? "" : ", ") + recipe.name;
+                break;
+            }
+    for (const auto& s : Smelting::Recipes())
+        if (static_cast<ItemId>(s.input) == item || static_cast<ItemId>(s.extra) == item) uses += (uses.empty() ? "" : ", ") + ItemName(s.output) + " (smelted)";
+    if (!uses.empty()) {
+        ImGui::TextUnformatted("Goes into:");
+        ImGui::TextDisabled("  %s", uses.c_str());
+    }
+    ImGui::PopTextWrapPos();
 }
 
 Stack Application::StackIn(SlotBox box, int slot) const {
@@ -2945,6 +3046,13 @@ void Application::DrawPlayerSlots(float size) {
 }
 
 void Application::HandleSlotClicks() {
+    // The item panel: a click picks the item whose details it shows; in survival that's
+    // all it does (nothing's taken from it).
+    if (hoveredSlot && hoveredSlot->first == SlotBox::Palette && !heldStack &&
+        (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))) {
+        if (const Stack st = StackIn(SlotBox::Palette, hoveredSlot->second); !st.Empty()) itemInfo = st.item;
+        if (!client->IsCreative()) return;
+    }
     // A stack picked up that's gone from its slot (moved, used up): let go of it.
     if (heldStack && heldStack->box != SlotBox::Palette) {
         const Stack st = StackIn(heldStack->box, heldStack->slot);
@@ -3136,7 +3244,7 @@ void Application::DrawChest() {
     }
     constexpr float kIcon = 36.0f;
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.42f),
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f - kItemPanelWidth * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.42f),
                             ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowBgAlpha(0.85f);
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
@@ -3163,6 +3271,7 @@ void Application::DrawChest() {
         DrawPlayerSlots(kIcon);
     }
     ImGui::End();
+    DrawItemPanel();
     HandleSlotClicks();
     DrawHeldStack();
     if (!keepOpen) SetInventoryOpen(false);
