@@ -2294,7 +2294,8 @@ Run with no options, the game opens at a title screen:
 The first time you open the game it makes up a name for you (two words and a number,
 such as "BraveOtter42"), which you can change in the settings. A server won't let in a
 second player with a name someone there is already using (whatever its capitals): it
-says so, and you can pick another.
+says so, and you can pick another. (If your connection dropped and you come straight
+back, the old one, gone quiet, is let go and you carry on.)
 
 In a game, Esc opens the pause menu: back to the game, settings, save and quit to the
 title screen (or disconnect), or quit. A singleplayer world keeps running while

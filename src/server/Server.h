@@ -175,6 +175,7 @@ private:
         glm::vec3 feet{0.0f};
         glm::vec3 lastValid{0.0f};
         double lastStateTime = 0.0;
+        double lastHeard = 0.0; // when it last sent anything (a live game: many times a second)
         float yaw = 0.0f, pitch = 0.0f;
         uint8_t flags = 0;
         uint32_t lastSequence = 0;

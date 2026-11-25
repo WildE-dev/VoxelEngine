@@ -105,6 +105,16 @@ int main() {
         const std::string why = twin.client.GetDisconnectReason();
         Check(!twin.client.IsWelcomed() && why.find("already playing here") != std::string::npos && a.client.IsConnected(),
               "a second player with a name in use is turned away (" + why + ")");
+        // A player whose connection has gone quiet (dropped, not yet timed out) coming
+        // back under the same name is let in, and the old connection let go.
+        TestClient gone, back;
+        gone.client.Connect("127.0.0.1", server.GetPort(), "Dave", error, kTestViewDistance);
+        Pump({ &a, &b, &gone }, 20.0, [&] { return gone.client.IsWelcomed(); });
+        Pump({ &a, &b }, 4.0, [] { return false; }); // (Dave's game says nothing now)
+        back.client.Connect("127.0.0.1", server.GetPort(), "Dave", error, kTestViewDistance);
+        Check(Pump({ &a, &b, &back }, 20.0, [&] { return back.client.IsWelcomed(); }) && back.client.GetDisconnectReason().empty(),
+              "a player whose old connection went quiet can come straight back under their name");
+        back.client.Disconnect();
         const std::string made = PlayerNames::Random(7), again = PlayerNames::Random(7), other = PlayerNames::Random(8);
         Check(!made.empty() && made.size() <= 32 && made == again && made != other, "a new player's name is made up (" + made + ", " + other + ")");
     }

@@ -373,6 +373,7 @@ void Server::HandleEvent(const net::NetEvent& event) {
 
 void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data) {
     if (client.kicked) return;
+    client.lastHeard = Now();
     if (data.empty()) return Kick(client, "empty message");
     net::ByteReader in(data.data() + 1, data.size() - 1);
     const auto type = static_cast<net::MsgType>(data[0]);
@@ -555,9 +556,22 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
             for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             return s;
         };
-        for (const auto& [peer, other] : clients)
-            if (&other != &client && other.welcomed && lower(other.name) == lower(client.name))
-                return Kick(client, "someone called " + other.name + " is already playing here: choose another name");
+        // (Unless that one's gone quiet: a connection that dropped and hasn't timed out
+        // yet, the same player coming back. It's let go, and they carry on from it.)
+        constexpr double kStaleSeconds = 3.0;
+        net::PeerId stale{};
+        bool replace = false;
+        for (auto& [peer, other] : clients) {
+            if (&other == &client || !other.welcomed || lower(other.name) != lower(client.name)) continue;
+            if (Now() - other.lastHeard < kStaleSeconds) return Kick(client, "someone called " + other.name + " is already playing here: choose another name");
+            stale = peer, replace = true;
+        }
+        if (replace) {
+            Log(client.name + " came back while their old connection hung on: letting it go");
+            StorePlayer(clients[stale]);
+            net.Disconnect(stale);
+            clients.erase(stale);
+        }
     }
     client.welcomed = true;
 
