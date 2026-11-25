@@ -191,6 +191,16 @@ int main() {
         Check(a.client.GetHealth() >= wet, "until you're in water");
         Check(!a.client.Burning(), "which puts it out on the client too");
 
+        // Burned to death (in a pit of lava, well away from that water): they come back
+        // at the spawn point, and not still alight.
+        fill({ 34, -1, 60 }, { 34, -1, 60 }, "lava");
+        Pump(a, 5.0, [&] { return at({ 34, -1, 60 }) == BlockType::LAVA; });
+        const double diedBefore = a.client.GetLastDeath();
+        server.QueueConsoleCommand("tp Warden 34.5 -1 60.5");
+        Check(Pump(a, 20.0, [&] { return a.client.GetLastDeath() > diedBefore && std::abs(a.feet.x - 34.5f) > 1.0f; }), "wading in lava kills");
+        Check(a.client.GetHealth() == a.client.GetMaxHealth() && !a.client.Burning(), "and they come back whole, no longer on fire");
+        fill({ 34, -1, 60 }, { 34, -1, 60 }, "stone");
+
         // Items in it are lost.
         server.QueueConsoleCommand("gamemode creative Warden");
         Pump(a, 5.0, [&] { return a.client.IsCreative(); });

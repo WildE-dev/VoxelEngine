@@ -1572,6 +1572,7 @@ void Server::Hurt(ClientState& client, int amount, const std::string& deathMessa
     client.food = Hunger::kMaxFood;
     client.exhaustion = 0.0f;
     client.hasHungerFeet = false;
+    client.burningUntil = 0.0; // (they don't come back still alight)
     client.invulnerableUntil = now + 3.0;
     std::string why;
     Teleport(client, RespawnPoint(client, why));
