@@ -28,6 +28,14 @@ ENetPacket* MakePacket(uint8_t channel, const std::vector<uint8_t>& data) {
     return enet_packet_create(data.data(), data.size(), flags);
 }
 
+// Queues a packet for a peer. ENet only takes the packet over if it queues it: one it
+// refuses (the peer is on its way out, say: kicked, or timed out but not yet reported)
+// is still ours to free.
+void SendTo(ENetPeer* peer, uint8_t channel, const std::vector<uint8_t>& data) {
+    ENetPacket* packet = MakePacket(channel, data);
+    if (packet && enet_peer_send(peer, channel, packet) < 0) enet_packet_destroy(packet);
+}
+
 size_t QueuedReliableBytes(const ENetPeer* peer) {
     size_t bytes = peer->reliableDataInTransit;
     for (const ENetList* list : { &peer->outgoingCommands, &peer->outgoingSendReliableCommands }) {
@@ -145,7 +153,7 @@ bool NetServer::Poll(NetEvent& event, uint32_t timeoutMs) {
 }
 
 void NetServer::Send(PeerId id, uint8_t channel, const std::vector<uint8_t>& data) {
-    if (ENetPeer* peer = impl->Find(id)) enet_peer_send(peer, channel, MakePacket(channel, data));
+    if (ENetPeer* peer = impl->Find(id)) SendTo(peer, channel, data);
 }
 
 void NetServer::Flush() {
@@ -208,7 +216,9 @@ bool NetClient::Connect(const std::string& host, uint16_t port, uint32_t timeout
     ENetEvent e;
     while (Clock::now() < deadline) {
         const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count();
-        if (enet_host_service(impl->host, &e, static_cast<enet_uint32>(std::max<long long>(1, remaining))) <= 0) continue;
+        const int result = enet_host_service(impl->host, &e, static_cast<enet_uint32>(std::max<long long>(1, remaining)));
+        if (result < 0) break; // (the socket failed: waiting won't help)
+        if (result == 0) continue;
         if (e.type == ENET_EVENT_TYPE_CONNECT) {
             impl->connected = true;
             return true;
@@ -241,7 +251,7 @@ bool NetClient::Poll(NetEvent& event, uint32_t timeoutMs) {
 }
 
 void NetClient::Send(uint8_t channel, const std::vector<uint8_t>& data) {
-    if (impl->connected) enet_peer_send(impl->peer, channel, MakePacket(channel, data));
+    if (impl->connected && impl->peer) SendTo(impl->peer, channel, data);
 }
 
 void NetClient::Flush() {
