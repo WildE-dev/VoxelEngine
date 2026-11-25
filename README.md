@@ -2092,7 +2092,7 @@ light. Other players carrying one light their surroundings too (up to eight ligh
 once), and figures and creatures near a carried light are lit by it.
 ## Editing blocks and creatures
 
-Blocks' details and creatures' models are data, in `Resources/Data`, so you can change
+Blocks' and items' details and creatures' models are data, in `Resources/Data`, so you can change
 them without touching the code. Edit the files there (the build copies them beside the
 game), or the copies beside the game for a quick try. The game notices when one of
 them changes (it looks once a second) and loads it again, saying so in chat; **R** also
@@ -2100,9 +2100,9 @@ loads them again, with the textures and shaders. A file that can't be read is
 reported, with the line, and the game carries on with its own built-in details (blocks)
 or plain boxes (creatures).
 
-**One file per entry.** Blocks, creatures and structures are each a folder in
-`Resources/Data` (`blocks`, `creatures`, `structures`), with a file for each block or
-model named by its id (`creatures/deer.json`, `blocks/stone.json`) holding just that
+**One file per entry.** Blocks, items, creatures and structures are each a folder in
+`Resources/Data` (`blocks`, `items`, `creatures`, `structures`), with a file for each block,
+item or model named by its id (`creatures/deer.json`, `blocks/stone.json`) holding just that
 entry, and a `README.md` there saying what goes in them. Add a model by adding a file;
 a model may still inherit from one in another file. (A single `blocks.json`, or
 `creatures.json`, of them all is still read if there's no folder.)
@@ -2137,6 +2137,16 @@ The server reads it too (hardness and tools decide how long breaking takes), so 
 server and its players should share the same file. How blocks behave (solid, plant,
 liquid, machine) stays in the code. `VoxelEngine --dump-block-data FILE` writes the
 game's own details out as a fresh file.
+
+**Items** (`items/<id>.json`): things you carry that aren't blocks and are never placed
+as themselves: ingots, coal and coke, food, hide, seeds and wheat, cement and bitumen,
+arrows, the crossbow, the boat, the engineer's hammer, buckets and the forge core. Each
+has a `name` and a `texture` (its icon, a PNG in `Resources/Textures/Blocks`); which
+items there are, and what they do, stays in the code (`src/world/Items.h`). Recipes,
+smelting and `/give` name them by id like blocks (`iron_ingot`). Worlds saved before
+items had their own types (format 16 and earlier) load as they were: the old block
+numbers of items, in inventories, chests, items on the ground and filter pipes, become
+the items.
 
 **Creature models** (`creatures/<id>.json`): one for each creature, by id (`deer`, `wolf`, `bat`,
 `dwarf`, `crossbow_dwarf`, `dwarf_chief`, `dwarf_miner`): a list of boxes, drawn facing
@@ -2177,6 +2187,8 @@ cd build && ./ModelEditor            # or: ./ModelEditor structures blast_furnac
   as a cube. Its name, textures (one for every face; top, bottom and sides; or each
   face), hardness, best tool, sound, light and map colour can be changed. Blocks
   themselves are made in the code, so none can be added here.
+- **Items** (the fourth tab) likewise lists every item, shown as a flat card; its name
+  and icon can be changed.
 - **Animations** (a tab beside the parts) picks one of the model's animations (or
   makes one), sets its length and whether it loops, and plays it in the view, or holds
   it at a time on the slider. Each labelled part (its own or inherited) has its keys:
