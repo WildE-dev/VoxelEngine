@@ -316,6 +316,9 @@ private:
     void SendCreatures();
     void HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType type, int height, int faceAxis);
     void HandleChisel(ClientState& client, const net::EditChisel& chisel);
+    // The armour worn, as a little inventory of a slot per BodySlot, and back.
+    static Inventory ArmourBox(uint8_t worn);
+    static uint8_t WornFrom(const Inventory& box);
     // A shovel's right-click: the ground `radius` round the block clicked (1: 3 by 3) levelled
     // to its surface (soft ground shaved off above, filled in below with what was clicked;
     // anything else left be). Survival: what's taken off is given back, what's filled costs.

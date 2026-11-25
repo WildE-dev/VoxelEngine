@@ -339,6 +339,18 @@ int main() {
     server.QueueConsoleCommand("fill 13 -1 11 13 -1 11 water");
     const bool scalded = Pump(a, 10.0, [&] { return a.client.GetHealth() < healthBefore; });
     Check(scalded, "thick steam scalds a survival player in it (" + std::to_string(healthBefore) + " -> " + std::to_string(a.client.GetHealth()) + " half hearts)");
+    // A mask keeps it out: the same again, masked, and no scalding.
+    server.QueueConsoleCommand("give mask 1 Smith");
+    Pump(a, 10.0, [&] { return (a.client.GetArmour() & Armour::Bit(ArmourPiece::Mask)) != 0; });
+    Pump(a, 6.0, [] { return false; }); // (the first cloud thins away)
+    server.QueueConsoleCommand("fill 13 -1 11 13 -1 11 air");
+    server.QueueConsoleCommand("fill 12 -1 11 12 -1 11 lava");
+    Pump(a, 5.0, [&] { return at({ 12, -1, 11 }).IsLava(); });
+    int lowest = a.client.GetHealth();
+    const int maskedBefore = lowest;
+    server.QueueConsoleCommand("fill 13 -1 11 13 -1 11 water");
+    Pump(a, 6.0, [&] { lowest = std::min(lowest, a.client.GetHealth()); return false; });
+    Check(lowest >= maskedBefore, "with a mask on, the steam doesn't scald (" + std::to_string(maskedBefore) + " -> lowest " + std::to_string(lowest) + ")");
 
     a.client.Disconnect();
     Pump(a, 0.3, [] { return false; });

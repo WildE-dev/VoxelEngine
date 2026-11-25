@@ -174,11 +174,11 @@ int main() {
         Check(both(20.0, [&] { return b.client.HasArmour(ArmourPiece::Cap) && b.client.GetCount(Items::OfArmour(ArmourPiece::Cap)) == 1; }),
               "given two caps: one goes on, the other into a slot");
         const int cap = slotOf(b.client.GetInventory(), Items::OfArmour(ArmourPiece::Cap));
-        b.client.MoveItems(net::Box::Player, cap, net::Box::Armour, static_cast<int>(ArmourPiece::Tunic));
-        b.client.MoveItems(net::Box::Armour, static_cast<int>(ArmourPiece::Cap), net::Box::Player, net::kAnySlot);
+        b.client.MoveItems(net::Box::Player, cap, net::Box::Armour, static_cast<int>(BodySlot::Body));
+        b.client.MoveItems(net::Box::Armour, static_cast<int>(BodySlot::Head), net::Box::Player, net::kAnySlot);
         Check(both(20.0, [&] { return !b.client.HasArmour(ArmourPiece::Cap) && b.client.GetCount(Items::OfArmour(ArmourPiece::Cap)) == 2; }) &&
                   !b.client.HasArmour(ArmourPiece::Tunic),
-              "a cap won't go in the tunic's slot; taken off, both caps are in slots");
+              "a cap won't go on the body's slot; taken off the head, both caps are in slots");
         b.client.MoveItems(net::Box::Player, cap, net::Box::Armour, net::kAnySlot);
         Check(both(20.0, [&] { return b.client.HasArmour(ArmourPiece::Cap) && b.client.GetCount(Items::OfArmour(ArmourPiece::Cap)) == 1; }), "and one goes back on");
         b.client.CloseChest();

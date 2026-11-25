@@ -2781,9 +2781,9 @@ void Application::DrawInventory() {
         ImGui::PopTextWrapPos();
         // Armour: a slot for each piece (only that piece goes in it), and what they take off.
         ImGui::SeparatorText("Armour");
-        for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++) {
-            if (p > 0) ImGui::SameLine();
-            DrawSlot(SlotBox::Armour, p, kIcon);
+        for (int s = 0; s < static_cast<int>(BodySlot::Count); s++) {
+            if (s > 0) ImGui::SameLine();
+            DrawSlot(SlotBox::Armour, s, kIcon);
         }
         ImGui::SameLine();
         ImGui::AlignTextToFramePadding();
@@ -2982,8 +2982,9 @@ Stack Application::StackIn(SlotBox box, int slot) const {
         return slot < static_cast<int>(slots.size()) ? slots[slot] : Stack{};
     }
     case SlotBox::Armour:
-        if (slot >= static_cast<int>(ArmourPiece::Count) || !client->HasArmour(static_cast<ArmourPiece>(slot))) return {};
-        return { Items::OfArmour(static_cast<ArmourPiece>(slot)), 1 };
+        if (slot >= static_cast<int>(BodySlot::Count)) return {};
+        if (const ArmourPiece p = Armour::InSlot(client->GetArmour(), static_cast<BodySlot>(slot)); p != ArmourPiece::Count) return { Items::OfArmour(p), 1 };
+        return {};
     case SlotBox::Chest: {
         const auto& slots = client->GetChest().slots;
         return slot < static_cast<int>(slots.size()) ? slots[slot] : Stack{};
@@ -3012,19 +3013,22 @@ void Application::DrawSlot(SlotBox box, int slot, float size, bool selected) {
     const bool lifted = heldStack && heldStack->box == box && heldStack->slot == slot && box != SlotBox::Palette;
     if (!st.Empty()) DrawStackOn(draw, atlas, texture, lo, hi, kPad, st, lifted, box != SlotBox::Palette);
     else if (box == SlotBox::Armour) {
-        // An empty armour slot shows its piece, faintly.
+        // An empty armour slot shows what goes there, faintly.
         glm::vec2 uv0, uv1;
-        atlas.GetTileUV(atlas.GetIndex(Armour::Texture(static_cast<ArmourPiece>(slot))), uv0, uv1);
+        atlas.GetTileUV(atlas.GetIndex(Armour::Texture(Armour::SlotIcon(static_cast<BodySlot>(slot)))), uv0, uv1);
         draw->AddImage(texture, ImVec2(lo.x + kPad, lo.y + kPad), ImVec2(hi.x - kPad, hi.y - kPad), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y), IM_COL32(255, 255, 255, 45));
     }
     draw->AddRect(lo, hi, selected ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 255, 255, 50), 3.0f, 0, selected ? 2.5f : 1.0f);
     if (hovered && !heldStack && (!st.Empty() || box == SlotBox::Armour)) {
-        const ItemId item = st.Empty() ? Items::OfArmour(static_cast<ArmourPiece>(slot)) : st.item;
-        std::string tip = ItemName(item);
+        const ItemId item = st.Empty() ? Items::OfArmour(Armour::SlotIcon(static_cast<BodySlot>(slot))) : st.item;
+        std::string tip = box == SlotBox::Armour && st.Empty() ? std::string(Armour::SlotName(static_cast<BodySlot>(slot))) + " (empty)" : ItemName(item);
         if (Items::IsTool(item)) tip += std::string(": ") + ToolHint(Items::ToolOf(item));
         if (Items::IsArmour(item))
-            tip += ": " + std::to_string(static_cast<int>(std::lround(Armour::Protection(Items::ArmourOf(item)) * 100.0f))) + "% less damage" +
-                   (Items::ArmourOf(item) == ArmourPiece::OxygenTank ? " (holds air to breathe instead)" : "") + (st.Empty() ? " (its slot: empty)" : "");
+            if (!st.Empty())
+                tip += std::string(" (") + Armour::SlotName(Armour::SlotOf(Items::ArmourOf(item))) + "): " +
+                       std::to_string(static_cast<int>(std::lround(Armour::Protection(Items::ArmourOf(item)) * 100.0f))) + "% less damage" +
+                       (Items::ArmourOf(item) == ArmourPiece::OxygenTank ? " (holds air to breathe instead)" : "") +
+                       (Items::ArmourOf(item) == ArmourPiece::Mask ? ", keeps steam out" : "");
         if (Items::IsStackable(item) && box != SlotBox::Palette && st.count > 1) tip += " x" + std::to_string(st.count);
         ImGui::SetTooltip("%s", tip.c_str());
     }

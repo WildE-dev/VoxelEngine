@@ -130,6 +130,15 @@ int main() {
         const auto& gate = Crafting::Recipes()[Crafting::Find("logic_gate")];
         Check(Crafting::TimesAffordable(gate, noCopper) == 0 && Crafting::TimesAffordable(gate, withCopper) == 2, "a logic gate can't be made without copper (half an ingot each)");
         Check(Smelting::FirstAffordable(std::array<uint32_t, Items::kKinds>{}) == nullptr, "(nothing to smelt in an empty chest)");
+        // Armour by part of the body: one piece to a part. An old save wearing a tunic and
+        // a plate (both on the body) keeps the plate on, and the tunic comes off.
+        uint8_t off = 0;
+        const uint8_t both = Armour::Bit(ArmourPiece::Tunic) | Armour::Bit(ArmourPiece::Plate) | Armour::Bit(ArmourPiece::Cap);
+        const uint8_t kept = Armour::OnePerSlot(both, off);
+        Check(kept == (Armour::Bit(ArmourPiece::Plate) | Armour::Bit(ArmourPiece::Cap)) && off == Armour::Bit(ArmourPiece::Tunic) &&
+                  Armour::InSlot(kept, BodySlot::Body) == ArmourPiece::Plate && Armour::SlotOf(ArmourPiece::Leggings) == BodySlot::Legs &&
+                  Armour::SlotOf(ArmourPiece::Mask) == BodySlot::Face && Armour::SlotOf(ArmourPiece::OxygenTank) == BodySlot::Back,
+              "armour goes by part of the body, one piece to each (a tunic and a plate: the plate stays on)");
         // Limestone to cement (smelted, or burnt by hand with coal), and cement to concrete.
         std::array<uint32_t, Items::kKinds> quarry{};
         quarry[Items::KindOf(Items::Of(BlockType::LIMESTONE))] = 4 * Block::kUnitsPerBlock;

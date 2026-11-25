@@ -601,7 +601,12 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
             client.flags = saved->flags;
             client.health = std::clamp(saved->health, 1, kMaxHealth);
             client.food = std::clamp(saved->food, 0, Hunger::kMaxFood);
-            client.armour = saved->armour;
+            // (One piece to a part of the body: an older save's extra comes off into
+            // their slots.)
+            uint8_t off = 0;
+            client.armour = Armour::OnePerSlot(saved->armour, off);
+            for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++)
+                if (off & Armour::Bit(static_cast<ArmourPiece>(p))) client.inventory.Add(Items::OfArmour(static_cast<ArmourPiece>(p)), 1);
             client.bed = saved->bed;
             client.achievements = saved->achievements;
             welcome.spawn = saved->feet;
@@ -846,7 +851,7 @@ void Server::HandleCraft(ClientState& client, int recipeIndex, int count, Tool u
     for (const auto& in : recipe.inputs) after.TakeUnits(in.item, in.units * count);
     bool fits = true;
     // Armour goes straight on if that slot's free; the rest into the inventory.
-    const bool wear = recipe.armour != ArmourPiece::Count && !(client.armour & Armour::Bit(recipe.armour));
+    const bool wear = recipe.armour != ArmourPiece::Count && Armour::InSlot(client.armour, Armour::SlotOf(recipe.armour)) == ArmourPiece::Count;
     if (recipe.tool != Tool::None) fits = after.Add(Items::OfTool(recipe.tool), count) == 0;
     else if (recipe.armour != ArmourPiece::Count) fits = after.Add(Items::OfArmour(recipe.armour), static_cast<uint32_t>(count) - (wear ? 1 : 0)) == 0;
     else fits = after.AddUnits(recipe.output, recipe.outputUnits * count) == 0;
@@ -860,21 +865,36 @@ void Server::HandleCraft(ClientState& client, int recipeIndex, int count, Tool u
     if (recipe.output == ItemType::COOKED_VENISON) Award(client, Achievement::Cook);
     if (recipe.output == ItemType::BREAD) Award(client, Achievement::Baker);
     if (recipe.output == BlockType::TURBINE) Award(client, Achievement::FullSteam);
-    if (client.armour == (Armour::Bit(ArmourPiece::Cap) | Armour::Bit(ArmourPiece::Tunic) | Armour::Bit(ArmourPiece::Boots))) Award(client, Achievement::Armoured);
+    if ((client.armour & (Armour::Bit(ArmourPiece::Cap) | Armour::Bit(ArmourPiece::Boots))) == (Armour::Bit(ArmourPiece::Cap) | Armour::Bit(ArmourPiece::Boots)) && Armour::InSlot(client.armour, BodySlot::Body) != ArmourPiece::Count) Award(client, Achievement::Armoured);
     SendInventory(client);
 }
 
+Inventory Server::ArmourBox(uint8_t worn) {
+    Inventory box(static_cast<size_t>(BodySlot::Count));
+    for (int s = 0; s < static_cast<int>(BodySlot::Count); s++)
+        if (const ArmourPiece p = Armour::InSlot(worn, static_cast<BodySlot>(s)); p != ArmourPiece::Count) box.slots[s] = { Items::OfArmour(p), 1 };
+    return box;
+}
+
+uint8_t Server::WornFrom(const Inventory& box) {
+    uint8_t worn = 0;
+    for (const auto& st : box.slots)
+        if (!st.Empty() && Items::IsArmour(st.item)) worn |= Armour::Bit(Items::ArmourOf(st.item));
+    return worn;
+}
+
 void Server::HandleInventoryMove(ClientState& client, const net::InventoryMove& m) {
-    // The armour slots as a little inventory of their own (slot = piece), put back after.
-    Inventory armourBox(static_cast<size_t>(ArmourPiece::Count));
-    for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++)
-        if (client.armour & Armour::Bit(static_cast<ArmourPiece>(p))) armourBox.slots[p] = { Items::OfArmour(static_cast<ArmourPiece>(p)), 1 };
+    // The armour slots as a little inventory of their own (a slot per part of the body),
+    // put back after.
+    Inventory armourBox = ArmourBox(client.armour);
     Inventory* chest = (m.fromBox == net::Box::Chest || m.toBox == net::Box::Chest) ? OpenChestOf(client) : nullptr;
     auto box = [&](net::Box b) -> Inventory* {
         return b == net::Box::Player ? &client.inventory : b == net::Box::Armour ? &armourBox : chest;
     };
-    // What may go in a slot: an armour slot takes only its own piece.
-    auto fits = [&](net::Box b, size_t slot, ItemId item) { return b != net::Box::Armour || item == Items::OfArmour(static_cast<ArmourPiece>(slot)); };
+    // What may go in a slot: an armour slot takes only what's worn there.
+    auto fits = [&](net::Box b, size_t slot, ItemId item) {
+        return b != net::Box::Armour || (Items::IsArmour(item) && static_cast<size_t>(Armour::SlotOf(Items::ArmourOf(item))) == slot);
+    };
     Inventory* src = box(m.fromBox);
     Inventory* dst = box(m.toBox);
     if (!src || !dst || m.fromSlot >= src->slots.size()) return SendInventory(client), SendChest(client);
@@ -889,7 +909,12 @@ void Server::HandleInventoryMove(ClientState& client, const net::InventoryMove& 
         size_t begin = 0, end = dst->slots.size();
         if (m.toBox == net::Box::Armour) {
             if (!Items::IsArmour(item)) return SendInventory(client);
-            begin = static_cast<size_t>(Items::ArmourOf(item)), end = begin + 1;
+            begin = static_cast<size_t>(Armour::SlotOf(Items::ArmourOf(item))), end = begin + 1;
+            // (Something else worn there: they swap.)
+            if (!dst->slots[begin].Empty() && dst->slots[begin].item != item && n == 1) {
+                std::swap(from, dst->slots[begin]);
+                begin = end; // (done)
+            }
         }
         else if (src == dst) {
             if (m.fromSlot < Inventory::kHotbarSlots) begin = Inventory::kHotbarSlots;
@@ -929,12 +954,10 @@ void Server::HandleInventoryMove(ClientState& client, const net::InventoryMove& 
             std::swap(from, to);
         }
     }
-    client.armour = 0;
-    for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++)
-        if (!armourBox.slots[p].Empty()) client.armour |= Armour::Bit(static_cast<ArmourPiece>(p));
+    client.armour = WornFrom(armourBox);
     client.inventory.Trim(Inventory::kPlayerSlots);
     if (chest) chest->Trim(Inventory::kChestSlots);
-    if (client.armour == (Armour::Bit(ArmourPiece::Cap) | Armour::Bit(ArmourPiece::Tunic) | Armour::Bit(ArmourPiece::Boots))) Award(client, Achievement::Armoured);
+    if ((client.armour & (Armour::Bit(ArmourPiece::Cap) | Armour::Bit(ArmourPiece::Boots))) == (Armour::Bit(ArmourPiece::Cap) | Armour::Bit(ArmourPiece::Boots)) && Armour::InSlot(client.armour, BodySlot::Body) != ArmourPiece::Count) Award(client, Achievement::Armoured);
     SendInventory(client);
     if (chest) SendChestToViewers(*client.openChest);
 }
@@ -2182,9 +2205,7 @@ void Server::SendArrows() {
 void Server::HandleDropItem(ClientState& client, const net::DropItem& m) {
     if (client.health <= 0 || !client.hasState) return;
     // The armour slots as a little inventory of their own (as in HandleInventoryMove).
-    Inventory armourBox(static_cast<size_t>(ArmourPiece::Count));
-    for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++)
-        if (client.armour & Armour::Bit(static_cast<ArmourPiece>(p))) armourBox.slots[p] = { Items::OfArmour(static_cast<ArmourPiece>(p)), 1 };
+    Inventory armourBox = ArmourBox(client.armour);
     const net::Box boxKind = static_cast<net::Box>(m.box);
     Inventory* box = boxKind == net::Box::Player ? &client.inventory : boxKind == net::Box::Armour ? &armourBox : OpenChestOf(client);
     if (!box || m.slot >= box->slots.size() || box->slots[m.slot].Empty()) return SendInventory(client), SendChest(client);
@@ -2193,11 +2214,7 @@ void Server::HandleDropItem(ClientState& client, const net::DropItem& m) {
     const ItemId item = st.item;
     st.count = static_cast<uint8_t>(st.count - n);
     if (st.count == 0) st = {};
-    if (boxKind == net::Box::Armour) {
-        client.armour = 0;
-        for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++)
-            if (!armourBox.slots[p].Empty()) client.armour |= Armour::Bit(static_cast<ArmourPiece>(p));
-    }
+    if (boxKind == net::Box::Armour) client.armour = WornFrom(armourBox);
     // Thrown from the eye, the way they're looking, a little up: as hard as they held
     // the throw for.
     const glm::vec3 dir = glm::length(m.direction) > 1e-3f ? glm::normalize(m.direction) : glm::vec3(0.0f, 0.0f, -1.0f);
@@ -2711,7 +2728,7 @@ void Server::UpdateTraps() {
                 Hurt(client, Fire::kBurnDamage, inFire ? "was burned to death" : "burned to death", false);
             }
             // Thick steam scalds (armour doesn't keep it out).
-            if (steamIn >= SteamCloud::kScaldUnits && now >= client.nextScald) {
+            if (steamIn >= SteamCloud::kScaldUnits && now >= client.nextScald && !(client.armour & Armour::Bit(ArmourPiece::Mask))) { // (a mask keeps it out)
                 client.nextScald = now + SteamCloud::kScaldInterval;
                 Hurt(client, SteamCloud::kScaldDamage, "was scalded by steam", false);
             }

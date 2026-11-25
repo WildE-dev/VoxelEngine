@@ -537,9 +537,15 @@ int main(int argc, char** argv) {
         server.QueueConsoleCommand("give hide 2 Rival");
         both(20.0, [&] { return b.client.GetResources(ItemType::STEEL_INGOT) >= 4 * 64; });
         b.client.Craft(Crafting::Find("plate"), 1);
-        Check(both(20.0, [&] { return (rivalAsSeen().armour & Armour::Bit(ArmourPiece::Plate)) != 0; }), "and a steel plate");
+        // (Worn in place of the tunic: put on, the tunic comes off into a slot.)
+        both(20.0, [&] { return b.client.GetCount(Items::OfArmour(ArmourPiece::Plate)) == 1; });
+        for (int i = 0; i < static_cast<int>(b.client.GetInventory().slots.size()); i++)
+            if (b.client.GetInventory().slots[i].item == Items::OfArmour(ArmourPiece::Plate)) b.client.MoveItems(net::Box::Player, i, net::Box::Armour, net::kAnySlot);
+        Check(both(20.0, [&] { return (rivalAsSeen().armour & Armour::Bit(ArmourPiece::Plate)) != 0 && !(rivalAsSeen().armour & Armour::Bit(ArmourPiece::Tunic)); }) &&
+                  b.client.GetCount(Items::OfArmour(ArmourPiece::Tunic)) == 1,
+              "and a steel plate, worn on the body in place of the tunic (which comes off into a slot)");
         const int plated = bolt();
-        Check(plated == 2, "with all of it on (taking off the most armour can: 80%), a bolt does 1 heart (" + std::to_string(plated) + ")");
+        Check(plated == 2, "with cap, plate, boots and shield on (76% off), a bolt does 1 heart (" + std::to_string(plated) + ")");
         a.heldBlock = BlockType::AIR;
         a.client.Disconnect();
         b.client.Disconnect();

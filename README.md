@@ -1294,33 +1294,36 @@ The **sword** is a tool made for fighting: 3.5 hearts a hit, against creatures o
 players (an axe does 2.5). It's also quick on leaves. Make it from 0.5 planks and 2
 stone.
 
-**Armour** is made from deer **hide** (each deer you kill gives one, along with its
-venison). There are three pieces, each worn in an armour slot of its own (see
-[Inventory](#inventory)):
+**Armour** is worn in six slots, one for each part of the body: **head**, **face**,
+**body**, **back**, **legs** and **feet**, one piece in each (see [Inventory](#inventory)):
 
-| Piece | From | Takes off |
-| --- | --- | --- |
-| Hide cap | 2 hide | 12% |
-| Hide tunic | 4 hide | 24% |
-| Hide boots | 2 hide | 12% |
+| Slot | Piece | From | Takes off |
+| --- | --- | --- | --- |
+| Head | Hide cap | 2 hide | 12% |
+| Face | Mask | a hide and half a glass | 4%, and keeps steam out (no scalding) |
+| Body | Hide tunic, or a steel plate | 4 hide; 4 steel ingots and 2 hide | 24%; 40% |
+| Back | Oxygen tank, or a shield | 3 iron ingots and a glass; 2 planks and an iron ingot | holds air to breathe; 12% |
+| Legs | Hide leggings | 3 hide | 18% |
+| Feet | Hide boots | 2 hide | 12% |
 
-All three take 48% off the damage from hits (creatures and other players) and traps,
-rounded, but a hit always does at least half a heart. Armour doesn't help against
-drowning, thin or stale air, or starving. The inventory shows the armour slots (an
-empty one shows its piece faintly) and the total. A piece crafted goes straight on if
-its slot is free, else into your slots; drag it onto its slot (or Crouch-click it) to
-wear it, and off again to take it off. Armour is saved with you; operators can hand it
-out with `/give cap|tunic|boots [count] [player]`. The rules are in
-`src/world/Armour.h`. `CraftTest` checks making the sword and the armour, the damage
-sums, and that they're kept after a restart; `CreatureTest` checks that armour takes a
-sword hit from 3.5 hearts down to 2.
+Hide comes from deer (each one you kill gives one, along with its venison). The pieces
+worn add up, to at most 80% off the damage from hits (creatures and other players) and
+traps, rounded, but a hit always does at least half a heart. Armour doesn't help against
+drowning, thin or stale air, or starving. Crouch with a shield on your back to raise it
+and block: half of each hit's damage (after armour) is stopped. The inventory shows the
+six slots (an empty one shows what goes there, faintly) and the total. A piece crafted
+goes straight on if its slot is free, else into your slots; drag it onto its slot (or
+Crouch-click it) to wear it, swapping out what was there, and off again to take it off.
+Armour is saved with you (from a world saved before the six slots, a second piece on one
+part of the body, such as a tunic under a plate, comes off into your slots: the one that
+protects most stays on); operators can hand it out with `/give cap|mask|tunic|plate|tank|shield|leggings|boots [count] [player]`.
+The rules are in `src/world/Armour.h`. `CraftTest` checks making the sword and the
+armour, the damage sums, one piece to a part of the body, and that they're kept after a
+restart; `CreatureTest` checks that armour takes a sword hit from 3.5 hearts down to 2,
+and a plate going on in place of a tunic; `SteamTest` that a mask keeps steam from
+scalding.
 
-
-**Shield, steel plate and crossbow.** A **shield** (2 planks and an iron ingot) and a
-**steel plate** (4 steel ingots and 2 hides, worn over the tunic) are armour too: the
-shield takes 12% off, the plate 25%, and all the armour together at most 80%. Crouch
-with a shield to block: half of each hit's damage (after armour) is stopped. Others see
-the shield on your left side and the plate over your chest. A **crossbow** (a steel
+**Crossbow.** A **crossbow** (a steel
 ingot, 2 planks and a hide) is held like an item: right-click shoots a bolt (an arrow)
 for 4.5 hearts, faster and flatter than a bow's, but it takes 1.2 seconds to wind.
 `CreatureTest` checks a bolt's damage, blocking with a shield, and the plate.
@@ -1880,6 +1883,8 @@ Tools are made of stone; crafted armour goes straight on if its slot is free.
 | Steel upgrade (an iron tool in hand becomes steel) | 1 steel ingot |
 | Bread | 3 wheat |
 | Hide cap / tunic / boots | 2 / 4 / 2 hide |
+| Hide leggings | 3 hide |
+| Mask | 1 hide + 0.5 glass |
 
 Amounts are in blocks, using the same units as building (a block is 64): part of a
 block comes out of its offcut. Tools are items in your slots, saved with the player,

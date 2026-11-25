@@ -144,6 +144,13 @@ void PlayerModels::Draw(Shader& shader, const glm::mat4& view, const glm::mat4& 
         if (p.armour & Armour::Bit(ArmourPiece::Tunic))
             box(glm::scale(glm::translate(base, glm::vec3(0, bodyHeight * 0.68f, 0)), glm::vec3(BodyWidth() * 0.5f + 0.04f, bodyHeight * 0.55f, BodyWidth() + 0.04f)),
                 tint(hide));
+        if (p.armour & Armour::Bit(ArmourPiece::Leggings))
+            box(glm::scale(glm::translate(base, glm::vec3(0.015f, bodyHeight * 0.24f, 0)), glm::vec3(BodyWidth() * 0.5f + 0.05f, bodyHeight * 0.3f, BodyWidth() + 0.04f)),
+                tint(hide * 0.9f));
+        if (p.armour & Armour::Bit(ArmourPiece::Mask)) {
+            box(glm::scale(glm::translate(head, glm::vec3(kHead * 0.5f + 0.01f, -kHead * 0.05f, 0)), glm::vec3(0.04f, kHead * 0.5f, kHead * 0.9f)), tint(hide));
+            box(glm::scale(glm::translate(head, glm::vec3(kHead * 0.5f + 0.03f, kHead * 0.08f, 0)), glm::vec3(0.03f, kHead * 0.14f, kHead * 0.8f)), tint(glm::vec3(0.65f, 0.8f, 0.9f)));
+        }
         if (p.armour & Armour::Bit(ArmourPiece::Boots))
             box(glm::scale(glm::translate(base, glm::vec3(0.02f, 0.11f, 0)), glm::vec3(BodyWidth() * 0.5f + 0.06f, 0.22f, BodyWidth() + 0.04f)), tint(hideDark));
         // A steel plate over the chest, and a shield on the left side.
