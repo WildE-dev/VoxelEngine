@@ -181,9 +181,14 @@ private:
     static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
     static void CursorPosCallback(GLFWwindow* window, double x, double y);
     static void ScrollCallback(GLFWwindow* window, double xOffset, double yOffset);
+    static void CharCallback(GLFWwindow* window, unsigned int codepoint);
+    // The UI's frame (src/ui/Ui.h): begun before anything's shown, drawn at the end.
+    void BeginUiFrame();
+    void EndUiFrame();
+    double uiLastFrame = 0.0;
 
     GLFWwindow* window = nullptr;
-    bool imguiInitialized = false;
+    bool uiInitialized = false;
 
     Camera camera;
     Player player{ glm::vec3(7.0f, 7.0f, 7.0f) };

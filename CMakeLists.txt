@@ -161,10 +161,13 @@ add_executable(${PROJECT_NAME}
     src/render/Textures.h
     src/render/TextureAtlas.cpp
     src/render/TextureAtlas.h
+
+    src/ui/Ui.cpp
+    src/ui/Ui.h
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${STB_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME} PRIVATE voxel_server voxel_client glfw imgui::imgui)
+target_link_libraries(${PROJECT_NAME} PRIVATE voxel_server voxel_client glfw glad::glad)
 
 # The model editor (src/editor/ModelEditor.cpp): its own program, for the creature and
 # structure models in Resources/Data, drawn as the game draws them.

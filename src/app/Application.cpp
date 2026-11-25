@@ -26,9 +26,7 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
-#include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_opengl3.h>
+#include "ui/Ui.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
@@ -150,27 +148,27 @@ std::string ItemName(ItemId item) {
 
 // A stack drawn in a slot from lo to hi (the icon inset by `pad`): what it is, what a
 // tool's made of (top right: Fe iron, St steel) and how many (bottom right, if asked).
-void DrawStackOn(ImDrawList* draw, const TextureAtlas& atlas, ImTextureID texture, ImVec2 lo, ImVec2 hi, float pad, const Stack& st, bool dim,
+void DrawStackOn(ui::DrawList* draw, const TextureAtlas& atlas, ui::TextureId texture, ui::Vec2 lo, ui::Vec2 hi, float pad, const Stack& st, bool dim,
                  bool showCount) {
     if (st.Empty()) return;
     glm::vec2 uv0, uv1;
     atlas.GetTileUV(ItemTile(atlas, st.item), uv0, uv1);
-    draw->AddImage(texture, ImVec2(lo.x + pad, lo.y + pad), ImVec2(hi.x - pad, hi.y - pad), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y),
-                   dim ? IM_COL32(255, 255, 255, 80) : IM_COL32_WHITE);
-    auto text = [&](ImVec2 at, ImU32 colour, const char* t) {
-        draw->AddText(ImVec2(at.x + 1.0f, at.y + 1.0f), IM_COL32(0, 0, 0, 230), t);
+    draw->AddImage(texture, ui::Vec2(lo.x + pad, lo.y + pad), ui::Vec2(hi.x - pad, hi.y - pad), ui::Vec2(uv0.x, uv0.y), ui::Vec2(uv1.x, uv1.y),
+                   dim ? UI_COL32(255, 255, 255, 80) : 0xFFFFFFFFu);
+    auto text = [&](ui::Vec2 at, ui::Color colour, const char* t) {
+        draw->AddText(ui::Vec2(at.x + 1.0f, at.y + 1.0f), UI_COL32(0, 0, 0, 230), t);
         draw->AddText(at, colour, t);
     };
     if (Items::IsTool(st.item) && Items::TierOf(st.item) > 0) {
         const bool steel = Items::TierOf(st.item) == 2;
         const char* badge = steel ? "St" : "Fe";
-        const ImVec2 size = ImGui::CalcTextSize(badge);
-        text(ImVec2(hi.x - size.x - 3.0f, lo.y + 1.0f), steel ? IM_COL32(150, 220, 255, 255) : IM_COL32(215, 215, 225, 255), badge);
+        const ui::Vec2 size = ui::CalcTextSize(badge);
+        text(ui::Vec2(hi.x - size.x - 3.0f, lo.y + 1.0f), steel ? UI_COL32(150, 220, 255, 255) : UI_COL32(215, 215, 225, 255), badge);
     }
     if (showCount && st.count > 1) {
         const std::string count = std::to_string(st.count);
-        const ImVec2 size = ImGui::CalcTextSize(count.c_str());
-        text(ImVec2(hi.x - size.x - 3.0f, hi.y - size.y - 1.0f), IM_COL32_WHITE, count.c_str());
+        const ui::Vec2 size = ui::CalcTextSize(count.c_str());
+        text(ui::Vec2(hi.x - size.x - 3.0f, hi.y - size.y - 1.0f), 0xFFFFFFFFu, count.c_str());
     }
 }
 
@@ -388,20 +386,23 @@ bool Application::Init(const ClientOptions& options) {
     if (const char* pitch = std::getenv("VOXEL_START_PITCH")) camera.SetLook(camera.GetDirectionAngles().y, static_cast<float>(std::atof(pitch)));
     if (const char* click = std::getenv("VOXEL_RIGHT_CLICK")) rightClickAt = std::atof(click);
 
-    // Installed before ImGui so its backend chains to ours.
+    // The window's input goes to the game and to its UI (src/ui/Ui.h).
     glfwSetWindowUserPointer(window, this);
     glfwSetKeyCallback(window, KeyCallback);
     glfwSetMouseButtonCallback(window, MouseButtonCallback);
     glfwSetCursorPosCallback(window, CursorPosCallback);
     glfwSetScrollCallback(window, ScrollCallback);
+    glfwSetCharCallback(window, CharCallback);
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGui::StyleColorsDark();
-    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad; // (menus work with a gamepad too)
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init(kGlslVersion);
-    imguiInitialized = true;
+    {
+        std::string error;
+        if (!ui::Init("Resources/Fonts", error)) {
+            std::cerr << "ERROR: the UI couldn't start: " << error << std::endl;
+            return false;
+        }
+        ui::SetClipboardGetter([](void* w) { return glfwGetClipboardString(static_cast<GLFWwindow*>(w)); }, window);
+        uiInitialized = true;
+    }
 
     // On high-DPI displays the framebuffer is larger than the window.
     int framebufferWidth, framebufferHeight;
@@ -560,13 +561,10 @@ void Application::RunMenuFrame(double now) {
     glViewport(0, 0, width, height);
     glClearColor(0.42f, 0.62f, 0.86f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-    ImGui::GetIO().ConfigFlags &= ~(ImGuiConfigFlags_NoMouse | ImGuiConfigFlags_NoKeyboard); // the menus type and click
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
+    ui::GetIO().ConfigFlags &= ~(ui::ConfigFlags_NoMouse | ui::ConfigFlags_NoKeyboard); // the menus type and click
+    BeginUiFrame();
     DrawMenu();
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    EndUiFrame();
     if (!client && !autoScreenshotPath.empty() && now >= autoScreenshotAt) {
         SaveScreenshot(autoScreenshotPath, width, height);
         autoScreenshotPath.clear();
@@ -714,11 +712,9 @@ void Application::Shutdown() {
     if (localServer) localServer->Stop();
     localServer.reset();
 
-    if (imguiInitialized) {
-        ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplGlfw_Shutdown();
-        ImGui::DestroyContext();
-        imguiInitialized = false;
+    if (uiInitialized) {
+        ui::Shutdown();
+        uiInitialized = false;
     }
 
     if (window) {
@@ -993,17 +989,15 @@ void Application::Run() {
 
         // With the cursor captured it's hidden but still moves; keep it from clicking
         // on the UI by accident.
-        ImGuiIO& io = ImGui::GetIO();
-        if (captureCursor) io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
-        else io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+        ui::IO& io = ui::GetIO();
+        if (captureCursor) io.ConfigFlags |= ui::ConfigFlags_NoMouse;
+        else io.ConfigFlags &= ~ui::ConfigFlags_NoMouse;
         // The keyboard is the UI's only while something takes typing (chat, the pause
         // menu's settings, the inventory); otherwise it's the game's.
-        if (chatOpen || paused || inventoryOpen) io.ConfigFlags &= ~ImGuiConfigFlags_NoKeyboard;
-        else io.ConfigFlags |= ImGuiConfigFlags_NoKeyboard;
+        if (chatOpen || paused || inventoryOpen) io.ConfigFlags &= ~ui::ConfigFlags_NoKeyboard;
+        else io.ConfigFlags |= ui::ConfigFlags_NoKeyboard;
 
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
+        BeginUiFrame();
         DrawNameTags(params.projection * params.view);
         DrawSigns(params.projection * params.view);
         if (showCompass) DrawCompass();
@@ -1025,8 +1019,7 @@ void Application::Run() {
             SetCursorCaptured(false);
         }
         if (paused) DrawPauseMenu();
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        EndUiFrame();
         lap(4);
 
         if (screenshotRequested || (!autoScreenshotPath.empty() && now >= autoScreenshotAt)) {
@@ -1207,33 +1200,33 @@ void Application::UpdateNetwork() {
 void Application::DrawCrosshair() {
     // Only while aiming: not with the cursor free, the inventory open or typing.
     if (!captureCursor || inventoryOpen || chatOpen || !client->IsWelcomed()) return;
-    ImDrawList* draw = ImGui::GetForegroundDrawList();
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const ImVec2 c(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.5f);
+    ui::DrawList* draw = ui::GetForegroundDrawList();
+    const ui::Viewport* viewport = ui::GetMainViewport();
+    const ui::Vec2 c(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.5f);
     constexpr float kArm = 9.0f, kGap = 0.0f;
     // A dark outline under a white cross, so it shows on sky and snow alike.
-    for (const auto& [color, width] : { std::pair<ImU32, float>{ IM_COL32(0, 0, 0, 170), 4.0f }, { IM_COL32(255, 255, 255, 230), 2.0f } }) {
-        draw->AddLine(ImVec2(c.x - kArm, c.y), ImVec2(c.x - kGap, c.y), color, width);
-        draw->AddLine(ImVec2(c.x + kGap, c.y), ImVec2(c.x + kArm, c.y), color, width);
-        draw->AddLine(ImVec2(c.x, c.y - kArm), ImVec2(c.x, c.y - kGap), color, width);
-        draw->AddLine(ImVec2(c.x, c.y + kGap), ImVec2(c.x, c.y + kArm), color, width);
+    for (const auto& [color, width] : { std::pair<ui::Color, float>{ UI_COL32(0, 0, 0, 170), 4.0f }, { UI_COL32(255, 255, 255, 230), 2.0f } }) {
+        draw->AddLine(ui::Vec2(c.x - kArm, c.y), ui::Vec2(c.x - kGap, c.y), color, width);
+        draw->AddLine(ui::Vec2(c.x + kGap, c.y), ui::Vec2(c.x + kArm, c.y), color, width);
+        draw->AddLine(ui::Vec2(c.x, c.y - kArm), ui::Vec2(c.x, c.y - kGap), color, width);
+        draw->AddLine(ui::Vec2(c.x, c.y + kGap), ui::Vec2(c.x, c.y + kArm), color, width);
     }
     // Winding up a throw: a bar under the crosshair, filling as it's held.
     if (throwHeld && ThrowStrength() > 0.0f) {
         const float strength = ThrowStrength();
         constexpr float kWidth = 44.0f, kHeight = 5.0f, kBelow = 14.0f;
-        const ImVec2 lo(c.x - kWidth * 0.5f, c.y + kBelow), hi(c.x + kWidth * 0.5f, c.y + kBelow + kHeight);
-        draw->AddRectFilled(ImVec2(lo.x - 1, lo.y - 1), ImVec2(hi.x + 1, hi.y + 1), IM_COL32(0, 0, 0, 170), 2.0f);
-        const ImU32 fill = strength >= 1.0f ? IM_COL32(255, 210, 80, 240) : IM_COL32(255, 255, 255, 220);
-        draw->AddRectFilled(lo, ImVec2(lo.x + kWidth * strength, hi.y), fill, 2.0f);
+        const ui::Vec2 lo(c.x - kWidth * 0.5f, c.y + kBelow), hi(c.x + kWidth * 0.5f, c.y + kBelow + kHeight);
+        draw->AddRectFilled(ui::Vec2(lo.x - 1, lo.y - 1), ui::Vec2(hi.x + 1, hi.y + 1), UI_COL32(0, 0, 0, 170), 2.0f);
+        const ui::Color fill = strength >= 1.0f ? UI_COL32(255, 210, 80, 240) : UI_COL32(255, 255, 255, 220);
+        draw->AddRectFilled(lo, ui::Vec2(lo.x + kWidth * strength, hi.y), fill, 2.0f);
     }
     // Looking at a signal block: its channels and whether it's on.
     Block target;
     auto label = [&](const char* text) {
-        const ImVec2 size = ImGui::CalcTextSize(text);
-        const ImVec2 p(c.x - size.x * 0.5f, c.y + 22.0f);
-        draw->AddRectFilled(ImVec2(p.x - 6, p.y - 3), ImVec2(p.x + size.x + 6, p.y + size.y + 3), IM_COL32(0, 0, 0, 140), 4.0f);
-        draw->AddText(p, IM_COL32(255, 255, 255, 235), text);
+        const ui::Vec2 size = ui::CalcTextSize(text);
+        const ui::Vec2 p(c.x - size.x * 0.5f, c.y + 22.0f);
+        draw->AddRectFilled(ui::Vec2(p.x - 6, p.y - 3), ui::Vec2(p.x + size.x + 6, p.y + size.y + 3), UI_COL32(0, 0, 0, 140), 4.0f);
+        draw->AddText(p, UI_COL32(255, 255, 255, 235), text);
     };
     if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
         at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && Signals::KindOf(target.type) != Signals::Kind::None) {
@@ -1713,111 +1706,111 @@ void Application::DrawMinimap() {
         SaveMapCache(true);
     }
     // Shown in the top-right corner, north up, with an arrow for the player.
-    ImDrawList* draw = ImGui::GetForegroundDrawList();
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ui::DrawList* draw = ui::GetForegroundDrawList();
+    const ui::Viewport* viewport = ui::GetMainViewport();
     constexpr float kShown = 170.0f;
-    const ImVec2 lo(viewport->WorkPos.x + viewport->WorkSize.x - kShown - 12.0f, viewport->WorkPos.y + 12.0f), hi(lo.x + kShown, lo.y + kShown);
-    draw->AddRectFilled(ImVec2(lo.x - 3.0f, lo.y - 3.0f), ImVec2(hi.x + 3.0f, hi.y + 3.0f), IM_COL32(0, 0, 0, 150), 4.0f);
-    draw->AddImage(static_cast<ImTextureID>(static_cast<uintptr_t>(mapTexture)), lo, hi);
+    const ui::Vec2 lo(viewport->WorkPos.x + viewport->WorkSize.x - kShown - 12.0f, viewport->WorkPos.y + 12.0f), hi(lo.x + kShown, lo.y + kShown);
+    draw->AddRectFilled(ui::Vec2(lo.x - 3.0f, lo.y - 3.0f), ui::Vec2(hi.x + 3.0f, hi.y + 3.0f), UI_COL32(0, 0, 0, 150), 4.0f);
+    draw->AddImage(static_cast<ui::TextureId>(static_cast<uintptr_t>(mapTexture)), lo, hi);
     const float scale = kShown / kMapSize;
-    const ImVec2 me(lo.x + (feet.x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (feet.z - (mapCentre.y - kMapSize / 2)) * scale);
+    const ui::Vec2 me(lo.x + (feet.x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (feet.z - (mapCentre.y - kMapSize / 2)) * scale);
     // Dwarf sites: a camp a red triangle, a mine a brown square, a market a green dot, a
     // stronghold a purple diamond (grey once its king has fallen). Those off the map
     // sit at its edge, smaller, the way to them.
     for (const auto& site : client->sites) {
-        ImVec2 at(lo.x + (site.centre.x + 0.5f - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (site.centre.z + 0.5f - (mapCentre.y - kMapSize / 2)) * scale);
+        ui::Vec2 at(lo.x + (site.centre.x + 0.5f - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (site.centre.z + 0.5f - (mapCentre.y - kMapSize / 2)) * scale);
         const bool inside = at.x > lo.x + 5 && at.x < hi.x - 5 && at.y > lo.y + 5 && at.y < hi.y - 5;
         if (!inside) {
             // (Along the line from the middle to it, stopped at the edge.)
-            const ImVec2 c((lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f);
+            const ui::Vec2 c((lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f);
             const float dx = at.x - c.x, dy = at.y - c.y, half = kShown * 0.5f - 6.0f;
             const float k = half / std::max(std::abs(dx), std::abs(dy));
-            at = ImVec2(c.x + dx * k, c.y + dy * k);
+            at = ui::Vec2(c.x + dx * k, c.y + dy * k);
         }
         const float s = inside ? 5.0f : 3.0f;
         const auto kind = static_cast<Dwarves::SiteKind>(site.kind);
-        const ImU32 dark = IM_COL32(0, 0, 0, 200);
+        const ui::Color dark = UI_COL32(0, 0, 0, 200);
         switch (kind) {
         case Dwarves::SiteKind::Camp:
-            draw->AddTriangleFilled(ImVec2(at.x, at.y - s - 1), ImVec2(at.x - s - 1, at.y + s), ImVec2(at.x + s + 1, at.y + s), dark);
-            draw->AddTriangleFilled(ImVec2(at.x, at.y - s), ImVec2(at.x - s, at.y + s - 1), ImVec2(at.x + s, at.y + s - 1), IM_COL32(230, 70, 50, 255));
+            draw->AddTriangleFilled(ui::Vec2(at.x, at.y - s - 1), ui::Vec2(at.x - s - 1, at.y + s), ui::Vec2(at.x + s + 1, at.y + s), dark);
+            draw->AddTriangleFilled(ui::Vec2(at.x, at.y - s), ui::Vec2(at.x - s, at.y + s - 1), ui::Vec2(at.x + s, at.y + s - 1), UI_COL32(230, 70, 50, 255));
             break;
         case Dwarves::SiteKind::Mine:
-            draw->AddRectFilled(ImVec2(at.x - s - 1, at.y - s - 1), ImVec2(at.x + s + 1, at.y + s + 1), dark);
-            draw->AddRectFilled(ImVec2(at.x - s, at.y - s), ImVec2(at.x + s, at.y + s), site.fallen ? IM_COL32(120, 110, 100, 255) : IM_COL32(170, 110, 60, 255));
+            draw->AddRectFilled(ui::Vec2(at.x - s - 1, at.y - s - 1), ui::Vec2(at.x + s + 1, at.y + s + 1), dark);
+            draw->AddRectFilled(ui::Vec2(at.x - s, at.y - s), ui::Vec2(at.x + s, at.y + s), site.fallen ? UI_COL32(120, 110, 100, 255) : UI_COL32(170, 110, 60, 255));
             break;
         case Dwarves::SiteKind::Market:
             draw->AddCircleFilled(at, s + 1, dark);
-            draw->AddCircleFilled(at, s, IM_COL32(80, 210, 90, 255));
+            draw->AddCircleFilled(at, s, UI_COL32(80, 210, 90, 255));
             break;
         default:
-            draw->AddQuadFilled(ImVec2(at.x, at.y - s - 2), ImVec2(at.x + s + 2, at.y), ImVec2(at.x, at.y + s + 2), ImVec2(at.x - s - 2, at.y), dark);
-            draw->AddQuadFilled(ImVec2(at.x, at.y - s - 1), ImVec2(at.x + s + 1, at.y), ImVec2(at.x, at.y + s + 1), ImVec2(at.x - s - 1, at.y),
-                                site.fallen ? IM_COL32(130, 130, 130, 255) : IM_COL32(170, 80, 220, 255));
+            draw->AddQuadFilled(ui::Vec2(at.x, at.y - s - 2), ui::Vec2(at.x + s + 2, at.y), ui::Vec2(at.x, at.y + s + 2), ui::Vec2(at.x - s - 2, at.y), dark);
+            draw->AddQuadFilled(ui::Vec2(at.x, at.y - s - 1), ui::Vec2(at.x + s + 1, at.y), ui::Vec2(at.x, at.y + s + 1), ui::Vec2(at.x - s - 1, at.y),
+                                site.fallen ? UI_COL32(130, 130, 130, 255) : UI_COL32(170, 80, 220, 255));
         }
     }
     // Our bed: a little house (at the edge, if it's off the map).
     if (client->bed) {
-        ImVec2 at(lo.x + (client->bed->x + 0.5f - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (client->bed->z + 0.5f - (mapCentre.y - kMapSize / 2)) * scale);
-        const ImVec2 c((lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f);
+        ui::Vec2 at(lo.x + (client->bed->x + 0.5f - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (client->bed->z + 0.5f - (mapCentre.y - kMapSize / 2)) * scale);
+        const ui::Vec2 c((lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f);
         const float dx = at.x - c.x, dy = at.y - c.y, half = kShown * 0.5f - 6.0f;
         if (std::max(std::abs(dx), std::abs(dy)) > half) {
             const float k = half / std::max(std::abs(dx), std::abs(dy));
-            at = ImVec2(c.x + dx * k, c.y + dy * k);
+            at = ui::Vec2(c.x + dx * k, c.y + dy * k);
         }
-        draw->AddRectFilled(ImVec2(at.x - 5, at.y - 1), ImVec2(at.x + 5, at.y + 6), IM_COL32(0, 0, 0, 220));
-        draw->AddTriangleFilled(ImVec2(at.x, at.y - 7), ImVec2(at.x - 7, at.y), ImVec2(at.x + 7, at.y), IM_COL32(0, 0, 0, 220));
-        draw->AddRectFilled(ImVec2(at.x - 4, at.y), ImVec2(at.x + 4, at.y + 5), IM_COL32(240, 240, 240, 255));
-        draw->AddTriangleFilled(ImVec2(at.x, at.y - 6), ImVec2(at.x - 6, at.y), ImVec2(at.x + 6, at.y), IM_COL32(220, 60, 50, 255));
+        draw->AddRectFilled(ui::Vec2(at.x - 5, at.y - 1), ui::Vec2(at.x + 5, at.y + 6), UI_COL32(0, 0, 0, 220));
+        draw->AddTriangleFilled(ui::Vec2(at.x, at.y - 7), ui::Vec2(at.x - 7, at.y), ui::Vec2(at.x + 7, at.y), UI_COL32(0, 0, 0, 220));
+        draw->AddRectFilled(ui::Vec2(at.x - 4, at.y), ui::Vec2(at.x + 4, at.y + 5), UI_COL32(240, 240, 240, 255));
+        draw->AddTriangleFilled(ui::Vec2(at.x, at.y - 6), ui::Vec2(at.x - 6, at.y), ui::Vec2(at.x + 6, at.y), UI_COL32(220, 60, 50, 255));
     }
     // Where we last died: a red cross (at the edge, if it's off the map).
     if (deathSpot) {
-        ImVec2 at(lo.x + (deathSpot->x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (deathSpot->z - (mapCentre.y - kMapSize / 2)) * scale);
-        const ImVec2 c((lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f);
+        ui::Vec2 at(lo.x + (deathSpot->x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (deathSpot->z - (mapCentre.y - kMapSize / 2)) * scale);
+        const ui::Vec2 c((lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f);
         const float dx = at.x - c.x, dy = at.y - c.y, half = kShown * 0.5f - 6.0f;
         if (std::max(std::abs(dx), std::abs(dy)) > half) {
             const float k = half / std::max(std::abs(dx), std::abs(dy));
-            at = ImVec2(c.x + dx * k, c.y + dy * k);
+            at = ui::Vec2(c.x + dx * k, c.y + dy * k);
         }
         for (const float w : { 4.0f, 2.2f }) {
-            const ImU32 col = w > 3.0f ? IM_COL32(0, 0, 0, 220) : IM_COL32(255, 60, 50, 255);
-            draw->AddLine(ImVec2(at.x - 5, at.y - 5), ImVec2(at.x + 5, at.y + 5), col, w);
-            draw->AddLine(ImVec2(at.x - 5, at.y + 5), ImVec2(at.x + 5, at.y - 5), col, w);
+            const ui::Color col = w > 3.0f ? UI_COL32(0, 0, 0, 220) : UI_COL32(255, 60, 50, 255);
+            draw->AddLine(ui::Vec2(at.x - 5, at.y - 5), ui::Vec2(at.x + 5, at.y + 5), col, w);
+            draw->AddLine(ui::Vec2(at.x - 5, at.y + 5), ui::Vec2(at.x + 5, at.y - 5), col, w);
         }
     }
     // Other players: dots.
     for (const auto& other : client->GetRemotePlayers()) {
-        const ImVec2 at(lo.x + (other.feet.x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (other.feet.z - (mapCentre.y - kMapSize / 2)) * scale);
-        if (at.x > lo.x && at.x < hi.x && at.y > lo.y && at.y < hi.y) draw->AddCircleFilled(at, 3.5f, IM_COL32(255, 220, 80, 255));
+        const ui::Vec2 at(lo.x + (other.feet.x - (mapCentre.x - kMapSize / 2)) * scale, lo.y + (other.feet.z - (mapCentre.y - kMapSize / 2)) * scale);
+        if (at.x > lo.x && at.x < hi.x && at.y > lo.y && at.y < hi.y) draw->AddCircleFilled(at, 3.5f, UI_COL32(255, 220, 80, 255));
     }
     const float yaw = glm::radians(camera.GetYaw());
-    const ImVec2 f(std::cos(yaw), std::sin(yaw)), r(-f.y, f.x);
-    draw->AddTriangleFilled(ImVec2(me.x + f.x * 7.0f, me.y + f.y * 7.0f), ImVec2(me.x - f.x * 4.0f + r.x * 4.5f, me.y - f.y * 4.0f + r.y * 4.5f),
-                            ImVec2(me.x - f.x * 4.0f - r.x * 4.5f, me.y - f.y * 4.0f - r.y * 4.5f), IM_COL32(255, 255, 255, 255));
-    draw->AddText(ImVec2(lo.x + kShown * 0.5f - 4.0f, lo.y + 2.0f), IM_COL32(255, 110, 100, 255), "N");
+    const ui::Vec2 f(std::cos(yaw), std::sin(yaw)), r(-f.y, f.x);
+    draw->AddTriangleFilled(ui::Vec2(me.x + f.x * 7.0f, me.y + f.y * 7.0f), ui::Vec2(me.x - f.x * 4.0f + r.x * 4.5f, me.y - f.y * 4.0f + r.y * 4.5f),
+                            ui::Vec2(me.x - f.x * 4.0f - r.x * 4.5f, me.y - f.y * 4.0f - r.y * 4.5f), UI_COL32(255, 255, 255, 255));
+    draw->AddText(ui::Vec2(lo.x + kShown * 0.5f - 4.0f, lo.y + 2.0f), UI_COL32(255, 110, 100, 255), "N");
 }
 
 void Application::DrawPlayerList() {
     // Everyone here: you first, then the others with how far off they are and which way.
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 12.0f, viewport->WorkPos.y + 12.0f), ImGuiCond_Always);
-    ImGui::SetNextWindowBgAlpha(0.6f);
-    if (ImGui::Begin("Players", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings |
-                                             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoFocusOnAppearing)) {
+    const ui::Viewport* viewport = ui::GetMainViewport();
+    ui::SetNextWindowPos(ui::Vec2(viewport->WorkPos.x + 12.0f, viewport->WorkPos.y + 12.0f), ui::Cond_Always);
+    ui::SetNextWindowBgAlpha(0.6f);
+    if (ui::Begin("Players", nullptr, ui::WindowFlags_AlwaysAutoResize | ui::WindowFlags_NoInputs | ui::WindowFlags_NoSavedSettings |
+                                             ui::WindowFlags_NoTitleBar | ui::WindowFlags_NoFocusOnAppearing)) {
         const auto others = client->GetRemotePlayers();
-        ImGui::Text("Players online: %d", static_cast<int>(others.size()) + 1);
-        ImGui::Separator();
-        ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.5f, 1.0f), "%s (you)", client->GetMyName().c_str());
+        ui::Text("Players online: %d", static_cast<int>(others.size()) + 1);
+        ui::Separator();
+        ui::TextColored(ui::Vec4(1.0f, 0.9f, 0.5f, 1.0f), "%s (you)", client->GetMyName().c_str());
         const glm::vec3 me = player.GetFeetPosition();
         for (const auto& o : others) {
             const glm::vec3 d = o.feet - me;
             const float bearing = std::fmod(glm::degrees(std::atan2(d.z, d.x)) + 90.0f + 720.0f, 360.0f);
             static const char* kWays[] = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
-            ImGui::Text("%s   %d blocks %s", o.name.empty() ? "?" : o.name.c_str(), static_cast<int>(glm::length(d)),
+            ui::Text("%s   %d blocks %s", o.name.empty() ? "?" : o.name.c_str(), static_cast<int>(glm::length(d)),
                         kWays[static_cast<int>((bearing + 22.5f) / 45.0f) % 8]);
         }
     }
-    ImGui::End();
+    ui::End();
 }
 
 void Application::DrawDeath() {
@@ -1847,21 +1840,21 @@ void Application::DrawDeath() {
                 if (rest.rfind(death, 0) == 0) how = "You " + (rest.rfind("was ", 0) == 0 ? "were " + rest.substr(4) : rest);
         }
     const float fade = static_cast<float>(std::min(1.0, std::min(since * 6.0, (4.0 - since) * 1.5)));
-    ImDrawList* draw = ImGui::GetForegroundDrawList();
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const ImVec2 lo = viewport->WorkPos, hi(lo.x + viewport->WorkSize.x, lo.y + viewport->WorkSize.y);
-    draw->AddRectFilledMultiColor(lo, hi, IM_COL32(90, 0, 0, static_cast<int>(150 * fade)), IM_COL32(90, 0, 0, static_cast<int>(150 * fade)),
-                                  IM_COL32(20, 0, 0, static_cast<int>(200 * fade)), IM_COL32(20, 0, 0, static_cast<int>(200 * fade)));
+    ui::DrawList* draw = ui::GetForegroundDrawList();
+    const ui::Viewport* viewport = ui::GetMainViewport();
+    const ui::Vec2 lo = viewport->WorkPos, hi(lo.x + viewport->WorkSize.x, lo.y + viewport->WorkSize.y);
+    draw->AddRectFilledMultiColor(lo, hi, UI_COL32(90, 0, 0, static_cast<int>(150 * fade)), UI_COL32(90, 0, 0, static_cast<int>(150 * fade)),
+                                  UI_COL32(20, 0, 0, static_cast<int>(200 * fade)), UI_COL32(20, 0, 0, static_cast<int>(200 * fade)));
     const char* title = "You died!";
     const float cx = lo.x + viewport->WorkSize.x * 0.5f, cy = lo.y + viewport->WorkSize.y * 0.38f;
-    ImFont* font = ImGui::GetFont();
-    const float big = ImGui::GetFontSize() * 2.6f;
-    const ImVec2 titleSize = font->CalcTextSizeA(big, FLT_MAX, 0.0f, title);
-    draw->AddText(font, big, ImVec2(cx - titleSize.x * 0.5f + 3.0f, cy + 3.0f), IM_COL32(0, 0, 0, static_cast<int>(200 * fade)), title);
-    draw->AddText(font, big, ImVec2(cx - titleSize.x * 0.5f, cy), IM_COL32(255, 90, 80, static_cast<int>(255 * fade)), title);
+    const ui::Font* font = ui::GetFont();
+    const float big = ui::GetFontSize() * 2.6f;
+    const ui::Vec2 titleSize = font->Measure(big, title);
+    draw->AddText(font, big, ui::Vec2(cx - titleSize.x * 0.5f + 3.0f, cy + 3.0f), UI_COL32(0, 0, 0, static_cast<int>(200 * fade)), title);
+    draw->AddText(font, big, ui::Vec2(cx - titleSize.x * 0.5f, cy), UI_COL32(255, 90, 80, static_cast<int>(255 * fade)), title);
     if (!how.empty()) {
-        const ImVec2 size = ImGui::CalcTextSize(how.c_str());
-        draw->AddText(ImVec2(cx - size.x * 0.5f, cy + titleSize.y + 14.0f), IM_COL32(255, 230, 220, static_cast<int>(240 * fade)), how.c_str());
+        const ui::Vec2 size = ui::CalcTextSize(how.c_str());
+        draw->AddText(ui::Vec2(cx - size.x * 0.5f, cy + titleSize.y + 14.0f), UI_COL32(255, 230, 220, static_cast<int>(240 * fade)), how.c_str());
     }
 }
 
@@ -1874,14 +1867,14 @@ void Application::DrawBossBar() {
             if (d < best) best = d, health = std::clamp(c.health, 0.0f, 1.0f), title = c.type == CreatureType::DwarfKing ? "The Dwarf King" : "Forge golem";
         }
     if (health < 0.0f) return;
-    ImDrawList* draw = ImGui::GetForegroundDrawList();
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ui::DrawList* draw = ui::GetForegroundDrawList();
+    const ui::Viewport* viewport = ui::GetMainViewport();
     const float width = std::min(520.0f, viewport->WorkSize.x * 0.5f), height = 14.0f;
-    const ImVec2 corner(viewport->WorkPos.x + (viewport->WorkSize.x - width) * 0.5f, viewport->WorkPos.y + 118.0f);
-    const ImVec2 titleSize = ImGui::CalcTextSize(title);
-    draw->AddText(ImVec2(corner.x + (width - titleSize.x) * 0.5f, corner.y - titleSize.y - 4.0f), IM_COL32(255, 220, 140, 255), title);
-    draw->AddRectFilled(ImVec2(corner.x - 2, corner.y - 2), ImVec2(corner.x + width + 2, corner.y + height + 2), IM_COL32(20, 12, 8, 210), 3.0f);
-    draw->AddRectFilled(corner, ImVec2(corner.x + width * health, corner.y + height), health < 0.5f ? IM_COL32(220, 70, 40, 255) : IM_COL32(200, 150, 40, 255), 2.0f);
+    const ui::Vec2 corner(viewport->WorkPos.x + (viewport->WorkSize.x - width) * 0.5f, viewport->WorkPos.y + 118.0f);
+    const ui::Vec2 titleSize = ui::CalcTextSize(title);
+    draw->AddText(ui::Vec2(corner.x + (width - titleSize.x) * 0.5f, corner.y - titleSize.y - 4.0f), UI_COL32(255, 220, 140, 255), title);
+    draw->AddRectFilled(ui::Vec2(corner.x - 2, corner.y - 2), ui::Vec2(corner.x + width + 2, corner.y + height + 2), UI_COL32(20, 12, 8, 210), 3.0f);
+    draw->AddRectFilled(corner, ui::Vec2(corner.x + width * health, corner.y + height), health < 0.5f ? UI_COL32(220, 70, 40, 255) : UI_COL32(200, 150, 40, 255), 2.0f);
 }
 
 void Application::DrawToast() {
@@ -1899,17 +1892,17 @@ void Application::DrawToast() {
     const double left = toastUntil - Client::Now();
     if (left <= 0.0 || toastText.empty()) return;
     const float fade = static_cast<float>(std::min(1.0, std::min(left, 4.0 - left) * 3.0));
-    ImDrawList* draw = ImGui::GetForegroundDrawList();
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ui::DrawList* draw = ui::GetForegroundDrawList();
+    const ui::Viewport* viewport = ui::GetMainViewport();
     const std::string title = "Achievement unlocked";
-    const ImVec2 textSize = ImGui::CalcTextSize(toastText.c_str()), titleSize = ImGui::CalcTextSize(title.c_str());
+    const ui::Vec2 textSize = ui::CalcTextSize(toastText.c_str()), titleSize = ui::CalcTextSize(title.c_str());
     const float width = std::max(textSize.x, titleSize.x) + 40.0f, cx = viewport->WorkPos.x + viewport->WorkSize.x * 0.5f;
     const float y = viewport->WorkPos.y + 62.0f - (1.0f - fade) * 20.0f;
-    const ImVec2 lo(cx - width * 0.5f, y), hi(cx + width * 0.5f, y + titleSize.y + textSize.y + 18.0f);
-    draw->AddRectFilled(lo, hi, IM_COL32(30, 24, 8, static_cast<int>(210 * fade)), 6.0f);
-    draw->AddRect(lo, hi, IM_COL32(240, 200, 80, static_cast<int>(255 * fade)), 6.0f, 0, 2.0f);
-    draw->AddText(ImVec2(cx - titleSize.x * 0.5f, y + 6.0f), IM_COL32(255, 214, 90, static_cast<int>(255 * fade)), title.c_str());
-    draw->AddText(ImVec2(cx - textSize.x * 0.5f, y + 10.0f + titleSize.y), IM_COL32(255, 255, 255, static_cast<int>(240 * fade)), toastText.c_str());
+    const ui::Vec2 lo(cx - width * 0.5f, y), hi(cx + width * 0.5f, y + titleSize.y + textSize.y + 18.0f);
+    draw->AddRectFilled(lo, hi, UI_COL32(30, 24, 8, static_cast<int>(210 * fade)), 6.0f);
+    draw->AddRect(lo, hi, UI_COL32(240, 200, 80, static_cast<int>(255 * fade)), 6.0f, 0, 2.0f);
+    draw->AddText(ui::Vec2(cx - titleSize.x * 0.5f, y + 6.0f), UI_COL32(255, 214, 90, static_cast<int>(255 * fade)), title.c_str());
+    draw->AddText(ui::Vec2(cx - textSize.x * 0.5f, y + 10.0f + titleSize.y), UI_COL32(255, 255, 255, static_cast<int>(240 * fade)), toastText.c_str());
 }
 
 void Application::DrawCompass() {
@@ -1917,12 +1910,12 @@ void Application::DrawCompass() {
     // (north is -z) with ticks between, sliding as you turn; under it, where you are
     // and the time of day.
     if (!client->IsWelcomed()) return;
-    ImDrawList* draw = ImGui::GetForegroundDrawList();
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ui::DrawList* draw = ui::GetForegroundDrawList();
+    const ui::Viewport* viewport = ui::GetMainViewport();
     const float width = 360.0f, cx = viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, top = viewport->WorkPos.y + 10.0f;
     const float bearing = std::fmod(camera.GetYaw() + 90.0f + 720.0f, 360.0f); // degrees clockwise from north
-    draw->AddRectFilled(ImVec2(cx - width * 0.5f, top), ImVec2(cx + width * 0.5f, top + 26.0f), IM_COL32(0, 0, 0, 90), 4.0f);
-    draw->PushClipRect(ImVec2(cx - width * 0.5f, top), ImVec2(cx + width * 0.5f, top + 26.0f), true);
+    draw->AddRectFilled(ui::Vec2(cx - width * 0.5f, top), ui::Vec2(cx + width * 0.5f, top + 26.0f), UI_COL32(0, 0, 0, 90), 4.0f);
+    draw->PushClipRect(ui::Vec2(cx - width * 0.5f, top), ui::Vec2(cx + width * 0.5f, top + 26.0f), true);
     constexpr float kPixelsPerDegree = 2.0f; // 180 degrees across
     for (int deg = 0; deg < 360; deg += 15) {
         float offset = std::fmod(deg - bearing + 540.0f, 360.0f) - 180.0f;
@@ -1930,13 +1923,13 @@ void Application::DrawCompass() {
         if (std::abs(offset) > width * 0.5f / kPixelsPerDegree + 10.0f) continue;
         const char* label = deg == 0 ? "N" : deg == 90 ? "E" : deg == 180 ? "S" : deg == 270 ? "W" : nullptr;
         if (label) {
-            const ImVec2 size = ImGui::CalcTextSize(label);
-            draw->AddText(ImVec2(x - size.x * 0.5f, top + 5.0f), deg == 0 ? IM_COL32(255, 110, 100, 255) : IM_COL32(255, 255, 255, 235), label);
+            const ui::Vec2 size = ui::CalcTextSize(label);
+            draw->AddText(ui::Vec2(x - size.x * 0.5f, top + 5.0f), deg == 0 ? UI_COL32(255, 110, 100, 255) : UI_COL32(255, 255, 255, 235), label);
         }
-        else draw->AddLine(ImVec2(x, top + (deg % 45 == 0 ? 7.0f : 11.0f)), ImVec2(x, top + 19.0f), IM_COL32(255, 255, 255, deg % 45 == 0 ? 200 : 120), 1.5f);
+        else draw->AddLine(ui::Vec2(x, top + (deg % 45 == 0 ? 7.0f : 11.0f)), ui::Vec2(x, top + 19.0f), UI_COL32(255, 255, 255, deg % 45 == 0 ? 200 : 120), 1.5f);
     }
     draw->PopClipRect();
-    draw->AddTriangleFilled(ImVec2(cx - 5.0f, top + 26.0f), ImVec2(cx + 5.0f, top + 26.0f), ImVec2(cx, top + 20.0f), IM_COL32(255, 230, 120, 255));
+    draw->AddTriangleFilled(ui::Vec2(cx - 5.0f, top + 26.0f), ui::Vec2(cx + 5.0f, top + 26.0f), ui::Vec2(cx, top + 20.0f), UI_COL32(255, 230, 120, 255));
     // Where, and when (the day runs from sunrise at 06:00).
     const glm::vec3 feet = player.GetFeetPosition();
     const float hours = std::fmod(client->GetTimeOfDay() * 24.0f + 6.0f, 24.0f);
@@ -1944,16 +1937,16 @@ void Application::DrawCompass() {
     char line[96];
     std::snprintf(line, sizeof line, "%d, %d, %d    %s %02d:%02d", static_cast<int>(std::floor(feet.x)), static_cast<int>(std::floor(feet.y)),
                   static_cast<int>(std::floor(feet.z)), day ? "sun" : "moon", static_cast<int>(hours), static_cast<int>(std::fmod(hours, 1.0f) * 60.0f));
-    const ImVec2 size = ImGui::CalcTextSize(line);
-    draw->AddText(ImVec2(cx - size.x * 0.5f + 1.0f, top + 31.0f), IM_COL32(0, 0, 0, 200), line);
-    draw->AddText(ImVec2(cx - size.x * 0.5f, top + 30.0f), day ? IM_COL32(255, 244, 200, 235) : IM_COL32(190, 210, 255, 235), line);
+    const ui::Vec2 size = ui::CalcTextSize(line);
+    draw->AddText(ui::Vec2(cx - size.x * 0.5f + 1.0f, top + 31.0f), UI_COL32(0, 0, 0, 200), line);
+    draw->AddText(ui::Vec2(cx - size.x * 0.5f, top + 30.0f), day ? UI_COL32(255, 244, 200, 235) : UI_COL32(190, 210, 255, 235), line);
 }
 
 void Application::DrawNameTags(const glm::mat4& viewProjection) {
     // Each other player's name over their head: within 40 blocks, in view, and not
     // behind a wall (the line from the eye to the tag is clear), fading with distance.
-    ImDrawList* draw = ImGui::GetBackgroundDrawList();
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ui::DrawList* draw = ui::GetBackgroundDrawList();
+    const ui::Viewport* viewport = ui::GetMainViewport();
     const glm::vec3 eye = camera.GetPosition();
     constexpr float kRange = 40.0f;
     for (const auto& other : client->GetRemotePlayers()) {
@@ -1967,20 +1960,20 @@ void Application::DrawNameTags(const glm::mat4& viewProjection) {
         const glm::vec2 ndc = glm::vec2(clip) / clip.w;
         if (std::abs(ndc.x) > 1.1f || std::abs(ndc.y) > 1.1f) continue;
         if (auto hit = Raycast(*world, eye, toTag / distance, distance - 0.3f)) continue; // behind a wall
-        const ImVec2 at(viewport->WorkPos.x + (ndc.x * 0.5f + 0.5f) * viewport->WorkSize.x,
+        const ui::Vec2 at(viewport->WorkPos.x + (ndc.x * 0.5f + 0.5f) * viewport->WorkSize.x,
                         viewport->WorkPos.y + (0.5f - ndc.y * 0.5f) * viewport->WorkSize.y);
         const float fade = std::clamp((kRange - distance) / 10.0f, 0.0f, 1.0f);
-        const ImVec2 size = ImGui::CalcTextSize(other.name.c_str());
-        const ImVec2 lo(at.x - size.x * 0.5f - 5.0f, at.y - size.y - 4.0f), hi(at.x + size.x * 0.5f + 5.0f, at.y + 2.0f);
-        draw->AddRectFilled(lo, hi, IM_COL32(0, 0, 0, static_cast<int>(120 * fade)), 3.0f);
-        draw->AddText(ImVec2(lo.x + 5.0f, lo.y + 3.0f), IM_COL32(255, 255, 255, static_cast<int>(235 * fade)), other.name.c_str());
+        const ui::Vec2 size = ui::CalcTextSize(other.name.c_str());
+        const ui::Vec2 lo(at.x - size.x * 0.5f - 5.0f, at.y - size.y - 4.0f), hi(at.x + size.x * 0.5f + 5.0f, at.y + 2.0f);
+        draw->AddRectFilled(lo, hi, UI_COL32(0, 0, 0, static_cast<int>(120 * fade)), 3.0f);
+        draw->AddText(ui::Vec2(lo.x + 5.0f, lo.y + 3.0f), UI_COL32(255, 255, 255, static_cast<int>(235 * fade)), other.name.c_str());
     }
 }
 
 void Application::DrawHealth() {
     if (!client->IsWelcomed()) return;
-    ImDrawList* draw = ImGui::GetForegroundDrawList();
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ui::DrawList* draw = ui::GetForegroundDrawList();
+    const ui::Viewport* viewport = ui::GetMainViewport();
 
     // A red flash when hurt, fading over half a second.
     if (client->IsCreative()) return; // nothing hurts in creative
@@ -1993,22 +1986,22 @@ void Application::DrawHealth() {
     if (cause != Breathing::Cause::None && airLeft < 0.6f) {
         float strength = (0.6f - airLeft) / 0.6f;
         if (air == 0) strength = 0.85f + 0.15f * std::sin(static_cast<float>(Client::Now()) * 4.0f);
-        const ImVec2 lo = viewport->WorkPos, hi(lo.x + viewport->WorkSize.x, lo.y + viewport->WorkSize.y);
+        const ui::Vec2 lo = viewport->WorkPos, hi(lo.x + viewport->WorkSize.x, lo.y + viewport->WorkSize.y);
         const bool water = cause == Breathing::Cause::Water;
         const int r = water ? 0 : 10, g = water ? 20 : 8, b = water ? 60 : 12;
-        const ImU32 edge = IM_COL32(r, g, b, static_cast<int>(230 * strength)), clear = IM_COL32(r, g, b, 0);
+        const ui::Color edge = UI_COL32(r, g, b, static_cast<int>(230 * strength)), clear = UI_COL32(r, g, b, 0);
         const float band = std::min(viewport->WorkSize.x, viewport->WorkSize.y) * (0.15f + 0.3f * strength);
-        draw->AddRectFilledMultiColor(lo, ImVec2(hi.x, lo.y + band), edge, edge, clear, clear);
-        draw->AddRectFilledMultiColor(ImVec2(lo.x, hi.y - band), hi, clear, clear, edge, edge);
-        draw->AddRectFilledMultiColor(lo, ImVec2(lo.x + band, hi.y), edge, clear, clear, edge);
-        draw->AddRectFilledMultiColor(ImVec2(hi.x - band, lo.y), hi, clear, edge, edge, clear);
+        draw->AddRectFilledMultiColor(lo, ui::Vec2(hi.x, lo.y + band), edge, edge, clear, clear);
+        draw->AddRectFilledMultiColor(ui::Vec2(lo.x, hi.y - band), hi, clear, clear, edge, edge);
+        draw->AddRectFilledMultiColor(lo, ui::Vec2(lo.x + band, hi.y), edge, clear, clear, edge);
+        draw->AddRectFilledMultiColor(ui::Vec2(hi.x - band, lo.y), hi, clear, edge, edge, clear);
     }
 
     const float sinceHurt = static_cast<float>(Client::Now() - client->GetLastHurt());
     if (sinceHurt < 0.5f) {
         const int alpha = static_cast<int>(110.0f * (1.0f - sinceHurt / 0.5f));
-        draw->AddRectFilled(viewport->WorkPos, ImVec2(viewport->WorkPos.x + viewport->WorkSize.x, viewport->WorkPos.y + viewport->WorkSize.y),
-                            IM_COL32(200, 20, 20, alpha));
+        draw->AddRectFilled(viewport->WorkPos, ui::Vec2(viewport->WorkPos.x + viewport->WorkSize.x, viewport->WorkPos.y + viewport->WorkSize.y),
+                            UI_COL32(200, 20, 20, alpha));
     }
     if (player.IsFlying()) return; // no-clip: nothing can hurt you
 
@@ -2018,22 +2011,22 @@ void Application::DrawHealth() {
     const float hotbarWidth = kHotbarSlots * 52.0f + (kHotbarSlots - 1) * 4.0f + 16.0f;
     const float x0 = viewport->WorkPos.x + (viewport->WorkSize.x - hotbarWidth) * 0.5f + 6.0f;
     const float y = viewport->WorkPos.y + viewport->WorkSize.y - 12.0f - 98.0f;
-    auto heart = [&](float cx, float cy, ImU32 color) {
+    auto heart = [&](float cx, float cy, ui::Color color) {
         // Two lobes and a point.
-        draw->AddCircleFilled(ImVec2(cx - kSize * 0.45f, cy), kSize * 0.55f, color);
-        draw->AddCircleFilled(ImVec2(cx + kSize * 0.45f, cy), kSize * 0.55f, color);
-        draw->AddTriangleFilled(ImVec2(cx - kSize, cy + kSize * 0.15f), ImVec2(cx + kSize, cy + kSize * 0.15f), ImVec2(cx, cy + kSize * 1.1f), color);
+        draw->AddCircleFilled(ui::Vec2(cx - kSize * 0.45f, cy), kSize * 0.55f, color);
+        draw->AddCircleFilled(ui::Vec2(cx + kSize * 0.45f, cy), kSize * 0.55f, color);
+        draw->AddTriangleFilled(ui::Vec2(cx - kSize, cy + kSize * 0.15f), ui::Vec2(cx + kSize, cy + kSize * 0.15f), ui::Vec2(cx, cy + kSize * 1.1f), color);
     };
     const bool blink = sinceHurt < 0.6f && static_cast<int>(sinceHurt * 10.0f) % 2 == 0;
     for (int i = 0; i < hearts; i++) {
         const float cx = x0 + kSize + i * (2.0f * kSize + kGap);
-        heart(cx + 1.5f, y + 1.5f, IM_COL32(0, 0, 0, 160));       // shadow
-        heart(cx, y, IM_COL32(60, 50, 50, 220));                    // empty
+        heart(cx + 1.5f, y + 1.5f, UI_COL32(0, 0, 0, 160));       // shadow
+        heart(cx, y, UI_COL32(60, 50, 50, 220));                    // empty
         const int left = health - 2 * i;
-        const ImU32 red = blink ? IM_COL32(255, 200, 200, 255) : IM_COL32(220, 30, 40, 255);
+        const ui::Color red = blink ? UI_COL32(255, 200, 200, 255) : UI_COL32(220, 30, 40, 255);
         if (left >= 2) heart(cx, y, red);
         else if (left == 1) {
-            draw->PushClipRect(ImVec2(cx - kSize * 1.2f, y - kSize), ImVec2(cx, y + kSize * 1.2f), true); // left half
+            draw->PushClipRect(ui::Vec2(cx - kSize * 1.2f, y - kSize), ui::Vec2(cx, y + kSize * 1.2f), true); // left half
             heart(cx, y, red);
             draw->PopClipRect();
         }
@@ -2045,22 +2038,22 @@ void Application::DrawHealth() {
         const int sticks = (client->GetMaxFood() + 1) / 2, food = client->GetFood();
         // Hungry: the row shivers a little, so it's noticed.
         const float shiver = food <= Hunger::kRegenFood / 2 ? std::sin(static_cast<float>(Client::Now()) * 30.0f) * 0.8f : 0.0f;
-        auto drumstick = [&](float cx, float cy, ImU32 meat, ImU32 bone) {
+        auto drumstick = [&](float cx, float cy, ui::Color meat, ui::Color bone) {
             // The meat, upper left; the bone sticking out to the lower right with a knob.
-            draw->AddLine(ImVec2(cx, cy), ImVec2(cx + kSize * 0.8f, cy + kSize * 0.8f), bone, kSize * 0.35f);
-            draw->AddCircleFilled(ImVec2(cx + kSize * 0.85f, cy + kSize * 0.6f), kSize * 0.22f, bone);
-            draw->AddCircleFilled(ImVec2(cx + kSize * 0.6f, cy + kSize * 0.85f), kSize * 0.22f, bone);
-            draw->AddCircleFilled(ImVec2(cx - kSize * 0.2f, cy - kSize * 0.2f), kSize * 0.7f, meat);
+            draw->AddLine(ui::Vec2(cx, cy), ui::Vec2(cx + kSize * 0.8f, cy + kSize * 0.8f), bone, kSize * 0.35f);
+            draw->AddCircleFilled(ui::Vec2(cx + kSize * 0.85f, cy + kSize * 0.6f), kSize * 0.22f, bone);
+            draw->AddCircleFilled(ui::Vec2(cx + kSize * 0.6f, cy + kSize * 0.85f), kSize * 0.22f, bone);
+            draw->AddCircleFilled(ui::Vec2(cx - kSize * 0.2f, cy - kSize * 0.2f), kSize * 0.7f, meat);
         };
         for (int i = 0; i < sticks; i++) {
             const float cx = right - kSize * 1.4f - i * (2.0f * kSize + kGap), cy = y + shiver * ((i % 2) ? 1.0f : -1.0f);
-            drumstick(cx + 1.5f, cy + 1.5f, IM_COL32(0, 0, 0, 160), IM_COL32(0, 0, 0, 160)); // shadow
-            drumstick(cx, cy, IM_COL32(60, 45, 35, 220), IM_COL32(70, 65, 60, 220));          // empty
+            drumstick(cx + 1.5f, cy + 1.5f, UI_COL32(0, 0, 0, 160), UI_COL32(0, 0, 0, 160)); // shadow
+            drumstick(cx, cy, UI_COL32(60, 45, 35, 220), UI_COL32(70, 65, 60, 220));          // empty
             const int left = food - 2 * i;
-            const ImU32 meat = IM_COL32(176, 96, 44, 255), bone = IM_COL32(235, 225, 205, 255);
+            const ui::Color meat = UI_COL32(176, 96, 44, 255), bone = UI_COL32(235, 225, 205, 255);
             if (left >= 2) drumstick(cx, cy, meat, bone);
             else if (left == 1) {
-                draw->PushClipRect(ImVec2(cx, cy - kSize * 1.2f), ImVec2(cx + kSize * 1.4f, cy + kSize * 1.4f), true); // the bone half
+                draw->PushClipRect(ui::Vec2(cx, cy - kSize * 1.2f), ui::Vec2(cx + kSize * 1.4f, cy + kSize * 1.4f), true); // the bone half
                 drumstick(cx, cy, meat, bone);
                 draw->PopClipRect();
             }
@@ -2071,15 +2064,15 @@ void Application::DrawHealth() {
     if ((client->GetArmour() & Armour::Bit(ArmourPiece::OxygenTank)) && (client->OnTank() || client->GetTank() < 0.999f)) {
         const float w = 9.0f * (2.0f * kSize + kGap) - kGap, h = 8.0f;
         const float y = viewport->WorkPos.y + viewport->WorkSize.y - 12.0f - 98.0f - (2.0f * kSize + 8.0f) * (cause != Breathing::Cause::None || air < maxAir ? 2.0f : 1.0f);
-        const ImVec2 lo(right - w, y - h * 0.5f), hi(right, y + h * 0.5f);
-        draw->AddRectFilled(ImVec2(lo.x - 2, lo.y - 2), ImVec2(hi.x + 2, hi.y + 2), IM_COL32(0, 0, 0, 160), 3.0f);
+        const ui::Vec2 lo(right - w, y - h * 0.5f), hi(right, y + h * 0.5f);
+        draw->AddRectFilled(ui::Vec2(lo.x - 2, lo.y - 2), ui::Vec2(hi.x + 2, hi.y + 2), UI_COL32(0, 0, 0, 160), 3.0f);
         const float fill = std::clamp(client->GetTank(), 0.0f, 1.0f);
-        const ImU32 colour = fill < 0.25f ? IM_COL32(240, 90, 60, 255) : IM_COL32(120, 220, 230, 255);
-        draw->AddRectFilled(lo, ImVec2(lo.x + w * fill, hi.y), colour, 2.0f);
+        const ui::Color colour = fill < 0.25f ? UI_COL32(240, 90, 60, 255) : UI_COL32(120, 220, 230, 255);
+        draw->AddRectFilled(lo, ui::Vec2(lo.x + w * fill, hi.y), colour, 2.0f);
         char label[48];
         std::snprintf(label, sizeof label, client->OnTank() ? "On the tank: %d%%" : "Tank filling: %d%%", static_cast<int>(fill * 100.0f + 0.5f));
-        const ImVec2 size = ImGui::CalcTextSize(label);
-        draw->AddText(ImVec2(right - size.x, lo.y - size.y - 3.0f), IM_COL32(220, 245, 250, 255), label);
+        const ui::Vec2 size = ui::CalcTextSize(label);
+        draw->AddText(ui::Vec2(right - size.x, lo.y - size.y - 3.0f), UI_COL32(220, 245, 250, 255), label);
     }
 
     // Air bubbles over the food, right to left, while anything takes your breath or
@@ -2091,22 +2084,22 @@ void Application::DrawHealth() {
             const float cx = right - kSize - i * (2.0f * kSize + kGap);
             const int left = air - 2 * i;
             if (left <= 0) {
-                draw->AddCircleFilled(ImVec2(cx, y + 2.0f), kSize * 0.75f, IM_COL32(20, 30, 45, 150)); // gone
-                draw->AddCircle(ImVec2(cx, y + 2.0f), kSize * 0.75f, IM_COL32(140, 180, 220, 170), 0, 1.5f);
+                draw->AddCircleFilled(ui::Vec2(cx, y + 2.0f), kSize * 0.75f, UI_COL32(20, 30, 45, 150)); // gone
+                draw->AddCircle(ui::Vec2(cx, y + 2.0f), kSize * 0.75f, UI_COL32(140, 180, 220, 170), 0, 1.5f);
                 continue;
             }
             const float radius = kSize * (left >= 2 ? 0.8f : 0.5f); // half a bubble is a small one
-            draw->AddCircleFilled(ImVec2(cx + 1.5f, y + 3.5f), radius, IM_COL32(0, 0, 0, 140));
-            draw->AddCircleFilled(ImVec2(cx, y + 2.0f), radius, IM_COL32(90, 170, 255, 235));
-            draw->AddCircle(ImVec2(cx, y + 2.0f), radius, IM_COL32(220, 240, 255, 255), 0, 1.5f);
-            draw->AddCircleFilled(ImVec2(cx - radius * 0.35f, y + 2.0f - radius * 0.35f), radius * 0.25f, IM_COL32(255, 255, 255, 230)); // shine
+            draw->AddCircleFilled(ui::Vec2(cx + 1.5f, y + 3.5f), radius, UI_COL32(0, 0, 0, 140));
+            draw->AddCircleFilled(ui::Vec2(cx, y + 2.0f), radius, UI_COL32(90, 170, 255, 235));
+            draw->AddCircle(ui::Vec2(cx, y + 2.0f), radius, UI_COL32(220, 240, 255, 255), 0, 1.5f);
+            draw->AddCircleFilled(ui::Vec2(cx - radius * 0.35f, y + 2.0f - radius * 0.35f), radius * 0.25f, UI_COL32(255, 255, 255, 230)); // shine
         }
         if (cause != Breathing::Cause::None) {
             const char* label = CauseName(cause);
-            const ImVec2 size = ImGui::CalcTextSize(label);
-            const ImVec2 at(right - size.x, y - kSize - size.y - 4.0f);
-            draw->AddText(ImVec2(at.x + 1.0f, at.y + 1.0f), IM_COL32(0, 0, 0, 220), label);
-            draw->AddText(at, air == 0 ? IM_COL32(255, 120, 110, 255) : IM_COL32(200, 230, 255, 255), label);
+            const ui::Vec2 size = ui::CalcTextSize(label);
+            const ui::Vec2 at(right - size.x, y - kSize - size.y - 4.0f);
+            draw->AddText(ui::Vec2(at.x + 1.0f, at.y + 1.0f), UI_COL32(0, 0, 0, 220), label);
+            draw->AddText(at, air == 0 ? UI_COL32(255, 120, 110, 255) : UI_COL32(200, 230, 255, 255), label);
         }
     }
 }
@@ -2140,85 +2133,64 @@ void Application::DrawChat() {
     while (first > 0 && lines.size() - first < limit && (chatOpen || now - lines[first - 1].time < kShowSeconds)) first--;
     if (first == lines.size() && !chatOpen) return;
 
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const ui::Viewport* viewport = ui::GetMainViewport();
     const float width = std::min(560.0f, viewport->WorkSize.x - 24.0f);
     // Above the hotbar and the hearts and air bubbles over it.
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 12.0f, viewport->WorkPos.y + viewport->WorkSize.y - 160.0f), ImGuiCond_Always,
-                            ImVec2(0.0f, 1.0f));
-    ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
-    ImGui::SetNextWindowBgAlpha(chatOpen ? 0.7f : 0.55f);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 1.0f)); // black, so text reads over bright terrain
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
-    const bool visible = ImGui::Begin("Chat", nullptr, flags);
-    ImGui::PopStyleColor(2);
+    ui::SetNextWindowPos(ui::Vec2(viewport->WorkPos.x + 12.0f, viewport->WorkPos.y + viewport->WorkSize.y - 160.0f), ui::Cond_Always,
+                            ui::Vec2(0.0f, 1.0f));
+    ui::SetNextWindowSize(ui::Vec2(width, 0.0f));
+    ui::SetNextWindowBgAlpha(chatOpen ? 0.7f : 0.55f);
+    ui::PushStyleColor(ui::Col_WindowBg, ui::Vec4(0.0f, 0.0f, 0.0f, 1.0f)); // black, so text reads over bright terrain
+    ui::PushStyleColor(ui::Col_Border, ui::Vec4(0.0f, 0.0f, 0.0f, 0.0f));
+    const int flags = ui::WindowFlags_NoDecoration | ui::WindowFlags_AlwaysAutoResize | ui::WindowFlags_NoMove |
+                                   ui::WindowFlags_NoSavedSettings | ui::WindowFlags_NoFocusOnAppearing | ui::WindowFlags_NoNav;
+    const bool visible = ui::Begin("Chat", nullptr, flags);
+    ui::PopStyleColor(2);
     if (!visible) {
-        ImGui::End();
+        ui::End();
         return;
     }
-    ImGui::PushTextWrapPos(width - 16.0f);
+    ui::PushTextWrapPos(width - 16.0f);
     for (size_t i = first; i < lines.size(); i++) {
         const auto& line = lines[i];
-        ImVec4 color(1.0f, 1.0f, 1.0f, 1.0f);
+        ui::Vec4 color(1.0f, 1.0f, 1.0f, 1.0f);
         switch (line.kind) {
-        case net::ChatMessage::Kind::Info: color = ImVec4(1.0f, 0.88f, 0.45f, 1.0f); break;
-        case net::ChatMessage::Kind::Error: color = ImVec4(1.0f, 0.5f, 0.45f, 1.0f); break;
-        case net::ChatMessage::Kind::Private: color = ImVec4(0.82f, 0.65f, 1.0f, 1.0f); break;
+        case net::ChatMessage::Kind::Info: color = ui::Vec4(1.0f, 0.88f, 0.45f, 1.0f); break;
+        case net::ChatMessage::Kind::Error: color = ui::Vec4(1.0f, 0.5f, 0.45f, 1.0f); break;
+        case net::ChatMessage::Kind::Private: color = ui::Vec4(0.82f, 0.65f, 1.0f, 1.0f); break;
         default: break;
         }
         if (!chatOpen) color.w = static_cast<float>(std::clamp((kShowSeconds - (now - line.time)) / kFadeSeconds, 0.0, 1.0));
-        ImGui::PushStyleColor(ImGuiCol_Text, color);
-        ImGui::TextUnformatted(line.text.c_str());
-        ImGui::PopStyleColor();
+        ui::PushStyleColor(ui::Col_Text, color);
+        ui::TextUnformatted(line.text.c_str());
+        ui::PopStyleColor();
     }
-    ImGui::PopTextWrapPos();
+    ui::PopTextWrapPos();
 
     if (chatOpen) {
-        if (chatOpenFrames < 2) ImGui::SetKeyboardFocusHere();
-        ImGui::SetNextItemWidth(-1.0f);
+        if (chatOpenFrames < 2) ui::SetKeyboardFocusHere();
+        ui::SetNextItemWidth(-1.0f);
         // Just opened: the key that opened it may also arrive as a typed character (drop
-        // the 't', keep a single '/'), and the box would select what's in it (the '/'),
-        // so the cursor goes to the end with nothing selected. Done inside the box's
-        // own edit (a callback): it keeps its own copy of the text while typing.
-        // Up and Down step back and forward through what was typed before, the newest
-        // first; past the newest is the line being typed, as it was left.
-        struct Opening {
-            char with;
-            int frames;
-            const std::vector<std::string>* history;
-            int* at;
-            std::string* draft;
-        } opening{ chatOpenedWith, chatOpenFrames, &chatHistory, &chatHistoryAt, &chatDraft };
-        auto onEdit = [](ImGuiInputTextCallbackData* data) {
-            const auto* o = static_cast<const Opening*>(data->UserData);
-            if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory) {
-                const int count = static_cast<int>(o->history->size());
-                const int was = *o->at;
-                if (data->EventKey == ImGuiKey_UpArrow && count > 0) {
-                    if (was == -1) *o->draft = std::string(data->Buf, data->BufTextLen), *o->at = count - 1;
-                    else if (was > 0) *o->at = was - 1;
-                }
-                else if (data->EventKey == ImGuiKey_DownArrow && was != -1)
-                    *o->at = was + 1 < count ? was + 1 : -1;
-                if (*o->at != was) {
-                    const std::string& text = *o->at == -1 ? *o->draft : (*o->history)[static_cast<size_t>(*o->at)];
-                    data->DeleteChars(0, data->BufTextLen);
-                    data->InsertChars(0, text.c_str());
-                }
-                return 0;
-            }
-            if (o->frames >= 3) return 0;
-            const std::string text(data->Buf, data->BufTextLen);
-            if (o->with == 't' && (text == "t" || text == "T")) data->DeleteChars(0, data->BufTextLen);
-            if (o->with == '/' && text == "//") data->DeleteChars(1, 1);
-            data->ClearSelection();
-            data->CursorPos = data->BufTextLen;
-            return 0;
-        };
-        const bool send = ImGui::InputText("##chat", chatInput, sizeof chatInput,
-                                           ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_CallbackHistory,
-                                           onEdit, &opening);
+        // the 't', keep a single '/'). Up and Down step back and forward through what was
+        // typed before, the newest first; past the newest is the line being typed, as it
+        // was left.
+        const int count = static_cast<int>(chatHistory.size()), was = chatHistoryAt;
+        if (ui::IsKeyPressed(ui::Key::Up) && count > 0) {
+            if (was == -1) chatDraft = chatInput, chatHistoryAt = count - 1;
+            else if (was > 0) chatHistoryAt = was - 1;
+        }
+        else if (ui::IsKeyPressed(ui::Key::Down) && was != -1)
+            chatHistoryAt = was + 1 < count ? was + 1 : -1;
+        if (chatHistoryAt != was) {
+            const std::string& text = chatHistoryAt == -1 ? chatDraft : chatHistory[static_cast<size_t>(chatHistoryAt)];
+            std::snprintf(chatInput, sizeof chatInput, "%s", text.c_str());
+        }
+        const bool send = ui::InputText("##chat", chatInput, sizeof chatInput, ui::InputTextFlags_EnterReturnsTrue);
+        if (chatOpenFrames < 3) {
+            const std::string text = chatInput;
+            if (chatOpenedWith == 't' && (text == "t" || text == "T")) chatInput[0] = '\0';
+            if (chatOpenedWith == '/' && text == "//") chatInput[1] = '\0';
+        }
         chatOpenFrames++;
         if (send) {
             RememberChat(chatInput);
@@ -2226,7 +2198,7 @@ void Application::DrawChat() {
             CloseChat();
         }
     }
-    ImGui::End();
+    ui::End();
 }
 
 void Application::DrawStatus() {
@@ -2236,14 +2208,14 @@ void Application::DrawStatus() {
     else if (!player.IsSpawned() && !player.IsFlying()) text = "Loading terrain...";
     if (text.empty()) return;
 
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + 40.0f), ImGuiCond_Always,
-                            ImVec2(0.5f, 0.0f));
-    ImGui::SetNextWindowBgAlpha(0.6f);
-    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
-    if (ImGui::Begin("Status", nullptr, flags)) ImGui::TextUnformatted(text.c_str());
-    ImGui::End();
+    const ui::Viewport* viewport = ui::GetMainViewport();
+    ui::SetNextWindowPos(ui::Vec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + 40.0f), ui::Cond_Always,
+                            ui::Vec2(0.5f, 0.0f));
+    ui::SetNextWindowBgAlpha(0.6f);
+    const int flags = ui::WindowFlags_NoDecoration | ui::WindowFlags_AlwaysAutoResize | ui::WindowFlags_NoMove |
+                                   ui::WindowFlags_NoSavedSettings | ui::WindowFlags_NoFocusOnAppearing | ui::WindowFlags_NoNav;
+    if (ui::Begin("Status", nullptr, flags)) ui::TextUnformatted(text.c_str());
+    ui::End();
 }
 
 void Application::HandleContinuousInput(float deltaTime) {
@@ -2323,20 +2295,20 @@ void Application::DrawHotbar() {
     SeedCreativeHotbar();
     constexpr int kSlots = kHotbarSlots;
     constexpr float kIcon = 40.0f, kPad = 6.0f, kGap = 4.0f;
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const ui::Viewport* viewport = ui::GetMainViewport();
     const float barWidth = kSlots * (kIcon + 2 * kPad) + (kSlots - 1) * kGap;
 
     // A borderless strip along the bottom centre of the screen.
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y - 12.0f),
-                            ImGuiCond_Always, ImVec2(0.5f, 1.0f));
-    ImGui::SetNextWindowBgAlpha(0.45f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 6.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(kGap, 4.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
-    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
-                                   ImGuiWindowFlags_NoBringToFrontOnFocus;
-    if (ImGui::Begin("Hotbar", nullptr, flags)) {
+    ui::SetNextWindowPos(ui::Vec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y - 12.0f),
+                            ui::Cond_Always, ui::Vec2(0.5f, 1.0f));
+    ui::SetNextWindowBgAlpha(0.45f);
+    ui::PushStyleVar(ui::StyleVar_WindowPadding, ui::Vec2(8.0f, 6.0f));
+    ui::PushStyleVar(ui::StyleVar_ItemSpacing, ui::Vec2(kGap, 4.0f));
+    ui::PushStyleVar(ui::StyleVar_WindowRounding, 6.0f);
+    const int flags = ui::WindowFlags_NoDecoration | ui::WindowFlags_AlwaysAutoResize | ui::WindowFlags_NoMove |
+                                   ui::WindowFlags_NoSavedSettings | ui::WindowFlags_NoFocusOnAppearing | ui::WindowFlags_NoNav |
+                                   ui::WindowFlags_NoBringToFrontOnFocus;
+    if (ui::Begin("Hotbar", nullptr, flags)) {
         // The selected item's name, centred above the slots, with the height building
         // blocks are placed at (V); reddish if it can't be used (a tool not made yet,
         // or a block we haven't enough of).
@@ -2351,39 +2323,39 @@ void Application::DrawHotbar() {
         const bool affordable = SelectedItem() == Items::kNone || !Items::IsBlock(SelectedItem()) ||
                                 client->CanAfford(selected, Block::CanShape(selected) ? placeHeight : 8);
         const bool affordableShown = affordable;
-        const float nameWidth = ImGui::CalcTextSize(label.c_str()).x;
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (barWidth - nameWidth) * 0.5f));
-        ImGui::PushStyleColor(ImGuiCol_Text, affordableShown ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(1.0f, 0.55f, 0.5f, 1.0f));
-        ImGui::TextUnformatted(label.c_str());
-        ImGui::PopStyleColor();
+        const float nameWidth = ui::CalcTextSize(label.c_str()).x;
+        ui::SetCursorPosX(ui::GetCursorPosX() + std::max(0.0f, (barWidth - nameWidth) * 0.5f));
+        ui::PushStyleColor(ui::Col_Text, affordableShown ? ui::Vec4(1.0f, 1.0f, 1.0f, 1.0f) : ui::Vec4(1.0f, 0.55f, 0.5f, 1.0f));
+        ui::TextUnformatted(label.c_str());
+        ui::PopStyleColor();
 
         const TextureAtlas& atlas = renderer->GetAtlas();
-        const ImTextureID atlasTexture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
-        ImDrawList* draw = ImGui::GetWindowDrawList();
+        const ui::TextureId atlasTexture = static_cast<ui::TextureId>(static_cast<uintptr_t>(atlas.GetTexture()));
+        ui::DrawList* draw = ui::GetWindowDrawList();
         for (int i = 0; i < kSlots; i++) {
-            if (i > 0) ImGui::SameLine();
+            if (i > 0) ui::SameLine();
             const bool selected = i == selectedSlot;
-            const ImVec2 slotMin = ImGui::GetCursorScreenPos();
-            const ImVec2 slotMax(slotMin.x + kIcon + 2 * kPad, slotMin.y + kIcon + 2 * kPad);
+            const ui::Vec2 slotMin = ui::GetCursorScreenPos();
+            const ui::Vec2 slotMax(slotMin.x + kIcon + 2 * kPad, slotMin.y + kIcon + 2 * kPad);
 
             // Clicking a slot selects it (when the cursor is released with Tab).
-            ImGui::PushID(i);
-            if (ImGui::InvisibleButton("slot", ImVec2(slotMax.x - slotMin.x, slotMax.y - slotMin.y))) SelectSlot(i);
-            const bool hovered = ImGui::IsItemHovered();
-            ImGui::PopID();
+            ui::PushID(i);
+            if (ui::InvisibleButton("slot", ui::Vec2(slotMax.x - slotMin.x, slotMax.y - slotMin.y))) SelectSlot(i);
+            const bool hovered = ui::IsItemHovered();
+            ui::PopID();
 
-            draw->AddRectFilled(slotMin, slotMax, selected ? IM_COL32(255, 255, 255, 60) : hovered ? IM_COL32(255, 255, 255, 30) : IM_COL32(0, 0, 0, 70), 4.0f);
+            draw->AddRectFilled(slotMin, slotMax, selected ? UI_COL32(255, 255, 255, 60) : hovered ? UI_COL32(255, 255, 255, 30) : UI_COL32(0, 0, 0, 70), 4.0f);
             // What's in the slot (survival: how many, in the bottom right).
             DrawStackOn(draw, atlas, atlasTexture, slotMin, slotMax, kPad, StackIn(SlotBox::Player, i), false, survival);
-            draw->AddRect(slotMin, slotMax, selected ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 255, 255, 60), 4.0f, 0, selected ? 3.0f : 1.0f);
+            draw->AddRect(slotMin, slotMax, selected ? UI_COL32(255, 255, 255, 255) : UI_COL32(255, 255, 255, 60), 4.0f, 0, selected ? 3.0f : 1.0f);
             // Number key in the corner (1-9, then 0; later slots are picked with the wheel).
             char key[2] = { static_cast<char>(i < 9 ? '1' + i : i == 9 ? '0' : 0), 0 };
-            draw->AddText(ImVec2(slotMin.x + 5.0f, slotMin.y + 3.0f), IM_COL32(0, 0, 0, 200), key); // shadow, readable on light textures
-            draw->AddText(ImVec2(slotMin.x + 4.0f, slotMin.y + 2.0f), IM_COL32(255, 255, 255, selected ? 255 : 190), key);
+            draw->AddText(ui::Vec2(slotMin.x + 5.0f, slotMin.y + 3.0f), UI_COL32(0, 0, 0, 200), key); // shadow, readable on light textures
+            draw->AddText(ui::Vec2(slotMin.x + 4.0f, slotMin.y + 2.0f), UI_COL32(255, 255, 255, selected ? 255 : 190), key);
         }
     }
-    ImGui::End();
-    ImGui::PopStyleVar(3);
+    ui::End();
+    ui::PopStyleVar(3);
 }
 
 void Application::DrawDebugWindow(float deltaTime) {
@@ -2394,57 +2366,57 @@ void Application::DrawDebugWindow(float deltaTime) {
         frameSampleTimer = 0.0f;
     }
 
-    if (ImGui::Begin("Debug", &showDebug)) {
+    if (ui::Begin("Debug", &showDebug)) {
         const glm::vec3 pos = camera.GetPosition();
         const glm::vec2 angles = camera.GetDirectionAngles();
 
-        ImGui::Checkbox("VSync", &vsync);
-        ImGui::Checkbox("Wireframe", &wireframe);
-        ImGui::Checkbox("Ambient occlusion", &ambientOcclusion);
+        ui::Checkbox("VSync", &vsync);
+        ui::Checkbox("Wireframe", &wireframe);
+        ui::Checkbox("Ambient occlusion", &ambientOcclusion);
         {
             const float t = client->GetTimeOfDay();
             const int minutes = static_cast<int>((t * 24.0f + 6.0f) * 60.0f) % (24 * 60); // sunrise at 06:00
-            ImGui::Text("Time %02d:%02d (N skips to dawn / dusk), rain %.0f%%%s", minutes / 60, minutes % 60, client->GetRain() * 100.0f,
+            ui::Text("Time %02d:%02d (N skips to dawn / dusk), rain %.0f%%%s", minutes / 60, minutes % 60, client->GetRain() * 100.0f,
                         sheltered ? ", sheltered" : "");
         }
-        ImGui::Text("Placing: %s", BlockName(SelectedBlock()));
-        ImGui::Text("Position %.3f, %.3f, %.3f", pos.x, pos.y, pos.z);
+        ui::Text("Placing: %s", BlockName(SelectedBlock()));
+        ui::Text("Position %.3f, %.3f, %.3f", pos.x, pos.y, pos.z);
         if (!(client->GetSpawnFlags() & net::kWelcomeEmptyWorld)) {
             // The world generator is deterministic, so the biome can be worked out here.
             static const TerrainGenerator climate;
             const int bx = static_cast<int>(std::floor(pos.x)), bz = static_cast<int>(std::floor(pos.z));
             const int row = climate.ColumnAt(bx, bz).surfaceRow;
             const auto c = climate.ClimateAt(bx, bz, row);
-            ImGui::Text("Biome: %s (temperature %.2f, humidity %.2f)", BiomeName(TerrainGenerator::Classify(c)), c.temperature, c.humidity);
+            ui::Text("Biome: %s (temperature %.2f, humidity %.2f)", BiomeName(TerrainGenerator::Classify(c)), c.temperature, c.humidity);
         }
         const glm::vec3 velocity = player.GetVelocity();
-        ImGui::Text("%s%s, velocity %.2f, %.2f, %.2f", player.IsFlying() ? "Flying" : player.IsSwimming() ? "Swimming" : "Walking",
+        ui::Text("%s%s, velocity %.2f, %.2f, %.2f", player.IsFlying() ? "Flying" : player.IsSwimming() ? "Swimming" : "Walking",
                     player.IsFlying() || player.IsSwimming() ? "" : player.IsOnGround() ? " (on ground)" : " (airborne)",
                     velocity.x, velocity.y, velocity.z);
-        ImGui::Text("Angles %.3f, %.3f", angles.x, angles.y);
-        ImGui::Text("Frame %.3f ms (%.1f FPS)", deltaTime * 1000.0f, deltaTime > 0.0f ? 1.0f / deltaTime : 0.0f);
-        ImGui::PlotLines("Frame Time (ms)", frameTimes.data(), kFrameHistory, frameTimeIndex);
-        ImGui::Text("Chunks: %zu received, %zu tracked, %d alive", world->GetLoadedChunkCount(), world->GetChunkCount(), Chunk::GetLiveCount());
+        ui::Text("Angles %.3f, %.3f", angles.x, angles.y);
+        ui::Text("Frame %.3f ms (%.1f FPS)", deltaTime * 1000.0f, deltaTime > 0.0f ? 1.0f / deltaTime : 0.0f);
+        ui::PlotLines("Frame Time (ms)", frameTimes.data(), kFrameHistory, frameTimeIndex);
+        ui::Text("Chunks: %zu received, %zu tracked, %d alive", world->GetLoadedChunkCount(), world->GetChunkCount(), Chunk::GetLiveCount());
         const Client::Stats net = client->GetStats();
-        ImGui::Text("Server: %s, player %u, ping %u ms", serverLabel.c_str(), client->GetPlayerId(), net.roundTripMs);
-        ImGui::Text("Received %.1f MB: %u chunks, %u cell updates, %u light updates", net.bytesReceived / (1024.0 * 1024.0),
+        ui::Text("Server: %s, player %u, ping %u ms", serverLabel.c_str(), client->GetPlayerId(), net.roundTripMs);
+        ui::Text("Received %.1f MB: %u chunks, %u cell updates, %u light updates", net.bytesReceived / (1024.0 * 1024.0),
                     net.chunksReceived, net.deltasReceived, net.lightUpdates);
-        ImGui::Text("Other players: %zu", client->GetRemotePlayers().size());
+        ui::Text("Other players: %zu", client->GetRemotePlayers().size());
 
         const TextureAtlas& atlas = renderer->GetAtlas();
-        if (ImGui::CollapsingHeader("Texture atlas")) {
+        if (ui::CollapsingHeader("Texture atlas")) {
             glm::ivec2 size = atlas.GetSize();
-            ImGui::Text("%zu textures, %dx%d, %dpx tiles (R to reload)", atlas.GetNames().size() - 1, size.x, size.y, atlas.GetTileSize());
+            ui::Text("%zu textures, %dx%d, %dpx tiles (R to reload)", atlas.GetNames().size() - 1, size.x, size.y, atlas.GetTileSize());
             const float scale = 128.0f / std::max(size.x, size.y);
-            ImGui::Image(static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture())), ImVec2(size.x * scale, size.y * scale));
+            ui::Image(static_cast<ui::TextureId>(static_cast<uintptr_t>(atlas.GetTexture())), ui::Vec2(size.x * scale, size.y * scale));
         }
 
         const float previewScale = 0.25f;
-        ImGui::Image(static_cast<ImTextureID>(static_cast<uintptr_t>(renderer->GetSceneTexture())),
-                     ImVec2(renderer->GetWidth() * previewScale, renderer->GetHeight() * previewScale),
-                     ImVec2(0, 1), ImVec2(1, 0));
+        ui::Image(static_cast<ui::TextureId>(static_cast<uintptr_t>(renderer->GetSceneTexture())),
+                     ui::Vec2(renderer->GetWidth() * previewScale, renderer->GetHeight() * previewScale),
+                     ui::Vec2(0, 1), ui::Vec2(1, 0));
     }
-    ImGui::End();
+    ui::End();
 }
 
 void Application::OnKey(int key, int action) {
@@ -2476,13 +2448,14 @@ void Application::OnKey(int key, int action) {
         return;
     }
 
-    // While typing, keys belong to the chat line (ImGui gets them too); Esc closes it.
+    // While typing, keys belong to the chat line (the UI gets them too); Esc closes it.
     if (chatOpen) {
         if (key == GLFW_KEY_ESCAPE) CloseChat();
         return;
     }
     // The inventory takes its key (Tab) and Esc (to close) and the number keys (to pick a slot).
     if (inventoryOpen) {
+        if (ui::GetIO().WantTextInput && key != GLFW_KEY_ESCAPE) return; // (typing in a box: the keys are letters)
         if ((key == settings.Key(Action::Inventory) && !signMode && !signalMode) || key == GLFW_KEY_ESCAPE) SetInventoryOpen(false); // (writing a sign, it's a letter)
         else if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9) SelectSlot(key - GLFW_KEY_1);
         else if (key == GLFW_KEY_0) SelectSlot(9);
@@ -2696,63 +2669,63 @@ void Application::DrawTrade() {
     for (const auto& c : client->GetCreatures())
         if (c.id == tradeWith) near = glm::distance(c.feet, camera.GetPosition()) < Trades::kReach + 2.0f;
     if (!near) return SetInventoryOpen(false);
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.42f),
-                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowBgAlpha(0.88f);
-    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize;
+    const ui::Viewport* viewport = ui::GetMainViewport();
+    ui::SetNextWindowPos(ui::Vec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.42f),
+                            ui::Cond_Always, ui::Vec2(0.5f, 0.5f));
+    ui::SetNextWindowBgAlpha(0.88f);
+    const int flags = ui::WindowFlags_NoCollapse | ui::WindowFlags_AlwaysAutoResize | ui::WindowFlags_NoMove |
+                                   ui::WindowFlags_NoSavedSettings | ui::WindowFlags_NoResize;
     bool keepOpen = true;
-    if (ImGui::Begin("Dwarf trader", &keepOpen, flags)) {
+    if (ui::Begin("Dwarf trader", &keepOpen, flags)) {
         const TextureAtlas& atlas = renderer->GetAtlas();
-        const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
+        const ui::TextureId texture = static_cast<ui::TextureId>(static_cast<uintptr_t>(atlas.GetTexture()));
         constexpr float kIcon = 32.0f;
         auto icon = [&](ItemId item) {
             glm::vec2 uv0, uv1;
             atlas.GetTileUV(ItemTile(atlas, item), uv0, uv1);
-            ImGui::Image(texture, ImVec2(kIcon, kIcon), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
-            ImGui::SetItemTooltip("%s", ItemName(item).c_str());
+            ui::Image(texture, ui::Vec2(kIcon, kIcon), ui::Vec2(uv0.x, uv0.y), ui::Vec2(uv1.x, uv1.y));
+            ui::SetItemTooltip("%s", ItemName(item).c_str());
         };
-        ImGui::TextDisabled("\"Gold's what we deal in. Buying or selling?\"");
+        ui::TextDisabled("\"Gold's what we deal in. Buying or selling?\"");
         const auto& offers = Trades::Offers();
         const auto& prices = client->GetTradePrices();
         for (size_t i = 0; i < offers.size(); i++) {
             const Trades::Offer& o = offers[i];
-            if (i == 0) ImGui::SeparatorText("They sell");
-            if (i == 5) ImGui::SeparatorText("They buy");
-            if (i == 11) ImGui::SeparatorText("Barter");
-            ImGui::PushID(static_cast<int>(i));
+            if (i == 0) ui::SeparatorText("They sell");
+            if (i == 5) ui::SeparatorText("They buy");
+            if (i == 11) ui::SeparatorText("Barter");
+            ui::PushID(static_cast<int>(i));
             const int price = i < prices.size() ? prices[i] : o.giveCount;
             const uint32_t have = client->GetResources(o.give) / Block::kUnitsPerBlock;
             const bool can = client->IsCreative() || have >= static_cast<uint32_t>(price);
             icon(o.give);
-            ImGui::SameLine();
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(can ? ImVec4(1, 1, 1, 1) : ImVec4(1.0f, 0.5f, 0.45f, 1.0f), "%d %s", price, ItemName(o.give).c_str());
+            ui::SameLine();
+            ui::AlignTextToFramePadding();
+            ui::TextColored(can ? ui::Vec4(1, 1, 1, 1) : ui::Vec4(1.0f, 0.5f, 0.45f, 1.0f), "%d %s", price, ItemName(o.give).c_str());
             if (price > o.giveCount) {
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "(up from %d)", o.giveCount);
+                ui::SameLine();
+                ui::TextColored(ui::Vec4(1.0f, 0.75f, 0.3f, 1.0f), "(up from %d)", o.giveCount);
             }
-            ImGui::SameLine(250.0f);
-            ImGui::TextUnformatted("->");
-            ImGui::SameLine();
+            ui::SameLine(250.0f);
+            ui::TextUnformatted("->");
+            ui::SameLine();
             if (o.hire) {
-                ImGui::TextUnformatted("a guard for ten minutes");
-                ImGui::SetItemTooltip("Follows you and fights hostile dwarves (at most %d at once)", Trades::kMaxHired);
+                ui::TextUnformatted("a guard for ten minutes");
+                ui::SetItemTooltip("Follows you and fights hostile dwarves (at most %d at once)", Trades::kMaxHired);
             } else {
                 icon(o.get);
-                ImGui::SameLine();
-                ImGui::Text("%d %s", o.getCount, ItemName(o.get).c_str());
+                ui::SameLine();
+                ui::Text("%d %s", o.getCount, ItemName(o.get).c_str());
             }
-            ImGui::SameLine(560.0f);
-            ImGui::BeginDisabled(!can);
-            if (ImGui::Button(o.hire ? "Hire" : "Trade")) client->Trade(tradeWith, static_cast<uint8_t>(i));
-            ImGui::EndDisabled();
-            ImGui::PopID();
+            ui::SameLine(560.0f);
+            ui::BeginDisabled(!can);
+            if (ui::Button(o.hire ? "Hire" : "Trade")) client->Trade(tradeWith, static_cast<uint8_t>(i));
+            ui::EndDisabled();
+            ui::PopID();
         }
-        ImGui::TextDisabled("You have what's in white.");
+        ui::TextDisabled("You have what's in white.");
     }
-    ImGui::End();
+    ui::End();
     if (!keepOpen) SetInventoryOpen(false);
 }
 
@@ -2764,30 +2737,30 @@ void Application::DrawInventory() {
     if (signalMode) return DrawSignalEditor();
     if (tradeMode) return DrawTrade();
     constexpr float kIcon = 38.0f;
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f - kItemPanelWidth * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
-                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowBgAlpha(0.85f);
-    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize;
+    const ui::Viewport* viewport = ui::GetMainViewport();
+    ui::SetNextWindowPos(ui::Vec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f - kItemPanelWidth * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
+                            ui::Cond_Always, ui::Vec2(0.5f, 0.5f));
+    ui::SetNextWindowBgAlpha(0.85f);
+    const int flags = ui::WindowFlags_NoCollapse | ui::WindowFlags_AlwaysAutoResize | ui::WindowFlags_NoMove |
+                                   ui::WindowFlags_NoSavedSettings | ui::WindowFlags_NoResize;
     bool open = true;
     hoveredSlot.reset();
-    if (ImGui::Begin("Inventory", &open, flags)) {
+    if (ui::Begin("Inventory", &open, flags)) {
         const bool survival = !client->IsCreative();
         const TextureAtlas& atlas = renderer->GetAtlas();
-        const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
-        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 10 * (kIcon + 10.0f));
-        ImGui::TextDisabled("Right-click: half or one. Crouch-click: move across.");
-        ImGui::PopTextWrapPos();
+        const ui::TextureId texture = static_cast<ui::TextureId>(static_cast<uintptr_t>(atlas.GetTexture()));
+        ui::PushTextWrapPos(ui::GetCursorPosX() + 10 * (kIcon + 10.0f));
+        ui::TextDisabled("Right-click: half or one. Crouch-click: move across.");
+        ui::PopTextWrapPos();
         // Armour: a slot for each piece (only that piece goes in it), and what they take off.
-        ImGui::SeparatorText("Armour");
+        ui::SeparatorText("Armour");
         for (int s = 0; s < static_cast<int>(BodySlot::Count); s++) {
-            if (s > 0) ImGui::SameLine();
+            if (s > 0) ui::SameLine();
             DrawSlot(SlotBox::Armour, s, kIcon);
         }
-        ImGui::SameLine();
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextDisabled("%d%% less damage from hits and traps", static_cast<int>(std::lround(Armour::Protection(client->GetArmour()) * 100.0f)));
+        ui::SameLine();
+        ui::AlignTextToFramePadding();
+        ui::TextDisabled("%d%% less damage from hits and traps", static_cast<int>(std::lround(Armour::Protection(client->GetArmour()) * 100.0f)));
         DrawPlayerSlots(kIcon);
         // Offcuts: part blocks left from shaped blocks and recipes, used before whole ones.
         std::string cuts;
@@ -2795,28 +2768,28 @@ void Application::DrawInventory() {
         for (size_t t = 0; t < inv.offcuts.size(); t++)
             if (inv.offcuts[t]) cuts += (cuts.empty() ? "" : ", ") + FormatBlocks(inv.offcuts[t]) + " " + ItemName(Items::OfKind(t));
         if (!cuts.empty()) {
-            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 10 * (kIcon + 10.0f));
-            ImGui::TextDisabled("Offcuts: %s", cuts.c_str());
-            ImGui::PopTextWrapPos();
+            ui::PushTextWrapPos(ui::GetCursorPosX() + 10 * (kIcon + 10.0f));
+            ui::TextDisabled("Offcuts: %s", cuts.c_str());
+            ui::PopTextWrapPos();
         }
 
         if (survival) {
             // Crafting: what you can make now from what you carry (and the tool in hand),
             // and buttons to make it (into your slots). (Everything else: the item panel.)
-            ImGui::SeparatorText("Crafting");
+            ui::SeparatorText("Crafting");
             const auto& recipes = Crafting::Recipes();
             const Tool inHand = SelectedTool();
             // In a scrolling box, so the window stays on screen.
-            ImGui::BeginChild("crafting", ImVec2(10 * (kIcon + 10.0f), 170.0f), true);
+            ui::BeginChild("crafting", ui::Vec2(10 * (kIcon + 10.0f), 170.0f), true);
             int shown = 0;
-            if (ImGui::BeginTable("recipes", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+            if (ui::BeginTable("recipes", 3, ui::TableFlags_RowBg | ui::TableFlags_SizingFixedFit)) {
                 for (int r = 0; r < static_cast<int>(recipes.size()); r++) {
                     const Recipe& recipe = recipes[r];
                     if (!client->CanCraft(r, 1, inHand)) continue;
                     shown++;
-                    ImGui::PushID(r);
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
+                    ui::PushID(r);
+                    ui::TableNextRow();
+                    ui::TableNextColumn();
                     glm::vec2 uv0, uv1;
                     const int icon = recipe.ironUpgrade                    ? atlas.GetIndex("iron_ingot")
                                      : recipe.steelUpgrade                   ? atlas.GetIndex("steel_ingot")
@@ -2824,43 +2797,43 @@ void Application::DrawInventory() {
                                      : recipe.armour != ArmourPiece::Count ? atlas.GetIndex(Armour::Texture(recipe.armour))
                                                                            : ItemTile(atlas, recipe.output);
                     atlas.GetTileUV(icon, uv0, uv1);
-                    ImGui::Image(texture, ImVec2(24.0f, 24.0f), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
-                    ImGui::SameLine();
-                    ImGui::AlignTextToFramePadding();
-                    ImGui::TextUnformatted(recipe.name.c_str());
-                    ImGui::TableNextColumn();
+                    ui::Image(texture, ui::Vec2(24.0f, 24.0f), ui::Vec2(uv0.x, uv0.y), ui::Vec2(uv1.x, uv1.y));
+                    ui::SameLine();
+                    ui::AlignTextToFramePadding();
+                    ui::TextUnformatted(recipe.name.c_str());
+                    ui::TableNextColumn();
                     std::string needs;
                     for (const auto& in : recipe.inputs)
                         needs += (needs.empty() ? "" : " + ") + FormatBlocks(in.units) + " " + ItemName(in.item);
                     if (recipe.Upgrade()) needs += recipe.steelUpgrade ? ", an iron tool in hand" : ", a stone tool in hand";
                     const bool can = client->CanCraft(r, 1, inHand);
-                    if (can) ImGui::TextUnformatted(needs.c_str());
-                    else ImGui::TextDisabled("%s", needs.c_str());
-                    ImGui::TableNextColumn();
-                    ImGui::BeginDisabled(!can);
-                    if (ImGui::SmallButton("Make")) {
+                    if (can) ui::TextUnformatted(needs.c_str());
+                    else ui::TextDisabled("%s", needs.c_str());
+                    ui::TableNextColumn();
+                    ui::BeginDisabled(!can);
+                    if (ui::SmallButton("Make")) {
                         client->Craft(r, 1, inHand);
                         audio->PlayHere("craft", 0.6f);
                     }
-                    ImGui::EndDisabled();
+                    ui::EndDisabled();
                     if (!recipe.Upgrade()) {
-                        ImGui::SameLine();
-                        ImGui::BeginDisabled(!client->CanCraft(r, 4));
-                        if (ImGui::SmallButton("x4")) {
+                        ui::SameLine();
+                        ui::BeginDisabled(!client->CanCraft(r, 4));
+                        if (ui::SmallButton("x4")) {
                             client->Craft(r, 4);
                             audio->PlayHere("craft", 0.6f);
                         }
-                        ImGui::EndDisabled();
+                        ui::EndDisabled();
                     }
-                    ImGui::PopID();
+                    ui::PopID();
                 }
-                ImGui::EndTable();
+                ui::EndTable();
             }
-            if (shown == 0) ImGui::TextDisabled("Nothing you can make with what you carry (the item panel shows what everything takes).");
-            ImGui::EndChild();
+            if (shown == 0) ui::TextDisabled("Nothing you can make with what you carry (the item panel shows what everything takes).");
+            ui::EndChild();
         }
     }
-    ImGui::End();
+    ui::End();
     DrawItemPanel();
     HandleSlotClicks();
     DrawHeldStack();
@@ -2884,43 +2857,43 @@ void Application::DrawItemPanel() {
     for (ItemId item : allItems)
         if (search.empty() || lower(ItemName(item)).find(search) != std::string::npos) paletteItems.push_back(item);
 
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - 10.0f, viewport->WorkPos.y + 200.0f), ImGuiCond_Always, ImVec2(1.0f, 0.0f)); // (under the minimap)
-    ImGui::SetNextWindowSize(ImVec2(kItemPanelWidth, std::max(260.0f, viewport->WorkSize.y - 330.0f)), ImGuiCond_Always);
-    ImGui::SetNextWindowBgAlpha(0.85f);
-    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize;
-    if (ImGui::Begin("Items", nullptr, flags)) {
+    const ui::Viewport* viewport = ui::GetMainViewport();
+    ui::SetNextWindowPos(ui::Vec2(viewport->WorkPos.x + viewport->WorkSize.x - 10.0f, viewport->WorkPos.y + 200.0f), ui::Cond_Always, ui::Vec2(1.0f, 0.0f)); // (under the minimap)
+    ui::SetNextWindowSize(ui::Vec2(kItemPanelWidth, std::max(260.0f, viewport->WorkSize.y - 330.0f)), ui::Cond_Always);
+    ui::SetNextWindowBgAlpha(0.85f);
+    const int flags = ui::WindowFlags_NoCollapse | ui::WindowFlags_NoMove | ui::WindowFlags_NoSavedSettings | ui::WindowFlags_NoResize;
+    if (ui::Begin("Items", nullptr, flags)) {
         const bool creative = client->IsCreative();
-        ImGui::SetNextItemWidth(-1.0f);
-        ImGui::InputTextWithHint("##search", "Search", itemSearch, sizeof itemSearch);
-        ImGui::TextDisabled(creative ? "Take a stack; put one here to get rid of it." : "Click one to see how to get it.");
+        ui::SetNextItemWidth(-1.0f);
+        ui::InputTextWithHint("##search", "Search", itemSearch, sizeof itemSearch);
+        ui::TextDisabled(creative ? "Take a stack; put one here to get rid of it." : "Click one to see how to get it.");
         constexpr float kSlot = 30.0f;
-        const int columns = std::max(1, static_cast<int>((kItemPanelWidth - 40.0f) / (kSlot + 6.0f + ImGui::GetStyle().ItemSpacing.x)));
+        const int columns = std::max(1, static_cast<int>((kItemPanelWidth - 40.0f) / (kSlot + 6.0f + ui::GetStyle().ItemSpacing.x)));
         const float infoHeight = itemInfo != Items::kNone ? 170.0f : 0.0f;
-        ImGui::BeginChild("items", ImVec2(0.0f, -infoHeight), true);
+        ui::BeginChild("items", ui::Vec2(0.0f, -infoHeight), true);
         DrawSlotGrid(SlotBox::Palette, 0, static_cast<int>(paletteItems.size()), columns, kSlot);
-        if (paletteItems.empty()) ImGui::TextDisabled("Nothing called that.");
-        ImGui::EndChild();
+        if (paletteItems.empty()) ui::TextDisabled("Nothing called that.");
+        ui::EndChild();
         if (itemInfo != Items::kNone) {
-            ImGui::BeginChild("info", ImVec2(0.0f, 0.0f), false);
+            ui::BeginChild("info", ui::Vec2(0.0f, 0.0f), false);
             DrawItemInfo(itemInfo);
-            ImGui::EndChild();
+            ui::EndChild();
         }
     }
-    ImGui::End();
+    ui::End();
 }
 
 void Application::DrawItemInfo(ItemId item) {
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kItemPanelWidth - 30.0f);
-    ImGui::SeparatorText(ItemName(item).c_str());
-    if (Items::IsTool(item)) ImGui::TextUnformatted(ToolHint(Items::ToolOf(item)));
-    if (Items::IsArmour(item)) ImGui::Text("%d%% less damage", static_cast<int>(std::lround(Armour::Protection(Items::ArmourOf(item)) * 100.0f)));
+    ui::PushTextWrapPos(ui::GetCursorPosX() + kItemPanelWidth - 30.0f);
+    ui::SeparatorText(ItemName(item).c_str());
+    if (Items::IsTool(item)) ui::TextUnformatted(ToolHint(Items::ToolOf(item)));
+    if (Items::IsArmour(item)) ui::Text("%d%% less damage", static_cast<int>(std::lround(Armour::Protection(Items::ArmourOf(item)) * 100.0f)));
     if (Items::IsBlock(item)) {
         const BlockType type = Items::BlockOf(item);
         const float hardness = Mining::Hardness(type);
         const Tool best = Mining::BestTool(type);
-        if (hardness <= 0.0f) ImGui::TextDisabled("Breaks at once.");
-        else ImGui::TextDisabled("Hardness %g%s%s.", hardness, best != Tool::None ? ", faster with a " : "", best != Tool::None ? Mining::ToolName(best) : "");
+        if (hardness <= 0.0f) ui::TextDisabled("Breaks at once.");
+        else ui::TextDisabled("Hardness %g%s%s.", hardness, best != Tool::None ? ", faster with a " : "", best != Tool::None ? Mining::ToolName(best) : "");
     }
     auto inputs = [](const std::vector<Ingredient>& ins) {
         std::string s;
@@ -2938,25 +2911,25 @@ void Application::DrawItemInfo(ItemId item) {
         else if (recipe.armour != ArmourPiece::Count) makes = Items::ArmourOf(item) == recipe.armour;
         else makes = !recipe.Upgrade() && static_cast<ItemId>(recipe.output) == item;
         if (!makes) continue;
-        if (!any) ImGui::TextUnformatted("Made from:");
+        if (!any) ui::TextUnformatted("Made from:");
         any = true;
         std::string line = "  " + inputs(recipe.inputs);
         if (recipe.Upgrade()) line += recipe.steelUpgrade ? ", an iron one in hand" : ", a stone one in hand";
         if (recipe.outputUnits > Block::kUnitsPerBlock) line += " (makes " + FormatBlocks(recipe.outputUnits) + ")";
-        if (!client->IsCreative() && client->CanCraft(r, 1, inHand)) ImGui::TextColored(ImVec4(0.6f, 1.0f, 0.6f, 1.0f), "%s (you can make it)", line.c_str());
-        else ImGui::TextUnformatted(line.c_str());
+        if (!client->IsCreative() && client->CanCraft(r, 1, inHand)) ui::TextColored(ui::Vec4(0.6f, 1.0f, 0.6f, 1.0f), "%s (you can make it)", line.c_str());
+        else ui::TextUnformatted(line.c_str());
     }
     for (const auto& s : Smelting::Recipes()) {
         if (static_cast<ItemId>(s.output) != item) continue;
-        if (!any) ImGui::TextUnformatted("Made from:");
+        if (!any) ui::TextUnformatted("Made from:");
         any = true;
         std::string line = "  " + FormatBlocks(s.inputUnits) + " " + ItemName(s.input);
         if (static_cast<ItemId>(s.extra) != Items::kNone) line += " + " + FormatBlocks(s.extraUnits) + " " + ItemName(s.extra);
         if (s.outputUnits > Block::kUnitsPerBlock) line += " (makes " + FormatBlocks(s.outputUnits) + ")";
-        ImGui::Text("%s, in a smelter", line.c_str());
+        ui::Text("%s, in a smelter", line.c_str());
     }
-    if (!any && Items::IsBlock(item)) ImGui::TextDisabled("Found in the world (it can't be made).");
-    else if (!any) ImGui::TextDisabled("Found, traded or dropped (it can't be made).");
+    if (!any && Items::IsBlock(item)) ui::TextDisabled("Found in the world (it can't be made).");
+    else if (!any) ui::TextDisabled("Found, traded or dropped (it can't be made).");
     // What it's for: the recipes it goes into.
     std::string uses;
     for (const auto& recipe : recipes)
@@ -2968,10 +2941,10 @@ void Application::DrawItemInfo(ItemId item) {
     for (const auto& s : Smelting::Recipes())
         if (static_cast<ItemId>(s.input) == item || static_cast<ItemId>(s.extra) == item) uses += (uses.empty() ? "" : ", ") + ItemName(s.output) + " (smelted)";
     if (!uses.empty()) {
-        ImGui::TextUnformatted("Goes into:");
-        ImGui::TextDisabled("  %s", uses.c_str());
+        ui::TextUnformatted("Goes into:");
+        ui::TextDisabled("  %s", uses.c_str());
     }
-    ImGui::PopTextWrapPos();
+    ui::PopTextWrapPos();
 }
 
 Stack Application::StackIn(SlotBox box, int slot) const {
@@ -2999,26 +2972,26 @@ Stack Application::StackIn(SlotBox box, int slot) const {
 void Application::DrawSlot(SlotBox box, int slot, float size, bool selected) {
     const Stack st = StackIn(box, slot);
     const TextureAtlas& atlas = renderer->GetAtlas();
-    const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
+    const ui::TextureId texture = static_cast<ui::TextureId>(static_cast<uintptr_t>(atlas.GetTexture()));
     constexpr float kPad = 3.0f;
-    const ImVec2 lo = ImGui::GetCursorScreenPos();
-    const ImVec2 hi(lo.x + size + 2 * kPad, lo.y + size + 2 * kPad);
-    ImGui::PushID(static_cast<int>(box) * 4096 + slot);
-    ImGui::InvisibleButton("slot", ImVec2(hi.x - lo.x, hi.y - lo.y));
-    const bool hovered = ImGui::IsItemHovered();
-    ImGui::PopID();
+    const ui::Vec2 lo = ui::GetCursorScreenPos();
+    const ui::Vec2 hi(lo.x + size + 2 * kPad, lo.y + size + 2 * kPad);
+    ui::PushID(static_cast<int>(box) * 4096 + slot);
+    ui::InvisibleButton("slot", ui::Vec2(hi.x - lo.x, hi.y - lo.y));
+    const bool hovered = ui::IsItemHovered();
+    ui::PopID();
     if (hovered) hoveredSlot = std::make_pair(box, slot);
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    draw->AddRectFilled(lo, hi, hovered ? IM_COL32(255, 255, 255, 45) : IM_COL32(0, 0, 0, 90), 3.0f);
+    ui::DrawList* draw = ui::GetWindowDrawList();
+    draw->AddRectFilled(lo, hi, hovered ? UI_COL32(255, 255, 255, 45) : UI_COL32(0, 0, 0, 90), 3.0f);
     const bool lifted = heldStack && heldStack->box == box && heldStack->slot == slot && box != SlotBox::Palette;
     if (!st.Empty()) DrawStackOn(draw, atlas, texture, lo, hi, kPad, st, lifted, box != SlotBox::Palette);
     else if (box == SlotBox::Armour) {
         // An empty armour slot shows what goes there, faintly.
         glm::vec2 uv0, uv1;
         atlas.GetTileUV(atlas.GetIndex(Armour::Texture(Armour::SlotIcon(static_cast<BodySlot>(slot)))), uv0, uv1);
-        draw->AddImage(texture, ImVec2(lo.x + kPad, lo.y + kPad), ImVec2(hi.x - kPad, hi.y - kPad), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y), IM_COL32(255, 255, 255, 45));
+        draw->AddImage(texture, ui::Vec2(lo.x + kPad, lo.y + kPad), ui::Vec2(hi.x - kPad, hi.y - kPad), ui::Vec2(uv0.x, uv0.y), ui::Vec2(uv1.x, uv1.y), UI_COL32(255, 255, 255, 45));
     }
-    draw->AddRect(lo, hi, selected ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 255, 255, 50), 3.0f, 0, selected ? 2.5f : 1.0f);
+    draw->AddRect(lo, hi, selected ? UI_COL32(255, 255, 255, 255) : UI_COL32(255, 255, 255, 50), 3.0f, 0, selected ? 2.5f : 1.0f);
     if (hovered && !heldStack && (!st.Empty() || box == SlotBox::Armour)) {
         const ItemId item = st.Empty() ? Items::OfArmour(Armour::SlotIcon(static_cast<BodySlot>(slot))) : st.item;
         std::string tip = box == SlotBox::Armour && st.Empty() ? std::string(Armour::SlotName(static_cast<BodySlot>(slot))) + " (empty)" : ItemName(item);
@@ -3030,22 +3003,22 @@ void Application::DrawSlot(SlotBox box, int slot, float size, bool selected) {
                        (Items::ArmourOf(item) == ArmourPiece::OxygenTank ? " (holds air to breathe instead)" : "") +
                        (Items::ArmourOf(item) == ArmourPiece::Mask ? ", keeps steam out" : "");
         if (Items::IsStackable(item) && box != SlotBox::Palette && st.count > 1) tip += " x" + std::to_string(st.count);
-        ImGui::SetTooltip("%s", tip.c_str());
+        ui::SetTooltip("%s", tip.c_str());
     }
 }
 
 void Application::DrawSlotGrid(SlotBox box, int first, int count, int columns, float size) {
     for (int i = 0; i < count; i++) {
-        if (i % columns != 0) ImGui::SameLine();
+        if (i % columns != 0) ui::SameLine();
         DrawSlot(box, first + i, size, box == SlotBox::Player && first + i == selectedSlot);
     }
 }
 
 void Application::DrawPlayerSlots(float size) {
     const int total = static_cast<int>(client->GetInventory().slots.size());
-    ImGui::SeparatorText("Inventory");
+    ui::SeparatorText("Inventory");
     DrawSlotGrid(SlotBox::Player, kHotbarSlots, total - kHotbarSlots, kHotbarSlots, size);
-    ImGui::SeparatorText("Hotbar");
+    ui::SeparatorText("Hotbar");
     DrawSlotGrid(SlotBox::Player, 0, std::min(total, kHotbarSlots), kHotbarSlots, size);
 }
 
@@ -3053,7 +3026,7 @@ void Application::HandleSlotClicks() {
     // The item panel: a click picks the item whose details it shows; in survival that's
     // all it does (nothing's taken from it).
     if (hoveredSlot && hoveredSlot->first == SlotBox::Palette && !heldStack &&
-        (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))) {
+        (ui::IsMouseClicked(ui::MouseButton_Left) || ui::IsMouseClicked(ui::MouseButton_Right))) {
         if (const Stack st = StackIn(SlotBox::Palette, hoveredSlot->second); !st.Empty()) itemInfo = st.item;
         if (!client->IsCreative()) return;
     }
@@ -3065,7 +3038,7 @@ void Application::HandleSlotClicks() {
     }
     auto isHeld = [&](const std::pair<SlotBox, int>& h) { return heldStack && heldStack->box == h.first && heldStack->slot == h.second; };
     // Outside every window: what's held is thrown out onto the ground.
-    const bool outside = !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) && !ImGui::IsAnyItemHovered();
+    const bool outside = !ui::IsWindowHovered(ui::HoveredFlags_AnyWindow) && !ui::IsAnyItemHovered();
     auto throwHeld = [&] {
         if (heldStack->box != SlotBox::Palette) {
             const net::Box box = heldStack->box == SlotBox::Armour ? net::Box::Armour : heldStack->box == SlotBox::Chest ? net::Box::Chest : net::Box::Player;
@@ -3076,10 +3049,10 @@ void Application::HandleSlotClicks() {
         heldStack.reset();
         draggingStack = false;
     };
-    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+    if (ui::IsMouseClicked(ui::MouseButton_Left)) {
         if (!hoveredSlot) {
             if (heldStack && outside) throwHeld();
-            else if (heldStack && !ImGui::IsAnyItemHovered()) heldStack.reset(); // (clicked off the slots: let go)
+            else if (heldStack && !ui::IsAnyItemHovered()) heldStack.reset(); // (clicked off the slots: let go)
         }
         else if (heldStack) {
             if (!isHeld(*hoveredSlot)) MoveStack(*heldStack, hoveredSlot->first, hoveredSlot->second, heldStack->count);
@@ -3095,7 +3068,7 @@ void Application::HandleSlotClicks() {
     }
     // Let go of a dragged stack over another slot: it goes there. (Over its own slot, it
     // stays picked up, to be put down with a click.)
-    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && draggingStack) {
+    if (ui::IsMouseReleased(ui::MouseButton_Left) && draggingStack) {
         draggingStack = false;
         if (heldStack && !hoveredSlot && outside) throwHeld();
         else if (heldStack && hoveredSlot && !isHeld(*hoveredSlot)) {
@@ -3103,7 +3076,7 @@ void Application::HandleSlotClicks() {
             heldStack.reset();
         }
     }
-    if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) && hoveredSlot) {
+    if (ui::IsMouseClicked(ui::MouseButton_Right) && hoveredSlot) {
         if (!heldStack) {
             if (const Stack st = StackIn(hoveredSlot->first, hoveredSlot->second); !st.Empty()) {
                 const int half = hoveredSlot->first == SlotBox::Palette ? 1 : (st.count + 1) / 2;
@@ -3121,10 +3094,10 @@ void Application::HandleSlotClicks() {
 void Application::DrawHeldStack() {
     if (!heldStack) return;
     const TextureAtlas& atlas = renderer->GetAtlas();
-    const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
-    const ImVec2 mouse = ImGui::GetIO().MousePos;
-    const ImVec2 lo(mouse.x - 18.0f, mouse.y - 18.0f), hi(mouse.x + 18.0f, mouse.y + 18.0f);
-    DrawStackOn(ImGui::GetForegroundDrawList(), atlas, texture, lo, hi, 0.0f, { heldStack->item, static_cast<uint8_t>(std::clamp(heldStack->count, 1, 255)) }, false, true);
+    const ui::TextureId texture = static_cast<ui::TextureId>(static_cast<uintptr_t>(atlas.GetTexture()));
+    const ui::Vec2 mouse = ui::GetIO().MousePos;
+    const ui::Vec2 lo(mouse.x - 18.0f, mouse.y - 18.0f), hi(mouse.x + 18.0f, mouse.y + 18.0f);
+    DrawStackOn(ui::GetForegroundDrawList(), atlas, texture, lo, hi, 0.0f, { heldStack->item, static_cast<uint8_t>(std::clamp(heldStack->count, 1, 255)) }, false, true);
 }
 
 void Application::QuickMove(SlotBox box, int slot) {
@@ -3202,16 +3175,16 @@ void Application::DrawMachineInfo(const glm::ivec3& pos) {
         client->Inspect(pos);
         machineInspectAt = now;
     }
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 460.0f);
+    ui::PushTextWrapPos(ui::GetCursorPosX() + 460.0f);
     const auto& said = client->GetInspections();
     if (!said.empty() && said.back().time >= machineAskedAt - 0.5) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
-        ImGui::TextUnformatted(said.back().text.c_str());
-        ImGui::PopStyleColor();
+        ui::PushStyleColor(ui::Col_Text, ui::Vec4(0.8f, 0.8f, 0.8f, 1.0f));
+        ui::TextUnformatted(said.back().text.c_str());
+        ui::PopStyleColor();
     }
-    else ImGui::TextDisabled("...");
-    ImGui::PopTextWrapPos();
-    ImGui::Separator();
+    else ui::TextDisabled("...");
+    ui::PopTextWrapPos();
+    ui::Separator();
 }
 
 void Application::DrawMachine() {
@@ -3222,18 +3195,18 @@ void Application::DrawMachine() {
         SetInventoryOpen(false);
         return;
     }
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.42f),
-                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowBgAlpha(0.85f);
-    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize;
+    const ui::Viewport* viewport = ui::GetMainViewport();
+    ui::SetNextWindowPos(ui::Vec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.42f),
+                            ui::Cond_Always, ui::Vec2(0.5f, 0.5f));
+    ui::SetNextWindowBgAlpha(0.85f);
+    const int flags = ui::WindowFlags_NoCollapse | ui::WindowFlags_AlwaysAutoResize | ui::WindowFlags_NoMove |
+                                   ui::WindowFlags_NoSavedSettings | ui::WindowFlags_NoResize;
     bool keepOpen = true;
     const std::string title = std::string(BlockName(b.type)) + "###machine";
-    if (ImGui::Begin(title.c_str(), &keepOpen, flags)) {
+    if (ui::Begin(title.c_str(), &keepOpen, flags)) {
         DrawMachineInfo(machineAt);
     }
-    ImGui::End();
+    ui::End();
     if (!keepOpen) SetInventoryOpen(false);
 }
 
@@ -3247,12 +3220,12 @@ void Application::DrawChest() {
         return;
     }
     constexpr float kIcon = 36.0f;
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f - kItemPanelWidth * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.42f),
-                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowBgAlpha(0.85f);
-    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize;
+    const ui::Viewport* viewport = ui::GetMainViewport();
+    ui::SetNextWindowPos(ui::Vec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f - kItemPanelWidth * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.42f),
+                            ui::Cond_Always, ui::Vec2(0.5f, 0.5f));
+    ui::SetNextWindowBgAlpha(0.85f);
+    const int flags = ui::WindowFlags_NoCollapse | ui::WindowFlags_AlwaysAutoResize | ui::WindowFlags_NoMove |
+                                   ui::WindowFlags_NoSavedSettings | ui::WindowFlags_NoResize;
     bool keepOpen = true;
     std::string title = "Chest";
     if (const auto at = client->GetOpenChest()) {
@@ -3262,19 +3235,19 @@ void Application::DrawChest() {
     }
     title += "###chest";
     hoveredSlot.reset();
-    if (ImGui::Begin(title.c_str(), &keepOpen, flags)) {
+    if (ui::Begin(title.c_str(), &keepOpen, flags)) {
         if (const auto at = client->GetOpenChest()) DrawMachineInfo(*at); // (a machine: how it's doing)
-        ImGui::TextDisabled("Right-click: half or one. Crouch-click: move across.");
-        ImGui::SeparatorText("In it");
+        ui::TextDisabled("Right-click: half or one. Crouch-click: move across.");
+        ui::SeparatorText("In it");
         DrawSlotGrid(SlotBox::Chest, 0, static_cast<int>(client->GetChest().slots.size()), 10, kIcon);
         std::string cuts;
         const Inventory& chest = client->GetChest();
         for (size_t t = 0; t < chest.offcuts.size(); t++)
             if (chest.offcuts[t]) cuts += (cuts.empty() ? "" : ", ") + FormatBlocks(chest.offcuts[t]) + " " + ItemName(Items::OfKind(t));
-        if (!cuts.empty()) ImGui::TextDisabled("Offcuts: %s", cuts.c_str());
+        if (!cuts.empty()) ui::TextDisabled("Offcuts: %s", cuts.c_str());
         DrawPlayerSlots(kIcon);
     }
-    ImGui::End();
+    ui::End();
     DrawItemPanel();
     HandleSlotClicks();
     DrawHeldStack();
@@ -3725,27 +3698,27 @@ void Application::OpenSignalEditor(const glm::ivec3& pos, BlockType type) {
 
 void Application::DrawSignalEditor() {
     const auto kind = static_cast<Signals::Kind>(signalKind);
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.4f),
-                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowBgAlpha(0.9f);
+    const ui::Viewport* viewport = ui::GetMainViewport();
+    ui::SetNextWindowPos(ui::Vec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.4f),
+                            ui::Cond_Always, ui::Vec2(0.5f, 0.5f));
+    ui::SetNextWindowBgAlpha(0.9f);
     const char* titles[] = { "Signal", "Lever", "Pressure plate", "Logic gate", "Signal lamp", "Valve", "Sluice gate", "Piston",
                              "Water sensor", "Pressure sensor", "Daylight sensor", "Player sensor", "Machine sensor", "Air launcher", "Heat sensor", "Sprinkler" };
-    static_assert(IM_ARRAYSIZE(titles) == static_cast<int>(Signals::Kind::Count), "a signal kind has no title");
+    static_assert(UI_ARRAYSIZE(titles) == static_cast<int>(Signals::Kind::Count), "a signal kind has no title");
     bool open = true;
-    if (ImGui::Begin(titles[std::clamp(signalKind, 0, static_cast<int>(Signals::Kind::Count) - 1)], &open,
-                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse)) {
+    if (ui::Begin(titles[std::clamp(signalKind, 0, static_cast<int>(Signals::Kind::Count) - 1)], &open,
+                     ui::WindowFlags_AlwaysAutoResize | ui::WindowFlags_NoMove | ui::WindowFlags_NoSavedSettings | ui::WindowFlags_NoCollapse)) {
         auto channel = [](const char* label, int& value) {
-            ImGui::SetNextItemWidth(160.0f);
-            if (ImGui::InputInt(label, &value)) value = std::clamp(value, 0, 255);
+            ui::SetNextItemWidth(160.0f);
+            if (ui::InputInt(label, &value)) value = std::clamp(value, 0, 255);
         };
-        ImGui::TextDisabled("Channels 1-255 (0: none)");
+        ui::TextDisabled("Channels 1-255 (0: none)");
         if (kind == Signals::Kind::Gate) {
             const char* modes[] = { "AND (on while A and B are)", "OR (on while A or B is)", "XOR (on while just one of A, B is)", "NOT (on while A isn't)",
                                     "RELAY (sends A on again, further)", "CLOCK (on and off each second while A is on, or always)",
                                     "LATCH (A turns it on, and it stays on until B turns it off)" };
-            ImGui::SetNextItemWidth(360.0f);
-            ImGui::Combo("Does", &signalModeIndex, modes, IM_ARRAYSIZE(modes));
+            ui::SetNextItemWidth(360.0f);
+            ui::Combo("Does", &signalModeIndex, modes, UI_ARRAYSIZE(modes));
             channel("Input A", signalA);
             if (Signals::Inputs(static_cast<Signals::Mode>(signalModeIndex)) == 2) channel("Input B", signalB);
             channel("Sends on", signalOut);
@@ -3754,32 +3727,32 @@ void Application::DrawSignalEditor() {
             channel("Sends on", signalOut);
             switch (kind) {
             case Signals::Kind::PressureSensor:
-                ImGui::SetNextItemWidth(160.0f);
-                if (ImGui::InputInt("Pressure (%)", &signalB)) signalB = std::clamp(signalB, 0, 100);
+                ui::SetNextItemWidth(160.0f);
+                if (ui::InputInt("Pressure (%)", &signalB)) signalB = std::clamp(signalB, 0, 100);
                 break;
             case Signals::Kind::MachineSensor: {
                 const char* watches[] = { "a machine working", "a machine stopped", "a machine waiting for air", "a chest with anything in it", "an empty chest",
                                           "a tank or air network at least this full" };
-                static_assert(IM_ARRAYSIZE(watches) == static_cast<int>(Signals::Watch::Count), "a watch has no name");
+                static_assert(UI_ARRAYSIZE(watches) == static_cast<int>(Signals::Watch::Count), "a watch has no name");
                 signalModeIndex = std::clamp(signalModeIndex, 0, static_cast<int>(Signals::Watch::Count) - 1);
-                ImGui::SetNextItemWidth(320.0f);
-                ImGui::Combo("Watches for", &signalModeIndex, watches, IM_ARRAYSIZE(watches));
+                ui::SetNextItemWidth(320.0f);
+                ui::Combo("Watches for", &signalModeIndex, watches, UI_ARRAYSIZE(watches));
                 if (signalModeIndex == static_cast<int>(Signals::Watch::Level)) {
-                    ImGui::SetNextItemWidth(160.0f);
-                    if (ImGui::InputInt("Full (%)", &signalB)) signalB = std::clamp(signalB, 0, 100);
+                    ui::SetNextItemWidth(160.0f);
+                    if (ui::InputInt("Full (%)", &signalB)) signalB = std::clamp(signalB, 0, 100);
                 }
                 break;
             }
             case Signals::Kind::HeatSensor:
-                ImGui::SetNextItemWidth(160.0f);
-                if (ImGui::InputInt("Range (blocks)", &signalB)) signalB = std::clamp(signalB, 0, Signals::kMaxHeatRange);
+                ui::SetNextItemWidth(160.0f);
+                if (ui::InputInt("Range (blocks)", &signalB)) signalB = std::clamp(signalB, 0, Signals::kMaxHeatRange);
                 break;
             case Signals::Kind::PlayerSensor:
-                ImGui::SetNextItemWidth(160.0f);
-                if (ImGui::InputInt("Range (blocks)", &signalB)) signalB = std::clamp(signalB, 0, Signals::kMaxPlayerRange);
+                ui::SetNextItemWidth(160.0f);
+                if (ui::InputInt("Range (blocks)", &signalB)) signalB = std::clamp(signalB, 0, Signals::kMaxPlayerRange);
                 {
                     bool creaturesToo = signalModeIndex == static_cast<int>(Signals::Mode::Or);
-                    if (ImGui::Checkbox("Hostile creatures too", &creaturesToo)) signalModeIndex = creaturesToo ? static_cast<int>(Signals::Mode::Or) : 0;
+                    if (ui::Checkbox("Hostile creatures too", &creaturesToo)) signalModeIndex = creaturesToo ? static_cast<int>(Signals::Mode::Or) : 0;
                 }
                 break;
             default: break;
@@ -3787,14 +3760,14 @@ void Application::DrawSignalEditor() {
         }
         else {
             channel("Listens to", signalA);
-            if (kind == Signals::Kind::Sprinkler) ImGui::TextDisabled("No channel: sprays when it senses fire");
+            if (kind == Signals::Kind::Sprinkler) ui::TextDisabled("No channel: sprays when it senses fire");
             if (kind == Signals::Kind::Launcher) {
-                ImGui::SetNextItemWidth(160.0f);
-                if (ImGui::InputInt("Power (blocks/s)", &signalB)) signalB = signalB <= 0 ? 0 : std::clamp(signalB, Power::kMinLaunchSpeed, Power::kMaxLaunchSpeed);
-                ImGui::TextDisabled("0: %d; %d to %d", static_cast<int>(Power::kLaunchSpeed), Power::kMinLaunchSpeed, Power::kMaxLaunchSpeed);
+                ui::SetNextItemWidth(160.0f);
+                if (ui::InputInt("Power (blocks/s)", &signalB)) signalB = signalB <= 0 ? 0 : std::clamp(signalB, Power::kMinLaunchSpeed, Power::kMaxLaunchSpeed);
+                ui::TextDisabled("0: %d; %d to %d", static_cast<int>(Power::kLaunchSpeed), Power::kMinLaunchSpeed, Power::kMaxLaunchSpeed);
             }
         }
-        if (ImGui::Button("Done") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+        if (ui::Button("Done") || ui::IsKeyPressed(ui::Key::Enter)) {
             net::SignalInfo info;
             info.pos = signalAt;
             info.kind = static_cast<uint8_t>(signalKind);
@@ -3806,33 +3779,33 @@ void Application::DrawSignalEditor() {
             open = false;
         }
     }
-    ImGui::End();
+    ui::End();
     if (!open) SetInventoryOpen(false);
 }
 
 void Application::DrawSignEditor() {
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.4f),
-                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowBgAlpha(0.9f);
+    const ui::Viewport* viewport = ui::GetMainViewport();
+    ui::SetNextWindowPos(ui::Vec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.4f),
+                            ui::Cond_Always, ui::Vec2(0.5f, 0.5f));
+    ui::SetNextWindowBgAlpha(0.9f);
     bool open = true;
-    if (ImGui::Begin("Sign", &open, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse)) {
-        ImGui::TextUnformatted("What's written on it (Enter to finish, Esc to leave it):");
-        ImGui::SetNextItemWidth(420.0f);
-        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
-        if (ImGui::InputText("##sign", signText, net::kMaxSignLength + 1, ImGuiInputTextFlags_EnterReturnsTrue)) {
+    if (ui::Begin("Sign", &open, ui::WindowFlags_AlwaysAutoResize | ui::WindowFlags_NoMove | ui::WindowFlags_NoSavedSettings | ui::WindowFlags_NoCollapse)) {
+        ui::TextUnformatted("What's written on it (Enter to finish, Esc to leave it):");
+        ui::SetNextItemWidth(420.0f);
+        if (ui::IsWindowAppearing()) ui::SetKeyboardFocusHere();
+        if (ui::InputText("##sign", signText, net::kMaxSignLength + 1, ui::InputTextFlags_EnterReturnsTrue)) {
             client->WriteSign(signAt, signText);
             open = false;
         }
     }
-    ImGui::End();
+    ui::End();
     if (!open) SetInventoryOpen(false);
 }
 
 void Application::DrawSigns(const glm::mat4& viewProjection) {
     // Each sign's words over it, within 12 blocks and in sight, like a little plaque.
-    ImDrawList* draw = ImGui::GetBackgroundDrawList();
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ui::DrawList* draw = ui::GetBackgroundDrawList();
+    const ui::Viewport* viewport = ui::GetMainViewport();
     const glm::vec3 eye = camera.GetPosition();
     for (const auto& [pos, text] : client->GetSigns()) {
         const glm::vec3 at = glm::vec3(pos) + glm::vec3(0.5f, 0.95f, 0.5f);
@@ -3844,13 +3817,13 @@ void Application::DrawSigns(const glm::mat4& viewProjection) {
         const glm::vec2 ndc = glm::vec2(clip) / clip.w;
         if (std::abs(ndc.x) > 1.1f || std::abs(ndc.y) > 1.1f) continue;
         if (auto hit = Raycast(*world, eye, to / distance, distance - 0.6f); hit && hit->block != pos) continue;
-        const ImVec2 c(viewport->WorkPos.x + (ndc.x * 0.5f + 0.5f) * viewport->WorkSize.x, viewport->WorkPos.y + (0.5f - ndc.y * 0.5f) * viewport->WorkSize.y);
+        const ui::Vec2 c(viewport->WorkPos.x + (ndc.x * 0.5f + 0.5f) * viewport->WorkSize.x, viewport->WorkPos.y + (0.5f - ndc.y * 0.5f) * viewport->WorkSize.y);
         const float fade = std::clamp((12.0f - distance) / 3.0f, 0.0f, 1.0f);
-        const ImVec2 size = ImGui::CalcTextSize(text.c_str());
-        const ImVec2 lo(c.x - size.x * 0.5f - 7.0f, c.y - size.y - 6.0f), hi(c.x + size.x * 0.5f + 7.0f, c.y + 2.0f);
-        draw->AddRectFilled(lo, hi, IM_COL32(196, 160, 104, static_cast<int>(225 * fade)), 2.0f);
-        draw->AddRect(lo, hi, IM_COL32(110, 76, 38, static_cast<int>(255 * fade)), 2.0f, 0, 2.0f);
-        draw->AddText(ImVec2(lo.x + 7.0f, lo.y + 4.0f), IM_COL32(40, 26, 12, static_cast<int>(255 * fade)), text.c_str());
+        const ui::Vec2 size = ui::CalcTextSize(text.c_str());
+        const ui::Vec2 lo(c.x - size.x * 0.5f - 7.0f, c.y - size.y - 6.0f), hi(c.x + size.x * 0.5f + 7.0f, c.y + 2.0f);
+        draw->AddRectFilled(lo, hi, UI_COL32(196, 160, 104, static_cast<int>(225 * fade)), 2.0f);
+        draw->AddRect(lo, hi, UI_COL32(110, 76, 38, static_cast<int>(255 * fade)), 2.0f, 0, 2.0f);
+        draw->AddText(ui::Vec2(lo.x + 7.0f, lo.y + 4.0f), UI_COL32(40, 26, 12, static_cast<int>(255 * fade)), text.c_str());
     }
 }
 
@@ -4405,19 +4378,66 @@ void Application::OnScroll(double yOffset) {
 }
 
 void Application::ScrollCallback(GLFWwindow* window, double, double yOffset) {
+    ui::AddMouseWheel(static_cast<float>(yOffset));
     static_cast<Application*>(glfwGetWindowUserPointer(window))->OnScroll(yOffset);
 }
 
-void Application::KeyCallback(GLFWwindow* window, int key, int, int action, int) {
+void Application::KeyCallback(GLFWwindow* window, int key, int, int action, int mods) {
+    if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+        const bool ctrl = (mods & GLFW_MOD_CONTROL) != 0;
+        if (ctrl && key == GLFW_KEY_V) ui::AddChar(22); // (paste)
+        switch (key) {
+        case GLFW_KEY_ENTER:
+        case GLFW_KEY_KP_ENTER: ui::AddKey(ui::Key::Enter); break;
+        case GLFW_KEY_ESCAPE: ui::AddKey(ui::Key::Escape); break;
+        case GLFW_KEY_BACKSPACE: ui::AddKey(ui::Key::Backspace); break;
+        case GLFW_KEY_DELETE: ui::AddKey(ui::Key::Delete); break;
+        case GLFW_KEY_LEFT: ui::AddKey(ui::Key::Left); break;
+        case GLFW_KEY_RIGHT: ui::AddKey(ui::Key::Right); break;
+        case GLFW_KEY_UP: ui::AddKey(ui::Key::Up); break;
+        case GLFW_KEY_DOWN: ui::AddKey(ui::Key::Down); break;
+        case GLFW_KEY_HOME: ui::AddKey(ui::Key::Home); break;
+        case GLFW_KEY_END: ui::AddKey(ui::Key::End); break;
+        case GLFW_KEY_TAB: ui::AddKey(ui::Key::Tab); break;
+        default: break;
+        }
+    }
     static_cast<Application*>(glfwGetWindowUserPointer(window))->OnKey(key, action);
 }
 
+void Application::CharCallback(GLFWwindow*, unsigned int codepoint) { ui::AddChar(codepoint); }
+
 void Application::MouseButtonCallback(GLFWwindow* window, int button, int action, int) {
+    ui::AddMouseButton(button, action == GLFW_PRESS);
     static_cast<Application*>(glfwGetWindowUserPointer(window))->OnMouseButton(button, action);
 }
 
 void Application::CursorPosCallback(GLFWwindow* window, double x, double y) {
+    ui::SetMousePos({ static_cast<float>(x), static_cast<float>(y) });
     static_cast<Application*>(glfwGetWindowUserPointer(window))->OnCursorMove(x, y);
+}
+
+void Application::BeginUiFrame() {
+    int w = 0, h = 0;
+    glfwGetWindowSize(window, &w, &h);
+    const double now = glfwGetTime();
+    const float dt = uiLastFrame > 0.0 ? static_cast<float>(std::min(0.25, now - uiLastFrame)) : 1.0f / 60.0f;
+    uiLastFrame = now;
+    // A gamepad moves between the menus' buttons (D-pad), presses (A).
+    GLFWgamepadstate pad;
+    if (glfwJoystickIsGamepad(GLFW_JOYSTICK_1) && glfwGetGamepadState(GLFW_JOYSTICK_1, &pad))
+        ui::SetGamepad(pad.buttons[GLFW_GAMEPAD_BUTTON_DPAD_UP] == GLFW_PRESS, pad.buttons[GLFW_GAMEPAD_BUTTON_DPAD_DOWN] == GLFW_PRESS,
+                       pad.buttons[GLFW_GAMEPAD_BUTTON_DPAD_LEFT] == GLFW_PRESS, pad.buttons[GLFW_GAMEPAD_BUTTON_DPAD_RIGHT] == GLFW_PRESS,
+                       pad.buttons[GLFW_GAMEPAD_BUTTON_A] == GLFW_PRESS, pad.buttons[GLFW_GAMEPAD_BUTTON_B] == GLFW_PRESS);
+    else ui::SetGamepad(false, false, false, false, false, false);
+    ui::NewFrame({ static_cast<float>(std::max(1, w)), static_cast<float>(std::max(1, h)) }, dt);
+}
+
+void Application::EndUiFrame() {
+    int w = 0, h = 0;
+    glfwGetFramebufferSize(window, &w, &h);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    ui::Render({ static_cast<float>(w), static_cast<float>(h) });
 }
 
 float Application::Reach() const {

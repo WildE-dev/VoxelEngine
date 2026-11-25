@@ -2398,6 +2398,7 @@ src/
   audio/    Audio (OpenAL sound effects)
   render/   Renderer (frame passes, skybox, post effect), Rain, PlayerModels, Shader,
             Textures, DebugDraw
+  ui/       Ui: the game's own interface (see [The interface](#the-interface))
   world/    Shared by both sides: Chunk, Block, BlockAccess, TerrainGenerator, Caves,
             Features, Dungeons, Noise, Lighting, Collision, Raycast, Mining,
             Breathing, Creatures, Crafting, Hunger, Armour, Power, Signals, Smelting, Fluids,
@@ -2406,5 +2407,21 @@ tests/      NetSmokeTest, SaveTest, WaterAreaTest, PumpTest, EvaporationTest, We
             ChatTest, DungeonTest, TrapTest, ShapeTest, BiomeTest, ModeTest, MiningTest,
             BreathTest, CreatureTest, CraftTest, SoundTest, FoodTest, ChestTest, BedTest,
             PowerTest, SignalTest, FactoryTest, DataTest
-tools/      convert_sounds.py and sound_prompts.txt (sound effects), make_item_textures.py (item icons)
+tools/      convert_sounds.py and sound_prompts.txt (sound effects), make_item_textures.py (item icons),
+            bake_ui_font.py (the interface's font)
 ```
+
+## The interface
+
+Every menu, window and piece of the HUD is drawn by the game's own UI, `src/ui/Ui.h`: an
+immediate-mode interface (the code that shows a window or a button does so each frame,
+and learns there whether it was clicked) drawn with one shader as batches of quads over
+the 3D view, clipped to each window and scrolling area. Its font is Aileron Regular
+(dotcolon.net, free for any use), baked by `tools/bake_ui_font.py` into
+`Resources/Fonts/ui.png` and `ui.json` and drawn at any size. It has windows (placed,
+sized or fitted to what's in them, with a title bar and a close button), text that wraps,
+buttons, checkboxes, sliders, number and text boxes (with paste), drop-down lists,
+images, scrolling areas, tables, collapsing sections, tooltips, a modal popup and a line
+graph, in dark panels with a warm accent. A gamepad's D-pad moves between the buttons and
+boxes (A presses, left and right move sliders). The model editor, a developer's tool, still
+uses Dear ImGui.
