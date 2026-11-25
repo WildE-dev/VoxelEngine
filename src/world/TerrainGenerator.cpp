@@ -566,6 +566,35 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                 }
             }
 
+    // Cave and cavern floors: stone with open air over it is given a sloped top, each
+    // corner up to half a block down (by a noise of the corner's own position, so
+    // neighbours share their corners and the floor runs on smoothly), instead of flat
+    // blocks. Ores stay whole (so they show). (Not the chunk's top row: what's over that
+    // is the next chunk's.)
+    {
+        auto drop = [](int cx, int y, int cz) {
+            const float n = Noise::Perlin3(cx * 0.21f, y * 0.37f, cz * 0.21f, 0xF1A7u);
+            return std::clamp(static_cast<int>(std::lround((n + 0.15f) * 6.0f)), 0, 4);
+        };
+        for (int x = 0; x < S; x++)
+            for (int z = 0; z < S; z++) {
+                const int m = rows[x * S + z];
+                for (int y = 0; y + 1 < S; y++) {
+                    const int wy = coords.y * S + y;
+                    if (wy >= m - 1) break; // (underground only: the surface is shaped already)
+                    Block& cell = out[Index(x, y, z)];
+                    if (cell.type != BlockType::STONE || !cell.IsFullBlock() || !out[Index(x, y + 1, z)].IsAir()) continue;
+                    const int wx = coords.x * S + x, wz = coords.z * S + z;
+                    // EdgeData order: 0 (x, z+1), 1 (x+1, z), 2 (x, z), 3 (x+1, z+1).
+                    const int d[4] = { drop(wx, wy, wz + 1), drop(wx + 1, wy, wz), drop(wx, wy, wz), drop(wx + 1, wy, wz + 1) };
+                    if (d[0] + d[1] + d[2] + d[3] == 0) continue;
+                    EdgeData edges;
+                    for (int e = 0; e < 4; e++) edges.SetTopY(e, static_cast<uint8_t>(8 - d[e]));
+                    cell = Block(BlockType::STONE, edges);
+                }
+            }
+    }
+
     // Lakes and rivers: their water level per column, and their beds kept whole (a
     // cave opening under one would drain it) and sandy. (Rivers' water comes after.)
     std::array<int, S * S> waterLevels;

@@ -354,6 +354,30 @@ int main() {
         Check(limestone > 500 && tooDeep == 0, "limestone lies in beds in the rock (" + std::to_string(limestone) + " blocks), none far down");
         Check(gravel > 200, "and gravel in pockets under the topsoil (" + std::to_string(gravel) + " blocks)");
     }
+    // Cave floors slope: stone with air over it has a shaped top, not all of it flat.
+    {
+        TerrainGenerator rock(TerrainGenerator::Type::Normal);
+        long floors = 0, sloped = 0;
+        for (int cx = -3; cx < 3; cx++)
+            for (int cz = -3; cz < 3; cz++) {
+                TerrainGenerator::ColumnHeights h;
+                rock.ComputeColumnHeights(cx, cz, h);
+                for (int cy = -6; cy <= -1; cy++) {
+                    TerrainGenerator::Blocks blocks;
+                    rock.GenerateChunk({ cx, cy, cz }, h, blocks);
+                    constexpr int S = TerrainGenerator::S;
+                    for (int x = 0; x < S; x++)
+                        for (int z = 0; z < S; z++)
+                            for (int y = 0; y + 1 < S; y++) {
+                                const Block& b = blocks[x + S * (y + S * z)];
+                                if (b.type != BlockType::STONE || !blocks[x + S * (y + 1 + S * z)].IsAir()) continue;
+                                floors++;
+                                sloped += !b.IsFullBlock();
+                            }
+                }
+            }
+        Check(floors > 200 && sloped * 2 > floors, "cave floors are sloped stone, not flat blocks (" + std::to_string(sloped) + " of " + std::to_string(floors) + ")");
+    }
 
     // The Deep: open caverns with fungus, magma and gold ore far down, and no gold above.
     {

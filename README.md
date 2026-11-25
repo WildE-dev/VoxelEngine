@@ -257,6 +257,10 @@ pauses. The menus can be driven with the pad as well.
 2. **Caves** (`Caves.cpp`): winding tunnels where two 3D noise fields are both
    near zero, plus large caverns more than 24 blocks down. Tunnels that reach
    the surface form entrances. Noise is sampled every 4 blocks and interpolated.
+   Their floors (and the Deep's cavern floors) are sloped like the ground above:
+   stone with air over it gets a top with each corner up to half a block down, by a
+   noise of the corner's position, so the floor runs on smoothly (ores stay whole).
+   `BiomeTest` checks most cave floor stone is sloped.
 3. **Features** (`Features.cpp`): trees cluster in forests, plus bushes and
    boulders. Each kind sits on a jittered grid, so a chunk can generate the parts
    of features rooted in neighbouring columns.
