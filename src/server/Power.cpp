@@ -27,8 +27,10 @@ uint8_t ToByte(float v) { return static_cast<uint8_t>(std::lround(std::clamp(v, 
 
 // What a drill won't dig through: things people keep, other machinery, and liquids.
 bool StopsDrill(const Block& b) {
-    if (b.IsLiquid() || b.HasWater()) return true;
+    if (b.IsLiquid() || b.IsLava() || b.HasWater()) return true;
     switch (b.type) {
+    case BlockType::FIRE:
+    case BlockType::PISTON_HEAD:
     case BlockType::CHEST:
     case BlockType::MINING_POST:
     case BlockType::BED:
@@ -299,7 +301,7 @@ void Server::UpdatePower() {
         for (const auto& p : netLaunchers) {
             auto sig = signalBlocks.find(p);
             const bool want = sig != signalBlocks.end() && sig->second.on;
-            bool& armed = launcherArmed[p];
+            bool& armed = launcherArmed.try_emplace(p, want).first->second; // (first seen with its channel already on, after a restart say: it doesn't fire for that)
             const float speed = Power::LaunchSpeed(sig != signalBlocks.end() ? sig->second.config.b : 0);
             if (want && !armed && net.Pressure() >= Power::kMinPressure && net.air >= Power::LaunchAir(speed)) {
                 net.air -= Power::LaunchAir(speed);
@@ -1006,7 +1008,7 @@ bool Server::Refine(const glm::ivec3&, const Block&, Worker& w) {
 }
 
 bool Server::Movable(const glm::ivec3& pos, const Block& b) const {
-    if (b.IsAir() || b.IsLiquid() || b.type == BlockType::COUNT) return false;
+    if (b.IsAir() || b.IsLiquid() || b.IsLava() || b.type == BlockType::COUNT) return false;
     if (signalBlocks.count(pos) || Signals::KindOf(b.type) != Signals::Kind::None) return false;
     switch (b.type) {
     case BlockType::CHEST:

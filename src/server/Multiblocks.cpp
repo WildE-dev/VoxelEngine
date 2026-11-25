@@ -39,7 +39,12 @@ void Server::TryForm(ClientState* client, const glm::ivec3& pos) {
                 for (const auto& c : p.cells) {
                     const glm::ivec3 at = Place(origin, turn, c.at);
                     Block b;
-                    if (world->GetBlock(at.x, at.y, at.z, b) && b.type == c.type) continue;
+                    // Whole blocks only: a part chiselled down to a sliver would come back
+                    // whole when the structure's taken apart. (A lit smelter is a smelter.)
+                    if (world->GetBlock(at.x, at.y, at.z, b)) {
+                        const BlockType has = b.type == BlockType::SMELTER_LIT ? BlockType::SMELTER : b.type;
+                        if (has == c.type && (c.role != Role::Part || b.IsFullBlock())) continue;
+                    }
                     if (t.wrong++ == 0) t.firstWrong = at, t.wanted = c.type;
                 }
                 for (const auto& o : p.open) {

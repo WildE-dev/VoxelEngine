@@ -377,6 +377,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
                 for (int z = lo.z; z <= hi.z; z++) {
                     Block old;
                     if (!world->GetBlock(x, y, z, old)) continue;
+                    if (old.type == BlockType::MULTIBLOCK || old.type == BlockType::MULTIBLOCK_PART) TakeApart({ x, y, z });
                     if (IsStorageType(old.type)) RemoveChest({ x, y, z }, nullptr);
                     world->SetBlock(x, y, z, block);
                     if (IsStorageType(type)) chests[{ x, y, z }] = Inventory(Inventory::kChestSlots);

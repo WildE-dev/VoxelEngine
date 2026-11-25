@@ -1436,6 +1436,7 @@ void Server::HandleCarve(ClientState& client, const net::EditCarve& carve) {
                 for (int z = -r; z <= r; z++)
                     if (x * x + y * y + z * z <= r * r) {
                         const glm::ivec3 p = center + glm::ivec3(x, y, z);
+                        if (Block b; world->GetBlock(p.x, p.y, p.z, b) && (b.type == BlockType::MULTIBLOCK || b.type == BlockType::MULTIBLOCK_PART)) TakeApart(p);
                         world->SetBlock(p.x, p.y, p.z, BlockType::AIR);
                         if (chests.count(p)) RemoveChest(p, nullptr); // (lasered: its contents are gone)
                     }
@@ -2028,6 +2029,7 @@ void Server::UpdateTnt() {
 void Server::Explode(const glm::ivec3& pos, int radius) {
     // Everything in a ball goes (water and dungeon bricks too; a chest's contents are
     // lost), and TNT caught in it is set off on a short fuse.
+    std::vector<glm::ivec3> logsGone;
     for (int x = -radius; x <= radius; x++)
         for (int y = -radius; y <= radius; y++)
             for (int z = -radius; z <= radius; z++) {
@@ -2039,10 +2041,15 @@ void Server::Explode(const glm::ivec3& pos, int radius) {
                     LightTnt(p, 0.4 + 0.1 * (std::abs(x) + std::abs(z)));
                     continue;
                 }
+                // (A structure caught in it comes apart first, or what's left of it outside
+                // the blast would stay as solid parts nobody can see.)
+                if (IsPartOnlyType(b.type) && b.type != BlockType::PISTON_HEAD) TakeApart(p);
                 if (IsStorageType(b.type)) RemoveChest(p, nullptr);
                 if (b.type == BlockType::SIGN && signs.erase(p)) BroadcastSign(p);
+                if (Trees::IsLog(b)) logsGone.push_back(p);
                 world->SetBlock(p.x, p.y, p.z, Block());
             }
+    LoosenLeaves(logsGone); // (the leaves of trees it felled fall away, as when a log's cut)
     // It leaves fires round it, where there's something to burn.
     Scorch(pos, radius + 1, 0.15f);
     const auto packet = net::Encode(net::Explosion{ pos, static_cast<uint8_t>(radius) });
@@ -2473,6 +2480,7 @@ void Server::UpdateFire() {
             if (b.type == BlockType::TNT) LightTnt(n, 0.5 + FireRandom());
             if (!Fire::Burns(b.type)) continue;
             fuel = true;
+            fireLit[f] = now; // (it dies down a while after it last had something to burn, not after it was lit)
             if (FireRandom() >= Fire::BurnRate(b.type) * dt * (rainedOn ? 0.5f : 1.0f)) continue;
             if (IsStorageType(b.type)) RemoveChest(n, nullptr); // (what was in it burns too)
             if (b.type == BlockType::SIGN && signs.erase(n)) BroadcastSign(n);
@@ -2519,6 +2527,8 @@ void Server::UpdateFire() {
 void Server::HandleUseBucket(ClientState& client, const net::UseBucket& m) {
     const glm::ivec3& p = m.pos;
     Block b;
+    // (The water's read and then changed: the water thread mustn't move it in between.)
+    std::lock_guard<std::recursive_mutex> edit(world->GetEditMutex());
     if (!InReach(client, p, EditReach(client)) || !world->GetBlock(p.x, p.y, p.z, b)) return SendInventory(client);
     const bool creative = Creative(client);
     const ItemId bucket = Items::Of(ItemType::BUCKET), full = Items::Of(ItemType::WATER_BUCKET);

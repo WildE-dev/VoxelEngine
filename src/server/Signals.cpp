@@ -63,6 +63,8 @@ void Server::HandleConfigureSignal(ClientState& client, const net::SignalInfo& m
 }
 
 bool Server::CloseSluice(const glm::ivec3& pos) {
+    // (The water's read and then moved: the water thread mustn't move it in between.)
+    std::lock_guard<std::recursive_mutex> edit(world->GetEditMutex());
     Block cell;
     if (!world->GetBlock(pos.x, pos.y, pos.z, cell)) return false;
     if (cell.type == BlockType::SLUICE) return true;
@@ -300,7 +302,14 @@ void Server::UpdateSignals() {
             }
             break;
         case Signals::Kind::Sluice:
-            if (c.a == 0) break;
+            // (Left with no channel while open: it shuts, rather than staying open for good.)
+            if (c.a == 0) {
+                if (s.on && CloseSluice(pos)) {
+                    s.on = false;
+                    BroadcastSignal(pos);
+                }
+                break;
+            }
             if (a && !s.on) {
                 world->SetBlock(pos.x, pos.y, pos.z, Block()); // out of the way
                 s.on = true;

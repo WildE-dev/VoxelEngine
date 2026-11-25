@@ -100,6 +100,7 @@ void Server::UpdateMiningPosts() {
                 after.TakeUnits(t, take);
                 owed -= take;
             }
+            if (owed > 0) continue; // (not enough left to pay this one: no dig)
             if (after.AddUnits(Items::ResourceOf(ore.type), static_cast<uint32_t>(ore.ResourceUnits())) != 0) {
                 post.state = Power::DrillState::Full;
                 continue;

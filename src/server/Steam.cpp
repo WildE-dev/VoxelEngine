@@ -55,7 +55,7 @@ void SteamCloud::Update(const BlockAccess& world) {
             if (isOpen(up)) next[up] = static_cast<uint16_t>(std::min(kMaxCell, next[up] + left));
             continue;
         }
-        left -= left * fade / 1000 + (left < 40 ? 1 : 0); // (thin wisps go, a unit at a time)
+        left -= std::max(1, left * fade / 1000); // (at least a unit: a share that rounds to nothing left a sealed pocket of it for ever)
         if (left <= 0) continue;
         const int start = left;
         for (const Way& w : kWays) {

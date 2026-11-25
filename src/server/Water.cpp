@@ -259,7 +259,7 @@ void WaterSimulation::RunPump(ServerWorld& world, const glm::ivec3& pump) {
             const glm::ivec3 n = pipe + d;
             Block b;
             const BlockType t = typeAt(n, b);
-            if (t == BlockType::FLUID_PIPE || t == BlockType::FLUID_VALVE_OPEN || t == BlockType::PUMP) {
+            if (t == BlockType::FLUID_PIPE || t == BlockType::OBSIDIAN_PIPE || t == BlockType::FLUID_VALVE_OPEN || t == BlockType::PUMP) {
                 joins++, joinedAt = d;
                 if (t != BlockType::PUMP && seen.insert(n).second) frontier.push_back(n);
             }
@@ -377,7 +377,9 @@ void WaterSimulation::RandomTicks(ServerWorld& world) {
     aboveSea.clear();
     for (const auto& chunk : randomChunks)
         for (int i = 0; i < kRandomTicksPerChunk; i++) {
-            const glm::ivec3 pos = chunk * S + glm::ivec3(local(random), local(random), local(random));
+            // (One at a time: the order arguments are worked out in is the compiler's choice.)
+            const int lx = local(random), ly = local(random), lz = local(random);
+            const glm::ivec3 pos = chunk * S + glm::ivec3(lx, ly, lz);
             Block block;
             if (!world.GetBlock(pos.x, pos.y, pos.z, block) || !block.HasWater()) continue;
             if (pos.y >= TerrainGenerator::kSeaLevel && IsAboveSea(world, pos)) aboveSea.push_back(pos); // the sea takes it
