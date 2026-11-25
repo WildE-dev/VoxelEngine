@@ -96,6 +96,9 @@ inline uint32_t MaxStack(ItemId id) {
 // a block in another state is the block (an open door a door). kNone: nothing (part of
 // something bigger).
 inline ItemId ResourceOf(BlockType type) {
+    // (A piston's head is part of the piston; taking a structure apart gives back what
+    // it was built of.)
+    if (IsPartOnlyType(type)) return kNone;
     switch (type) {
     case BlockType::PEBBLES: return Of(BlockType::STONE);
     case BlockType::COAL_ORE: return Of(ItemType::COAL);
@@ -107,13 +110,10 @@ inline ItemId ResourceOf(BlockType type) {
     case BlockType::SIGNAL_LAMP_ON: return Of(BlockType::SIGNAL_LAMP);
     case BlockType::VALVE_OPEN: return Of(BlockType::VALVE);
     case BlockType::FLUID_VALVE_OPEN: return Of(BlockType::FLUID_VALVE);
-    case BlockType::PISTON_HEAD: return kNone; // (part of the piston)
     case BlockType::SMELTER_LIT: return Of(BlockType::SMELTER);
     case BlockType::SPRING:
     case BlockType::SINKHOLE:
     case BlockType::OIL_SHALE: return Of(BlockType::STONE);
-    case BlockType::MULTIBLOCK:
-    case BlockType::MULTIBLOCK_PART: return kNone; // (taking it apart gives back what it was built of)
     default: return type < BlockType::COUNT ? Of(type) : kNone;
     }
 }

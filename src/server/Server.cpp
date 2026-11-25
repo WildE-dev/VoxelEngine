@@ -1285,8 +1285,9 @@ void Server::HandlePlace(ClientState& client, const glm::ivec3& pos, BlockType t
         Echo(client, pos);
         if (type == BlockType::DOOR) Echo(client, pos + glm::ivec3(0, 1, 0)); // (it predicted the upper half too)
     };
-    // Room for it (a door's upper half too; seeds on dirt or grass): BlockAccess::CanPlace,
-    // which the client checks too before predicting it.
+    // Something that can be put down (not a part of something bigger), with room for it (a
+    // door's upper half too; seeds on dirt or grass): BlockAccess::CanPlace, which the
+    // client checks too before predicting it.
     if (type == BlockType::AIR || type >= BlockType::COUNT || !InReach(client, pos, EditReach(client)) || !world->CanPlace(pos, type)) return refuse();
     if (IsCreativeOnlyType(type) && !Creative(client)) return refuse();
     const Block placed = Block::Placed(type, height, faceAxis);

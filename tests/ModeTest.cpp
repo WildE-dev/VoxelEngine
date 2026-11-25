@@ -242,6 +242,19 @@ int main() {
     Check(both(20.0, [&] { return At(*b, spot).type == groundType; }) && a->client.GetResources(groundType) == 16, "but a quarter (16) can");
     mine(spot);
     Check(both(20.0, [&] { return At(*b, spot).IsAir() && a->client.GetResources(groundType) == 32; }), "and breaking it gives the 16 back");
+    {
+        // What's only ever part of something bigger can't be put down as itself (by the
+        // rule the server places by too): worth nothing, it would be free, and a
+        // structure's core taken apart again would give back blocks nobody built.
+        bool refused = true;
+        for (const BlockType part : { BlockType::MULTIBLOCK, BlockType::MULTIBLOCK_PART, BlockType::PISTON_HEAD }) {
+            refused &= IsPartOnlyType(part) && Block(part).ResourceUnits() == 0 && Items::ResourceOf(part) == Items::kNone;
+            refused &= !a->world.CanPlace(spot, part) && !a->client.PlaceBlock(spot, part);
+        }
+        both(0.5, [] { return false; });
+        Check(refused && At(*b, spot).IsAir() && a->world.CanPlace(spot, groundType) && !a->world.CanPlace(spot, BlockType::AIR),
+              "a structure's core or part, or a piston's head, can't be placed as itself");
+    }
 
     a->client.SendChat("/give stone_brick 2");
     Check(both(20.0, [&] { return Has(*a, "Only operators can do that"); }) && a->client.GetResources(BlockType::STONE_BRICK) == 0, "players can't /give themselves blocks");

@@ -1045,7 +1045,7 @@ void Block::Shrink() {
 }
 
 int Block::ResourceUnits() const {
-    if (IsAir() || IsLiquid() || IsLava() || type == BlockType::PISTON_HEAD || type == BlockType::MULTIBLOCK || type == BlockType::MULTIBLOCK_PART) return 0;
+    if (IsAir() || IsLiquid() || IsLava() || IsPartOnlyType(type)) return 0;
     if (type == BlockType::PEBBLES) return kPebbleUnits;
     if (IsFullBlock() || !CanChisel()) return kUnitsPerBlock;
     if (IsStepped()) {

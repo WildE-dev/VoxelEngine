@@ -25,12 +25,6 @@ public:
         return point.y - cell.y < block.WaterLevel() / static_cast<float>(Block::kMaxWaterVolume);
     }
 
-    // Whether a block of this type may be placed at `pos`, as far as the blocks go: the
-    // cell holds only air, a plant or water, and isn't inside a formed structure (one of
-    // the cells its pattern leaves empty); a door has room for its upper half; seeds
-    // and saplings go on dirt or grass. The server decides by this, and the client checks
-    // it before showing a placement it predicts, so one the server will refuse isn't
-    // shown for a moment and then taken back.
     // Whether a lever here (as placed) is fixed to a solid block: the one behind it.
     bool LeverHeld(const glm::ivec3& pos, const Block& lever) const {
         const glm::ivec3 s = pos - lever.LeverFacing();
@@ -38,7 +32,16 @@ public:
         return GetBlock(s.x, s.y, s.z, support) && Block::HoldsLever(support);
     }
 
+    // Whether a block of this type may be placed at `pos`, as far as the blocks go: it's
+    // something put down as itself (not air, nor a part of something bigger: those are
+    // worth nothing, so they'd be free, and a structure's core taken apart again would
+    // give back blocks nobody built); the cell holds only air, a plant or water, and
+    // isn't inside a formed structure (one of the cells its pattern leaves empty); a door
+    // has room for its upper half; seeds and saplings go on dirt or grass. The server
+    // decides by this, and the client checks it before showing a placement it predicts,
+    // so one the server will refuse isn't shown for a moment and then taken back.
     bool CanPlace(const glm::ivec3& pos, BlockType type) const {
+        if (type == BlockType::AIR || type >= BlockType::COUNT || IsPartOnlyType(type)) return false;
         Block existing;
         if (!GetBlock(pos.x, pos.y, pos.z, existing) || !existing.IsPassable()) return false;
         if (InsideStructure(pos)) return false;

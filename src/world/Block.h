@@ -340,6 +340,11 @@ inline BlockType ValveSetTo(BlockType t, bool open) {
 // The pipe a valve sits in (whose tube it's drawn as, and joins like).
 inline BlockType ValvePipe(BlockType t) { return t == BlockType::FLUID_VALVE || t == BlockType::FLUID_VALVE_OPEN ? BlockType::FLUID_PIPE : BlockType::AIR_PIPE; }
 inline bool IsCreativeOnlyType(BlockType t) { return t == BlockType::CREATIVE_AIR_TANK || t == BlockType::LAVA || t == BlockType::FIRE; }
+// Blocks that are only ever part of something bigger: a piston's head, and a formed
+// structure's core and parts. They're made and unmade with it, never carried or put
+// down as themselves, and worth nothing by themselves (breaking one gives what it's part
+// of: Items::ResourceOf, Block::ResourceUnits, BlockAccess::CanPlace).
+inline bool IsPartOnlyType(BlockType t) { return t == BlockType::PISTON_HEAD || t == BlockType::MULTIBLOCK || t == BlockType::MULTIBLOCK_PART; }
 // Blocks that hold things like a chest (opened, filled, emptied, broken open).
 inline bool IsStorageType(BlockType t) { return t == BlockType::CHEST || t == BlockType::MINING_POST || IsMachineInventory(t); }
 
