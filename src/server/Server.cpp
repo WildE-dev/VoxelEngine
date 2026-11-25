@@ -549,7 +549,15 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
     const int most = world->GetRenderDistance();
     client.viewDistance = hello.viewDistance > 0 ? std::clamp(static_cast<int>(hello.viewDistance), 2, most) : most;
     client.verticalViewDistance = std::min(world->GetVerticalRenderDistance(), std::max(client.viewDistance, 4));
-    client.name = hello.name.empty() ? "Player " + std::to_string(client.id) : hello.name;
+    // Their name as sent, less anything that isn't printable (a line break in a name
+    // would let it write lines of its own into everyone's chat and the log) and any
+    // spaces round it.
+    client.name.clear();
+    for (const unsigned char c : hello.name)
+        if (c >= 0x20 && c != 0x7F) client.name.push_back(static_cast<char>(c));
+    client.name.erase(0, client.name.find_first_not_of(' '));
+    client.name.erase(client.name.find_last_not_of(' ') + 1);
+    if (client.name.empty()) client.name = "Player" + std::to_string(client.id);
     // One player of a name at a time (whatever its capitals): their saved place and
     // things go by it.
     {
