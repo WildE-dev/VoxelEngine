@@ -141,11 +141,15 @@ add_executable(${PROJECT_NAME}
 
     src/app/Application.cpp
     src/app/Application.h
+    src/app/Bindings.h
     src/app/Camera.cpp
     src/app/Camera.h
+    src/app/ItemPalette.h
     src/app/Menu.cpp
     src/app/Player.cpp
     src/app/Player.h
+    src/app/PlayerNames.h
+    src/app/Settings.h
 
     src/render/DebugDraw.cpp
     src/render/DebugDraw.h
@@ -185,122 +189,39 @@ target_compile_definitions(ModelEditor PRIVATE VOXEL_SOURCE_DIR="${CMAKE_SOURCE_
 add_executable(VoxelServer src/server/main.cpp)
 target_link_libraries(VoxelServer PRIVATE voxel_server)
 
-# Starts a server and two network clients in one process and checks that chunks,
-# edits, water flow and player positions reach both clients.
-add_executable(NetSmokeTest tests/NetSmokeTest.cpp src/app/Player.cpp)
-target_link_libraries(NetSmokeTest PRIVATE voxel_server voxel_client)
-
-# Saves a world, restarts, and checks edits, light and players come back.
-add_executable(SaveTest tests/SaveTest.cpp src/app/Player.cpp)
-target_link_libraries(SaveTest PRIVATE voxel_server voxel_client)
-
-# Water only flows within the simulation distance of players.
-add_executable(WaterAreaTest tests/WaterAreaTest.cpp)
-target_link_libraries(WaterAreaTest PRIVATE voxel_server)
-
-# Pumps move water through pipes, conserving it.
-add_executable(SignalTest tests/SignalTest.cpp)
-target_link_libraries(SignalTest PRIVATE voxel_server voxel_client)
-add_executable(DataTest tests/DataTest.cpp)
-target_link_libraries(DataTest PRIVATE voxel_common glfw)
-add_executable(FactoryTest tests/FactoryTest.cpp)
-target_link_libraries(FactoryTest PRIVATE voxel_server voxel_client)
-add_executable(SyncTest tests/SyncTest.cpp)
-target_link_libraries(SyncTest PRIVATE voxel_server voxel_client)
-add_executable(PowerTest tests/PowerTest.cpp)
-target_link_libraries(PowerTest PRIVATE voxel_server voxel_client)
-add_executable(PumpTest tests/PumpTest.cpp)
-target_link_libraries(PumpTest PRIVATE voxel_server)
-
-# Empty worlds, and puddles drying up.
-add_executable(EvaporationTest tests/EvaporationTest.cpp)
-target_link_libraries(EvaporationTest PRIVATE voxel_server)
-
-# Thin water, rain, and the day/night clock.
-add_executable(WeatherTest tests/WeatherTest.cpp)
-target_link_libraries(WeatherTest PRIVATE voxel_server voxel_client)
-
-# Chat and commands between a server and two clients.
-add_executable(ChatTest tests/ChatTest.cpp)
-target_link_libraries(ChatTest PRIVATE voxel_server voxel_client)
-
-# Dungeon layouts and generation.
-add_executable(DungeonTest tests/DungeonTest.cpp)
-target_link_libraries(DungeonTest PRIVATE voxel_common)
-
-# Traps, health, no-clip and the laser between a server and two clients.
-add_executable(TrapTest tests/TrapTest.cpp src/app/Player.cpp)
-target_link_libraries(TrapTest PRIVATE voxel_server voxel_client)
-
-# Sound: the sound files, materials, and hearing others' edits.
-add_executable(SoundTest tests/SoundTest.cpp)
-target_link_libraries(SoundTest PRIVATE voxel_server voxel_client)
-
-# Crafting: recipes, tools made once and kept, glass.
-add_executable(CraftTest tests/CraftTest.cpp)
-target_link_libraries(CraftTest PRIVATE voxel_server voxel_client)
-
-# Creatures: summoning, fights, ghouls, burning, natural spawning.
-add_executable(CreatureTest tests/CreatureTest.cpp)
-target_link_libraries(CreatureTest PRIVATE voxel_server voxel_client)
-
-# Mining: hardness, tools, and the server timing breaks.
-add_executable(MiningTest tests/MiningTest.cpp)
-target_link_libraries(MiningTest PRIVATE voxel_server voxel_client)
-
-# Lava and steam: lava running and draining, water boiling off it into steam, steam rising,
-# spreading and fading, and the steam reaching a client.
-add_executable(SteamTest tests/SteamTest.cpp)
-target_link_libraries(SteamTest PRIVATE voxel_server voxel_client)
-
-# Fire: spreading through a wood, dying down, put out (water, smothering, buckets),
-# burning players and items.
-add_executable(FireTest tests/FireTest.cpp)
-target_link_libraries(FireTest PRIVATE voxel_server voxel_client)
-
-# Food: hunger, starving, eating, venison from deer and cooking it.
-add_executable(FoodTest tests/FoodTest.cpp)
-target_link_libraries(FoodTest PRIVATE voxel_server voxel_client)
-
-# Chests: storing, sharing, breaking and saving.
-add_executable(ChestTest tests/ChestTest.cpp)
-target_link_libraries(ChestTest PRIVATE voxel_server voxel_client)
-
-# Beds: respawning at your bed, and sleeping through the night.
-add_executable(BedTest tests/BedTest.cpp)
-target_link_libraries(BedTest PRIVATE voxel_server voxel_client)
-
-# Breathing: drowning, thin air up mountains, stale air deep down.
-add_executable(BreathTest tests/BreathTest.cpp)
-target_link_libraries(BreathTest PRIVATE voxel_server voxel_client)
-
-# Creative and survival: resources, costs, /gamemode, /give, saving.
-add_executable(ModeTest tests/ModeTest.cpp src/app/Player.cpp)
-target_link_libraries(ModeTest PRIVATE voxel_server voxel_client)
-
-# Block shapes (sloped and stepped), the chisel, joined slopes, thin water, mountains.
-add_executable(ShapeTest tests/ShapeTest.cpp src/app/Player.cpp)
-target_link_libraries(ShapeTest PRIVATE voxel_server voxel_client)
-
-# Biomes: climate, ground, plants, ice and swamps.
-add_executable(BiomeTest tests/BiomeTest.cpp)
-target_link_libraries(BiomeTest PRIVATE voxel_common)
-
-foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} ModelEditor VoxelServer NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest SyncTest SteamTest FireTest)
+# Warnings for our own code. (MSVC's "unsafe" notes about getenv, localtime and the like
+# are off: those are the standard functions, and its replacements for them aren't.)
+function(voxel_warnings target)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W3)
+        target_compile_definitions(${target} PRIVATE _CRT_SECURE_NO_WARNINGS)
     else()
         target_compile_options(${target} PRIVATE -Wall -Wextra)
     endif()
+endfunction()
+foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} ModelEditor VoxelServer)
+    voxel_warnings(${target})
 endforeach()
 
-# Copy shaders/textures next to the executable on every build so edits are picked up,
-# even when only a resource changed (a post-build step would only run when the game
-# relinks). It's part of ALL and runs after the game is built (the generator expression
-# makes it depend on the game). The app loads them relative to the working directory.
+# Where the programs end up: the build directory, or with a multi-configuration
+# generator (Visual Studio) a directory per configuration inside it. They load
+# Resources/ relative to the working directory, so that's where the resources are
+# copied and where the tests run.
+get_property(VOXEL_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(VOXEL_MULTI_CONFIG)
+    set(VOXEL_RUNTIME_DIR "${CMAKE_BINARY_DIR}/$<CONFIG>")
+else()
+    set(VOXEL_RUNTIME_DIR "${CMAKE_BINARY_DIR}")
+endif()
+
+# Copy shaders, textures and data next to the programs on every build, so edits are
+# picked up even when only a resource changed (a post-build step would only run when the
+# game relinks). It doesn't wait on the game: while a running game keeps its executable
+# from being relinked, the resources (which the tests read too) are still brought up to
+# date.
 add_custom_target(copy_resources ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/Resources $<TARGET_FILE_DIR:${PROJECT_NAME}>/Resources
+            ${CMAKE_SOURCE_DIR}/Resources ${VOXEL_RUNTIME_DIR}/Resources
     COMMENT "Copying resources")
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -308,19 +229,79 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 # `ctest` (or `ctest -j16` to run them all at once) runs every test suite.
 enable_testing()
-# The long tests run in parts, side by side: each group of their sections is a test of its
-# own (see tests/TestSections.h). Run without a group, a test runs everything.
-set(CreatureTest_GROUPS fighting allies raids pvp spawning)
-set(FactoryTest_GROUPS machines mining structures)
-set(BreathTest_GROUPS water air)
-set(TrapTest_GROUPS traps falling tnt)
-set(FoodTest_GROUPS hunger food)
-foreach(test NetSmokeTest SaveTest WaterAreaTest PumpTest EvaporationTest WeatherTest ChatTest DungeonTest TrapTest ShapeTest BiomeTest ModeTest BreathTest MiningTest CreatureTest CraftTest SoundTest FoodTest ChestTest BedTest PowerTest SignalTest FactoryTest DataTest SyncTest SteamTest FireTest)
-    if(DEFINED ${test}_GROUPS)
-        foreach(group ${${test}_GROUPS})
-            add_test(NAME ${test}.${group} COMMAND ${test} ${group} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+
+# A test suite, tests/<name>.cpp: built with any other SOURCES, linked to LIBS, and run
+# by ctest. The long ones run in parts, side by side: with GROUPS, each group of the
+# suite's sections is a ctest test of its own, such as CreatureTest.raids (see
+# tests/TestSections.h). Run without a group, a test runs everything.
+function(voxel_test name)
+    cmake_parse_arguments(TEST "" "" "SOURCES;LIBS;GROUPS" ${ARGN})
+    add_executable(${name} tests/${name}.cpp ${TEST_SOURCES})
+    target_link_libraries(${name} PRIVATE ${TEST_LIBS})
+    voxel_warnings(${name})
+    if(TEST_GROUPS)
+        foreach(group ${TEST_GROUPS})
+            add_test(NAME ${name}.${group} COMMAND ${name} ${group} WORKING_DIRECTORY ${VOXEL_RUNTIME_DIR})
         endforeach()
     else()
-        add_test(NAME ${test} COMMAND ${test} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+        add_test(NAME ${name} COMMAND ${name} WORKING_DIRECTORY ${VOXEL_RUNTIME_DIR})
     endif()
-endforeach()
+endfunction()
+
+# Starts a server and two network clients in one process and checks that chunks,
+# edits, water flow and player positions reach both clients.
+voxel_test(NetSmokeTest SOURCES src/app/Player.cpp LIBS voxel_server voxel_client)
+# Saves a world, restarts, and checks edits, light and players come back.
+voxel_test(SaveTest SOURCES src/app/Player.cpp LIBS voxel_server voxel_client)
+# Water only flows within the simulation distance of players.
+voxel_test(WaterAreaTest LIBS voxel_server)
+# Pumps move water through pipes, conserving it.
+voxel_test(PumpTest LIBS voxel_server)
+# Empty worlds, and puddles drying up.
+voxel_test(EvaporationTest LIBS voxel_server)
+# Thin water, rain, and the day/night clock.
+voxel_test(WeatherTest LIBS voxel_server voxel_client)
+# Chat and commands between a server and two clients.
+voxel_test(ChatTest LIBS voxel_server voxel_client)
+# Dungeon layouts and generation.
+voxel_test(DungeonTest LIBS voxel_common)
+# Traps, health, no-clip and the laser between a server and two clients.
+voxel_test(TrapTest SOURCES src/app/Player.cpp LIBS voxel_server voxel_client GROUPS traps falling tnt)
+# Block shapes (sloped and stepped), the chisel, joined slopes, thin water, mountains.
+voxel_test(ShapeTest SOURCES src/app/Player.cpp LIBS voxel_server voxel_client)
+# Biomes: climate, ground, plants, ice and swamps.
+voxel_test(BiomeTest LIBS voxel_common)
+# Creative and survival: resources, costs, /gamemode, /give, saving.
+voxel_test(ModeTest SOURCES src/app/Player.cpp LIBS voxel_server voxel_client)
+# Breathing: drowning, thin air up mountains, stale air deep down.
+voxel_test(BreathTest LIBS voxel_server voxel_client GROUPS water air)
+# Mining: hardness, tools, and the server timing breaks.
+voxel_test(MiningTest LIBS voxel_server voxel_client)
+# Creatures: summoning, fights, ghouls, burning, natural spawning.
+voxel_test(CreatureTest LIBS voxel_server voxel_client GROUPS fighting allies raids pvp spawning)
+# Crafting: recipes, tools made once and kept, glass.
+voxel_test(CraftTest LIBS voxel_server voxel_client)
+# Sound: the sound files, materials, and hearing others' edits.
+voxel_test(SoundTest LIBS voxel_server voxel_client)
+# Food: hunger, starving, eating, venison from deer and cooking it.
+voxel_test(FoodTest LIBS voxel_server voxel_client GROUPS hunger food)
+# Chests: storing, sharing, breaking and saving.
+voxel_test(ChestTest LIBS voxel_server voxel_client)
+# Beds: respawning at your bed, and sleeping through the night.
+voxel_test(BedTest LIBS voxel_server voxel_client)
+# Air power: wheels, compressors and what runs on them; factories of machines, miners
+# and structures.
+voxel_test(PowerTest LIBS voxel_server voxel_client)
+voxel_test(FactoryTest LIBS voxel_server voxel_client GROUPS machines mining structures)
+# Signals: levers, gates, sensors and what listens to them.
+voxel_test(SignalTest LIBS voxel_server voxel_client)
+# The data files (Resources/Data), and the item panel's list.
+voxel_test(DataTest LIBS voxel_common glfw)
+# Two players see the same of structures, chests, fluids, miners and guards.
+voxel_test(SyncTest LIBS voxel_server voxel_client)
+# Lava and steam: lava running and draining, water boiling off it into steam, steam rising,
+# spreading and fading, and the steam reaching a client.
+voxel_test(SteamTest LIBS voxel_server voxel_client)
+# Fire: spreading through a wood, dying down, put out (water, smothering, buckets),
+# burning players and items.
+voxel_test(FireTest LIBS voxel_server voxel_client)
