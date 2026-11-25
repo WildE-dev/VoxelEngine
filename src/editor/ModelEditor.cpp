@@ -1,10 +1,10 @@
 // The model editor: a program of its own for Resources/Data/creatures.json and
-// structures.json (see PlayerModels::CreatureShape for the format), and blocks.json (see
-// world/BlockData.h). It shows the model
+// structures.json (see PlayerModels::CreatureShape for the format), blocks.json (see
+// world/BlockData.h) and items.json (see world/Items.h). It shows the model
 // being edited as the game draws it, with the part picked flashing, and saves the file
 // back both next to the program (so the game, after R, shows it) and in the source tree.
 //
-//   ModelEditor [creatures|structures|blocks] [model or block]
+//   ModelEditor [creatures|structures|blocks|items] [model, block or item]
 //
 // Drag (left or right button) to turn round the model, shift-drag or middle-drag to
 // move, scroll to zoom. Ctrl (Cmd) S saves, Z undoes, shift Z redoes; Delete removes the
@@ -54,13 +54,13 @@ using Part = PlayerModels::ShapePart;
 
 namespace {
 
-// (Each a folder with a file per model or block, in Resources/Data.)
-constexpr const char* kFiles[] = { "creatures", "structures", "blocks" };
-constexpr const char* kWhat[] = { "a creature's model", "a structure's model", "a block" };
-constexpr const char* kFileTitles[] = { "Creatures", "Structures", "Blocks" };
-constexpr int kFileCount = 3;
-// Blocks' lines are long: one block a line.
-int WidthFor(int file) { return file == 2 ? 300 : 110; }
+// (Each a folder with a file per model, block or item, in Resources/Data.)
+constexpr const char* kFiles[] = { "creatures", "structures", "blocks", "items" };
+constexpr const char* kWhat[] = { "a creature's model", "a structure's model", "a block", "an item" };
+constexpr const char* kFileTitles[] = { "Creatures", "Structures", "Blocks", "Items" };
+constexpr int kFileCount = 4;
+// Blocks' and items' lines are long: one a line.
+int WidthFor(int file) { return file >= 2 ? 300 : 110; }
 constexpr const char* kAxes[] = { "x", "y", "z" };
 constexpr float kLeftWidth = 270.0f, kRightWidth = 360.0f;
 
@@ -296,6 +296,9 @@ private:
     }
     bool Structures() const { return file == 1; }
     bool Blocks() const { return file == 2; }
+    bool ItemsFile() const { return file == 3; }
+    // Blocks and items: details to change, not models of parts.
+    bool Details() const { return file >= 2; }
     std::string blockFilter;
     // Animations: the one picked (shown while its tab is open), playing or held at a time.
     std::string anim, trackLabel, newAnimName;
@@ -394,6 +397,10 @@ private:
             BuildBlock();
             return;
         }
+        if (ItemsFile()) {
+            BuildItem();
+            return;
+        }
         if (!models.BuildShapes(root, { model }, shapes, buildError)) shapes.clear();
     }
 
@@ -422,6 +429,8 @@ private:
     void DrawScene(int x, int y, int w, int h, float time);
     void BuildBlock();
     void BlockInspector(Value& block);
+    void BuildItem();
+    void ItemInspector(Value& item);
     // A block's textures: top, bottom and the four sides (+x, -x, +z, -z as front, back,
     // left, right), from any of the forms the file allows.
     static void BlockFaces(const Value& block, std::string faces[6]);
@@ -489,7 +498,7 @@ void Editor::Frame(int fbWidth, int fbHeight, int winWidth, int winHeight, float
             }
         PlayerModels::Place(it->second, Base(), time, swingNow, working, placed, previewAnim, animNow);
     }
-    if (!Blocks()) ViewTools(top);
+    if (!Details()) ViewTools(top);
     const ImVec2 mouse = io.MousePos;
     ViewInput(mouse.x > kLeftWidth && mouse.x < winWidth - kRightWidth && mouse.y > top);
     if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete) && SelectedPart()) {
@@ -528,7 +537,7 @@ void Editor::CopyPart() {
 
 void Editor::PastePart() {
     Value* m = Model();
-    if (!clipboard || !m || Blocks()) return;
+    if (!clipboard || !m || Details()) return;
     if (Value* list = SelectedList(); list && SelectedPart()) {
         list->array.insert(list->array.begin() + path_.back() + 1, *clipboard);
         path_.back()++;
@@ -752,7 +761,7 @@ float HitBox(const glm::mat4& m, glm::vec3 origin, glm::vec3 direction) {
 }
 
 void Editor::PickAt(glm::vec2 mouse) {
-    if (Blocks()) return;
+    if (Details()) return;
     glm::vec3 o, d;
     if (!Ray(mouse, o, d)) return;
     const Part* best = nullptr;
@@ -908,7 +917,7 @@ void Editor::MenuBar() {
         if (ImGui::MenuItem("Redo", "Ctrl+Shift+Z", false, !redo.empty())) Redo();
         ImGui::Separator();
         if (ImGui::MenuItem("Copy part", "Ctrl+C", false, SelectedPart() != nullptr)) CopyPart();
-        if (ImGui::MenuItem("Paste part", "Ctrl+V", false, clipboard.has_value() && Model() != nullptr && !Blocks())) PastePart();
+        if (ImGui::MenuItem("Paste part", "Ctrl+V", false, clipboard.has_value() && Model() != nullptr && !Details())) PastePart();
         if (ImGui::MenuItem("Mirror part", "Ctrl+M", false, SelectedPart() != nullptr)) MirrorPart();
         ImGui::EndMenu();
     }
@@ -960,7 +969,7 @@ void Editor::UnsavedPrompt() {
 void Editor::LeftPanel(float top, float height) {
     ImGui::SetNextWindowPos(ImVec2(0, top));
     ImGui::SetNextWindowSize(ImVec2(kLeftWidth, height));
-    ImGui::Begin(Blocks() ? "Blocks###left" : "Models###left", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+    ImGui::Begin(Blocks() ? "Blocks###left" : ItemsFile() ? "Items###left" : "Models###left", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
 
     for (int i = 0; i < kFileCount; i++) {
         if (i) ImGui::SameLine();
@@ -970,16 +979,17 @@ void Editor::LeftPanel(float top, float height) {
         }
     }
 
-    if (Blocks()) {
-        // Blocks are made in the code: their details can be changed, not the list.
+    if (Details()) {
+        // Blocks and items are made in the code: their details can be changed, not the list.
         ImGui::SetNextItemWidth(-1);
-        ImGui::InputTextWithHint("##filter", "search blocks", &blockFilter);
+        ImGui::InputTextWithHint("##filter", Blocks() ? "search blocks" : "search items", &blockFilter);
         ImGui::BeginChild("blocks", ImVec2(0, 0), ImGuiChildFlags_Borders);
         for (const auto& [name, v] : root.object) {
             const std::string title = v.StringOr("name", name);
             if (!blockFilter.empty() && name.find(blockFilter) == std::string::npos && title.find(blockFilter) == std::string::npos) continue;
             std::string faces[6];
-            BlockFaces(v, faces);
+            if (Blocks()) BlockFaces(v, faces);
+            else faces[2] = v.StringOr("texture", name);
             const int index = faces[2].empty() ? -1 : atlas.GetIndex(faces[2]);
             if (index > 0) {
                 glm::vec2 a, b;
@@ -1170,7 +1180,7 @@ void Editor::LeftPanel(float top, float height) {
 void Editor::RightPanel(float left, float top, float height) {
     ImGui::SetNextWindowPos(ImVec2(left, top));
     ImGui::SetNextWindowSize(ImVec2(kRightWidth, height));
-    ImGui::Begin(Blocks() ? "Block###right" : "Parts###right", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+    ImGui::Begin(Blocks() ? "Block###right" : ItemsFile() ? "Item###right" : "Parts###right", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
     Value* m = Model();
     if (!m) {
         ImGui::TextDisabled("No model.");
@@ -1179,6 +1189,11 @@ void Editor::RightPanel(float left, float top, float height) {
     }
     if (Blocks()) {
         BlockInspector(*m);
+        ImGui::End();
+        return;
+    }
+    if (ItemsFile()) {
+        ItemInspector(*m);
         ImGui::End();
         return;
     }
@@ -1665,6 +1680,42 @@ void Editor::BlockInspector(Value& block) {
     glm::vec3 map = FromHex(block.StringOr("map", "#707070"));
     if (ImGui::ColorEdit3("Map colour", &map.x)) {
         Json::Member(block, "map") = Json::String(ToHex(map));
+        Changed();
+    }
+}
+
+void Editor::BuildItem() {
+    // (Drawn as a thin card showing its icon, as it's held.)
+    const Value* item = Model();
+    if (!item) return;
+    Part p;
+    p.hasBox = true;
+    p.box = glm::vec3(0.0f, 0.5f, 0.0f);
+    p.size = glm::vec3(0.8f, 0.8f, 0.05f);
+    p.color = glm::vec3(1.0f);
+    const std::string texture = item->StringOr("texture", model);
+    glm::vec2 a, b;
+    atlas.GetTileUV(atlas.GetIndex(texture), a, b);
+    for (auto& uv : p.uv) uv = glm::vec4(a, b);
+    p.textured = true;
+    Shape shape;
+    shape.parts.push_back(p);
+    shapes[model] = shape;
+}
+
+void Editor::ItemInspector(Value& item) {
+    ImGui::SeparatorText(model.c_str());
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("An item: carried and used, never placed as a block. What it is and does stays in the code; these details can be changed. A field left out keeps the game's own.");
+    ImGui::PopTextWrapPos();
+    std::string name = item.StringOr("name", "");
+    if (ImGui::InputText("Name", &name)) {
+        Json::Member(item, "name") = Json::String(name);
+        Changed();
+    }
+    std::string texture = item.StringOr("texture", "");
+    if (TexturePicker("Icon", texture)) {
+        Json::Member(item, "texture") = Json::String(texture);
         Changed();
     }
 }
