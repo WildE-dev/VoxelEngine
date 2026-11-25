@@ -188,7 +188,7 @@ bool Server::RunStructure(const glm::ivec3& core, const Block& block, Worker& w)
         toward += units;
         if (toward >= kCrudePerBitumen) {
             toward -= kCrudePerBitumen;
-            if (ChestAt(core).AddUnits(BlockType::BITUMEN, Block::kUnitsPerBlock) == 0) SendChestToViewers(core);
+            if (ChestAt(core).AddUnits(ItemType::BITUMEN, Block::kUnitsPerBlock) == 0) SendChestToViewers(core);
         }
         w.state = Power::DrillState::Working;
         return true;
@@ -222,10 +222,10 @@ bool Server::RunStructure(const glm::ivec3& core, const Block& block, Worker& w)
         }
         for (const auto& c : joined) {
             Inventory& chest = ChestAt(c);
-            if (chest.Units(BlockType::COAL) < 2 * Block::kUnitsPerBlock) continue;
+            if (chest.Units(ItemType::COAL) < 2 * Block::kUnitsPerBlock) continue;
             Inventory after = chest;
-            after.TakeUnits(BlockType::COAL, 2 * Block::kUnitsPerBlock);
-            if (after.AddUnits(BlockType::COKE, Block::kUnitsPerBlock) != 0) continue; // (full)
+            after.TakeUnits(ItemType::COAL, 2 * Block::kUnitsPerBlock);
+            if (after.AddUnits(ItemType::COKE, Block::kUnitsPerBlock) != 0) continue; // (full)
             chest = std::move(after);
             SendChestToViewers(c);
             w.state = Power::DrillState::Working;

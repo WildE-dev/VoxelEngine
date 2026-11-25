@@ -317,13 +317,14 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
     }
     else if (command == "give") {
         if (words.size() < 2) return usage("/give <item> [count] [player]");
-        // A block, a tool ("pickaxe", "iron_pickaxe", "steel_pickaxe") or a piece of armour.
+        // A block, an item ("iron_ingot"), a tool ("pickaxe", "iron_pickaxe", "steel_pickaxe") or a
+        // piece of armour.
         const ItemId item = Items::FromId(Lower(words[1]));
         if (item == Items::kNone || (Items::IsBlock(item) && Block(Items::BlockOf(item)).IsLiquid()))
             return reply(Kind::Error, "No block or item called " + words[1] + " (e.g. dirt, stone, log, pickaxe, iron_axe, cap)");
-        // Then a count (blocks: 64 if none; tools and armour: one), then a player.
+        // Then a count (blocks and items: 64 if none; tools and armour: one), then a player.
         size_t next = 2;
-        double count = Items::IsBlock(item) ? 64.0 : 1.0;
+        double count = Items::IsStackable(item) ? 64.0 : 1.0;
         if (double n; words.size() > next && ParseNumber(words[next], n)) {
             if (n <= 0.0 || n > 1e5) return usage("/give <item> [count] [player]");
             count = n;
@@ -334,10 +335,10 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         if (!target) return usage("give <item> [count] <player>");
         uint32_t given = 0;
         std::string amount;
-        if (Items::IsBlock(item)) {
-            // (Part of a block goes to the offcut.)
+        if (Items::IsStackable(item)) {
+            // (Part of one goes to the offcut.)
             const uint32_t units = static_cast<uint32_t>(count * Block::kUnitsPerBlock + 0.5);
-            const uint32_t lost = target->inventory.AddUnits(Items::BlockOf(item), units);
+            const uint32_t lost = target->inventory.AddUnits(item, units);
             given = units - lost;
             char text[32];
             std::snprintf(text, sizeof text, "%g", given / static_cast<double>(Block::kUnitsPerBlock));

@@ -7,7 +7,7 @@
 
 uint32_t DroppedItems::Drop(ItemId item, uint32_t count, uint32_t units, const glm::vec3& position, const glm::vec3& velocity, float pickupDelay, uint16_t owner) {
     if (!Items::Valid(item)) return 0;
-    if (!Items::IsBlock(item)) units = 0;
+    if (!Items::IsStackable(item)) units = 0;
     count = std::min<uint32_t>(count, 255);
     units = std::min<uint32_t>(units, Items::kUnits - 1);
     if (count == 0 && units == 0) return 0;
@@ -33,12 +33,11 @@ glm::vec3 DroppedItems::Pop() {
     return { std::cos(a) * s, up(rng), std::sin(a) * s };
 }
 
-void DroppedItems::DropUnits(BlockType type, uint32_t units, const glm::ivec3& cell, uint16_t owner) {
+void DroppedItems::DropUnits(ItemRef item, uint32_t units, const glm::ivec3& cell, uint16_t owner) {
     // (Fire, lava and the like are never anything to pick up: knocked off what held
     // them, or broken, they're just gone.)
-    if (IsCreativeOnlyType(type)) return;
-    const ItemId item = Items::OfBlock(type);
-    if (!Items::IsBlock(item) || units == 0) return;
+    if (Items::IsBlock(item) && IsCreativeOnlyType(Items::BlockOf(item))) return;
+    if (!Items::IsStackable(item) || units == 0) return;
     const glm::vec3 middle = glm::vec3(cell) + glm::vec3(0.5f);
     uint32_t whole = units / Items::kUnits;
     const uint32_t offcut = units % Items::kUnits;

@@ -403,8 +403,8 @@ void Stamp(const TerrainGenerator& terrain, const glm::ivec3& coords, Blocks& ou
         }
 }
 
-std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos) {
-    std::vector<std::pair<BlockType, uint32_t>> loot;
+std::vector<std::pair<ItemRef, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos) {
+    std::vector<std::pair<ItemRef, uint32_t>> loot;
     const RegionSite r = SiteIn(terrain, FloorDiv(pos.x, kRegionSize), FloorDiv(pos.z, kRegionSize));
     if (!r.exists || std::find(r.site.chests.begin(), r.site.chests.end(), pos) == r.site.chests.end()) return loot;
     constexpr uint32_t kBlock = Block::kUnitsPerBlock;
@@ -412,21 +412,21 @@ std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terr
         return static_cast<uint32_t>(least + static_cast<int>(Noise::Random01(pos.x, pos.y + salt, pos.z, r.seed) * (most - least + 1))) * kBlock;
     };
     if (r.site.kind == SiteKind::Stronghold) {
-        loot = { { BlockType::STEEL_INGOT, roll(1, 3, 6) }, { BlockType::IRON_INGOT, roll(2, 6, 12) }, { BlockType::TNT, roll(3, 2, 4) },
-                 { BlockType::ARROW, roll(4, 8, 16) }, { BlockType::BREAD, roll(5, 3, 6) } };
+        loot = { { ItemType::STEEL_INGOT, roll(1, 3, 6) }, { ItemType::IRON_INGOT, roll(2, 6, 12) }, { BlockType::TNT, roll(3, 2, 4) },
+                 { ItemType::ARROW, roll(4, 8, 16) }, { ItemType::BREAD, roll(5, 3, 6) } };
     }
     else if (r.site.kind == SiteKind::Camp) {
-        loot = { { BlockType::BREAD, roll(1, 2, 5) }, { BlockType::COOKED_VENISON, roll(2, 1, 3) }, { BlockType::ARROW, roll(3, 4, 12) },
-                 { BlockType::IRON_INGOT, roll(4, 1, 3) }, { BlockType::HIDE, roll(5, 1, 3) } };
-        if (Noise::Random01(pos.x, pos.y + 6, pos.z, r.seed) < 0.4f) loot.push_back({ BlockType::STEEL_INGOT, kBlock });
+        loot = { { ItemType::BREAD, roll(1, 2, 5) }, { ItemType::COOKED_VENISON, roll(2, 1, 3) }, { ItemType::ARROW, roll(3, 4, 12) },
+                 { ItemType::IRON_INGOT, roll(4, 1, 3) }, { ItemType::HIDE, roll(5, 1, 3) } };
+        if (Noise::Random01(pos.x, pos.y + 6, pos.z, r.seed) < 0.4f) loot.push_back({ ItemType::STEEL_INGOT, kBlock });
     }
     else if (r.forge && pos == r.forgeChest) {
-        loot = { { BlockType::STEEL_INGOT, roll(1, 3, 6) }, { BlockType::GOLD_INGOT, roll(2, 2, 4) }, { BlockType::COKE, roll(3, 4, 8) } };
+        loot = { { ItemType::STEEL_INGOT, roll(1, 3, 6) }, { ItemType::GOLD_INGOT, roll(2, 2, 4) }, { ItemType::COKE, roll(3, 4, 8) } };
     }
     else {
-        loot = { { BlockType::COAL, roll(1, 4, 10) }, { BlockType::IRON_ORE, roll(2, 2, 6) }, { BlockType::COPPER_INGOT, roll(8, 1, 4) }, { BlockType::IRON_INGOT, roll(3, 1, 3) },
-                 { BlockType::TNT, roll(4, 1, 2) }, { BlockType::BREAD, roll(5, 1, 3) } };
-        if (Noise::Random01(pos.x, pos.y + 6, pos.z, r.seed) < 0.5f) loot.push_back({ BlockType::STEEL_INGOT, roll(7, 1, 2) });
+        loot = { { ItemType::COAL, roll(1, 4, 10) }, { BlockType::IRON_ORE, roll(2, 2, 6) }, { ItemType::COPPER_INGOT, roll(8, 1, 4) }, { ItemType::IRON_INGOT, roll(3, 1, 3) },
+                 { BlockType::TNT, roll(4, 1, 2) }, { ItemType::BREAD, roll(5, 1, 3) } };
+        if (Noise::Random01(pos.x, pos.y + 6, pos.z, r.seed) < 0.5f) loot.push_back({ ItemType::STEEL_INGOT, roll(7, 1, 2) });
     }
     return loot;
 }

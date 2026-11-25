@@ -67,6 +67,9 @@ struct EdgeData {
     }
 };
 
+// Things that can stand in the world. (What's only carried is an item: world/Items.h.)
+// Saved by number, in chunks and as items (format 17 on): new types go at the end,
+// before COUNT. Older saves numbered them with the items among them: world/Legacy.h.
 enum class BlockType : uint8_t {
     AIR,
     GRASS,
@@ -114,12 +117,6 @@ enum class BlockType : uint8_t {
     // you can see through (its faces don't hide what's behind it, and light passes).
     PLANKS,
     GLASS,
-    // Items: held and used, never placed in the world (see IsItemType). Food (see
-    // world/Hunger.h): venison from deer, raw or cooked.
-    RAW_VENISON,
-    COOKED_VENISON,
-    // Deer hide, for armour (see world/Armour.h).
-    HIDE,
     // A chest: right-click to open it and store things in it (kept by the server, see
     // Server::HandleChestMove).
     CHEST,
@@ -130,16 +127,10 @@ enum class BlockType : uint8_t {
     // coal; iron ore is smelted into iron ingots (see world/Crafting.h).
     COAL_ORE,
     IRON_ORE,
-    COAL,       // items
-    IRON_INGOT,
-    // Farming: seeds (from tall grass) planted on dirt or grass grow into a crop that
-    // ripens into wheat (the server grows them: Server::UpdateCrops); wheat bakes into
-    // bread.
-    SEEDS,      // item
+    // Farming: seeds (an item, from tall grass) planted on dirt or grass grow into a
+    // crop that ripens into wheat (the server grows them: Server::UpdateCrops).
     CROP,       // plant: young
     RIPE_WHEAT, // plant: ready to harvest
-    WHEAT,      // items
-    BREAD,
     // A ladder: a see-through frame of rungs you walk into and climb (passable like a
     // plant; drawn as a cube).
     LADDER,
@@ -147,9 +138,6 @@ enum class BlockType : uint8_t {
     // an open frame you walk through (passable, drawn like a ladder's shell).
     DOOR,
     DOOR_OPEN,
-    ARROW, // item: what a bow shoots
-    RAW_FISH,    // items: caught with a fishing rod
-    COOKED_FISH,
     // A campfire: a bright light (drawn as a sprite of logs and flames, passable),
     // smoking; right-click it with raw food in hand to cook it; standing in it burns.
     CAMPFIRE,
@@ -159,7 +147,6 @@ enum class BlockType : uint8_t {
     // TNT: right-click to light it; three seconds later it explodes (the server runs it).
     TNT,
     TNT_LIT, // (flashing, about to go)
-    BOAT,    // item: right-click water to get in
     // Saplings (plants, from leaves): planted on soil, they grow into a tree.
     SAPLING,
     PINE_SAPLING,
@@ -207,13 +194,10 @@ enum class BlockType : uint8_t {
     // and beside it: see Water.h). Found where lakes overflow, starting the streams that
     // run down from them. Breaking it gives stone, and the spring is gone.
     SPRING,
-    // An item: steel, which only a smelter makes (from iron ingots and coal, see
-    // world/Smelting.h), for the steel upgrade and drills.
-    STEEL_INGOT,
     // Automation (air machines; see world/Power.h). An extractor (facing, like a
     // piston) takes things out of the chest in front of it and sends them out of its
     // back along item pipes to other chests. A filter pipe is an item pipe that lets
-    // only one type through (kept in its `axis`: see Block::FilterType). A crafter makes
+    // only one kind through (kept in its `axis`: see Items::FilterOf). A crafter makes
     // a recipe (chosen, kept in its `axis`) from what's in a chest joined to it. A
     // harvester reaps ripe wheat around it, replants it, and puts the wheat in a chest.
     EXTRACTOR,
@@ -252,34 +236,24 @@ enum class BlockType : uint8_t {
     // and putting it in the post (see Server::UpdateMiningPosts).
     MINING_POST,
     // Multiblock structures (see world/Multiblocks.h): building blocks for them (steel
-    // frames, machine casings, fire bricks); the engineer's hammer that forms them (an
-    // item, held); and what a formed structure is made of: its core (drawn as the whole
+    // frames, machine casings, fire bricks; the engineer's hammer that forms them is an
+    // item); and what a formed structure is made of: its core (drawn as the whole
     // structure's model) and its other parts (solid, drawn as nothing).
     STEEL_FRAME,
     MACHINE_CASING,
     FIRE_BRICK,
-    HAMMER,
     MULTIBLOCK,
     MULTIBLOCK_PART,
     // A crusher (an air machine) grinds ore from the chests joined to it: an iron ore
     // into two crushed iron (each smelting to two ingots), stone into sand. Crushed
     // iron and coke (baked from coal in a coke oven: see world/Multiblocks.h) are items.
     CRUSHER,
-    CRUSHED_IRON,
-    COKE,
     // The Deep (world/TerrainGenerator.h): glowing fungus on the floors of its caverns,
     // magma (glowing, and it burns whoever stands on it), and gold ore in its rock,
     // which smelts to gold ingots (an item: what dwarf traders pay and take).
     GLOW_FUNGUS,
     MAGMA,
     GOLD_ORE,
-    GOLD_INGOT,
-    // A crossbow (an item, held): right-click shoots a bolt (an arrow) harder, faster
-    // and flatter than a bow, but more slowly (Server::HandleShoot).
-    CROSSBOW,
-    // A forge golem's core (an item): what it leaves when it falls. A steam turbine
-    // needs one (world/Fluids.h).
-    FORGE_CORE,
     // A machine sensor (world/Signals.h): sends while the machine, chest, tank or air
     // network it touches is as it's set to watch for.
     MACHINE_SENSOR,
@@ -293,7 +267,6 @@ enum class BlockType : uint8_t {
     // Copper: ore in the rock (commoner and shallower than iron), smelted (or worked by
     // hand) into copper ingots, the wiring every signal block needs (world/Signals.h).
     COPPER_ORE,
-    COPPER_INGOT,
     // A creative air tank: part of an air network that never runs out of air (it
     // keeps the whole network full). Creative only: there's no recipe, survival
     // players can't place one, and breaking one in survival gives nothing.
@@ -316,10 +289,6 @@ enum class BlockType : uint8_t {
     // Fire (world/Fire.h): spreads through what burns, burns whoever's in it, hard to put
     // out. Drawn by the game as flames. Creative only (it starts itself well enough).
     FIRE,
-    // A bucket (an item): scoops up a block of water (a water bucket) and pours it out
-    // again, putting out fires round where it lands.
-    BUCKET,
-    WATER_BUCKET,
     // An air launcher (world/Power.h): facing (the way you look placing it), part of an
     // air network; each time its channel comes on it throws whatever's in front of it
     // (players, creatures, items) hard that way, for kLaunchAir.
@@ -332,14 +301,11 @@ enum class BlockType : uint8_t {
     // round and below it out, while its channel is on (with none, whenever it
     // senses fire itself).
     SPRINKLER,
-    // Bitumen (an item): what's left of crude oil once a refinery has made fuel of it.
-    BITUMEN,
-    // Asphalt: bitumen and stone, a road: you walk faster on it (kAsphaltPace).
+    // Asphalt: bitumen (an item, from a refinery) and stone, a road: you walk faster on it (kAsphaltPace).
     ASPHALT,
     // Limestone: beds of it in the rock. Burnt (a smelter, or by hand with coal) it's
-    // cement (an item); cement, sand and stone make concrete, a tough building block.
+    // cement (an item); cement, gravel and sand make concrete, a tough building block.
     LIMESTONE,
-    CEMENT,
     CONCRETE,
     // Gravel: pockets of it under the topsoil; it goes into asphalt and concrete.
     GRAVEL,
@@ -399,48 +365,12 @@ inline bool IsFacingType(BlockType type) {
            type == BlockType::REFINERY || type == BlockType::FLUID_OUTLET;
 }
 
-// Things held in the inventory that aren't blocks: they can't be placed.
-inline bool IsItemType(BlockType type) {
-    return type == BlockType::RAW_VENISON || type == BlockType::COOKED_VENISON || type == BlockType::HIDE || type == BlockType::COAL ||
-           type == BlockType::IRON_INGOT || type == BlockType::SEEDS || type == BlockType::WHEAT || type == BlockType::BREAD ||
-           type == BlockType::ARROW || type == BlockType::RAW_FISH || type == BlockType::COOKED_FISH || type == BlockType::BOAT ||
-           type == BlockType::STEEL_INGOT || type == BlockType::HAMMER || type == BlockType::CRUSHED_IRON || type == BlockType::COKE || type == BlockType::BITUMEN || type == BlockType::CEMENT ||
-           type == BlockType::GOLD_INGOT || type == BlockType::CROSSBOW || type == BlockType::FORGE_CORE ||
-           type == BlockType::COPPER_INGOT || type == BlockType::BUCKET || type == BlockType::WATER_BUCKET;
-}
-
 inline bool IsPlantType(BlockType type) {
     return type == BlockType::TALL_GRASS || type == BlockType::FLOWER_RED || type == BlockType::FLOWER_YELLOW || type == BlockType::SPIKES ||
            type == BlockType::DEAD_BUSH || type == BlockType::PEBBLES || type == BlockType::CROP || type == BlockType::RIPE_WHEAT ||
            type == BlockType::LADDER || type == BlockType::DOOR_OPEN || type == BlockType::CAMPFIRE ||
            type == BlockType::SIGN || type == BlockType::SAPLING || type == BlockType::PINE_SAPLING || type == BlockType::LEVER ||
            type == BlockType::LEVER_ON || type == BlockType::GLOW_FUNGUS || type == BlockType::FIRE;
-}
-
-// The resource a block counts as in survival (see Block::ResourceUnits): its own type,
-// except pebbles, which are stone.
-// What breaking a block gives: pebbles are stone, coal ore is coal.
-inline BlockType ResourceTypeOf(BlockType type) {
-    switch (type) {
-    case BlockType::PEBBLES: return BlockType::STONE;
-    case BlockType::COAL_ORE: return BlockType::COAL;
-    case BlockType::CROP: return BlockType::SEEDS;       // (an unripe crop gives its seed back; planting costs one)
-    case BlockType::RIPE_WHEAT: return BlockType::WHEAT; // (and the server adds seeds)
-    case BlockType::DOOR_OPEN: return BlockType::DOOR;
-    case BlockType::TNT_LIT: return BlockType::TNT;
-    case BlockType::LEVER_ON: return BlockType::LEVER;
-    case BlockType::SIGNAL_LAMP_ON: return BlockType::SIGNAL_LAMP;
-    case BlockType::VALVE_OPEN: return BlockType::VALVE;
-    case BlockType::FLUID_VALVE_OPEN: return BlockType::FLUID_VALVE;
-    case BlockType::PISTON_HEAD: return BlockType::AIR; // (part of the piston: gives nothing)
-    case BlockType::SMELTER_LIT: return BlockType::SMELTER;
-    case BlockType::SPRING:
-    case BlockType::SINKHOLE:
-    case BlockType::OIL_SHALE: return BlockType::STONE;
-    case BlockType::MULTIBLOCK:
-    case BlockType::MULTIBLOCK_PART: return BlockType::AIR; // (taking it apart gives back what it was built of)
-    default: return type;
-    }
 }
 
 // Grass of any biome (plants grow on it).
@@ -563,14 +493,12 @@ struct Block {
     uint8_t shown = 0;
     // Which way an orientable block (a log) runs: kUpright, kAlongX or kAlongZ. Its
     // ends face that way and its grain runs along it. A facing block (a piston) keeps
-    // the Face it points to here (0..5) instead; a filter pipe the BlockType it lets
-    // through (0, air: anything); a crafter its recipe (index + 1; 0: none). Always 0
+    // the Face it points to here (0..5) instead; a filter pipe what it lets through
+    // (Items::FilterOf: 0, anything); a crafter its recipe (index + 1; 0: none). Always 0
     // for others.
     uint8_t axis = 0;
     static constexpr uint8_t kUpright = 0, kAlongX = 1, kAlongZ = 2;
     static constexpr uint8_t kMaxAxis = 5; // (a facing block's Face)
-    // A filter pipe's type (AIR: it lets anything through).
-    BlockType FilterType() const { return axis < static_cast<uint8_t>(BlockType::COUNT) ? static_cast<BlockType>(axis) : BlockType::AIR; }
     // A facing block's direction (a unit step).
     glm::ivec3 Facing() const {
         const int f = (axis & 7) % 6;
@@ -662,7 +590,6 @@ struct Block {
     static constexpr int kUnitsPerBlock = 64;
     static constexpr int kPebbleUnits = 16; // a quarter of a block of stone
     int ResourceUnits() const;
-    BlockType ResourceType() const { return ResourceTypeOf(type); }
 
     static Block Plant(BlockType t, uint8_t dropEighths) {
         Block b(t);

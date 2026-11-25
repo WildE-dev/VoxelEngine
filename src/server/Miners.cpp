@@ -13,7 +13,7 @@ double Now() {
 }
 
 // What miners are paid in: cooked food, the cheapest first.
-const BlockType kPay[] = { BlockType::BREAD, BlockType::COOKED_FISH, BlockType::COOKED_VENISON };
+const ItemType kPay[] = { ItemType::BREAD, ItemType::COOKED_FISH, ItemType::COOKED_VENISON };
 
 bool IsOre(BlockType t) { return t == BlockType::COAL_ORE || t == BlockType::IRON_ORE || t == BlockType::COPPER_ORE; }
 
@@ -39,7 +39,7 @@ void Server::UpdateMiningPosts() {
 
         Inventory& held = ChestAt(pos);
         uint32_t food = 0;
-        for (BlockType t : kPay) food += held.Units(t);
+        for (ItemType t : kPay) food += held.Units(t);
         const bool paid = food >= kMinerPay;
         if (!paid) {
             if (post.unpaidSince < 0.0) post.unpaidSince = now;
@@ -95,12 +95,12 @@ void Server::UpdateMiningPosts() {
             // (Room in the post for it, once they've been paid.)
             Inventory after = held;
             uint32_t owed = kMinerPay;
-            for (BlockType t : kPay) {
+            for (ItemType t : kPay) {
                 const uint32_t take = std::min(owed, after.Units(t));
                 after.TakeUnits(t, take);
                 owed -= take;
             }
-            if (after.AddUnits(ore.ResourceType(), static_cast<uint32_t>(ore.ResourceUnits())) != 0) {
+            if (after.AddUnits(Items::ResourceOf(ore.type), static_cast<uint32_t>(ore.ResourceUnits())) != 0) {
                 post.state = Power::DrillState::Full;
                 continue;
             }

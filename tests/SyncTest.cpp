@@ -42,7 +42,7 @@ struct TestClient {
     Client client{ world };
     glm::vec3 feet{ 0.0f };
     bool joined = false;
-    BlockType held = BlockType::AIR;
+    ItemRef held;
     void Update() {
         client.Poll();
         if (!joined && client.IsWelcomed()) joined = true, feet = client.GetSpawn();
@@ -120,7 +120,7 @@ int main() {
         fill({ 21, 1, 21 }, { 21, 1, 21 }, "smelter");
         fill({ 21, 2, 21 }, { 21, 2, 21 }, "air"); // its hollow top, left empty
         both(10.0, [&] { return a.BlockAt({ 21, 1, 21 }) == BlockType::SMELTER && a.BlockAt({ 21, 2, 21 }) == BlockType::AIR && b.BlockAt({ 21, 1, 19 }) == BlockType::CHEST; });
-        a.held = BlockType::HAMMER;
+        a.held = ItemType::HAMMER;
         wait(0.3);
         a.client.UseBed({ 22, 2, 22 });
         Check(both(5.0, [&] { return Has(a.client, "Formed a Blast furnace"); }), "the builder forms a blast furnace");
@@ -167,10 +167,10 @@ int main() {
         server.QueueConsoleCommand("tp Builder 28.5 0 14.5");
         both(10.0, [&] { return a.feet.x > 28.0f; });
         server.QueueConsoleCommand("give bread 2 Builder");
-        both(5.0, [&] { return a.client.GetResources(BlockType::BREAD) >= 2 * Crafting::kBlock; });
+        both(5.0, [&] { return a.client.GetResources(ItemType::BREAD) >= 2 * Crafting::kBlock; });
         a.client.OpenChest(post);
         both(5.0, [&] { return a.client.GetOpenChest() == post; });
-        a.client.MoveChestItems(BlockType::BREAD, 2, true);
+        a.client.MoveChestItems(ItemType::BREAD, 2, true);
         a.client.CloseChest();
         Check(both(15.0, [&] { return a.Find(CreatureType::DwarfMiner) && b.Find(CreatureType::DwarfMiner); }), "the miners a post hires turn up for both players");
         Check(both(20.0, [&] { const auto m = b.Find(CreatureType::DwarfMiner); return m && m->action == 2; }), "and the watcher sees them dig (working)");
@@ -190,7 +190,7 @@ int main() {
 
         server.QueueConsoleCommand("summon dwarf_trader 22.5 0 15.5");
         server.QueueConsoleCommand("give gold_ingot 3 Builder");
-        both(10.0, [&] { return a.Find(CreatureType::DwarfTrader) && a.client.GetResources(BlockType::GOLD_INGOT) >= 3 * Crafting::kBlock; });
+        both(10.0, [&] { return a.Find(CreatureType::DwarfTrader) && a.client.GetResources(ItemType::GOLD_INGOT) >= 3 * Crafting::kBlock; });
         a.client.Trade(a.Find(CreatureType::DwarfTrader)->id, static_cast<uint8_t>(Trades::Offers().size() - 1));
         Check(both(10.0, [&] { const auto g = b.Find(CreatureType::DwarfGuard); return g && g->tame; }), "a guard the builder hires wears the band for the watcher too");
         server.QueueConsoleCommand("tp Builder 40.5 0 17.5");

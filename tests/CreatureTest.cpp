@@ -51,7 +51,7 @@ struct TestClient {
     glm::vec3 feet{ 0.0f };
     bool joined = false;
     Tool heldTool = Tool::None; // what others see in their hand
-    BlockType heldBlock = BlockType::AIR;
+    ItemRef heldBlock;
     bool crouching = false;
     void Update() {
         client.Poll();
@@ -134,7 +134,7 @@ int main(int argc, char** argv) {
             wait(1.0);
             a.client.Attack(deer, Tool::Axe);
             wait(1.0);
-            Check(a.Find(CreatureType::Deer) != nullptr && a.client.GetResources(BlockType::RAW_VENISON) == 0, "a hit from 20 blocks away doesn't count");
+            Check(a.Find(CreatureType::Deer) != nullptr && a.client.GetResources(ItemType::RAW_VENISON) == 0, "a hit from 20 blocks away doesn't count");
             const auto* d = a.Find(CreatureType::Deer);
             server.QueueConsoleCommand("tp Hunter " + std::to_string(d->feet.x - 2.0f) + " 0 " + std::to_string(d->feet.z));
             both(20.0, [&] { return glm::distance(a.feet, glm::vec3(d->feet.x - 2.0f, 0.0f, d->feet.z)) < 0.5f; });
@@ -159,7 +159,7 @@ int main(int argc, char** argv) {
                 a.client.Attack(deer, Tool::Axe);
                 gone = both(1.0, [&] { return a.Find(CreatureType::Deer) == nullptr; });
             }
-            Check(gone && both(5.0, [&] { return a.client.GetResources(BlockType::RAW_VENISON) > 0; }) && !Has(a, "defeated"),
+            Check(gone && both(5.0, [&] { return a.client.GetResources(ItemType::RAW_VENISON) > 0; }) && !Has(a, "defeated"),
                   "a second axe hit (8 health, 5 a hit) finishes it (its venison given, with nothing said in the chat)");
 
             std::cout << "Dwarf warriors" << std::endl;
@@ -216,7 +216,7 @@ int main(int argc, char** argv) {
             a.client.Interact(wolf); // (empty-handed: nothing)
             both(1.0, [] { return false; });
             Check(!a.Find(CreatureType::Wolf)->tame, "a wolf isn't tamed by an empty hand");
-            a.heldBlock = BlockType::RAW_VENISON;
+            a.heldBlock = ItemType::RAW_VENISON;
             both(0.3, [] { return false; });
             a.client.Interact(wolf);
             Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && w->tame; }) && Has(a, "Wolf tamed"), "fed raw venison, it's tamed (and wears a collar)");
@@ -245,21 +245,21 @@ int main(int argc, char** argv) {
             Check(both(20.0, [&] { return a.client.GetTradePrices().size() == Trades::Offers().size() && a.client.GetTradePrices()[0] == 1; }),
                   "right-clicking the trader brings its prices");
             a.client.Trade(trader, 0); // a gold ingot for 2 iron ingots
-            Check(both(20.0, [&] { return a.client.GetResources(BlockType::IRON_INGOT) == 2 * Block::kUnitsPerBlock && a.client.GetResources(BlockType::GOLD_INGOT) == 0; }),
+            Check(both(20.0, [&] { return a.client.GetResources(ItemType::IRON_INGOT) == 2 * Block::kUnitsPerBlock && a.client.GetResources(ItemType::GOLD_INGOT) == 0; }),
                   "a gold ingot buys 2 iron ingots");
             Check(both(10.0, [&] { return Has(a, "Merchant: trade with a dwarf trader"); }), "and earns Merchant");
             Check(both(20.0, [&] { return !a.client.GetTradePrices().empty() && a.client.GetTradePrices()[0] == 2; }), "and that offer's price goes up (2 gold now)");
             a.client.Trade(trader, 0);
-            Check(both(20.0, [&] { return Has(a, "You need 2"); }) && a.client.GetResources(BlockType::IRON_INGOT) == 2 * Block::kUnitsPerBlock,
+            Check(both(20.0, [&] { return Has(a, "You need 2"); }) && a.client.GetResources(ItemType::IRON_INGOT) == 2 * Block::kUnitsPerBlock,
                   "a trade without the goods is refused");
             a.client.Trade(trader, 5); // 8 glass for a gold ingot
-            Check(both(20.0, [&] { return a.client.GetResources(BlockType::GOLD_INGOT) == Block::kUnitsPerBlock && a.client.GetResources(BlockType::GLASS) == 0; }),
+            Check(both(20.0, [&] { return a.client.GetResources(ItemType::GOLD_INGOT) == Block::kUnitsPerBlock && a.client.GetResources(BlockType::GLASS) == 0; }),
                   "they buy 8 glass for a gold ingot");
             Check(both(20.0, [&] { return a.client.GetTradePrices().size() > 5 && a.client.GetTradePrices()[5] == 10; }), "and want 10 glass the next time");
             server.QueueConsoleCommand("give gold_ingot 2 Hunter");
-            both(20.0, [&] { return a.client.GetResources(BlockType::GOLD_INGOT) == 3 * Block::kUnitsPerBlock; });
+            both(20.0, [&] { return a.client.GetResources(ItemType::GOLD_INGOT) == 3 * Block::kUnitsPerBlock; });
             a.client.Trade(trader, static_cast<uint8_t>(Trades::Offers().size() - 1)); // a guard, for 3 gold
-            Check(both(20.0, [&] { const auto* g = a.Find(CreatureType::DwarfGuard); return g && g->tame; }) && a.client.GetResources(BlockType::GOLD_INGOT) == 0,
+            Check(both(20.0, [&] { const auto* g = a.Find(CreatureType::DwarfGuard); return g && g->tame; }) && a.client.GetResources(ItemType::GOLD_INGOT) == 0,
                   "3 gold ingots hire a guard (wearing a band)");
             server.QueueConsoleCommand("tp Hunter 22.5 0 8.5");
             Check(both(20.0, [&] { const auto* g = a.Find(CreatureType::DwarfGuard); return g && glm::distance(glm::vec2(g->feet.x, g->feet.z), glm::vec2(22.5f, 8.5f)) < 5.0f; }),
@@ -330,7 +330,7 @@ int main(int argc, char** argv) {
                 a.client.Attack(golem, Tool::Sword);
                 return false;
             });
-            Check(golemDown && both(10.0, [&] { return Has(a, "forge core") && a.client.GetResources(BlockType::FORGE_CORE) == Block::kUnitsPerBlock; }),
+            Check(golemDown && both(10.0, [&] { return Has(a, "forge core") && a.client.GetResources(ItemType::FORGE_CORE) == Block::kUnitsPerBlock; }),
                   "it falls, leaving its forge core");
             server.QueueConsoleCommand("creatures clear");
             both(20.0, [&] { return a.client.GetCreatures().empty(); });
@@ -487,7 +487,7 @@ int main(int argc, char** argv) {
         server.QueueConsoleCommand("give arrow 3 Duelist");
         server.QueueConsoleCommand("tp Duelist 20.5 0 8.5");
         server.QueueConsoleCommand("tp Rival 30.5 0 8.5"); // ten blocks off
-        Check(both(20.0, [&] { return a.client.HasTool(Tool::Bow) && a.client.GetResources(BlockType::ARROW) == 3 * 64 && std::abs(b.feet.x - 30.5f) < 0.1f; }),
+        Check(both(20.0, [&] { return a.client.HasTool(Tool::Bow) && a.client.GetResources(ItemType::ARROW) == 3 * 64 && std::abs(b.feet.x - 30.5f) < 0.1f; }),
               "the duelist has a bow and three arrows; the rival stands ten blocks off");
         both(3.5, [] { return false; }); // (no grace left; healed or not)
         const int beforeArrow = b.client.GetHealth();
@@ -496,24 +496,24 @@ int main(int argc, char** argv) {
         a.client.Shoot(target - eye);
         Check(both(5.0, [&] { return b.client.GetHealth() < beforeArrow; }) && b.client.GetHealth() == beforeArrow - 3,
               "an arrow across ten blocks hits (2.5 hearts, armour takes it to 1.5)");
-        Check(a.client.GetResources(BlockType::ARROW) == 2 * 64, "and uses an arrow");
+        Check(a.client.GetResources(ItemType::ARROW) == 2 * 64, "and uses an arrow");
         a.client.Shoot(glm::vec3(1.0f, -1.0f, 0.0f)); // (too soon: the bow isn't ready)
         both(1.0, [] { return false; });
-        Check(a.client.GetResources(BlockType::ARROW) == 2 * 64, "a second shot straight after doesn't go");
+        Check(a.client.GetResources(ItemType::ARROW) == 2 * 64, "a second shot straight after doesn't go");
         a.client.Shoot(glm::vec3(1.0f, -1.0f, 0.0f)); // at the ground ahead
         bool stuck = false;
         both(5.0, [&] {
             for (const auto& arrow : a.client.GetArrows()) stuck |= glm::length(arrow.velocity) < 1e-3f;
             return stuck;
         });
-        Check(stuck && a.client.GetResources(BlockType::ARROW) == 64, "one shot at the ground sticks there");
+        Check(stuck && a.client.GetResources(ItemType::ARROW) == 64, "one shot at the ground sticks there");
 
         // A crossbow: a bolt hits harder. Then a shield (blocking, crouched) and a steel plate.
         server.QueueConsoleCommand("give crossbow 1 Duelist");
         server.QueueConsoleCommand("give arrow 4 Duelist");
         a.heldTool = Tool::None;
-        a.heldBlock = BlockType::CROSSBOW;
-        both(20.0, [&] { return a.client.GetResources(BlockType::CROSSBOW) > 0 && a.client.GetResources(BlockType::ARROW) >= 4 * 64; });
+        a.heldBlock = ItemType::CROSSBOW;
+        both(20.0, [&] { return a.client.GetResources(ItemType::CROSSBOW) > 0 && a.client.GetResources(ItemType::ARROW) >= 4 * 64; });
         auto bolt = [&] {
             both(1.5, [] { return false; });
             const int before = b.client.GetHealth();
@@ -526,7 +526,7 @@ int main(int argc, char** argv) {
         Check(boltHit == 5, "a crossbow bolt hits harder: 4.5 hearts, armour takes it to 2.5 (" + std::to_string(boltHit) + ")");
         server.QueueConsoleCommand("give planks 2 Rival");
         server.QueueConsoleCommand("give iron_ingot 1 Rival");
-        both(20.0, [&] { return b.client.GetResources(BlockType::IRON_INGOT) >= 64; });
+        both(20.0, [&] { return b.client.GetResources(ItemType::IRON_INGOT) >= 64; });
         b.client.Craft(Crafting::Find("shield"), 1);
         Check(both(20.0, [&] { return (rivalAsSeen().armour & Armour::Bit(ArmourPiece::Shield)) != 0; }), "the rival makes a shield (others see it)");
         b.crouching = true;
@@ -535,7 +535,7 @@ int main(int argc, char** argv) {
         b.crouching = false;
         server.QueueConsoleCommand("give steel_ingot 4 Rival");
         server.QueueConsoleCommand("give hide 2 Rival");
-        both(20.0, [&] { return b.client.GetResources(BlockType::STEEL_INGOT) >= 4 * 64; });
+        both(20.0, [&] { return b.client.GetResources(ItemType::STEEL_INGOT) >= 4 * 64; });
         b.client.Craft(Crafting::Find("plate"), 1);
         Check(both(20.0, [&] { return (rivalAsSeen().armour & Armour::Bit(ArmourPiece::Plate)) != 0; }), "and a steel plate");
         const int plated = bolt();

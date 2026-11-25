@@ -51,7 +51,7 @@ public:
     uint32_t Drop(ItemId item, uint32_t count, uint32_t units, const glm::vec3& position, const glm::vec3& velocity, float pickupDelay, uint16_t owner = 0);
     // What a broken block leaves: `units` of a type, as stacks (and an offcut), popping
     // out of the middle of the cell, flying to `owner` when they're near.
-    void DropUnits(BlockType type, uint32_t units, const glm::ivec3& cell, uint16_t owner = 0);
+    void DropUnits(ItemRef item, uint32_t units, const glm::ivec3& cell, uint16_t owner = 0);
     // Items (whole), popping out of a cell (a chest's contents).
     void DropItems(ItemId item, uint32_t count, const glm::ivec3& cell, uint16_t owner = 0);
     // A little upward pop in some direction, for things coming out of a block.

@@ -20,20 +20,21 @@ namespace {
 
 uint32_t Units(double blocks) { return static_cast<uint32_t>(std::lround(blocks * Block::kUnitsPerBlock)); }
 
-bool TypeFrom(const std::string& id, BlockType& out, const std::string& where, std::string& error) {
-    out = BlockFromId(id);
-    if (out == BlockType::COUNT || out == BlockType::AIR) {
+// A block or item type by its id ("stone", "iron_ingot").
+bool TypeFrom(const std::string& id, ItemId& out, const std::string& where, std::string& error) {
+    out = Items::FromId(id);
+    if (!Items::IsStackable(out)) {
         error = where + ": no block or item called '" + id + "'";
         return false;
     }
     return true;
 }
 
-// "takes" or "makes": block id -> amount (in blocks).
+// "takes" or "makes": block or item id -> amount (in whole ones).
 bool Amounts(const Json::Value* v, std::vector<Ingredient>& out, const std::string& where, std::string& error) {
     if (!v || !v->IsObject()) return true;
     for (const auto& [id, amount] : v->object) {
-        BlockType t;
+        ItemId t;
         if (!TypeFrom(id, t, where, error)) return false;
         if (!amount.IsNumber() || Units(amount.number) == 0) {
             error = where + ": '" + id + "' needs an amount (in blocks, more than none)";
@@ -46,7 +47,7 @@ bool Amounts(const Json::Value* v, std::vector<Ingredient>& out, const std::stri
 
 Json::Value AmountsValue(const std::vector<Ingredient>& in) {
     Json::Value o = Json::Object();
-    for (const auto& i : in) Json::Member(o, BlockId(i.type)) = Json::Number(static_cast<double>(i.units) / Block::kUnitsPerBlock);
+    for (const auto& i : in) Json::Member(o, Items::Id(i.item)) = Json::Number(static_cast<double>(i.units) / Block::kUnitsPerBlock);
     return o;
 }
 
@@ -85,7 +86,7 @@ bool Load(const std::string& path, std::string& error) {
             error = where + ": it makes one thing";
             return false;
         }
-        if (!makes.empty()) r.output = makes[0].type, r.outputUnits = makes[0].units;
+        if (!makes.empty()) r.output = makes[0].item, r.outputUnits = makes[0].units;
         if (const std::string tool = v.StringOr("tool", ""); !tool.empty()) {
             r.tool = Mining::ToolFromId(tool);
             if (r.tool == Tool::None) {
@@ -102,7 +103,7 @@ bool Load(const std::string& path, std::string& error) {
         }
         const std::string upgrade = v.StringOr("upgrade", "");
         r.ironUpgrade = upgrade == "iron", r.steelUpgrade = upgrade == "steel";
-        if (r.inputs.empty() || (makes.empty() && !r.MakesItem())) {
+        if (r.inputs.empty() || (makes.empty() && !r.MakesGear())) {
             error = where + ": it needs \"takes\" and something it makes";
             return false;
         }
@@ -119,7 +120,7 @@ bool WriteDefaults(const std::string& path) {
         Json::Member(v, "id") = Json::String(r.id);
         Json::Member(v, "name") = Json::String(r.name);
         Json::Member(v, "takes") = AmountsValue(r.inputs);
-        if (r.output != BlockType::AIR) Json::Member(v, "makes") = AmountsValue({ { r.output, r.outputUnits } });
+        if (r.output != Items::kNone) Json::Member(v, "makes") = AmountsValue({ { r.output, r.outputUnits } });
         if (r.tool != Tool::None) Json::Member(v, "tool") = Json::String(Mining::ToolId(r.tool));
         if (r.armour != ArmourPiece::Count) Json::Member(v, "armour") = Json::String(Armour::Id(r.armour));
         if (r.ironUpgrade || r.steelUpgrade) Json::Member(v, "upgrade") = Json::String(r.ironUpgrade ? "iron" : "steel");
@@ -155,8 +156,8 @@ bool Load(const std::string& path, std::string& error) {
             error = where + ": it takes one or two things and makes one";
             return false;
         }
-        SmeltRecipe r{ takes[0].type, takes[0].units, BlockType::AIR, 0, makes[0].type, makes[0].units };
-        if (takes.size() == 2) r.extra = takes[1].type, r.extraUnits = takes[1].units;
+        SmeltRecipe r{ takes[0].item, takes[0].units, Items::kNone, 0, makes[0].item, makes[0].units };
+        if (takes.size() == 2) r.extra = takes[1].item, r.extraUnits = takes[1].units;
         table.push_back(r);
     }
     Current().store(new std::vector<SmeltRecipe>(std::move(table)), std::memory_order_release);
@@ -167,7 +168,7 @@ bool WriteDefaults(const std::string& path) {
     Json::Value list = Json::Array();
     for (const auto& r : Defaults()) {
         std::vector<Ingredient> takes{ { r.input, r.inputUnits } };
-        if (r.extra != BlockType::AIR) takes.push_back({ r.extra, r.extraUnits });
+        if (r.extra != Items::kNone) takes.push_back({ r.extra, r.extraUnits });
         Json::Value v = Json::Object();
         Json::Member(v, "takes") = AmountsValue(takes);
         Json::Member(v, "makes") = AmountsValue({ { r.output, r.outputUnits } });

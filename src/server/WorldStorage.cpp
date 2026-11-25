@@ -10,6 +10,7 @@
 
 #include "net/Protocol.h"
 #include "world/Crafting.h"
+#include "world/Legacy.h"
 
 namespace fs = std::filesystem;
 
@@ -135,7 +136,7 @@ bool WorldStorage::ReadWorldFile() {
         p.mode = defaultMode;
         if (version >= 4) {
             // (Before format 14: units by type and a tools mask, converted below.)
-            std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> oldUnits{};
+            std::array<uint32_t, 256> oldUnits{};
             uint16_t oldTools = 0;
             bool hasInventory = false;
             uint32_t kinds = 0;
@@ -143,7 +144,7 @@ bool WorldStorage::ReadWorldFile() {
             for (uint32_t k = 0; ok && k < kinds; k++) {
                 uint8_t type;
                 uint32_t units;
-                ok = r.U8(type) && type < oldUnits.size() && r.VarU32(units);
+                ok = r.U8(type) && r.VarU32(units);
                 if (ok) oldUnits[type] = units;
             }
             uint8_t lowTools = 0;
@@ -164,7 +165,7 @@ bool WorldStorage::ReadWorldFile() {
                 else if (tag == kFieldMoreTools && length == 1) ok = r.U8(v), oldTools = static_cast<uint16_t>((oldTools & 0xFF) | (v << 8));
                 else if (tag == kFieldInventory) {
                     const size_t before = r.Remaining();
-                    ok = net::ReadInventory(r, p.inventory) && before - r.Remaining() == length;
+                    ok = net::ReadInventory(r, p.inventory, 512, version < 17) && before - r.Remaining() == length;
                     hasInventory = true;
                 }
                 else if (tag == kFieldBed && length == 12) {
@@ -190,14 +191,14 @@ bool WorldStorage::ReadWorldFile() {
         glm::ivec3 pos;
         Inventory held(Inventory::kChestSlots);
         bool ok = r.IVec3(pos);
-        if (ok && version >= 14) ok = net::ReadInventory(r, held);
+        if (ok && version >= 14) ok = net::ReadInventory(r, held, 512, version < 17);
         else if (ok) {
-            std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> units{};
+            std::array<uint32_t, 256> units{};
             uint32_t kinds = 0;
             ok = r.VarU32(kinds) && kinds <= units.size();
             for (uint32_t k = 0; ok && k < kinds; k++) {
                 uint8_t type;
-                ok = r.U8(type) && type < units.size() && r.VarU32(units[type]);
+                ok = r.U8(type) && r.VarU32(units[type]);
             }
             if (ok) held = FromOld(units, 0, Inventory::kChestSlots);
         }
@@ -272,6 +273,7 @@ bool WorldStorage::ReadWorldFile() {
             std::cerr << "[storage] " << path.string() << " is truncated (items)" << std::endl;
             return false;
         }
+        if (version < 17) s.item = Legacy::FromV16(s.item);
         if (Items::Valid(s.item) && std::isfinite(s.position.x) && std::isfinite(s.position.y) && std::isfinite(s.position.z) && std::isfinite(s.age))
             items.push_back(s);
     }
@@ -315,13 +317,14 @@ bool WorldStorage::ReadRegion(const fs::path& path) {
         for (uint32_t b = 0; b < length; b++) r.U8(chunk.data[b]);
 
         net::ByteReader planes(chunk.data.data(), chunk.data.size());
-        if (!net::DecodeBlockPlanes(planes, *blocks, version >= 5) || !planes.AtEnd()) {
+        if (!net::DecodeBlockPlanes(planes, *blocks, version >= 5, version < 17) || !planes.AtEnd()) {
             std::cerr << "[storage] chunk " << coords.x << "," << coords.y << "," << coords.z << " in " << path.string()
                       << " is corrupt" << std::endl;
             return false;
         }
-        if (version < 5) {
-            // Saved before blocks had an axis: kept in the current format from now on.
+        if (version < 17) {
+            // Saved before blocks had an axis, or before items had their own types: kept
+            // in the current format from now on.
             net::ByteWriter current;
             net::EncodeBlockPlanes(current, *blocks);
             chunk.data = std::move(current.data);
@@ -417,13 +420,13 @@ void WorldStorage::SetTimeOfDay(float t) {
     playersDirty = true; // world.dat needs writing
 }
 
-Inventory WorldStorage::FromOld(const std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)>& units, uint16_t tools, size_t slots) {
+Inventory WorldStorage::FromOld(const std::array<uint32_t, 256>& units, uint16_t tools, size_t slots) {
     Inventory inv(slots);
     const int tier = (tools & Crafting::kOldSteelBit) ? 2 : (tools & Crafting::kOldIronBit) ? 1 : 0;
     for (int t = 1; t < static_cast<int>(Tool::Count); t++)
         if (tools & Crafting::OldToolBit(static_cast<Tool>(t))) inv.Add(Items::OfTool(static_cast<Tool>(t), tier), 1, true);
     for (size_t t = 1; t < units.size(); t++)
-        if (units[t] > 0) inv.AddUnits(static_cast<BlockType>(t), units[t], true);
+        if (units[t] > 0) inv.AddUnits(Legacy::ItemFromV16Block(static_cast<uint8_t>(t)), units[t], true);
     return inv;
 }
 

@@ -7,7 +7,7 @@
 // and handles eating (Server::HandleEat). Creative players don't get hungry.
 #include <cstdint>
 
-#include "world/Block.h"
+#include "world/Inventory.h"
 
 namespace Hunger {
 
@@ -23,17 +23,17 @@ constexpr double kStarveInterval = 4.0;
 constexpr int kStarveFloor = 2;
 
 // How much a whole item of food gives (0: not food).
-inline int FoodValue(BlockType type) {
-    switch (type) {
-    case BlockType::RAW_VENISON: return 3;
-    case BlockType::COOKED_VENISON: return 8;
-    case BlockType::BREAD: return 6;
-    case BlockType::RAW_FISH: return 2;
-    case BlockType::COOKED_FISH: return 6;
+inline int FoodValue(ItemId item) {
+    switch (Items::ItemOf(item)) {
+    case ItemType::RAW_VENISON: return 3;
+    case ItemType::COOKED_VENISON: return 8;
+    case ItemType::BREAD: return 6;
+    case ItemType::RAW_FISH: return 2;
+    case ItemType::COOKED_FISH: return 6;
     default: return 0;
     }
 }
-inline bool IsFood(BlockType type) { return FoodValue(type) > 0; }
+inline bool IsFood(ItemId item) { return FoodValue(item) > 0; }
 
 // Food left after `exhaustion` more points of drain, carried in `exhaustion` as the
 // fraction not yet taken.

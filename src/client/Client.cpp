@@ -207,7 +207,7 @@ void Client::HandleMessage(const std::vector<uint8_t>& data) {
             if (p.id == playerId) continue;
             auto& samples = next[p.id];
             if (auto it = remote.find(p.id); it != remote.end()) samples = std::move(it->second);
-            samples.push_back({ now, { p.id, p.feet, p.yaw, p.pitch, p.flags, p.heldTool, p.heldBlock, p.armour, {} } });
+            samples.push_back({ now, { p.id, p.feet, p.yaw, p.pitch, p.flags, p.heldTool, p.heldItem, p.armour, {} } });
             while (samples.size() > 2 && samples[1].time < now - 1.0) samples.pop_front();
         }
         remote = std::move(next); // players missing from the snapshot have left
@@ -336,7 +336,7 @@ std::optional<glm::vec3> Client::TakeCorrection() {
 }
 
 void Client::SendPlayerState(const glm::vec3& feet, const glm::vec3& velocity, float yaw, float pitch, uint8_t flags, Tool heldTool,
-                             BlockType heldBlock) {
+                             ItemId heldItem) {
     const double now = Now();
     if (!welcomed || now - lastStateSent < 1.0 / kStateRate) return;
     lastStateSent = now;
@@ -349,7 +349,7 @@ void Client::SendPlayerState(const glm::vec3& feet, const glm::vec3& velocity, f
     m.pitch = pitch;
     m.flags = flags;
     m.heldTool = heldTool;
-    m.heldBlock = heldBlock;
+    m.heldItem = heldItem;
     net.Send(net::kChannelUnreliable, net::Encode(m));
 }
 
@@ -422,9 +422,9 @@ bool Client::CanAfford(BlockType type, int heightEighths) const {
 
 bool Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths, int faceAxis) {
     // The server's rules (Server::HandlePlace), so what's refused here would be there too:
-    // nothing (an empty hand), items, creative-only blocks in survival, what we can't
-    // afford, no room.
-    if (!welcomed || type == BlockType::AIR || type >= BlockType::COUNT || IsItemType(type) || !CanAfford(type, heightEighths)) return false;
+    // nothing (an empty hand), creative-only blocks in survival, what we can't afford, no
+    // room.
+    if (!welcomed || type == BlockType::AIR || type >= BlockType::COUNT || !CanAfford(type, heightEighths)) return false;
     // Shown at once (predicted) only where the server will place it too, not over another
     // block, or it would show for a moment and then be taken back. Where this copy of the
     // world doesn't have the cell yet, it's left to the server (and shown when it answers).
@@ -448,7 +448,7 @@ bool Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths
     if (predict) {
         world.SetBlock(pos.x, pos.y, pos.z, placed);
         if (type == BlockType::DOOR) world.SetBlock(pos.x, pos.y + 1, pos.z, placed); // its upper half, as the server makes it
-        if (!IsCreative()) inventory.TakeUnits(ResourceTypeOf(type), static_cast<uint32_t>(placed.ResourceUnits()));
+        if (!IsCreative()) inventory.TakeUnits(Items::ResourceOf(type), static_cast<uint32_t>(placed.ResourceUnits()));
     }
     net.Send(net::kChannelReliable, net::Encode(net::EditPlace{ pos, type, static_cast<uint8_t>(heightEighths), static_cast<uint8_t>(faceAxis) }));
     return true;
@@ -460,7 +460,7 @@ void Client::Chisel(const glm::ivec3& pos, int edge, bool raise, int dir, int st
     if (!world.GetBlock(pos.x, pos.y, pos.z, block) || !block.CanChisel()) return;
     const Block after = block.ChiselledFrom(dir, edge, raise ? step : -step);
     if (!IsCreative()) {
-        const BlockType type = block.ResourceType();
+        const ItemId type = Items::ResourceOf(block.type);
         const int change = after.ResourceUnits() - block.ResourceUnits();
         if (change > 0 && !inventory.TakeUnits(type, static_cast<uint32_t>(change))) return; // can't afford to build it up
         if (change < 0 && !inventory.FitsUnits(type, static_cast<uint32_t>(-change))) return; // (no room: the server refuses it)
@@ -615,7 +615,7 @@ void Client::MoveChestItems(ItemId item, uint32_t count, bool intoChest) {
         net.Send(net::kChannelReliable, net::Encode(net::ChestMove{ *openChest, item, count, static_cast<uint8_t>(intoChest ? 1 : 0) }));
 }
 
-void Client::Eat(BlockType item) {
+void Client::Eat(ItemId item) {
     if (!welcomed) return;
     net.Send(net::kChannelReliable, net::Encode(net::Eat{ item }));
 }

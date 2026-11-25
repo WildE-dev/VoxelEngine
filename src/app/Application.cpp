@@ -42,6 +42,7 @@
 #include "world/Achievements.h"
 #include "world/Breathing.h"
 #include "world/Hunger.h"
+#include "world/Legacy.h"
 #include "world/BlockData.h"
 #include "world/Multiblocks.h"
 #include "world/Power.h"
@@ -64,12 +65,13 @@ constexpr float kCreativeReach = 50.0f, kSurvivalReach = 6.0f;
 constexpr float kLaserRange = 100.0f;
 constexpr int kLaserRadius = 4;
 // Everything the inventory (Tab) offers, in the order it shows them.
-constexpr BlockType kInventoryBlocks[] = {
+// Every block and item the creative palette offers.
+const ItemRef kInventoryItems[] = {
     BlockType::DIRT, BlockType::GRASS, BlockType::DRY_GRASS, BlockType::LUSH_GRASS, BlockType::SNOWY_GRASS, BlockType::STONE, BlockType::SAND,
     BlockType::SNOW, BlockType::ICE, BlockType::LOG, BlockType::LEAVES, BlockType::PINE_LEAVES, BlockType::CACTUS, BlockType::LAMP,
-    BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::LAVA, BlockType::OBSIDIAN, BlockType::HAY_BALE, BlockType::FIRE, BlockType::BUCKET, BlockType::WATER_BUCKET, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP,
+    BlockType::STONE_BRICK, BlockType::MOSSY_BRICK, BlockType::CRUMBLING_BRICK, BlockType::WATER, BlockType::LAVA, BlockType::OBSIDIAN, BlockType::HAY_BALE, BlockType::FIRE, ItemType::BUCKET, ItemType::WATER_BUCKET, BlockType::SPRING, BlockType::SINKHOLE, BlockType::DRAIN, BlockType::PUMP,
     BlockType::WATER_WHEEL, BlockType::SHAFT, BlockType::COMPRESSOR, BlockType::AIR_PIPE, BlockType::AIR_TANK, BlockType::CREATIVE_AIR_TANK, BlockType::VALVE, BlockType::FLUID_VALVE, BlockType::PRESSURE_GAUGE, BlockType::FLUID_PIPE, BlockType::OBSIDIAN_PIPE, BlockType::FLUID_TANK, BlockType::FLUID_OUTLET, BlockType::OIL_DERRICK, BlockType::REFINERY, BlockType::ENGINE, BlockType::BOILER, BlockType::TURBINE, BlockType::AIR_DIFFUSER, BlockType::DRILL, BlockType::SMELTER, BlockType::STEEL_FRAME, BlockType::MACHINE_CASING, BlockType::FIRE_BRICK, BlockType::ITEM_PIPE, BlockType::FILTER_PIPE, BlockType::EXTRACTOR, BlockType::CRAFTER, BlockType::HARVESTER, BlockType::PISTON, BlockType::LAUNCHER, BlockType::LEVER, BlockType::LOGIC_GATE, BlockType::SIGNAL_LAMP, BlockType::WATER_SENSOR, BlockType::PRESSURE_SENSOR, BlockType::DAYLIGHT_SENSOR, BlockType::PLAYER_SENSOR, BlockType::HEAT_SENSOR, BlockType::SPRINKLER, BlockType::SLUICE, BlockType::PRESSURE_PLATE, BlockType::SPIKES, BlockType::TALL_GRASS, BlockType::FLOWER_RED, BlockType::FLOWER_YELLOW,
-    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::ASPHALT, BlockType::CONCRETE, BlockType::LIMESTONE, BlockType::GRAVEL, BlockType::GLASS, BlockType::CHEST, BlockType::MINING_POST, BlockType::CRUSHER, BlockType::GLOW_FUNGUS, BlockType::MAGMA, BlockType::GOLD_ORE, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::COPPER_ORE, BlockType::OIL_SHALE, BlockType::TAR, BlockType::RAW_VENISON, BlockType::COOKED_VENISON, BlockType::HIDE, BlockType::COAL, BlockType::BITUMEN, BlockType::CEMENT, BlockType::IRON_INGOT, BlockType::COPPER_INGOT, BlockType::STEEL_INGOT, BlockType::HAMMER, BlockType::SEEDS, BlockType::WHEAT, BlockType::BREAD, BlockType::ARROW, BlockType::RAW_FISH, BlockType::COOKED_FISH, BlockType::BOAT,
+    BlockType::DEAD_BUSH, BlockType::PEBBLES, BlockType::PLANKS, BlockType::ASPHALT, BlockType::CONCRETE, BlockType::LIMESTONE, BlockType::GRAVEL, BlockType::GLASS, BlockType::CHEST, BlockType::MINING_POST, BlockType::CRUSHER, BlockType::GLOW_FUNGUS, BlockType::MAGMA, BlockType::GOLD_ORE, BlockType::BED, BlockType::LADDER, BlockType::DOOR, BlockType::CAMPFIRE, BlockType::SIGN, BlockType::TNT, BlockType::SAPLING, BlockType::PINE_SAPLING, BlockType::COAL_ORE, BlockType::IRON_ORE, BlockType::COPPER_ORE, BlockType::OIL_SHALE, BlockType::TAR, ItemType::RAW_VENISON, ItemType::COOKED_VENISON, ItemType::HIDE, ItemType::COAL, ItemType::BITUMEN, ItemType::CEMENT, ItemType::IRON_INGOT, ItemType::COPPER_INGOT, ItemType::STEEL_INGOT, ItemType::HAMMER, ItemType::SEEDS, ItemType::WHEAT, ItemType::BREAD, ItemType::ARROW, ItemType::RAW_FISH, ItemType::COOKED_FISH, ItemType::BOAT,
 };
 // Where the chosen hotbar is kept between games (working directory).
 constexpr const char* kHotbarFile = "hotbar.txt";
@@ -132,8 +134,10 @@ const char* DefaultBlockName(BlockType type);
 // What the game calls a block: Resources/Data/blocks.json's name, or its own.
 const char* BlockName(BlockType type) { return BlockData::NameOr(type, DefaultBlockName(type)); }
 
-// An item's icon (atlas tile) and name: a block's, a tool's, a piece of armour's.
+// An item's icon (atlas tile) and name: a block's, an item type's, a tool's, a piece of
+// armour's.
 int ItemTile(const TextureAtlas& atlas, ItemId item) {
+    if (Items::IsItem(item)) return atlas.GetIndex(ItemData::TextureOf(Items::ItemOf(item)));
     if (Items::IsTool(item)) return ToolTile(atlas, Items::ToolOf(item));
     if (Items::IsArmour(item)) return atlas.GetIndex(Armour::Texture(Items::ArmourOf(item)));
     return IconTile(Items::BlockOf(item));
@@ -186,8 +190,6 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::OBSIDIAN: return "Obsidian";
     case BlockType::OBSIDIAN_PIPE: return "Obsidian pipe";
     case BlockType::FIRE: return "Fire";
-    case BlockType::BUCKET: return "Bucket";
-    case BlockType::WATER_BUCKET: return "Water bucket";
     case BlockType::LAUNCHER: return "Air launcher";
     case BlockType::HAY_BALE: return "Hay bale";
     case BlockType::HEAT_SENSOR: return "Heat sensor";
@@ -218,7 +220,6 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::TURBINE: return "Steam turbine";
     case BlockType::AIR_DIFFUSER: return "Air diffuser";
     case BlockType::COPPER_ORE: return "Copper ore";
-    case BlockType::COPPER_INGOT: return "Copper ingot";
     case BlockType::PRESSURE_SENSOR: return "Pressure sensor";
     case BlockType::DAYLIGHT_SENSOR: return "Daylight sensor";
     case BlockType::PLAYER_SENSOR: return "Player sensor";
@@ -241,26 +242,17 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::STEEL_FRAME: return "Steel frame";
     case BlockType::MACHINE_CASING: return "Machine casing";
     case BlockType::FIRE_BRICK: return "Fire bricks";
-    case BlockType::HAMMER: return "Engineer's hammer";
     case BlockType::MULTIBLOCK: return "Structure";
     case BlockType::MULTIBLOCK_PART: return "Structure";
-    case BlockType::STEEL_INGOT: return "Steel ingot";
     case BlockType::EXTRACTOR: return "Extractor";
     case BlockType::CRUSHER: return "Crusher";
-    case BlockType::CRUSHED_IRON: return "Crushed iron";
-    case BlockType::COKE: return "Coke";
-    case BlockType::BITUMEN: return "Bitumen";
     case BlockType::ASPHALT: return "Asphalt";
     case BlockType::LIMESTONE: return "Limestone";
-    case BlockType::CEMENT: return "Cement";
     case BlockType::CONCRETE: return "Concrete";
     case BlockType::GRAVEL: return "Gravel";
     case BlockType::GLOW_FUNGUS: return "Glow fungus";
     case BlockType::MAGMA: return "Magma";
     case BlockType::GOLD_ORE: return "Gold ore";
-    case BlockType::GOLD_INGOT: return "Gold ingot";
-    case BlockType::CROSSBOW: return "Crossbow";
-    case BlockType::FORGE_CORE: return "Forge core";
     case BlockType::FILTER_PIPE: return "Filter pipe";
     case BlockType::CRAFTER: return "Crafter";
     case BlockType::HARVESTER: return "Harvester";
@@ -281,33 +273,21 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::PEBBLES: return "Pebbles";
     case BlockType::PLANKS: return "Planks";
     case BlockType::GLASS: return "Glass";
-    case BlockType::RAW_VENISON: return "Raw venison";
-    case BlockType::COOKED_VENISON: return "Cooked venison";
-    case BlockType::HIDE: return "Hide";
     case BlockType::CHEST: return "Chest";
     case BlockType::BED: return "Bed";
     case BlockType::COAL_ORE: return "Coal ore";
     case BlockType::IRON_ORE: return "Iron ore";
-    case BlockType::COAL: return "Coal";
-    case BlockType::IRON_INGOT: return "Iron ingot";
-    case BlockType::SEEDS: return "Seeds";
     case BlockType::CROP: return "Young crop";
     case BlockType::RIPE_WHEAT: return "Ripe wheat";
-    case BlockType::WHEAT: return "Wheat";
-    case BlockType::BREAD: return "Bread";
     case BlockType::LADDER: return "Ladder";
     case BlockType::DOOR: return "Door";
     case BlockType::DOOR_OPEN: return "Open door";
-    case BlockType::ARROW: return "Arrow";
     case BlockType::CAMPFIRE: return "Campfire";
     case BlockType::SIGN: return "Sign";
     case BlockType::TNT: return "TNT";
     case BlockType::TNT_LIT: return "Lit TNT";
-    case BlockType::BOAT: return "Boat";
     case BlockType::SAPLING: return "Sapling";
     case BlockType::PINE_SAPLING: return "Pine sapling";
-    case BlockType::RAW_FISH: return "Raw fish";
-    case BlockType::COOKED_FISH: return "Cooked fish";
     default:               return "Air";
     }
 }
@@ -647,9 +627,10 @@ bool DumpBlockData(const std::string& path) {
 }
 
 void Application::LoadData() {
-    // The editable data files (Resources/Data): blocks' details and creatures' models.
+    // The editable data files (Resources/Data): blocks' and items' details and creatures' models.
     std::string error;
     if (!BlockData::Load(BlockData::kPath, error)) std::cerr << "[data] " << error << " (using the game's own block details)" << std::endl;
+    if (!ItemData::Load(ItemData::kPath, error)) std::cerr << "[data] " << error << " (using the game's own item details)" << std::endl;
     if (!renderer->LoadCreatureModels(error)) std::cerr << "[data] " << error << " (creatures drawn as plain boxes)" << std::endl;
     if (!renderer->LoadStructureModels(error)) std::cerr << "[data] " << error << " (structures not drawn)" << std::endl;
     if (std::filesystem::exists(Crafting::kRecipesPath) && !Crafting::Load(Crafting::kRecipesPath, error)) std::cerr << "[data] " << error << " (the game's own recipes)" << std::endl;
@@ -660,7 +641,7 @@ void Application::WatchData(double now) {
     if (now - dataCheckedAt < 1.0) return;
     dataCheckedAt = now;
     std::vector<std::string> changed;
-    for (const char* path : { BlockData::kPath, PlayerModels::kCreatureModelsPath, PlayerModels::kStructureModelsPath, Crafting::kRecipesPath, Smelting::kPath }) {
+    for (const char* path : { BlockData::kPath, ItemData::kPath, PlayerModels::kCreatureModelsPath, PlayerModels::kStructureModelsPath, Crafting::kRecipesPath, Smelting::kPath }) {
         const std::string stamp = Json::DataStamp(path);
         auto it = dataTimes.find(path);
         if (it == dataTimes.end()) dataTimes[path] = stamp; // (the first look: as loaded)
@@ -678,7 +659,9 @@ void Application::WatchData(double now) {
             ok = BlockData::Load(BlockData::kPath, error);
             LoadBlockTextures();
             world->RebuildAllChunks();
-        } else if (path == Crafting::kRecipesPath)
+        } else if (path == ItemData::kPath)
+            ok = ItemData::Load(ItemData::kPath, error);
+        else if (path == Crafting::kRecipesPath)
             ok = Crafting::Load(Crafting::kRecipesPath, error);
         else if (path == Smelting::kPath)
             ok = Smelting::Load(Smelting::kPath, error);
@@ -833,8 +816,8 @@ void Application::Run() {
             if (GetLightEmission(mine) > 0 && (client->IsCreative() || client->GetResources(mine) > 0))
                 params.handLights.push_back(glm::vec4(player.GetEyePosition() - glm::vec3(0.0f, 0.4f, 0.0f), static_cast<float>(GetLightEmission(mine))));
             for (const auto& other : client->GetRemotePlayers())
-                if (GetLightEmission(other.heldBlock) > 0)
-                    params.handLights.push_back(glm::vec4(other.feet + glm::vec3(0.0f, 1.2f, 0.0f), static_cast<float>(GetLightEmission(other.heldBlock))));
+                if (const BlockType held = Items::BlockOf(other.heldItem); GetLightEmission(held) > 0)
+                    params.handLights.push_back(glm::vec4(other.feet + glm::vec3(0.0f, 1.2f, 0.0f), static_cast<float>(GetLightEmission(held))));
         }
         // Figures are lit by the light where they stand: the brighter of their feet's
         // cell (which may hold a slope or a plant) and the one above.
@@ -904,7 +887,7 @@ void Application::Run() {
                 ItemModel model;
                 model.position = i.position;
                 const BlockType type = Items::BlockOf(i.item);
-                model.cube = Items::IsBlock(i.item) && !IsItemType(type) && !IsPlantType(type) && !Block(type).IsLiquid();
+                model.cube = Items::IsBlock(i.item) && !IsPlantType(type) && !Block(type).IsLiquid();
                 glm::vec2 uv0, uv1;
                 atlas.GetTileUV(ItemTile(atlas, i.item), uv0, uv1);
                 model.uv = glm::vec4(uv0, uv1);
@@ -980,9 +963,10 @@ void Application::Run() {
             // little cube.
             int tile = -1;
             if (other.heldTool != Tool::None) tile = ToolTile(atlas, other.heldTool), model.held = PlayerModel::Held::Icon;
-            else if (other.heldBlock != BlockType::AIR) {
-                tile = IconTile(other.heldBlock);
-                const bool flat = IsItemType(other.heldBlock) || IsPlantType(other.heldBlock) || Block(other.heldBlock).IsLiquid();
+            else if (other.heldItem != Items::kNone) {
+                tile = ItemTile(atlas, other.heldItem);
+                const BlockType held = Items::BlockOf(other.heldItem);
+                const bool flat = !Items::IsBlock(other.heldItem) || IsPlantType(held) || Block(held).IsLiquid();
                 model.held = flat ? PlayerModel::Held::Icon : PlayerModel::Held::Block;
             }
             if (tile >= 0) {
@@ -1281,8 +1265,8 @@ void Application::DrawCrosshair() {
     // Looking at a filter pipe: what it lets through.
     if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f);
         at && world->GetBlock(at->block.x, at->block.y, at->block.z, target) && target.type == BlockType::FILTER_PIPE) {
-        const BlockType only = target.FilterType();
-        label((std::string("Filter: ") + (only == BlockType::AIR ? "anything" : BlockName(only))).c_str());
+        const ItemId only = Items::FilterOf(target);
+        label(("Filter: " + (only == Items::kNone ? std::string("anything") : ItemName(only))).c_str());
         return;
     }
 }
@@ -2313,9 +2297,9 @@ void Application::HandleContinuousInput(float deltaTime) {
         if (player.IsBoating()) flags |= net::kFlagBoat;
         // What's in hand, for others to see (a survival player's empty slot holds nothing).
         const Tool heldTool = SelectedTool();
-        const BlockType heldBlock = SelectedBlock();
+        const ItemId heldItem = Items::IsStackable(SelectedItem()) ? SelectedItem() : Items::kNone;
         client->SendPlayerState(player.GetFeetPosition(), player.GetVelocity(), camera.GetYaw(), camera.GetDirectionAngles().x, flags, heldTool,
-                                heldBlock);
+                                heldItem);
     }
 
     UpdateMining();
@@ -2355,7 +2339,7 @@ void Application::DrawHotbar() {
         if (selectedTool == Tool::Chisel) label += std::string(" - ") + ChiselStepName(chiselStep) + " a stroke (V)";
         if (selectedTool == Tool::None && Block::CanShape(selected))
             label += std::string(" - ") + HeightName(placeHeight) + (placeHeight < 8 ? " height" : " block") + " (V)";
-        const bool affordable = SelectedItem() == Items::kNone || !Items::IsBlock(SelectedItem()) || IsItemType(selected) ||
+        const bool affordable = SelectedItem() == Items::kNone || !Items::IsBlock(SelectedItem()) ||
                                 client->CanAfford(selected, Block::CanShape(selected) ? placeHeight : 8);
         const bool affordableShown = affordable;
         const float nameWidth = ImGui::CalcTextSize(label.c_str()).x;
@@ -2635,7 +2619,7 @@ void Application::SeedCreativeHotbar() {
     for (int i = 0; i < kHotbarSlots && i < static_cast<int>(slots.size()); i++)
         if (!slots[i].Empty()) return;
     for (int i = 0; i < kHotbarSlots; i++) {
-        const ItemId item = creativeHotbarTools[i] != Tool::None ? Items::OfTool(creativeHotbarTools[i], Items::kTiers - 1) : Items::OfBlock(creativeHotbar[i]);
+        const ItemId item = creativeHotbarTools[i] != Tool::None ? Items::OfTool(creativeHotbarTools[i], Items::kTiers - 1) : creativeHotbar[i];
         if (Items::Valid(item)) client->SetCreativeSlot(i, item, static_cast<int>(Items::MaxStack(item)));
     }
 }
@@ -2645,10 +2629,12 @@ void Application::SelectSlot(int slot) {
 }
 
 void Application::LoadHotbar() {
+    // (Written before items had their own types: block numbers of the time.)
     std::ifstream file(kHotbarFile);
-    for (int i = 0, type; i < kHotbarSlots && file >> type; i++)
-        if (std::find(std::begin(kInventoryBlocks), std::end(kInventoryBlocks), static_cast<BlockType>(type)) != std::end(kInventoryBlocks))
-            creativeHotbar[i] = static_cast<BlockType>(type);
+    for (int i = 0, type; i < kHotbarSlots && file >> type; i++) {
+        const ItemId item = type >= 0 && type < 256 ? Legacy::ItemFromV16Block(static_cast<uint8_t>(type)) : Items::kNone;
+        if (std::any_of(std::begin(kInventoryItems), std::end(kInventoryItems), [&](ItemId i) { return i == item; })) creativeHotbar[i] = item;
+    }
     // A second line: the tool in each slot (0 none).
     for (int i = 0, tool; i < kHotbarSlots && file >> tool; i++)
         if (tool > 0 && tool < static_cast<int>(Tool::Count)) creativeHotbarTools[i] = static_cast<Tool>(tool);
@@ -2708,11 +2694,11 @@ void Application::DrawTrade() {
         const TextureAtlas& atlas = renderer->GetAtlas();
         const ImTextureID texture = static_cast<ImTextureID>(static_cast<uintptr_t>(atlas.GetTexture()));
         constexpr float kIcon = 32.0f;
-        auto icon = [&](BlockType t) {
+        auto icon = [&](ItemId item) {
             glm::vec2 uv0, uv1;
-            atlas.GetTileUV(IconTile(t), uv0, uv1);
+            atlas.GetTileUV(ItemTile(atlas, item), uv0, uv1);
             ImGui::Image(texture, ImVec2(kIcon, kIcon), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
-            ImGui::SetItemTooltip("%s", BlockName(t));
+            ImGui::SetItemTooltip("%s", ItemName(item).c_str());
         };
         ImGui::TextDisabled("\"Gold's what we deal in. Buying or selling?\"");
         const auto& offers = Trades::Offers();
@@ -2729,7 +2715,7 @@ void Application::DrawTrade() {
             icon(o.give);
             ImGui::SameLine();
             ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(can ? ImVec4(1, 1, 1, 1) : ImVec4(1.0f, 0.5f, 0.45f, 1.0f), "%d %s", price, BlockName(o.give));
+            ImGui::TextColored(can ? ImVec4(1, 1, 1, 1) : ImVec4(1.0f, 0.5f, 0.45f, 1.0f), "%d %s", price, ItemName(o.give).c_str());
             if (price > o.giveCount) {
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "(up from %d)", o.giveCount);
@@ -2743,7 +2729,7 @@ void Application::DrawTrade() {
             } else {
                 icon(o.get);
                 ImGui::SameLine();
-                ImGui::Text("%d %s", o.getCount, BlockName(o.get));
+                ImGui::Text("%d %s", o.getCount, ItemName(o.get).c_str());
             }
             ImGui::SameLine(560.0f);
             ImGui::BeginDisabled(!can);
@@ -2794,7 +2780,7 @@ void Application::DrawInventory() {
         std::string cuts;
         const Inventory& inv = client->GetInventory();
         for (size_t t = 0; t < inv.offcuts.size(); t++)
-            if (inv.offcuts[t]) cuts += (cuts.empty() ? "" : ", ") + FormatBlocks(inv.offcuts[t]) + " " + BlockName(static_cast<BlockType>(t));
+            if (inv.offcuts[t]) cuts += (cuts.empty() ? "" : ", ") + FormatBlocks(inv.offcuts[t]) + " " + ItemName(Items::OfKind(t));
         if (!cuts.empty()) {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 10 * (kIcon + 10.0f));
             ImGui::TextDisabled("Offcuts: %s", cuts.c_str());
@@ -2805,7 +2791,7 @@ void Application::DrawInventory() {
             // Creative: every block and item, to take as many of as you like (put a stack
             // back here to get rid of it).
             if (paletteItems.empty()) {
-                for (BlockType t : kInventoryBlocks) paletteItems.push_back(Items::OfBlock(t));
+                for (ItemId item : kInventoryItems) paletteItems.push_back(item);
                 for (Tool t : kInventoryTools)
                     for (int tier = 0; tier < Items::kTiers; tier++) paletteItems.push_back(Items::OfTool(t, tier));
                 for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++) paletteItems.push_back(Items::OfArmour(static_cast<ArmourPiece>(p)));
@@ -2833,7 +2819,7 @@ void Application::DrawInventory() {
                                      : recipe.steelUpgrade                   ? atlas.GetIndex("steel_ingot")
                                      : recipe.tool != Tool::None             ? ToolTile(atlas, recipe.tool)
                                      : recipe.armour != ArmourPiece::Count ? atlas.GetIndex(Armour::Texture(recipe.armour))
-                                                                           : IconTile(recipe.output);
+                                                                           : ItemTile(atlas, recipe.output);
                     atlas.GetTileUV(icon, uv0, uv1);
                     ImGui::Image(texture, ImVec2(24.0f, 24.0f), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
                     ImGui::SameLine();
@@ -2842,7 +2828,7 @@ void Application::DrawInventory() {
                     ImGui::TableNextColumn();
                     std::string needs;
                     for (const auto& in : recipe.inputs)
-                        needs += (needs.empty() ? "" : " + ") + FormatBlocks(in.units) + " " + BlockName(in.type);
+                        needs += (needs.empty() ? "" : " + ") + FormatBlocks(in.units) + " " + ItemName(in.item);
                     if (recipe.Upgrade()) needs += recipe.steelUpgrade ? ", an iron tool in hand" : ", a stone tool in hand";
                     const bool can = client->CanCraft(r, 1, inHand);
                     if (can) ImGui::TextUnformatted(needs.c_str());
@@ -2927,7 +2913,7 @@ void Application::DrawSlot(SlotBox box, int slot, float size, bool selected) {
         if (Items::IsArmour(item))
             tip += ": " + std::to_string(static_cast<int>(std::lround(Armour::Protection(Items::ArmourOf(item)) * 100.0f))) + "% less damage" +
                    (Items::ArmourOf(item) == ArmourPiece::OxygenTank ? " (holds air to breathe instead)" : "") + (st.Empty() ? " (its slot: empty)" : "");
-        if (Items::IsBlock(item) && box != SlotBox::Palette && st.count > 1) tip += " x" + std::to_string(st.count);
+        if (Items::IsStackable(item) && box != SlotBox::Palette && st.count > 1) tip += " x" + std::to_string(st.count);
         ImGui::SetTooltip("%s", tip.c_str());
     }
 }
@@ -3161,7 +3147,7 @@ void Application::DrawChest() {
         std::string cuts;
         const Inventory& chest = client->GetChest();
         for (size_t t = 0; t < chest.offcuts.size(); t++)
-            if (chest.offcuts[t]) cuts += (cuts.empty() ? "" : ", ") + FormatBlocks(chest.offcuts[t]) + " " + BlockName(static_cast<BlockType>(t));
+            if (chest.offcuts[t]) cuts += (cuts.empty() ? "" : ", ") + FormatBlocks(chest.offcuts[t]) + " " + ItemName(Items::OfKind(t));
         if (!cuts.empty()) ImGui::TextDisabled("Offcuts: %s", cuts.c_str());
         DrawPlayerSlots(kIcon);
     }
@@ -3246,12 +3232,14 @@ void Application::OnMouseButton(int button, int action) {
         Block looked;
         if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach());
             at && world->GetBlock(at->block.x, at->block.y, at->block.z, looked)) {
-            BlockType type = ResourceTypeOf(looked.type) == looked.type || IsItemType(ResourceTypeOf(looked.type)) ? looked.type : ResourceTypeOf(looked.type);
-            if (type == BlockType::DOOR_OPEN) type = BlockType::DOOR;
-            if (type == BlockType::TNT_LIT) type = BlockType::TNT;
+            // (What it counts as, if that's another block: pebbles are stone, an open door a
+            // door. Coal ore is coal ore, though breaking it gives coal.)
+            const ItemId worth = Items::ResourceOf(looked.type);
+            const BlockType type = Items::IsBlock(worth) ? Items::BlockOf(worth) : worth == Items::kNone ? BlockType::AIR : looked.type;
             const ItemId item = Items::OfBlock(type);
-            if (!IsItemType(type) && client->IsCreative()) client->SetCreativeSlot(selectedSlot, item, static_cast<int>(Items::MaxStack(item)));
-            else if (!IsItemType(type)) {
+            if (type == BlockType::AIR) {} // (part of a structure: nothing to pick)
+            else if (client->IsCreative()) client->SetCreativeSlot(selectedSlot, item, static_cast<int>(Items::MaxStack(item)));
+            else {
                 // Survival: a hotbar slot holding it is chosen; else a stack of it from the
                 // rest of the inventory swaps into the slot in hand.
                 const auto& slots = client->GetInventory().slots;
@@ -3292,7 +3280,7 @@ void Application::OnMouseButton(int button, int action) {
                                Signals::KindOf(aimedAt.type) != Signals::Kind::None;
     // (Crouching at a door with no block in hand: it swaps which side it's hinged.)
     if (button == GLFW_MOUSE_BUTTON_RIGHT && CrouchHeld() && aimedHit && (aimedAt.type == BlockType::DOOR || aimedAt.type == BlockType::DOOR_OPEN) &&
-        (SelectedTool() != Tool::None || SelectedBlock() == BlockType::AIR || IsItemType(SelectedBlock()))) {
+        (SelectedTool() != Tool::None || SelectedBlock() == BlockType::AIR)) {
         client->UseBed(aimedHit->block);
         return;
     }
@@ -3300,7 +3288,7 @@ void Application::OnMouseButton(int button, int action) {
         Block target;
         // The engineer's hammer: strike a structure's block to form it (the server
         // checks the pattern and says what's missing).
-        if (SelectedBlock() == BlockType::HAMMER && SelectedTool() == Tool::None) {
+        if (SelectedItemType() == ItemType::HAMMER) {
             if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), 6.0f)) client->UseBed(at->block);
             return;
         }
@@ -3335,7 +3323,7 @@ void Application::OnMouseButton(int button, int action) {
         }
         // With a block in hand, right-clicking a pipe, a shaft, a wheel or a valve builds
         // against it (a pipe run on, a wheel on a shaft); anything with a menu opens it.
-        const bool building = SelectedTool() == Tool::None && SelectedBlock() != BlockType::AIR && !IsItemType(SelectedBlock());
+        const bool building = SelectedBlock() != BlockType::AIR;
         auto buildsOn = [&](BlockType t) {
             return building && (IsPipeType(t) || t == BlockType::SHAFT || t == BlockType::WATER_WHEEL || IsValveType(t));
         };
@@ -3407,8 +3395,8 @@ void Application::OnMouseButton(int button, int action) {
     }
 
     // Right-click with a crossbow in hand: a bolt (slower to wind than a bow).
-    if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::None && SelectedBlock() == BlockType::CROSSBOW) {
-        if ((client->IsCreative() || (client->GetResources(BlockType::CROSSBOW) > 0 && client->GetResources(BlockType::ARROW) >= Block::kUnitsPerBlock)) &&
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedItemType() == ItemType::CROSSBOW) {
+        if ((client->IsCreative() || (client->GetResources(ItemType::CROSSBOW) > 0 && client->GetResources(ItemType::ARROW) >= Block::kUnitsPerBlock)) &&
             Client::Now() >= nextShot) {
             client->Shoot(camera.GetDirection());
             audio->PlayHere("bow", 0.9f);
@@ -3418,7 +3406,7 @@ void Application::OnMouseButton(int button, int action) {
     }
     // Right-click with the bow drawn: shoot (if there's an arrow, in survival).
     if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::Bow) {
-        if (client->HasTool(Tool::Bow) && (client->IsCreative() || client->GetResources(BlockType::ARROW) >= Block::kUnitsPerBlock) &&
+        if (client->HasTool(Tool::Bow) && (client->IsCreative() || client->GetResources(ItemType::ARROW) >= Block::kUnitsPerBlock) &&
             Client::Now() >= nextShot) {
             client->Shoot(camera.GetDirection());
             audio->PlayHere("bow", 0.7f);
@@ -3429,11 +3417,11 @@ void Application::OnMouseButton(int button, int action) {
 
     // Right-click with an item in hand uses it (wherever you look): food is eaten;
     // items are never placed.
-    if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::None && IsItemType(SelectedBlock())) {
-        const BlockType item = SelectedBlock();
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && Items::IsItem(SelectedItem())) {
+        const ItemType item = SelectedItemType();
         // A bucket: scoop up the (full) water looked at; a water bucket: pour it out where
         // you're looking (on fire: it puts it out, and the fires round it).
-        if (item == BlockType::BUCKET) {
+        if (item == ItemType::BUCKET) {
             const glm::vec3 eye = camera.GetPosition(), dir = camera.GetDirection();
             for (float t = 0.3f; t < Reach(); t += 0.1f) {
                 const glm::ivec3 cell(glm::floor(eye + dir * t));
@@ -3448,7 +3436,7 @@ void Application::OnMouseButton(int button, int action) {
             }
             return;
         }
-        if (item == BlockType::WATER_BUCKET) {
+        if (item == ItemType::WATER_BUCKET) {
             if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
                 Block aimed;
                 const bool into = world->GetBlock(at->block.x, at->block.y, at->block.z, aimed) && aimed.IsReplaceableByWater();
@@ -3460,14 +3448,14 @@ void Application::OnMouseButton(int button, int action) {
         }
         // A boat: into it, on the water looked at (within 3 blocks: a hop the server's
         // movement check allows).
-        if (item == BlockType::BOAT) {
+        if (item == ItemType::BOAT) {
             const glm::vec3 eye = camera.GetPosition(), dir = camera.GetDirection();
             for (float t = 0.5f; t < 3.0f && !player.IsBoating(); t += 0.1f) {
                 const glm::ivec3 cell(glm::floor(eye + dir * t));
                 Block b, above;
                 if (!world->GetBlock(cell.x, cell.y, cell.z, b)) break;
                 if (b.HasWater() && !(world->GetBlock(cell.x, cell.y + 1, cell.z, above) && above.HasWater())) {
-                    if (client->IsCreative() || client->GetResources(BlockType::BOAT) >= Block::kUnitsPerBlock) {
+                    if (client->IsCreative() || client->GetResources(ItemType::BOAT) >= Block::kUnitsPerBlock) {
                         player.Teleport(glm::vec3(cell) + glm::vec3(0.5f, b.WaterShownLevel() / static_cast<float>(Block::kMaxWaterVolume) - 0.15f, 0.5f));
                         player.SetBoating(true);
                         audio->Play("splash", glm::vec3(cell) + glm::vec3(0.5f), 0.4f, 0.2f);
@@ -3480,7 +3468,7 @@ void Application::OnMouseButton(int button, int action) {
         }
         // Seeds are planted on the dirt or grass you're looking at.
         // (Or in place of a tuft of grass growing on it.)
-        if (item == BlockType::SEEDS) {
+        if (item == ItemType::SEEDS) {
             Block soil, aimed;
             if (auto at = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
                 const bool intoPlant = world->GetBlock(at->block.x, at->block.y, at->block.z, aimed) && aimed.IsReplaceablePlant();
@@ -3492,9 +3480,9 @@ void Application::OnMouseButton(int button, int action) {
             }
             return;
         }
-        if (Hunger::IsFood(item) && !client->IsCreative() && client->GetResources(item) >= Block::kUnitsPerBlock &&
+        if (Hunger::IsFood(Items::Of(item)) && !client->IsCreative() && client->GetResources(item) >= Block::kUnitsPerBlock &&
             client->GetFood() < client->GetMaxFood()) {
-            client->Eat(item);
+            client->Eat(Items::Of(item));
             audio->PlayHere("eat", 0.8f);
         }
         return;

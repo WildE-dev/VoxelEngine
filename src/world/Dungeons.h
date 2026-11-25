@@ -7,6 +7,7 @@
 #include <glm/glm.hpp>
 
 #include "world/Chunk.h"
+#include "world/Inventory.h"
 #include "world/Signals.h"
 
 class TerrainGenerator;
@@ -90,7 +91,7 @@ Layout LayoutFor(const TerrainGenerator& terrain, int regionX, int regionZ);
 // dungeon room there), rolled from its position and its room: a vault's is rich,
 // others hold a few useful things. The server rolls it the first time the chest is
 // opened or broken and keeps it from then on.
-std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos);
+std::vector<std::pair<ItemRef, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos);
 
 // A lever vault's puzzle: four levers in a row by one wall, a lamp in the wall over
 // each that should be on; a sluice gate in the middle of the floor over a pit with a

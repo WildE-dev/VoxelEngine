@@ -43,7 +43,7 @@ struct TestClient {
     Client client{ world };
     glm::vec3 feet{ 0.0f };
     bool joined = false;
-    BlockType held = BlockType::AIR; // what others (and the server) see in hand
+    ItemRef held; // what others (and the server) see in hand
     void Update() {
         client.Poll();
         if (!joined && client.IsWelcomed()) joined = true, feet = client.GetSpawn();
@@ -121,41 +121,39 @@ int main(int argc, char** argv) {
         Check(a.client.GetHealth() == Hunger::kStarveFloor, "but no further");
 
         std::cout << "Eating" << std::endl;
-        a.client.Eat(BlockType::COOKED_VENISON);
+        a.client.Eat(ItemType::COOKED_VENISON);
         wait(1.0);
         Check(a.client.GetFood() == 0, "they can't eat food they don't have");
         server.QueueConsoleCommand("give cooked_venison 2 Eater");
         server.QueueConsoleCommand("give raw_venison 1 Eater");
         sync();
-        Check(a.client.GetResources(BlockType::COOKED_VENISON) == 2 * Block::kUnitsPerBlock, "/give hands out food");
-        a.client.Eat(BlockType::RAW_VENISON);
+        Check(a.client.GetResources(ItemType::COOKED_VENISON) == 2 * Block::kUnitsPerBlock, "/give hands out food");
+        a.client.Eat(ItemType::RAW_VENISON);
         Check(Pump(a, 20.0, [&] { return a.client.GetFood() == 3; }), "raw venison gives 3 food");
-        a.client.Eat(BlockType::COOKED_VENISON);
-        a.client.Eat(BlockType::COOKED_VENISON);
+        a.client.Eat(ItemType::COOKED_VENISON);
+        a.client.Eat(ItemType::COOKED_VENISON);
         Check(Pump(a, 20.0, [&] { return a.client.GetFood() >= 17; }), "cooked venison gives 8 each");
-        Check(a.client.GetResources(BlockType::COOKED_VENISON) == 0 && a.client.GetResources(BlockType::RAW_VENISON) == 0, "and eating uses it up");
+        Check(a.client.GetResources(ItemType::COOKED_VENISON) == 0 && a.client.GetResources(ItemType::RAW_VENISON) == 0, "and eating uses it up");
         const int fed = a.client.GetHealth();
         Check(Pump(a, 20.0, [&] { return a.client.GetHealth() > fed; }), "well fed, health comes back");
         server.QueueConsoleCommand("food 20 Eater");
         server.QueueConsoleCommand("give raw_venison 1 Eater");
         sync();
-        a.client.Eat(BlockType::RAW_VENISON);
+        a.client.Eat(ItemType::RAW_VENISON);
         wait(1.0);
-        Check(a.client.GetResources(BlockType::RAW_VENISON) == Block::kUnitsPerBlock, "a full player can't eat");
+        Check(a.client.GetResources(ItemType::RAW_VENISON) == Block::kUnitsPerBlock, "a full player can't eat");
 
         std::cout << "Items aren't blocks" << std::endl;
-        a.client.PlaceBlock({ 3, 0, 3 }, BlockType::RAW_VENISON);
-        wait(1.0);
-        Block placed;
-        Check(a.world.GetBlock(3, 0, 3, placed) && placed.IsAir() && a.client.GetResources(BlockType::RAW_VENISON) == Block::kUnitsPerBlock,
-              "raw venison can't be placed (and isn't used up trying)");
+        Check(Items::IsItem(Items::Of(ItemType::RAW_VENISON)) && !Items::IsBlock(Items::Of(ItemType::RAW_VENISON)) &&
+                  Items::BlockOf(Items::Of(ItemType::RAW_VENISON)) == BlockType::AIR,
+              "raw venison is an item, not a block (there's nothing to place)");
 
     }
     if (sections.Run("food")) {
         std::cout << "Hunting and cooking" << std::endl;
         server.QueueConsoleCommand("summon deer " + std::to_string(a.feet.x + 2.0f) + " " + std::to_string(a.feet.y) + " " + std::to_string(a.feet.z));
         Check(Pump(a, 20.0, [&] { return FindDeer(a) != nullptr; }), "a deer is summoned beside them");
-        const uint32_t rawBeforeHunt = a.client.GetResources(BlockType::RAW_VENISON);
+        const uint32_t rawBeforeHunt = a.client.GetResources(ItemType::RAW_VENISON);
         bool gone = false;
         for (int i = 0; i < 12 && !gone; i++) {
             const auto* d = FindDeer(a);
@@ -166,15 +164,15 @@ int main(int argc, char** argv) {
             a.client.Attack(id, Tool::None);
             gone = Pump(a, 1.0, [&] { return FindDeer(a) == nullptr; });
         }
-        Check(gone && Pump(a, 5.0, [&] { return a.client.GetResources(BlockType::RAW_VENISON) >= rawBeforeHunt + Block::kUnitsPerBlock; }),
+        Check(gone && Pump(a, 5.0, [&] { return a.client.GetResources(ItemType::RAW_VENISON) >= rawBeforeHunt + Block::kUnitsPerBlock; }),
               "killing it gives raw venison");
         server.QueueConsoleCommand("give log 1 Eater");
         sync();
         const int cook = Crafting::Find("cooked_venison");
-        const uint32_t raw = a.client.GetResources(BlockType::RAW_VENISON);
+        const uint32_t raw = a.client.GetResources(ItemType::RAW_VENISON);
         a.client.Craft(cook, 1);
-        Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::COOKED_VENISON) == Block::kUnitsPerBlock; }) &&
-                  a.client.GetResources(BlockType::RAW_VENISON) == raw - Block::kUnitsPerBlock &&
+        Check(Pump(a, 20.0, [&] { return a.client.GetResources(ItemType::COOKED_VENISON) == Block::kUnitsPerBlock; }) &&
+                  a.client.GetResources(ItemType::RAW_VENISON) == raw - Block::kUnitsPerBlock &&
                   a.client.GetResources(BlockType::LOG) == Block::kUnitsPerBlock * 3 / 4,
               "raw venison and a quarter log cook into cooked venison");
 
@@ -187,18 +185,18 @@ int main(int argc, char** argv) {
         a.client.PlaceBlock({ 9, 3, 7 }, BlockType::CROP);
         wait(1.0);
         Block planted;
-        Check(a.world.GetBlock(9, 3, 7, planted) && planted.IsAir() && a.client.GetResources(BlockType::SEEDS) == 2 * Block::kUnitsPerBlock,
+        Check(a.world.GetBlock(9, 3, 7, planted) && planted.IsAir() && a.client.GetResources(ItemType::SEEDS) == 2 * Block::kUnitsPerBlock,
               "seeds won't grow in mid air");
         a.client.PlaceBlock({ 9, 0, 7 }, BlockType::CROP);
         Check(Pump(a, 20.0, [&] { return a.world.GetBlock(9, 0, 7, planted) && planted.type == BlockType::CROP; }) &&
-                  a.client.GetResources(BlockType::SEEDS) == Block::kUnitsPerBlock,
+                  a.client.GetResources(ItemType::SEEDS) == Block::kUnitsPerBlock,
               "a seed planted on grass comes up as a crop");
         Check(Pump(a, 20.0, [&] { return a.world.GetBlock(9, 0, 7, planted) && planted.type == BlockType::RIPE_WHEAT; }), "which ripens into wheat");
         a.client.BreakBlock({ 9, 0, 7 });
         // (The client counts the wheat at once; the seeds come with the server's answer.)
-        Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::WHEAT) == Block::kUnitsPerBlock && a.client.GetResources(BlockType::SEEDS) >= 2 * Block::kUnitsPerBlock; }),
-              "harvested, it gives wheat and seeds to plant again (wheat " + std::to_string(a.client.GetResources(BlockType::WHEAT)) + ", seeds " +
-                  std::to_string(a.client.GetResources(BlockType::SEEDS)) + ")");
+        Check(Pump(a, 20.0, [&] { return a.client.GetResources(ItemType::WHEAT) == Block::kUnitsPerBlock && a.client.GetResources(ItemType::SEEDS) >= 2 * Block::kUnitsPerBlock; }),
+              "harvested, it gives wheat and seeds to plant again (wheat " + std::to_string(a.client.GetResources(ItemType::WHEAT)) + ", seeds " +
+                  std::to_string(a.client.GetResources(ItemType::SEEDS)) + ")");
         server.QueueConsoleCommand("give sapling 1 Eater");
         sync();
         a.client.PlaceBlock({ 5, 0, 7 }, BlockType::SAPLING);
@@ -212,10 +210,10 @@ int main(int argc, char** argv) {
         server.QueueConsoleCommand("give wheat 2 Eater");
         sync();
         a.client.Craft(Crafting::Find("bread"), 1);
-        Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::BREAD) == Block::kUnitsPerBlock && a.client.GetResources(BlockType::WHEAT) == 0; }),
+        Check(Pump(a, 20.0, [&] { return a.client.GetResources(ItemType::BREAD) == Block::kUnitsPerBlock && a.client.GetResources(ItemType::WHEAT) == 0; }),
               "3 wheat bake into bread");
         const int beforeBread = a.client.GetFood();
-        a.client.Eat(BlockType::BREAD);
+        a.client.Eat(ItemType::BREAD);
         Check(Pump(a, 20.0, [&] { return a.client.GetFood() >= beforeBread + 5; }), "which is good for 6 food");
 
         std::cout << "Fishing" << std::endl;
@@ -235,13 +233,13 @@ int main(int argc, char** argv) {
         Check(!a.client.GetBobber(), "a line cast onto dry ground doesn't stay out");
         a.client.Cast({ 9, -1, 9 }, true);
         Check(Pump(a, 20.0, [&] { return a.client.GetBobber().has_value(); }), "cast into the pond, the bobber floats");
-        Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::RAW_FISH) == Block::kUnitsPerBlock; }) && a.client.TakeBite(),
+        Check(Pump(a, 20.0, [&] { return a.client.GetResources(ItemType::RAW_FISH) == Block::kUnitsPerBlock; }) && a.client.TakeBite(),
               "a fish bites, and it's caught");
         Check(!a.client.GetBobber() && Has(a, "Angler: catch a fish"), "the line comes in (and that's an achievement)");
         server.QueueConsoleCommand("give log 1 Eater");
         sync();
         a.client.Craft(Crafting::Find("cooked_fish"), 1);
-        Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::COOKED_FISH) == Block::kUnitsPerBlock; }), "and cooks with a little wood");
+        Check(Pump(a, 20.0, [&] { return a.client.GetResources(ItemType::COOKED_FISH) == Block::kUnitsPerBlock; }), "and cooks with a little wood");
 
         std::cout << "Campfire" << std::endl;
         server.QueueConsoleCommand("give campfire 1 Eater");
@@ -250,12 +248,12 @@ int main(int argc, char** argv) {
         a.client.PlaceBlock({ 6, 0, 7 }, BlockType::CAMPFIRE);
         int blockLight = 0, skyLight = 0;
         Check(Pump(a, 20.0, [&] { return a.world.GetLight(6, 0, 7, blockLight, skyLight) && blockLight >= 13; }), "a campfire burns bright (light " + std::to_string(blockLight) + ")");
-        a.held = BlockType::RAW_VENISON;
+        a.held = ItemType::RAW_VENISON;
         wait(0.3);
-        const uint32_t cookedBefore = a.client.GetResources(BlockType::COOKED_VENISON), rawBefore = a.client.GetResources(BlockType::RAW_VENISON);
+        const uint32_t cookedBefore = a.client.GetResources(ItemType::COOKED_VENISON), rawBefore = a.client.GetResources(ItemType::RAW_VENISON);
         a.client.UseBed({ 6, 0, 7 });
-        Check(Pump(a, 20.0, [&] { return a.client.GetResources(BlockType::COOKED_VENISON) == cookedBefore + Block::kUnitsPerBlock; }) &&
-                  a.client.GetResources(BlockType::RAW_VENISON) == rawBefore - Block::kUnitsPerBlock,
+        Check(Pump(a, 20.0, [&] { return a.client.GetResources(ItemType::COOKED_VENISON) == cookedBefore + Block::kUnitsPerBlock; }) &&
+                  a.client.GetResources(ItemType::RAW_VENISON) == rawBefore - Block::kUnitsPerBlock,
               "right-clicking it with raw venison in hand cooks one");
         a.held = BlockType::AIR;
 

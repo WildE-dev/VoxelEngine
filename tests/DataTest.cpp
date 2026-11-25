@@ -138,7 +138,7 @@ int main() {
             const Recipe &a = loaded[i], &b = defaults[i];
             same = a.id == b.id && a.name == b.name && a.output == b.output && a.outputUnits == b.outputUnits && a.tool == b.tool && a.armour == b.armour &&
                    a.ironUpgrade == b.ironUpgrade && a.steelUpgrade == b.steelUpgrade && a.inputs.size() == b.inputs.size();
-            for (size_t k = 0; same && k < a.inputs.size(); k++) same = a.inputs[k].type == b.inputs[k].type && a.inputs[k].units == b.inputs[k].units;
+            for (size_t k = 0; same && k < a.inputs.size(); k++) same = a.inputs[k].item == b.inputs[k].item && a.inputs[k].units == b.inputs[k].units;
             if (!same) std::cout << "        recipe " << i << " (" << b.id << ") differs" << std::endl;
         }
         Check(same, "and matches the game's own, recipe for recipe, in order (" + std::to_string(loaded.size()) + ")");

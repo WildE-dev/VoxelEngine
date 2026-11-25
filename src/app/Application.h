@@ -95,10 +95,11 @@ private:
     std::map<uint16_t, CreatureAction> creatureActions;
     std::map<std::string, std::string> dataTimes;
     void DrawHotbar();
-    // What's in the selected hotbar slot: a block (or item), or a tool (AIR / None: not
-    // that, or an empty slot).
+    // What's in the selected hotbar slot: a block, an item, or a tool (AIR / NONE / None:
+    // not that, or an empty slot).
     ItemId SelectedItem() const;
     BlockType SelectedBlock() const { return Items::BlockOf(SelectedItem()); }
+    ItemType SelectedItemType() const { return Items::ItemOf(SelectedItem()); }
     Tool SelectedTool() const { return Items::ToolOf(SelectedItem()); }
     // Survival: holding the left button mines the block in view (world/Mining.h).
     void UpdateMining();
@@ -303,8 +304,9 @@ private:
     static constexpr int kHotbarSlots = static_cast<int>(Inventory::kHotbarSlots); // keys 1-9 and 0
     // The hotbar is the first slots of the inventory (the server keeps it). A creative
     // player who joins with it empty gets these (or what hotbar.txt, from before, chose).
-    std::array<BlockType, kHotbarSlots> creativeHotbar = { BlockType::DIRT, BlockType::STONE, BlockType::GRASS, BlockType::LAMP, BlockType::LOG,
-                                                           BlockType::LEAVES, BlockType::SAND, BlockType::WATER, BlockType::STONE_BRICK, BlockType::PUMP };
+    std::array<ItemId, kHotbarSlots> creativeHotbar = {
+        Items::Of(BlockType::DIRT),   Items::Of(BlockType::STONE), Items::Of(BlockType::GRASS), Items::Of(BlockType::LAMP),        Items::Of(BlockType::LOG),
+        Items::Of(BlockType::LEAVES), Items::Of(BlockType::SAND),  Items::Of(BlockType::WATER), Items::Of(BlockType::STONE_BRICK), Items::Of(BlockType::PUMP) };
     std::array<Tool, kHotbarSlots> creativeHotbarTools{};
     bool hotbarSeeded = false;
     void SeedCreativeHotbar();

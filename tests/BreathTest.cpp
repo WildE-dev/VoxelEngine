@@ -185,7 +185,7 @@ int main(int argc, char** argv) {
         std::cout << "Oxygen tank" << std::endl;
         server.QueueConsoleCommand("give iron_ingot 3 Diver");
         server.QueueConsoleCommand("give glass 1 Diver");
-        both(10.0, [&] { return a.client.GetResources(BlockType::GLASS) >= Block::kUnitsPerBlock && a.client.GetResources(BlockType::IRON_INGOT) >= 3 * Block::kUnitsPerBlock; });
+        both(10.0, [&] { return a.client.GetResources(BlockType::GLASS) >= Block::kUnitsPerBlock && a.client.GetResources(ItemType::IRON_INGOT) >= 3 * Block::kUnitsPerBlock; });
         a.client.Craft(Crafting::Find("tank"), 1);
         Check(both(10.0, [&] { return (a.client.GetArmour() & Armour::Bit(ArmourPiece::OxygenTank)) != 0; }), "the diver makes an oxygen tank, and wears it");
         server.QueueConsoleCommand("tp Diver 20.5 -2 20.5"); // under water again

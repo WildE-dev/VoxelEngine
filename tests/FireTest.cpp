@@ -146,18 +146,18 @@ int main() {
         server.QueueConsoleCommand("tp Warden 54.5 0 49.5");
         Pump(a, 5.0, [&] { return std::abs(a.feet.x - 54.5f) < 0.1f; });
         server.QueueConsoleCommand("give bucket 1 Warden");
-        Pump(a, 5.0, [&] { return a.client.GetResources(BlockType::BUCKET) > 0; });
+        Pump(a, 5.0, [&] { return a.client.GetResources(ItemType::BUCKET) > 0; });
         server.QueueConsoleCommand("tp Warden 46.5 0 47.5");
         Pump(a, 5.0, [&] { return std::abs(a.feet.x - 46.5f) < 0.1f; });
         fill({ 44, -1, 47 }, { 44, -1, 47 }, "water"); // (well away from the water poured above)
         Pump(a, 5.0, [&] { return at({ 44, -1, 47 }) == BlockType::WATER; });
         a.client.UseBucket({ 44, -1, 47 }, false);
         const bool scooped = Pump(a, 5.0, [&] {
-            return a.client.GetResources(BlockType::WATER_BUCKET) > 0 && a.client.GetResources(BlockType::BUCKET) == 0 && at({ 44, -1, 47 }) != BlockType::WATER;
+            return a.client.GetResources(ItemType::WATER_BUCKET) > 0 && a.client.GetResources(ItemType::BUCKET) == 0 && at({ 44, -1, 47 }) != BlockType::WATER;
         });
         Check(scooped && at({ 44, -1, 47 }) != BlockType::WATER,
-              "a bucket scoops up a block of water (buckets " + std::to_string(a.client.GetResources(BlockType::BUCKET)) + ", full " +
-                  std::to_string(a.client.GetResources(BlockType::WATER_BUCKET)) + ", the cell now " + std::to_string(static_cast<int>(at({ 44, -1, 47 }))) + ")");
+              "a bucket scoops up a block of water (buckets " + std::to_string(a.client.GetResources(ItemType::BUCKET)) + ", full " +
+                  std::to_string(a.client.GetResources(ItemType::WATER_BUCKET)) + ", the cell now " + std::to_string(static_cast<int>(at({ 44, -1, 47 }))) + ")");
         server.QueueConsoleCommand("tp Warden 54.5 0 49.5");
         Pump(a, 5.0, [&] { return std::abs(a.feet.x - 54.5f) < 0.1f; });
         fill({ 57, 0, 51 }, { 57, 0, 51 }, "fire");
@@ -165,7 +165,7 @@ int main() {
         Pump(a, 5.0, [&] { return at({ 57, 0, 51 }) == BlockType::FIRE && at({ 56, 0, 51 }) == BlockType::FIRE; });
         a.client.UseBucket({ 57, 0, 51 }, true);
         Check(Pump(a, 5.0, [&] { return at({ 57, 0, 51 }) != BlockType::FIRE && at({ 56, 0, 51 }) != BlockType::FIRE; }) &&
-                  a.client.GetResources(BlockType::BUCKET) > 0,
+                  a.client.GetResources(ItemType::BUCKET) > 0,
               "poured on a fire, it puts out that one and those round it (and the bucket's empty again)");
     }
 

@@ -82,11 +82,31 @@ Server::Options MakeOptions(const fs::path& dir) {
 
 int main() {
     using Crafting::kBlock;
+    std::cout << "Items" << std::endl;
+    {
+        // Every item type has an id that names it (and no block has it), and its file in
+        // Resources/Data/items.
+        bool named = true;
+        for (int t = 1; t < static_cast<int>(ItemType::COUNT); t++) {
+            const ItemType type = static_cast<ItemType>(t);
+            const ItemId item = Items::Of(type);
+            named &= Items::FromId(ItemTypeId(type)) == item && BlockFromId(ItemTypeId(type)) == BlockType::COUNT && Items::IsItem(item) &&
+                     !Items::IsBlock(item) && Items::OfKind(Items::KindOf(item)) == item && Items::Valid(item);
+        }
+        Check(named, "every item type is an item by its id, not a block");
+        std::string error;
+        bool files = ItemData::Load(ItemData::kPath, error);
+        for (int t = 1; files && t < static_cast<int>(ItemType::COUNT); t++) files &= ItemData::Texture(static_cast<ItemType>(t)).has_value();
+        Check(files, "Resources/Data/items reads cleanly, with every item's icon" + (error.empty() ? "" : " (" + error + ")"));
+        Check(Items::Name(Items::Of(ItemType::IRON_INGOT)) == "Iron ingot" && Items::MaxStack(Items::Of(ItemType::BUCKET)) == 1 &&
+                  Items::MaxStack(Items::Of(ItemType::IRON_INGOT)) == Items::kMaxStack,
+              "an iron ingot is called that and stacks; a bucket doesn't");
+    }
     std::cout << "Recipes" << std::endl;
     bool sensible = true;
     for (const auto& r : Crafting::Recipes()) {
-        sensible &= !r.inputs.empty() && (r.MakesItem() ? r.output == BlockType::AIR : r.outputUnits > 0 && r.output != BlockType::AIR);
-        for (const auto& in : r.inputs) sensible &= in.units > 0 && in.type != BlockType::AIR;
+        sensible &= !r.inputs.empty() && (r.MakesGear() ? r.output == Items::kNone : r.outputUnits > 0 && Items::IsStackable(r.output));
+        for (const auto& in : r.inputs) sensible &= in.units > 0 && Items::IsStackable(in.item);
     }
     Check(sensible && Crafting::Recipes().size() >= 10, "every recipe takes something and makes something");
     Check(Crafting::Find("planks") >= 0 && Crafting::Find("pickaxe") >= 0 && Crafting::Find("cake") < 0, "recipes are found by id");
@@ -98,37 +118,37 @@ int main() {
             const int r = Crafting::Find(id);
             bool needs = false;
             if (r >= 0)
-                for (const auto& in : Crafting::Recipes()[r].inputs) needs |= in.type == BlockType::COPPER_INGOT;
+                for (const auto& in : Crafting::Recipes()[r].inputs) needs |= in.item == ItemType::COPPER_INGOT;
             if (!needs) std::cout << "        " << id << " takes no copper" << std::endl;
             copper = copper && needs;
         }
         Check(copper, "every signal block takes copper");
-        std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> noCopper{};
-        noCopper[static_cast<size_t>(BlockType::STONE)] = noCopper[static_cast<size_t>(BlockType::GLASS)] = 8 * Block::kUnitsPerBlock;
+        std::array<uint32_t, Items::kKinds> noCopper{};
+        noCopper[Items::KindOf(Items::Of(BlockType::STONE))] = noCopper[Items::KindOf(Items::Of(BlockType::GLASS))] = 8 * Block::kUnitsPerBlock;
         auto withCopper = noCopper;
-        withCopper[static_cast<size_t>(BlockType::COPPER_INGOT)] = Block::kUnitsPerBlock;
+        withCopper[Items::KindOf(Items::Of(ItemType::COPPER_INGOT))] = Block::kUnitsPerBlock;
         const auto& gate = Crafting::Recipes()[Crafting::Find("logic_gate")];
         Check(Crafting::TimesAffordable(gate, noCopper) == 0 && Crafting::TimesAffordable(gate, withCopper) == 2, "a logic gate can't be made without copper (half an ingot each)");
-        Check(Smelting::FirstAffordable(std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)>{}) == nullptr, "(nothing to smelt in an empty chest)");
+        Check(Smelting::FirstAffordable(std::array<uint32_t, Items::kKinds>{}) == nullptr, "(nothing to smelt in an empty chest)");
         // Limestone to cement (smelted, or burnt by hand with coal), and cement to concrete.
-        std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> quarry{};
-        quarry[static_cast<size_t>(BlockType::LIMESTONE)] = 4 * Block::kUnitsPerBlock;
-        quarry[static_cast<size_t>(BlockType::COAL)] = Block::kUnitsPerBlock;
+        std::array<uint32_t, Items::kKinds> quarry{};
+        quarry[Items::KindOf(Items::Of(BlockType::LIMESTONE))] = 4 * Block::kUnitsPerBlock;
+        quarry[Items::KindOf(Items::Of(ItemType::COAL))] = Block::kUnitsPerBlock;
         const SmeltRecipe* burnt = Smelting::FirstAffordable(quarry);
-        Check(burnt && burnt->input == BlockType::LIMESTONE && burnt->output == BlockType::CEMENT && burnt->outputUnits == Block::kUnitsPerBlock,
+        Check(burnt && burnt->input == BlockType::LIMESTONE && burnt->output == ItemType::CEMENT && burnt->outputUnits == Block::kUnitsPerBlock,
               "a smelter burns limestone into cement");
         Check(Crafting::TimesAffordable(Crafting::Recipes()[Crafting::Find("cement")], quarry) == 2, "and by hand, two limestone and half a coal make a cement");
-        std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> mix{};
-        mix[static_cast<size_t>(BlockType::CEMENT)] = Block::kUnitsPerBlock;
-        mix[static_cast<size_t>(BlockType::GRAVEL)] = 2 * Block::kUnitsPerBlock;
-        mix[static_cast<size_t>(BlockType::SAND)] = Block::kUnitsPerBlock;
+        std::array<uint32_t, Items::kKinds> mix{};
+        mix[Items::KindOf(Items::Of(ItemType::CEMENT))] = Block::kUnitsPerBlock;
+        mix[Items::KindOf(Items::Of(BlockType::GRAVEL))] = 2 * Block::kUnitsPerBlock;
+        mix[Items::KindOf(Items::Of(BlockType::SAND))] = Block::kUnitsPerBlock;
         const auto& concrete = Crafting::Recipes()[Crafting::Find("concrete")];
         Check(Crafting::TimesAffordable(concrete, mix) == 1 && concrete.output == BlockType::CONCRETE && concrete.outputUnits == 4 * Block::kUnitsPerBlock &&
                   Crafting::TimesAffordable(Crafting::Recipes()[Crafting::Find("asphalt")], mix) == 0,
               "a cement, two gravel and a sand make four concrete");
     }
-    std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)> held{};
-    held[static_cast<size_t>(BlockType::LOG)] = 3 * kBlock;
+    std::array<uint32_t, Items::kKinds> held{};
+    held[Items::KindOf(Items::Of(BlockType::LOG))] = 3 * kBlock;
     Check(Crafting::TimesAffordable(Crafting::Recipes()[Crafting::Find("planks")], held) == 3, "three logs make planks three times");
     {
         std::cout << "Inventories" << std::endl;
@@ -137,12 +157,12 @@ int main() {
         Check(inv.Add(stone, 100) == 0 && inv.slots[0].count == 64 && inv.slots[1].count == 36 && inv.Count(stone) == 100, "100 stone fill a stack of 64 and spill into the next slot");
         Check(inv.Add(Items::OfTool(Tool::Pickaxe), 2) == 1 && inv.Count(Items::OfTool(Tool::Pickaxe)) == 1, "tools don't stack: one pickaxe fits in the last slot");
         Check(inv.Room(stone) == 28 && inv.Add(stone, 30) == 2, "28 more stone fit, and no more");
-        Check(inv.TakeUnits(BlockType::STONE, kBlock / 4) && inv.Count(stone) == 127 && inv.offcuts[static_cast<size_t>(BlockType::STONE)] == kBlock * 3 / 4 &&
+        Check(inv.TakeUnits(BlockType::STONE, kBlock / 4) && inv.Count(stone) == 127 && inv.offcuts[Items::KindOf(Items::Of(BlockType::STONE))] == kBlock * 3 / 4 &&
                   inv.Units(BlockType::STONE) == 128 * kBlock - kBlock / 4,
               "a quarter block of stone cuts one, leaving three quarters as an offcut");
-        Check(inv.TakeUnits(BlockType::STONE, kBlock / 2) && inv.Count(stone) == 127 && inv.offcuts[static_cast<size_t>(BlockType::STONE)] == kBlock / 4,
+        Check(inv.TakeUnits(BlockType::STONE, kBlock / 2) && inv.Count(stone) == 127 && inv.offcuts[Items::KindOf(Items::Of(BlockType::STONE))] == kBlock / 4,
               "the next half comes from the offcut");
-        Check(inv.AddUnits(BlockType::STONE, kBlock * 3 / 4) == 0 && inv.Count(stone) == 128 && inv.offcuts[static_cast<size_t>(BlockType::STONE)] == 0,
+        Check(inv.AddUnits(BlockType::STONE, kBlock * 3 / 4) == 0 && inv.Count(stone) == 128 && inv.offcuts[Items::KindOf(Items::Of(BlockType::STONE))] == 0,
               "three quarters back make it whole again");
         Check(!inv.TakeUnits(BlockType::STONE, 200 * kBlock) && inv.Count(stone) == 128, "taking more than there is takes nothing");
         Check(!inv.FitsUnits(BlockType::DIRT, kBlock) && inv.FitsUnits(BlockType::DIRT, kBlock / 2) && inv.FitsUnits(BlockType::STONE, 0),
@@ -173,7 +193,7 @@ int main() {
         // On the ground (survival players build within 6 blocks).
         server.QueueConsoleCommand("tp Crafter 7.5 0 7.5");
         pump(20.0, [&] { return a.feet.y < 0.5f; });
-        auto units = [&](BlockType t) { return a.client.GetResources(t); };
+        auto units = [&](ItemRef t) { return a.client.GetResources(static_cast<ItemId>(t)); };
         // The client shows crafts at once (predicted); this waits until the server has
         // really done them: a command sent after them is answered after them (one
         // ordered channel), so once its reply is in, so are they.
@@ -236,7 +256,7 @@ int main() {
         for (const char* piece : { "cap", "tunic", "boots" }) a.client.Craft(Crafting::Find(piece), 1);
         sync();
         Check(pump(20.0, [&] { return a.client.HasArmour(ArmourPiece::Cap) && a.client.HasArmour(ArmourPiece::Tunic) && a.client.HasArmour(ArmourPiece::Boots); }) &&
-                  units(BlockType::HIDE) == 0,
+                  units(ItemType::HIDE) == 0,
               "8 hide make a cap, a tunic and boots, worn at once");
         Check(std::abs(Armour::Protection(a.client.GetArmour()) - 0.48f) < 1e-4f && a.client.GetCount(Items::OfArmour(ArmourPiece::Cap)) == 0,
               "they go into the armour slots, and together take off 48%");
@@ -248,20 +268,20 @@ int main() {
         server.QueueConsoleCommand("give steel_ingot 3 Crafter");
         server.QueueConsoleCommand("give iron_ingot 3 Crafter");
         sync();
-        pump(20.0, [&] { return units(BlockType::STEEL_INGOT) == 3 * kBlock && units(BlockType::IRON_INGOT) == 3 * kBlock; });
+        pump(20.0, [&] { return units(ItemType::STEEL_INGOT) == 3 * kBlock && units(ItemType::IRON_INGOT) == 3 * kBlock; });
         const int iron = Crafting::Find("iron_tools"), steel = Crafting::Find("steel_tools");
         Check(!a.client.CanCraft(steel, 1, Tool::Pickaxe) && !a.client.CanCraft(iron, 1, Tool::Axe) && !a.client.CanCraft(iron, 1, Tool::None) &&
                   a.client.CanCraft(iron, 1, Tool::Pickaxe),
               "an upgrade needs the tool in hand, of the tier below: no steel before iron, nothing for a tool not carried");
         a.client.Craft(iron, 1, Tool::Pickaxe);
         sync();
-        Check(pump(20.0, [&] { return a.client.ToolTier(Tool::Pickaxe) == 1; }) && units(BlockType::IRON_INGOT) == 2 * kBlock && a.client.ToolTier(Tool::Sword) == 0 &&
+        Check(pump(20.0, [&] { return a.client.ToolTier(Tool::Pickaxe) == 1; }) && units(ItemType::IRON_INGOT) == 2 * kBlock && a.client.ToolTier(Tool::Sword) == 0 &&
                   a.client.GetCount(Items::OfTool(Tool::Pickaxe)) == 0,
               "an iron ingot makes the stone pickaxe in hand iron (the sword stays stone)");
         Check(a.client.CanCraft(steel, 1, Tool::Pickaxe), "after which it can be made steel");
         a.client.Craft(steel, 1, Tool::Pickaxe);
         sync();
-        Check(pump(20.0, [&] { return a.client.ToolTier(Tool::Pickaxe) == 2; }) && units(BlockType::STEEL_INGOT) == 2 * kBlock &&
+        Check(pump(20.0, [&] { return a.client.ToolTier(Tool::Pickaxe) == 2; }) && units(ItemType::STEEL_INGOT) == 2 * kBlock &&
                   a.client.GetCount(Items::OfTool(Tool::Pickaxe, 2)) == 1,
               "and a steel ingot makes it steel");
         const Block stone(BlockType::STONE);

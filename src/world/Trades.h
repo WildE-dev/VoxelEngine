@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <vector>
 
-#include "world/Block.h"
+#include "world/Inventory.h"
 
 namespace Trades {
 
@@ -24,9 +24,9 @@ constexpr double kPriceRecovery = 60.0;
 constexpr int kMaxPressure = 12;    // (at most four times the price)
 
 struct Offer {
-    BlockType give;                 // what you give...
-    int giveCount;                  // ...how many (whole items or blocks), to start with
-    BlockType get = BlockType::AIR; // what you get (AIR with `hire`: a guard)
+    ItemRef give;  // what you give (a block or item type)...
+    int giveCount; // ...how many (whole ones), to start with
+    ItemRef get;   // what you get (none with `hire`: a guard)
     int getCount = 0;
     bool hire = false;
 };
@@ -34,24 +34,24 @@ struct Offer {
 inline const std::vector<Offer>& Offers() {
     static const std::vector<Offer> offers = {
         // What they sell, for gold.
-        { BlockType::GOLD_INGOT, 1, BlockType::IRON_INGOT, 2 },
-        { BlockType::GOLD_INGOT, 2, BlockType::STEEL_INGOT, 1 },
-        { BlockType::GOLD_INGOT, 1, BlockType::BREAD, 6 },
-        { BlockType::GOLD_INGOT, 1, BlockType::ARROW, 12 },
-        { BlockType::GOLD_INGOT, 2, BlockType::TNT, 2 },
+        { ItemType::GOLD_INGOT, 1, ItemType::IRON_INGOT, 2 },
+        { ItemType::GOLD_INGOT, 2, ItemType::STEEL_INGOT, 1 },
+        { ItemType::GOLD_INGOT, 1, ItemType::BREAD, 6 },
+        { ItemType::GOLD_INGOT, 1, ItemType::ARROW, 12 },
+        { ItemType::GOLD_INGOT, 2, BlockType::TNT, 2 },
         // What they buy, for gold.
-        { BlockType::GLASS, 8, BlockType::GOLD_INGOT, 1 },
-        { BlockType::STEEL_INGOT, 2, BlockType::GOLD_INGOT, 1 },
-        { BlockType::CRUSHED_IRON, 8, BlockType::GOLD_INGOT, 1 },
-        { BlockType::COKE, 4, BlockType::GOLD_INGOT, 1 },
-        { BlockType::COAL, 16, BlockType::GOLD_INGOT, 1 },
-        { BlockType::HIDE, 4, BlockType::GOLD_INGOT, 1 },
+        { BlockType::GLASS, 8, ItemType::GOLD_INGOT, 1 },
+        { ItemType::STEEL_INGOT, 2, ItemType::GOLD_INGOT, 1 },
+        { ItemType::CRUSHED_IRON, 8, ItemType::GOLD_INGOT, 1 },
+        { ItemType::COKE, 4, ItemType::GOLD_INGOT, 1 },
+        { ItemType::COAL, 16, ItemType::GOLD_INGOT, 1 },
+        { ItemType::HIDE, 4, ItemType::GOLD_INGOT, 1 },
         // Barter.
-        { BlockType::BREAD, 4, BlockType::IRON_INGOT, 1 },
-        { BlockType::IRON_INGOT, 3, BlockType::STEEL_INGOT, 1 },
-        { BlockType::GOLD_INGOT, 1, BlockType::COPPER_INGOT, 4 },
+        { ItemType::BREAD, 4, ItemType::IRON_INGOT, 1 },
+        { ItemType::IRON_INGOT, 3, ItemType::STEEL_INGOT, 1 },
+        { ItemType::GOLD_INGOT, 1, ItemType::COPPER_INGOT, 4 },
         // A guard, for ten minutes (last: tests take it by being last).
-        { BlockType::GOLD_INGOT, 3, BlockType::AIR, 0, true },
+        { ItemType::GOLD_INGOT, 3, Items::kNone, 0, true },
     };
     return offers;
 }

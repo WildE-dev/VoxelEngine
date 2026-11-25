@@ -132,9 +132,9 @@ int main() {
         a.client.OpenChest(chestAt);
         Check(both(20.0, [&] { return a.client.GetOpenChest() == chestAt; }), "right-clicking opens it");
         a.client.MoveChestItems(BlockType::STONE, 3, true);
-        a.client.MoveChestItems(BlockType::COOKED_VENISON, 2, true);
-        Check(both(20.0, [&] { return a.client.GetChestUnits(BlockType::STONE) == 3 * kBlock && a.client.GetChestUnits(BlockType::COOKED_VENISON) == 2 * kBlock; }) &&
-                  a.client.GetResources(BlockType::STONE) == 2 * kBlock && a.client.GetResources(BlockType::COOKED_VENISON) == 0,
+        a.client.MoveChestItems(ItemType::COOKED_VENISON, 2, true);
+        Check(both(20.0, [&] { return a.client.GetChestUnits(BlockType::STONE) == 3 * kBlock && a.client.GetChestUnits(ItemType::COOKED_VENISON) == 2 * kBlock; }) &&
+                  a.client.GetResources(BlockType::STONE) == 2 * kBlock && a.client.GetResources(ItemType::COOKED_VENISON) == 0,
               "3 stone and 2 cooked venison go in, and leave the player");
         a.client.MoveChestItems(BlockType::STONE, 10, true);
         Check(both(20.0, [&] { return a.client.GetChestUnits(BlockType::STONE) == 5 * kBlock; }) && a.client.GetResources(BlockType::STONE) == 0,
@@ -144,8 +144,8 @@ int main() {
         b.client.OpenChest(chestAt);
         Check(both(20.0, [&] { return b.client.GetOpenChest() == chestAt && b.client.GetChestUnits(BlockType::STONE) == 5 * kBlock; }),
               "the other player opens it and sees the same things");
-        b.client.MoveChestItems(BlockType::COOKED_VENISON, 1, false);
-        Check(both(20.0, [&] { return b.client.GetResources(BlockType::COOKED_VENISON) == kBlock && a.client.GetChestUnits(BlockType::COOKED_VENISON) == kBlock; }),
+        b.client.MoveChestItems(ItemType::COOKED_VENISON, 1, false);
+        Check(both(20.0, [&] { return b.client.GetResources(ItemType::COOKED_VENISON) == kBlock && a.client.GetChestUnits(ItemType::COOKED_VENISON) == kBlock; }),
               "and takes a cooked venison out (the keeper's open chest shows it gone)");
 
         std::cout << "Slots" << std::endl;
@@ -155,7 +155,7 @@ int main() {
                 if (!inv.slots[i].Empty() && inv.slots[i].item == item) return static_cast<int>(i);
             return -1;
         };
-        const ItemId venison = Items::OfBlock(BlockType::COOKED_VENISON), stone = Items::OfBlock(BlockType::STONE);
+        const ItemId venison = Items::Of(ItemType::COOKED_VENISON), stone = Items::OfBlock(BlockType::STONE);
         b.client.MoveItems(net::Box::Player, slotOf(b.client.GetInventory(), venison), net::Box::Player, 15);
         Check(both(20.0, [&] { return slotOf(b.client.GetInventory(), venison) == 15; }), "a stack moves from one slot to another");
         b.client.MoveItems(net::Box::Chest, slotOf(b.client.GetChest(), stone), net::Box::Player, net::kAnySlot);
@@ -224,7 +224,7 @@ int main() {
         Check(pump(20.0, [&] { Block c; return a.joined && a.world.GetBlock(chestAt.x, chestAt.y, chestAt.z, c) && c.type == BlockType::CHEST; }),
               "after a restart the chest is still there");
         a.client.OpenChest(chestAt);
-        Check(pump(20.0, [&] { return a.client.GetChestUnits(BlockType::STONE) == 5 * kBlock && a.client.GetChestUnits(BlockType::COOKED_VENISON) == kBlock; }),
+        Check(pump(20.0, [&] { return a.client.GetChestUnits(BlockType::STONE) == 5 * kBlock && a.client.GetChestUnits(ItemType::COOKED_VENISON) == kBlock; }),
               "with the same things in it");
 
         Check(pump(20.0, [&] { auto it = a.client.GetSigns().find({ 8, 0, 9 }); return it != a.client.GetSigns().end() && it->second == "Keep out! (mine)"; }),
@@ -235,7 +235,7 @@ int main() {
         pump(20.0, [&] { return a.client.IsCreative(); });
         a.client.BreakBlock(chestAt);
         Check(pump(20.0, [&] { return !a.client.GetOpenChest(); }), "breaking it closes it");
-        Check(pump(20.0, [&] { return a.client.GetResources(BlockType::STONE) == 5 * kBlock && a.client.GetResources(BlockType::COOKED_VENISON) == kBlock; }),
+        Check(pump(20.0, [&] { return a.client.GetResources(BlockType::STONE) == 5 * kBlock && a.client.GetResources(ItemType::COOKED_VENISON) == kBlock; }),
               "and what was in it goes to whoever broke it");
         a.client.Disconnect();
         Pump({ &a }, 0.3, [] { return false; });

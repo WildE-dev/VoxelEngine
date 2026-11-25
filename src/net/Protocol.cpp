@@ -1,4 +1,5 @@
 #include "net/Protocol.h"
+#include "world/Legacy.h"
 #include "world/Signals.h"
 
 #include <algorithm>
@@ -104,11 +105,12 @@ bool DecodeChunkPlanes(ByteReader& in, ChunkBlocks& blocks, ChunkLight& light) {
     return DecodeBlockPlanes(in, blocks) && DecodeLightPlane(in, light);
 }
 
-bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis) {
+bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis, bool v16) {
     bool valid = true;
     if (!DecodePlane(in, [&](int i, uint8_t v) {
-            if (v >= static_cast<uint8_t>(BlockType::COUNT)) valid = false;
-            blocks[i].type = static_cast<BlockType>(v);
+            const BlockType t = v16 ? Legacy::BlockFromV16(v) : static_cast<BlockType>(v);
+            if (t >= BlockType::COUNT) valid = false;
+            blocks[i].type = t;
         }))
         return false;
     for (int e = 0; e < 4; e++)
@@ -128,6 +130,9 @@ bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis) {
     }
     else if (!DecodePlane(in, [&](int i, uint8_t v) { blocks[i].axis = v; }))
         return false;
+    if (v16)
+        for (auto& b : blocks)
+            if (b.type == BlockType::FILTER_PIPE) b.axis = Legacy::FilterAxisFromV16(b.axis); // (it held an old block number)
     return valid;
 }
 
@@ -181,7 +186,7 @@ std::vector<uint8_t> Encode(const PlayerState& m) {
     w.F32(m.pitch);
     w.U8(m.flags);
     w.U8(static_cast<uint8_t>(m.heldTool));
-    w.U8(static_cast<uint8_t>(m.heldBlock));
+    w.U16(m.heldItem);
     return std::move(w.data);
 }
 
@@ -624,7 +629,7 @@ void WriteInventory(ByteWriter& w, const ::Inventory& inv) {
         }
 }
 
-bool ReadInventory(ByteReader& in, ::Inventory& inv, size_t maxSlots) {
+bool ReadInventory(ByteReader& in, ::Inventory& inv, size_t maxSlots, bool v16) {
     uint32_t n;
     if (!in.VarU32(n) || n > maxSlots) return false;
     inv.slots.assign(n, Stack{});
@@ -634,6 +639,7 @@ bool ReadInventory(ByteReader& in, ::Inventory& inv, size_t maxSlots) {
         if (!in.U16(item)) return false;
         if (item == 0) continue;
         uint8_t count;
+        if (v16) item = Legacy::FromV16(item);
         if (!Items::Valid(item) || !in.U8(count) || count == 0 || count > Items::MaxStack(item)) return false;
         if (Items::IsBlock(item)) item = Items::OfBlock(Current(Items::BlockOf(item))); // (old water pipes are fluid pipes now)
         st = { item, count };
@@ -642,8 +648,11 @@ bool ReadInventory(ByteReader& in, ::Inventory& inv, size_t maxSlots) {
     if (!in.VarU32(kinds) || kinds > inv.offcuts.size()) return false;
     for (uint32_t k = 0; k < kinds; k++) {
         uint8_t t, units;
-        if (!in.U8(t) || t >= inv.offcuts.size() || !in.U8(units) || units >= Items::kUnits) return false;
-        const size_t kept = static_cast<size_t>(Current(static_cast<BlockType>(t)));
+        if (!in.U8(t) || !in.U8(units) || units >= Items::kUnits) return false;
+        ItemId item = v16 ? Legacy::ItemFromV16Block(t) : Items::OfKind(t);
+        if (!Items::IsStackable(item)) return false;
+        if (Items::IsBlock(item)) item = Items::OfBlock(Current(Items::BlockOf(item)));
+        const size_t kept = Items::KindOf(item);
         inv.offcuts[kept] = static_cast<uint8_t>(std::min<int>(Items::kUnits - 1, inv.offcuts[kept] + units));
     }
     return true;
@@ -729,7 +738,7 @@ std::vector<uint8_t> Encode(const Health& m) {
 std::vector<uint8_t> Encode(const Eat& m) {
     ByteWriter w;
     Begin(w, MsgType::Eat);
-    w.U8(static_cast<uint8_t>(m.food));
+    w.U16(m.food);
     return std::move(w.data);
 }
 
@@ -785,10 +794,7 @@ bool Decode(ByteReader& in, ChestContents& m) {
 }
 
 bool Decode(ByteReader& in, Eat& m) {
-    uint8_t type;
-    if (!in.U8(type) || type >= static_cast<uint8_t>(BlockType::COUNT)) return false;
-    m.food = static_cast<BlockType>(type);
-    return in.AtEnd();
+    return in.U16(m.food) && Items::Valid(m.food) && in.AtEnd();
 }
 
 bool Decode(ByteReader& in, Health& m) {
@@ -882,7 +888,7 @@ std::vector<uint8_t> Encode(const PlayerSnapshot& m) {
         w.F32(p.pitch);
         w.U8(p.flags);
         w.U8(static_cast<uint8_t>(p.heldTool));
-        w.U8(static_cast<uint8_t>(p.heldBlock));
+        w.U16(p.heldItem);
         w.U8(p.armour);
     }
     w.F32(m.timeOfDay);
@@ -931,19 +937,18 @@ bool Decode(ByteReader& in, Kick& m) {
 }
 
 namespace {
-// What a player holds: a tool and a block type, both in range.
-bool ReadHeld(ByteReader& in, Tool& tool, BlockType& block) {
-    uint8_t t, b;
-    if (!in.U8(t) || !in.U8(b) || t >= static_cast<uint8_t>(Tool::Count) || b >= static_cast<uint8_t>(BlockType::COUNT)) return false;
+// What a player holds: a tool and an item (or none), both real.
+bool ReadHeld(ByteReader& in, Tool& tool, ItemId& item) {
+    uint8_t t;
+    if (!in.U8(t) || !in.U16(item) || t >= static_cast<uint8_t>(Tool::Count) || (item != Items::kNone && !Items::Valid(item))) return false;
     tool = static_cast<Tool>(t);
-    block = static_cast<BlockType>(b);
     return true;
 }
 } // namespace
 
 bool Decode(ByteReader& in, PlayerState& m) {
     return in.U32(m.sequence) && in.U16(m.correctionId) && in.Vec3(m.feet) && in.Vec3(m.velocity) && in.F32(m.yaw) &&
-           in.F32(m.pitch) && in.U8(m.flags) && ReadHeld(in, m.heldTool, m.heldBlock) && Finite(m.feet) && Finite(m.velocity) &&
+           in.F32(m.pitch) && in.U8(m.flags) && ReadHeld(in, m.heldTool, m.heldItem) && Finite(m.feet) && Finite(m.velocity) &&
            std::isfinite(m.yaw) && std::isfinite(m.pitch);
 }
 
@@ -1029,7 +1034,7 @@ bool Decode(ByteReader& in, PlayerSnapshot& m) {
     if (!in.U32(m.tick) || !in.VarU32(n) || n > kMaxPlayers) return false;
     m.players.resize(n);
     for (auto& p : m.players)
-        if (!in.U16(p.id) || !in.Vec3(p.feet) || !in.F32(p.yaw) || !in.F32(p.pitch) || !in.U8(p.flags) || !ReadHeld(in, p.heldTool, p.heldBlock) ||
+        if (!in.U16(p.id) || !in.Vec3(p.feet) || !in.F32(p.yaw) || !in.F32(p.pitch) || !in.U8(p.flags) || !ReadHeld(in, p.heldTool, p.heldItem) ||
             !in.U8(p.armour))
             return false;
     return in.F32(m.timeOfDay) && in.U8(m.rain) && in.U8(m.storm) && m.storm <= 1 && std::isfinite(m.timeOfDay) && m.timeOfDay >= 0.0f && m.timeOfDay < 1.0f;

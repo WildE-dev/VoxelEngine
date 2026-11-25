@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <iostream>
 
+#include "world/Items.h"
 #include "world/Json.h"
 #include "world/Mining.h"
 
@@ -144,7 +145,9 @@ bool Load(const std::string& path, std::string& error) {
     for (const auto& [id, v] : root.object) {
         const BlockType t = id == "air" ? BlockType::AIR : BlockFromId(id);
         if (t == BlockType::COUNT || !v.IsObject()) {
-            std::cerr << "[data] " << path << ": no block called '" << id << "' (left out)" << std::endl;
+            // (An item's file left from when items were blocks: they're in Resources/Data/items now.)
+            const bool item = ItemTypeFromId(id) != ItemType::COUNT;
+            std::cerr << "[data] " << path << ": no block called '" << id << "'" << (item ? " (an item now: see Resources/Data/items)" : " (left out)") << std::endl;
             continue;
         }
         Entry& e = loaded[static_cast<size_t>(t)];

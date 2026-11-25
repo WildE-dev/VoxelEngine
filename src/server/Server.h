@@ -199,7 +199,7 @@ private:
         bool falling = false;
         glm::vec3 fallVelocity{ 0.0f };      // the velocity they last said while in the air
         Tool heldTool = Tool::None;          // in their hand, for others to see
-        BlockType heldBlock = BlockType::AIR;
+        ItemId heldItem = Items::kNone;  
 
         int health = kMaxHealth;
         int sentHealth = -1;          // last health the client was told
@@ -309,7 +309,7 @@ private:
     void HandleUseBucket(ClientState& client, const net::UseBucket& m);
     // Gives a player units of a type (survival); what doesn't fit is lost, and they're
     // told. Returns whether it all fitted. (The caller sends the inventory.)
-    bool Give(ClientState& client, BlockType type, uint32_t units);
+    bool Give(ClientState& client, ItemRef item, uint32_t units);
     // A tick of the creatures, and telling each player about the ones near them.
     void UpdateCreatures();
     void SendCreatures();
@@ -359,7 +359,7 @@ private:
     // once it has run out (see world/Breathing.h).
     void UpdateBreath(ClientState& client, float dt);
     void UpdateHunger(ClientState& client, float dt);
-    void HandleEat(ClientState& client, BlockType food);
+    void HandleEat(ClientState& client, ItemId food);
     // Chests: what's in each (world/Inventory.h), by position; saved with the world.
     using ChestItems = Inventory;
     void HandleOpenChest(ClientState& client, const glm::ivec3& pos, bool open);
@@ -487,7 +487,7 @@ private:
         double nextSmelt = 0.0;
         double lastSmelt = -1e9;
         Power::DrillState state = Power::DrillState::Idle; // Working, NoPressure, NoChest, or Idle (nothing to smelt)
-        BlockType made = BlockType::AIR;                     // what it made last
+        ItemId made = Items::kNone;                           // what it made last
     };
     struct Compressor {
         float power = 0.0f; // the speeds of the wheels on its shaft lines, added up
@@ -588,9 +588,9 @@ private:
     // beside it. Returns whether it dug.
     bool DrillDig(const glm::ivec3& pos, Drill& drill);
     // The chests joined to a machine: touching it, or at the ends of item pipes from it
-    // (nearest first). For things of `type` (filter pipes pass only theirs; COUNT:
+    // (nearest first). For things of `item` (filter pipes pass only theirs; none:
     // anything, through unset filters only). With `face`, only out of that side.
-    std::vector<glm::ivec3> ChestsJoined(const glm::ivec3& pos, BlockType type = BlockType::COUNT, const glm::ivec3* face = nullptr) const;
+    std::vector<glm::ivec3> ChestsJoined(const glm::ivec3& pos, ItemId item = Items::kNone, const glm::ivec3* face = nullptr) const;
     // An extractor's, a crafter's or a harvester's turn (it has the air): whether it did
     // something.
     bool Extract(const glm::ivec3& pos, const Block& extractor, Worker& w);

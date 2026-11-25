@@ -29,7 +29,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 66;
+constexpr uint32_t kProtocolVersion = 67;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -173,7 +173,9 @@ bool DecodeChunkPlanes(ByteReader& in, ChunkBlocks& blocks, ChunkLight& light);
 // Just the block planes (saved chunks store no light; it's recomputed on load).
 void EncodeBlockPlanes(ByteWriter& out, const ChunkBlocks& blocks);
 // withAxis: false for planes saved before blocks had an axis (region format < 5).
-bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis = true);
+// v16: saved when block numbers counted items too (region format < 17, see
+// world/Legacy.h): they're turned into today's.
+bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis = true, bool v16 = false);
 void EncodeLightPlane(ByteWriter& out, const ChunkLight& light);
 bool DecodeLightPlane(ByteReader& in, ChunkLight& light);
 
@@ -230,9 +232,9 @@ struct PlayerState {
     float yaw = 0.0f, pitch = 0.0f; // degrees
     uint8_t flags = 0;
     // What's in their hand, for others to see: a tool, or else a block or item
-    // (BlockType::AIR: nothing).
+    // (Items::kNone: nothing).
     Tool heldTool = Tool::None;
-    BlockType heldBlock = BlockType::AIR;
+    ItemId heldItem = Items::kNone;
 };
 
 struct EditBreak {
@@ -262,10 +264,12 @@ struct GameModeIs {
 };
 // An inventory's slots and offcuts (world/Inventory.h), as they travel (and are saved):
 // the slot count, each slot's item (U16, 0 empty) and, if not empty, its count (U8);
-// then the offcuts: how many, and each one's type and units.
+// then the offcuts: how many, and each one's kind (Items::KindOf) and units.
 void WriteInventory(ByteWriter& out, const ::Inventory& inv);
 // Rejects unknown items, impossible counts and offcuts, and more than maxSlots slots.
-bool ReadInventory(ByteReader& in, ::Inventory& inv, size_t maxSlots = 512);
+// `v16`: saved before items had their own types (save format 16 and earlier), when
+// block numbers counted items too (see world/Legacy.h).
+bool ReadInventory(ByteReader& in, ::Inventory& inv, size_t maxSlots = 512, bool v16 = false);
 // What you carry: your slots (the hotbar first), offcuts and armour worn.
 struct InventoryIs {
     ::Inventory items{ ::Inventory::kPlayerSlots };
@@ -336,7 +340,7 @@ struct PlayerInfo {
     float yaw = 0.0f, pitch = 0.0f;
     uint8_t flags = 0;
     Tool heldTool = Tool::None;          // see PlayerState
-    BlockType heldBlock = BlockType::AIR;
+    ItemId heldItem = Items::kNone;
     uint8_t armour = 0;                  // armour worn (Armour::Bit each)
 };
 
@@ -572,7 +576,7 @@ struct UseBed {
 
 // Eat one of a food item you hold.
 struct Eat {
-    BlockType food = BlockType::AIR;
+    ItemId food = Items::kNone;
 };
 
 // Chat: what a player typed, and lines for the chat log.

@@ -1,2 +1,0 @@
-// bucket: a block (the format is in README.md, here)
-{ "name": "Bucket", "textures": { "all": "bucket" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

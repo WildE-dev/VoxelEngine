@@ -8,6 +8,9 @@
 //  - a world saved before inventories (format 13) loads with each player's units,
 //    tools (at their upgrade's tier) and armour, and each chest's units, as stacks,
 //    and saves and loads again as they are,
+//  - a world saved while items were block types (format 16) loads with its block
+//    numbers, in chunks, inventories, offcuts, items on the ground and filter pipes,
+//    turned into today's blocks and items,
 //  - a player who rejoins a saved server by name gets their position and look back,
 //    and lands exactly there; a new player doesn't.
 #include <chrono>
@@ -27,6 +30,7 @@
 #include "server/Server.h"
 #include "server/ServerWorld.h"
 #include "server/WorldStorage.h"
+#include "world/Legacy.h"
 
 namespace fs = std::filesystem;
 
@@ -249,7 +253,16 @@ int main() {
     {
         const fs::path old = dir.string() + "-old";
         fs::create_directories(old);
-        const auto stone = static_cast<size_t>(BlockType::STONE), planks = static_cast<size_t>(BlockType::PLANKS), coal = static_cast<size_t>(BlockType::COAL);
+        // (Saved by block numbers of the time, format 16's, when coal was block 38.)
+        const auto v16 = [](const char* id) {
+            size_t i = 0;
+            while (std::string(Legacy::kV16BlockIds[i]) != id) i++;
+            return i;
+        };
+        const size_t stone = v16("stone"), planks = v16("planks"), coal = v16("coal");
+        Check(coal == 38 && Legacy::ItemFromV16Block(38) == Items::Of(ItemType::COAL) && Legacy::BlockFromV16(38) == BlockType::COUNT &&
+                  Legacy::BlockFromV16(static_cast<uint8_t>(v16("chest"))) == BlockType::CHEST,
+              "old block numbers: 38 was coal (an item now, never a block in the world), and the chest's old number is the chest");
         net::ByteWriter w;
         for (char c : { 'V', 'X', 'W', 'D' }) w.U8(static_cast<uint8_t>(c));
         w.U32(13);  // format
@@ -280,18 +293,102 @@ int main() {
             const bool opened = storage.Open();
             const auto p = opened ? storage.FindPlayer("Old") : std::nullopt;
             const auto chests = opened ? storage.GetChests() : WorldStorage::Chests{};
-            Check(p && p->inventory.Count(Items::OfBlock(BlockType::STONE)) == 100 && p->inventory.offcuts[stone] == 16 &&
+            Check(p && p->inventory.Count(Items::OfBlock(BlockType::STONE)) == 100 && p->inventory.Offcut(Items::Of(BlockType::STONE)) == 16 &&
                       p->inventory.Units(BlockType::PLANKS) == 3 * 64 && p->inventory.slots.size() == Inventory::kPlayerSlots,
                   std::string(when) + ": the old player's 100.25 stone and 3 planks are stacks (and a quarter offcut)");
             Check(p && p->inventory.Count(Items::OfTool(Tool::Pickaxe, 1)) == 1 && p->inventory.Count(Items::OfTool(Tool::Axe, 1)) == 1 &&
                       p->inventory.Count(Items::OfTool(Tool::Chisel, 1)) == 1 && p->inventory.BestTier(Tool::Shovel) < 0 &&
                       p->armour == Armour::Bit(ArmourPiece::Cap),
                   std::string(when) + ": their pickaxe, axe and chisel are iron (they had the upgrade), and the cap is still worn");
-            Check(chests.size() == 1 && chests[0].second.Count(Items::OfBlock(BlockType::COAL)) == 5 && chests[0].second.offcuts[coal] == 32,
+            Check(chests.size() == 1 && chests[0].second.Count(Items::Of(ItemType::COAL)) == 5 && chests[0].second.Offcut(Items::Of(ItemType::COAL)) == 32,
                   std::string(when) + ": the chest's 5.5 coal are 5 coal and half an offcut");
             if (p && opened && std::string(when) == "converted") {
                 storage.StorePlayer("Old", *p);
                 storage.SetChests(chests);
+                Check(storage.Flush(), "saved again in the new format");
+            }
+        };
+        check("converted");
+        check("saved again");
+        fs::remove_all(old);
+    }
+
+    std::cout << "Saves from when items were blocks" << std::endl;
+    {
+        const fs::path old = dir.string() + "-v16";
+        fs::create_directories(old / "regions");
+        const auto v16 = [](const char* id) {
+            uint8_t i = 0;
+            while (std::string(Legacy::kV16BlockIds[i]) != id) i++;
+            return i;
+        };
+        const uint8_t iron = v16("iron_ingot"), stone = v16("stone"), bread = v16("bread"), gravel = v16("gravel");
+        Check(iron == 39 && gravel == 137, "(format 16: iron ingots were block 39, gravel 137)");
+        // world.dat: a player carrying iron ingots and stone, half an ingot of offcut, and
+        // a pickaxe; a chest of bread; iron ingots on the ground.
+        net::ByteWriter w;
+        for (char c : { 'V', 'X', 'W', 'D' }) w.U8(static_cast<uint8_t>(c));
+        w.U32(16), w.U8(0), w.F32(0.3f), w.U8(0);
+        w.VarU32(1);
+        w.Str("Smith");
+        w.Vec3(glm::vec3(3.0f, 10.0f, 4.0f));
+        w.F32(0.0f), w.F32(0.0f), w.U8(0);
+        w.U8(0), w.VarU32(0), w.U8(0); // survival, no old units, no old tools
+        net::ByteWriter inv;
+        inv.VarU32(static_cast<uint32_t>(Inventory::kPlayerSlots));
+        inv.U16(iron), inv.U8(5);
+        inv.U16(stone), inv.U8(7);
+        inv.U16(Items::OfTool(Tool::Pickaxe)), inv.U8(1);
+        for (size_t i = 3; i < Inventory::kPlayerSlots; i++) inv.U16(0);
+        inv.VarU32(1), inv.U8(iron), inv.U8(32); // half an ingot
+        w.VarU32(1);
+        w.U8(7), w.VarU32(static_cast<uint32_t>(inv.data.size())), w.Bytes(inv.data.data(), inv.data.size());
+        w.VarU32(1); // a chest of 3 bread
+        w.IVec3(glm::ivec3(1, 1, 1));
+        w.VarU32(1), w.U16(bread), w.U8(3), w.VarU32(0);
+        for (int i = 0; i < 5; i++) w.VarU32(0); // no crops, signs, signals, fluids or air
+        w.VarU32(1); // 2 iron ingots on the ground
+        w.U16(iron), w.U8(2), w.U8(0), w.Vec3(glm::vec3(5.5f, 3.0f, 5.5f)), w.F32(1.0f);
+        w.VarU32(0); // no placed leaves
+        std::ofstream(old / "world.dat", std::ios::binary).write(reinterpret_cast<const char*>(w.data.data()), static_cast<std::streamsize>(w.data.size()));
+        // A region: a chest, gravel, and a filter pipe set to let iron ingots through.
+        net::ChunkBlocks blocks{};
+        blocks[Chunk::Index(1, 1, 1)].type = static_cast<BlockType>(v16("chest"));
+        blocks[Chunk::Index(2, 1, 1)].type = static_cast<BlockType>(gravel);
+        blocks[Chunk::Index(3, 1, 1)].type = static_cast<BlockType>(v16("filter_pipe"));
+        blocks[Chunk::Index(3, 1, 1)].axis = iron;
+        net::ByteWriter planes;
+        net::EncodeBlockPlanes(planes, blocks);
+        net::ByteWriter region;
+        for (char c : { 'V', 'X', 'R', 'G' }) region.U8(static_cast<uint8_t>(c));
+        region.U32(16), region.U32(1);
+        region.IVec3(glm::ivec3(0)), region.VarU32(static_cast<uint32_t>(planes.data.size())), region.Bytes(planes.data.data(), planes.data.size());
+        std::ofstream(old / "regions" / "r.0.0.0.vxr", std::ios::binary)
+            .write(reinterpret_cast<const char*>(region.data.data()), static_cast<std::streamsize>(region.data.size()));
+
+        auto check = [&](const char* when) {
+            WorldStorage storage(old);
+            const bool opened = storage.Open();
+            const auto p = opened ? storage.FindPlayer("Smith") : std::nullopt;
+            Check(p && p->inventory.Count(Items::Of(ItemType::IRON_INGOT)) == 5 && p->inventory.Count(Items::Of(BlockType::STONE)) == 7 &&
+                      p->inventory.Count(Items::OfTool(Tool::Pickaxe)) == 1 && p->inventory.Offcut(Items::Of(ItemType::IRON_INGOT)) == 32 &&
+                      p->inventory.Units(ItemType::IRON_INGOT) == 5 * 64 + 32,
+                  std::string(when) + ": the player's iron ingots (and half an ingot), stone and pickaxe");
+            const auto chests = opened ? storage.GetChests() : WorldStorage::Chests{};
+            Check(chests.size() == 1 && chests[0].second.Count(Items::Of(ItemType::BREAD)) == 3, std::string(when) + ": the chest's bread");
+            const auto items = opened ? storage.GetItems() : std::vector<WorldStorage::SavedItem>{};
+            Check(items.size() == 1 && items[0].item == Items::Of(ItemType::IRON_INGOT) && items[0].count == 2, std::string(when) + ": the iron ingots on the ground");
+            net::ChunkBlocks loaded{};
+            const bool chunk = opened && storage.LoadChunk(glm::ivec3(0), loaded);
+            Check(chunk && loaded[Chunk::Index(1, 1, 1)].type == BlockType::CHEST && loaded[Chunk::Index(2, 1, 1)].type == BlockType::GRAVEL &&
+                      loaded[Chunk::Index(3, 1, 1)].type == BlockType::FILTER_PIPE && Items::FilterOf(loaded[Chunk::Index(3, 1, 1)]) == Items::Of(ItemType::IRON_INGOT) &&
+                      loaded[Chunk::Index(0, 0, 0)].type == BlockType::AIR,
+                  std::string(when) + ": the chunk's chest, gravel, and filter pipe (still for iron ingots)");
+            if (p && opened && std::string(when) == "converted") {
+                storage.StorePlayer("Smith", *p);
+                storage.SetChests(chests);
+                storage.SetItems(items);
+                storage.StoreChunk(glm::ivec3(0), loaded);
                 Check(storage.Flush(), "saved again in the new format");
             }
         };

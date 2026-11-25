@@ -56,7 +56,7 @@ struct TestClient {
     Client client{ world };
     glm::vec3 feet{ 0.0f };
     bool joined = false;
-    BlockType held = BlockType::AIR; // what they're holding (the server sees it)
+    ItemRef held; // what they're holding (the server sees it)
     void Update() {
         client.Poll();
         if (!joined && client.IsWelcomed()) joined = true, feet = client.GetSpawn();
@@ -160,13 +160,13 @@ int main(int argc, char** argv) {
                     if (blockAt(smelter) == BlockType::SMELTER_LIT) sawLit = true;
                     return false;
                 });
-                if (a.client.GetChestUnits(BlockType::STEEL_INGOT) >= 2 * Crafting::kBlock && a.client.GetChestUnits(BlockType::GLASS) >= 2 * Crafting::kBlock) break;
+                if (a.client.GetChestUnits(ItemType::STEEL_INGOT) >= 2 * Crafting::kBlock && a.client.GetChestUnits(BlockType::GLASS) >= 2 * Crafting::kBlock) break;
             }
             Check(sawSand, "the drill's sand comes down the item pipes into the chest");
             Check(a.client.GetChestUnits(BlockType::GLASS) == 2 * Crafting::kBlock && a.client.GetChestUnits(BlockType::SAND) == 0, "the smelter makes both blocks of sand into glass");
-            Check(a.client.GetChestUnits(BlockType::IRON_ORE) == 0 && a.client.GetChestUnits(BlockType::IRON_INGOT) + a.client.GetChestUnits(BlockType::STEEL_INGOT) == 4 * Crafting::kBlock,
+            Check(a.client.GetChestUnits(BlockType::IRON_ORE) == 0 && a.client.GetChestUnits(ItemType::IRON_INGOT) + a.client.GetChestUnits(ItemType::STEEL_INGOT) == 4 * Crafting::kBlock,
                   "and both blocks of iron ore into 4 iron ingots");
-            Check(a.client.GetChestUnits(BlockType::STEEL_INGOT) == 2 * Crafting::kBlock && a.client.GetChestUnits(BlockType::COAL) == 0,
+            Check(a.client.GetChestUnits(ItemType::STEEL_INGOT) == 2 * Crafting::kBlock && a.client.GetChestUnits(ItemType::COAL) == 0,
                   "and then, with the coal from the coal ore, 2 of them into steel");
             Check(sawLit, "lit while it works");
             Check(pump(6.0, [&] { return blockAt(smelter) == BlockType::SMELTER; }), "and dark again once there's nothing left to smelt");
@@ -199,7 +199,7 @@ int main(int argc, char** argv) {
             Check(pump(5.0, [&] { return Has(a.client, "Filter: glass"); }), "right-clicking the filter with glass in hand sets it to glass");
             Check(pump(5.0, [&] {
                       Block f;
-                      return a.world.GetBlock(filter.x, filter.y, filter.z, f) && f.FilterType() == BlockType::GLASS;
+                      return a.world.GetBlock(filter.x, filter.y, filter.z, f) && Items::FilterOf(f) == Items::Of(BlockType::GLASS);
                   }),
                   "(kept in the block)");
             a.held = BlockType::AIR;
@@ -212,8 +212,8 @@ int main(int argc, char** argv) {
             Check(sorted, "the glass goes through the filter to chest B");
             a.client.OpenChest(chestA);
             Check(pump(10.0, [&] {
-                      return a.client.GetOpenChest() == chestA && a.client.GetChestUnits(BlockType::IRON_INGOT) == 2 * Crafting::kBlock &&
-                             a.client.GetChestUnits(BlockType::STEEL_INGOT) == 2 * Crafting::kBlock && a.client.GetChestUnits(BlockType::GLASS) == 0;
+                      return a.client.GetOpenChest() == chestA && a.client.GetChestUnits(ItemType::IRON_INGOT) == 2 * Crafting::kBlock &&
+                             a.client.GetChestUnits(ItemType::STEEL_INGOT) == 2 * Crafting::kBlock && a.client.GetChestUnits(BlockType::GLASS) == 0;
                   }),
                   "the iron and steel to chest A (the filter keeps them out of B)");
 
@@ -258,7 +258,7 @@ int main(int argc, char** argv) {
             bool reaped = false;
             for (int i = 0; i < 20 && !reaped; i++) {
                 server.QueueConsoleCommand("pressurise 12 1 8");
-                reaped = pump(1.0, [&] { return a.client.GetChestUnits(BlockType::WHEAT) == 2 * Crafting::kBlock; });
+                reaped = pump(1.0, [&] { return a.client.GetChestUnits(ItemType::WHEAT) == 2 * Crafting::kBlock; });
             }
             Check(reaped, "the harvester reaps both crops of wheat into chest A");
             Check(pump(3.0, [&] { return blockAt({ 21, 0, 5 }) == BlockType::CROP && blockAt({ 21, 0, 6 }) == BlockType::CROP; }),
@@ -317,7 +317,7 @@ int main(int argc, char** argv) {
             a.client.PlaceBlock(engineGauge, BlockType::PRESSURE_GAUGE, 8, 2);
             Check(pump(10.0, [&] { return blockAt(engineGauge) == BlockType::PRESSURE_GAUGE && blockAt({ 35, 0, 31 }) == BlockType::REFINERY && blockAt({ 31, 4, 31 }) == BlockType::STEEL_FRAME; }),
                   "an oil derrick and a refinery built, tanks between them, an engine with its own air pipe and gauge");
-            a.held = BlockType::HAMMER;
+            a.held = ItemType::HAMMER;
             wait(0.3);
             a.client.UseBed({ 31, 0, 31 });
             a.client.UseBed({ 35, 0, 31 });
@@ -343,7 +343,7 @@ int main(int argc, char** argv) {
             a.client.OpenChest({ 35, 0, 31 });
             Check(pump(30.0, [&] {
                       server.QueueConsoleCommand("pressurise 29 0 31");
-                      return a.client.GetOpenChest() == glm::ivec3(35, 0, 31) && a.client.GetChestUnits(BlockType::BITUMEN) > 0;
+                      return a.client.GetOpenChest() == glm::ivec3(35, 0, 31) && a.client.GetChestUnits(ItemType::BITUMEN) > 0;
                   }),
                   "and leaves bitumen over in its inventory");
             const auto* g = machine(engineGauge);
@@ -404,15 +404,15 @@ int main(int argc, char** argv) {
             wait(3.0);
             Check(miners() == 0 && machine(post) && machine(post)->state == static_cast<uint8_t>(Power::DrillState::NoPressure), "unpaid, no miners come");
             server.QueueConsoleCommand("give bread 2 Builder");
-            pump(5.0, [&] { return a.client.GetResources(BlockType::BREAD) >= 2 * Crafting::kBlock; });
+            pump(5.0, [&] { return a.client.GetResources(ItemType::BREAD) >= 2 * Crafting::kBlock; });
             a.client.OpenChest(post);
             Check(pump(10.0, [&] { return a.client.GetOpenChest() == post; }), "it opens like a chest");
-            a.client.MoveChestItems(BlockType::BREAD, 1, true);
+            a.client.MoveChestItems(ItemType::BREAD, 1, true);
             Check(pump(10.0, [&] { return miners() >= 1; }), "paid in bread, dwarf miners come to work it");
-            Check(pump(30.0, [&] { return a.client.GetChestUnits(BlockType::COAL) == Crafting::kBlock && a.client.GetChestUnits(BlockType::IRON_ORE) == Crafting::kBlock; }),
+            Check(pump(30.0, [&] { return a.client.GetChestUnits(ItemType::COAL) == Crafting::kBlock && a.client.GetChestUnits(BlockType::IRON_ORE) == Crafting::kBlock; }),
                   "they dig out the coal and the iron ore and put them in the post");
             Check(blockAt(coal) == BlockType::AIR && blockAt(iron) == BlockType::AIR, "the ore is gone from the ground");
-            Check(a.client.GetChestUnits(BlockType::BREAD) == Crafting::kBlock - 2 * 16, "for a quarter of a block of bread each");
+            Check(a.client.GetChestUnits(ItemType::BREAD) == Crafting::kBlock - 2 * 16, "for a quarter of a block of bread each");
             a.client.BreakBlock(post);
             Check(pump(10.0, [&] { return miners() == 0; }), "breaking the post sends them away");
 
@@ -430,7 +430,7 @@ int main(int argc, char** argv) {
             fill({ 61, 1, 59 }, { 61, 1, 59 }, "chest");
             fill({ 61, 1, 61 }, { 61, 1, 61 }, "fire_brick"); // (the smelter's place, wrongly)
             pump(10.0, [&] { return blockAt({ 61, 1, 59 }) == BlockType::CHEST && blockAt({ 61, 1, 60 }) == BlockType::ITEM_PIPE; });
-            a.held = BlockType::HAMMER;
+            a.held = ItemType::HAMMER;
             wait(0.3);
             a.client.UseBed({ 60, 0, 60 });
             Check(pump(5.0, [&] { return Has(a.client, "Not quite a Blast furnace: 1 block missing or wrong (at 61 1 61 it needs smelter)"); }),
@@ -485,7 +485,7 @@ int main(int argc, char** argv) {
             fill({ 70, 3, 61 }, { 72, 3, 61 }, "steel_frame");
             fill({ 71, 4, 61 }, { 71, 4, 61 }, "steel_frame");
             pump(10.0, [&] { return blockAt({ 71, 4, 61 }) == BlockType::STEEL_FRAME && blockAt({ 73, 0, 61 }) == BlockType::FLUID_TANK; });
-            a.held = BlockType::HAMMER;
+            a.held = ItemType::HAMMER;
             wait(0.3);
             a.client.UseBed({ 71, 0, 61 });
             Check(pump(5.0, [&] { return Has(a.client, "Formed an Oil derrick"); }), "an oil derrick structure forms");
@@ -511,7 +511,7 @@ int main(int argc, char** argv) {
             server.QueueConsoleCommand("give iron_ore 1 Builder");
             server.QueueConsoleCommand("give stone 1 Builder");
             server.QueueConsoleCommand("give coal 4 Builder");
-            pump(5.0, [&] { return a.client.GetResources(BlockType::IRON_ORE) >= Crafting::kBlock && a.client.GetResources(BlockType::COAL) >= 4 * Crafting::kBlock; });
+            pump(5.0, [&] { return a.client.GetResources(BlockType::IRON_ORE) >= Crafting::kBlock && a.client.GetResources(ItemType::COAL) >= 4 * Crafting::kBlock; });
             a.client.OpenChest({ 80, 0, 50 });
             pump(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(80, 0, 50); });
             a.client.MoveChestItems(BlockType::IRON_ORE, 1, true);
@@ -519,7 +519,7 @@ int main(int argc, char** argv) {
             bool crushed = false;
             for (int i = 0; i < 12 && !crushed; i++) {
                 server.QueueConsoleCommand("pressurise 80 2 50");
-                crushed = pump(1.0, [&] { return a.client.GetChestUnits(BlockType::CRUSHED_IRON) == 2 * Crafting::kBlock && a.client.GetChestUnits(BlockType::SAND) == Crafting::kBlock; });
+                crushed = pump(1.0, [&] { return a.client.GetChestUnits(ItemType::CRUSHED_IRON) == 2 * Crafting::kBlock && a.client.GetChestUnits(BlockType::SAND) == Crafting::kBlock; });
             }
             Check(crushed && a.client.GetChestUnits(BlockType::IRON_ORE) == 0, "a crusher grinds an iron ore into two crushed iron, and stone into sand");
 
@@ -532,20 +532,20 @@ int main(int argc, char** argv) {
             fill({ 85, 0, 51 }, { 85, 0, 51 }, "smelter");
             fill({ 86, 0, 51 }, { 87, 0, 51 }, "air_pipe");
             pump(10.0, [&] { return blockAt({ 87, 0, 51 }) == BlockType::AIR_PIPE && blockAt({ 85, 0, 51 }) == BlockType::SMELTER && blockAt({ 83, 0, 51 }) == BlockType::CHEST; });
-            a.held = BlockType::HAMMER;
+            a.held = ItemType::HAMMER;
             wait(0.3);
             a.client.UseBed({ 85, 1, 51 });
             Check(pump(5.0, [&] { return Has(a.client, "Formed a Coke oven"); }), "a coke oven forms");
             a.held = BlockType::AIR;
             a.client.OpenChest({ 83, 0, 51 });
             pump(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(83, 0, 51); });
-            a.client.MoveChestItems(BlockType::COAL, 4, true);
+            a.client.MoveChestItems(ItemType::COAL, 4, true);
             bool coke = false;
             for (int i = 0; i < 15 && !coke; i++) {
                 server.QueueConsoleCommand("pressurise 87 0 51");
-                coke = pump(1.0, [&] { return a.client.GetChestUnits(BlockType::COKE) == 2 * Crafting::kBlock; });
+                coke = pump(1.0, [&] { return a.client.GetChestUnits(ItemType::COKE) == 2 * Crafting::kBlock; });
             }
-            Check(coke && a.client.GetChestUnits(BlockType::COAL) == 0, "with air it bakes the 4 coal into 2 coke");
+            Check(coke && a.client.GetChestUnits(ItemType::COAL) == 0, "with air it bakes the 4 coal into 2 coke");
 
             // A diesel compressor: machine casings and tanks round an engine, its fuel port
             // piped to a tank of fuel, its air port to a pipe.
@@ -558,7 +558,7 @@ int main(int argc, char** argv) {
             fill({ 89, 0, 51 }, { 89, 0, 51 }, "fluid_tank");
             fill({ 91, 0, 51 }, { 91, 0, 51 }, "engine");
             pump(10.0, [&] { return blockAt({ 91, 0, 51 }) == BlockType::ENGINE && blockAt({ 89, 0, 51 }) == BlockType::FLUID_TANK && blockAt({ 92, 1, 52 }) == BlockType::FLUID_TANK; });
-            a.held = BlockType::HAMMER;
+            a.held = ItemType::HAMMER;
             wait(0.3);
             a.client.UseBed({ 92, 0, 52 });
             Check(pump(5.0, [&] { return Has(a.client, "Formed a Diesel compressor"); }), "a diesel compressor forms");
@@ -591,10 +591,10 @@ int main(int argc, char** argv) {
             a.client.Inspect({ 100, 1, 50 });
             Check(pump(5.0, [&] { return Has(a.client, "out of fuel"); }), "with water but no coal, the boiler says it's out of fuel");
             server.QueueConsoleCommand("give coal 2 Builder");
-            pump(5.0, [&] { return a.client.GetResources(BlockType::COAL) >= 2 * Crafting::kBlock; });
+            pump(5.0, [&] { return a.client.GetResources(ItemType::COAL) >= 2 * Crafting::kBlock; });
             a.client.OpenChest({ 99, 1, 50 });
             pump(5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(99, 1, 50); });
-            a.client.MoveChestItems(BlockType::COAL, 2, true);
+            a.client.MoveChestItems(ItemType::COAL, 2, true);
             a.client.CloseChest();
             auto steamTank = [&] {
                 for (const auto& m : a.client.GetMachines())

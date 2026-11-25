@@ -749,8 +749,8 @@ LeverVault LeverVaultAt(const TerrainGenerator& terrain, const glm::ivec3& pos) 
     return out;
 }
 
-std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos) {
-    std::vector<std::pair<BlockType, uint32_t>> loot;
+std::vector<std::pair<ItemRef, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos) {
+    std::vector<std::pair<ItemRef, uint32_t>> loot;
     const Layout layout = LayoutFor(terrain, FloorDiv(pos.x, kRegionSize), FloorDiv(pos.z, kRegionSize));
     if (!layout.exists) return loot;
     const Room* room = nullptr;
@@ -758,14 +758,14 @@ std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terr
         if (Expand(r.inner, 1).Contains(pos) || (r.type == RoomType::LeverVault && pos == VaultGate(r) - glm::ivec3(0, 1, 0))) room = &r;
     if (!room) return loot;
     const bool rich = room->type == RoomType::Vault || room->type == RoomType::LeverVault;
-    struct Entry { BlockType type; int least, most; };
+    struct Entry { ItemRef type; int least, most; };
     static const Entry kCommon[] = {
-        { BlockType::COOKED_VENISON, 1, 3 }, { BlockType::RAW_VENISON, 1, 2 }, { BlockType::HIDE, 1, 3 }, { BlockType::LAMP, 1, 3 },
+        { ItemType::COOKED_VENISON, 1, 3 }, { ItemType::RAW_VENISON, 1, 2 }, { ItemType::HIDE, 1, 3 }, { BlockType::LAMP, 1, 3 },
         { BlockType::PLANKS, 4, 10 }, { BlockType::GLASS, 2, 5 }, { BlockType::STONE_BRICK, 4, 12 }, { BlockType::MOSSY_BRICK, 2, 6 },
         { BlockType::FLUID_PIPE, 2, 6 }, { BlockType::LOG, 2, 5 },
     };
     static const Entry kRich[] = {
-        { BlockType::COOKED_VENISON, 3, 6 }, { BlockType::HIDE, 3, 8 }, { BlockType::LAMP, 3, 8 }, { BlockType::PUMP, 1, 2 },
+        { ItemType::COOKED_VENISON, 3, 6 }, { ItemType::HIDE, 3, 8 }, { BlockType::LAMP, 3, 8 }, { BlockType::PUMP, 1, 2 },
         { BlockType::SLUICE, 1, 3 }, { BlockType::GLASS, 6, 12 }, { BlockType::FLUID_PIPE, 6, 16 }, { BlockType::SPIKES, 2, 4 },
         { BlockType::CHEST, 1, 2 }, { BlockType::BED, 1, 1 },
     };

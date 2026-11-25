@@ -36,6 +36,7 @@
 
 #include "world/Block.h"
 #include "world/Chunk.h"
+#include "world/Inventory.h"
 
 class TerrainGenerator;
 
@@ -85,6 +86,6 @@ using Blocks = std::array<Block, Chunk::VOLUME>;
 void Stamp(const TerrainGenerator& terrain, const glm::ivec3& chunkCoords, Blocks& out);
 
 // What's in a camp's or mine's chest at `pos` (empty if there's none there).
-std::vector<std::pair<BlockType, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos);
+std::vector<std::pair<ItemRef, uint32_t>> LootFor(const TerrainGenerator& terrain, const glm::ivec3& pos);
 
 } // namespace Dwarves

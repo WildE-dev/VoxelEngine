@@ -1,2 +1,0 @@
-// cooked_venison: a block (the format is in README.md, here)
-{ "name": "Cooked venison", "textures": { "all": "cooked_venison" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

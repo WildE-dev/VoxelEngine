@@ -1,2 +1,0 @@
-// steel_ingot: a block (the format is in README.md, here)
-{ "name": "Steel ingot", "textures": { "all": "steel_ingot" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

@@ -38,8 +38,10 @@ public:
     static constexpr int kRegionSize = 8;      // chunks per region along each axis
     // 2: world type; 3: time of day; 4: game modes and resources; 5: block axes (logs);
     // 6: tools players have made; ...; 14: inventories of item stacks (world/Inventory.h)
-    // in place of units by type, tool and upgrade masks (older ones are converted)
-    static constexpr uint32_t kFormatVersion = 16;
+    // in place of units by type, tool and upgrade masks (older ones are converted); ...;
+    // 17: items their own types, not blocks (block numbers and ItemIds saved before are
+    // turned into today's: see world/Legacy.h)
+    static constexpr uint32_t kFormatVersion = 17;
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
@@ -114,7 +116,8 @@ public:
     // and steel upgrade bits) as an inventory: each tool made at the upgrade's tier, then
     // the blocks (whole ones into slots, the rest offcuts). Nothing is lost: the slots
     // grow past `slots` if they have to.
-    static Inventory FromOld(const std::array<uint32_t, static_cast<size_t>(BlockType::COUNT)>& units, uint16_t tools, size_t slots);
+    // (Units are by old block number, format 16's: see world/Legacy.h.)
+    static Inventory FromOld(const std::array<uint32_t, 256>& units, uint16_t tools, size_t slots);
 
     // Creates the directory if needed and reads everything saved in it. Returns false
     // (with a message on stderr) if the save can't be read.

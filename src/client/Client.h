@@ -36,7 +36,7 @@ public:
         float yaw = 0.0f, pitch = 0.0f;
         uint8_t flags = 0;
         Tool heldTool = Tool::None;          // what's in their hand
-        BlockType heldBlock = BlockType::AIR;
+        ItemId heldItem = Items::kNone;
         uint8_t armour = 0;                  // armour worn (Armour::Bit each)
         std::string name;                    // (empty until the server says)
     };
@@ -73,9 +73,9 @@ public:
     glm::vec3 TakeKnockback() { const glm::vec3 k = pendingKnockback; pendingKnockback = glm::vec3(0.0f); return k; }
 
     // Sent at most kStateRate times a second; extra calls are ignored.
-    // `heldTool` / `heldBlock`: what's in hand, for others to see.
+    // `heldTool` / `heldItem`: what's in hand, for others to see.
     void SendPlayerState(const glm::vec3& feet, const glm::vec3& velocity, float yaw, float pitch, uint8_t flags, Tool heldTool = Tool::None,
-                         BlockType heldBlock = BlockType::AIR);
+                         ItemId heldItem = Items::kNone);
 
     // Edits (predicted locally).
     // In survival, breaking takes time (world/Mining.h): StartMining when starting on a
@@ -157,7 +157,9 @@ public:
     bool HasInventory() const { return inventoryKnown; }
     // Units of a type we carry, whole and offcut (by what the type counts as: pebbles
     // show the stone held).
-    uint32_t GetResources(BlockType type) const { return inventory.Units(ResourceTypeOf(type)); }
+    uint32_t GetResources(BlockType type) const { return inventory.Units(Items::ResourceOf(type)); }
+    uint32_t GetResources(ItemType type) const { return inventory.Units(type); }
+    uint32_t GetResources(ItemId item) const { return inventory.Units(item); }
     // Whole items of a kind we carry.
     uint32_t GetCount(ItemId item) const { return inventory.Count(item); }
     // Armour worn: what's in our armour slots (world/Armour.h).
@@ -227,7 +229,8 @@ public:
     // The water wheels and machines near us, as of the server's last word.
     const std::vector<net::MachineInfo>& GetMachines() const { return machines; }
     // Eat one of a food item held (survival; the server checks it).
-    void Eat(BlockType item);
+    void Eat(ItemId item);
+    void Eat(ItemType type) { Eat(Items::Of(type)); }
     // Chests: ask to open the one at `pos` (the server answers with its contents), close
     // it, and move units of a type into or out of it (the server's answer updates both).
     void OpenChest(const glm::ivec3& pos);
@@ -270,12 +273,14 @@ public:
     void CloseChest();
     // Up to `count` whole items of a kind, wherever they are, into the chest or out of it.
     void MoveChestItems(ItemId item, uint32_t count, bool intoChest);
-    void MoveChestItems(BlockType type, uint32_t count, bool intoChest) { MoveChestItems(Items::OfBlock(type), count, intoChest); }
+    void MoveChestItems(BlockType type, uint32_t count, bool intoChest) { MoveChestItems(Items::Of(type), count, intoChest); }
+    void MoveChestItems(ItemType type, uint32_t count, bool intoChest) { MoveChestItems(Items::Of(type), count, intoChest); }
     // The chest open now (none until the server says it's open, or once it's closed),
     // and what's in it.
     std::optional<glm::ivec3> GetOpenChest() const { return openChest; }
     const Inventory& GetChest() const { return chestHeld; }
     uint32_t GetChestUnits(BlockType type) const { return chestHeld.Units(type); }
+    uint32_t GetChestUnits(ItemType type) const { return chestHeld.Units(type); }
 
     struct Stats {
         uint32_t roundTripMs = 0;

@@ -1,6 +1,6 @@
 #pragma once
 // Multiblock structures: big machines built from a pattern of blocks, then formed by
-// striking any of its blocks with an engineer's hammer (BlockType::HAMMER, held).
+// striking any of its blocks with an engineer's hammer (ItemType::HAMMER, held).
 //
 // Each pattern is 3 x 3 across and some blocks high, round a machine block (its core),
 // in any of four turns about the vertical. Formed, the core becomes a MULTIBLOCK block

@@ -103,7 +103,7 @@ int main() {
         server.QueueConsoleCommand("tp Sleeper 18.5 0 20.5");
         server.QueueConsoleCommand("give planks 3 Sleeper");
         server.QueueConsoleCommand("give hide 1 Sleeper");
-        one(20.0, [&] { return a.feet.y < 0.5f && a.client.GetResources(BlockType::HIDE) == kBlock; });
+        one(20.0, [&] { return a.feet.y < 0.5f && a.client.GetResources(ItemType::HIDE) == kBlock; });
 
         std::cout << "Making and placing" << std::endl;
         a.client.Craft(Crafting::Find("bed"), 1);

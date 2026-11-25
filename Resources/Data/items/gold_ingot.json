@@ -1,0 +1,2 @@
+// gold_ingot: an item (the format is in README.md, here)
+{ "name": "Gold ingot", "texture": "gold_ingot" }

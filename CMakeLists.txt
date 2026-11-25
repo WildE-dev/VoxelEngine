@@ -44,6 +44,9 @@ add_library(voxel_common STATIC
     src/world/Dungeons.cpp
     src/world/Dwarves.cpp
     src/world/Json.cpp
+    src/world/Items.cpp
+    src/world/Items.h
+    src/world/Legacy.h
     src/world/Recipes.cpp
     src/world/BlockData.cpp
     src/world/Multiblocks.cpp

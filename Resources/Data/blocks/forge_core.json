@@ -1,2 +1,0 @@
-// forge_core: a block (the format is in README.md, here)
-{ "name": "Forge core", "textures": { "all": "forge_core" }, "hardness": 1, "tool": "none", "sound": "soft", "light": 0, "map": "#707070" }

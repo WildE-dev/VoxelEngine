@@ -144,7 +144,8 @@ int main() {
         Check(coal > 0 && iron > 0 && iron < coal && coal * 10 < stone, "coal and (rarer) iron ore lie in the stone (" + std::to_string(coal) + " coal, " +
                                                                               std::to_string(iron) + " iron, " + std::to_string(stone) + " stone)");
         Check(shallowOre == 0, "coal no shallower than 8 blocks, iron no shallower than 24");
-        Check(ResourceTypeOf(BlockType::COAL_ORE) == BlockType::COAL && IsItemType(BlockType::COAL) && IsItemType(BlockType::IRON_INGOT),
+        Check(Items::ResourceOf(BlockType::COAL_ORE) == Items::Of(ItemType::COAL) && Items::IsItem(Items::Of(ItemType::COAL)) &&
+                  Items::IsItem(Items::Of(ItemType::IRON_INGOT)),
               "coal ore breaks into coal; coal and ingots are items");
         Check(Seconds(Block(BlockType::IRON_ORE), Tool::Pickaxe, true) < Seconds(Block(BlockType::IRON_ORE), Tool::Pickaxe) &&
                   Combat::Damage(Tool::Sword, true) == Combat::Damage(Tool::Sword) + 2 && Combat::Damage(Tool::None, true) == Combat::Damage(Tool::None),
@@ -246,7 +247,7 @@ int main() {
 
     std::cout << "Pebbles" << std::endl;
     Check(Seconds(Block::Placed(BlockType::PEBBLES), Tool::None) == 0.0f && Block::Placed(BlockType::PEBBLES).ResourceUnits() == 16 &&
-              Block::Placed(BlockType::PEBBLES).ResourceType() == BlockType::STONE,
+              Items::ResourceOf(BlockType::PEBBLES) == Items::Of(BlockType::STONE),
           "pebbles are picked up at once, and are a quarter block of stone");
     builder.client.PlaceBlock({ 9, 0, 9 }, BlockType::PEBBLES);
     Check(both(20.0, [&] { return TypeAt(a, { 9, 0, 9 }) == BlockType::PEBBLES; }), "pebbles lie on the ground");
