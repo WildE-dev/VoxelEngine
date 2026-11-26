@@ -57,8 +57,7 @@ bool DeepCavern(int x, int y, int z) {
 
 constexpr int S = TerrainGenerator::S;
 // Surface heights snap to sixteenths of a block (EdgeData's steps, the finest chisel
-// stroke). (A corner poking a sliver above its row makes a little one-cornered peak
-// there: see Block::SetEdgeData.)
+// stroke).
 constexpr float kSmoothness = static_cast<float>(EdgeData::kSteps);
 
 int Index(int x, int y, int z) { return x + S * (y + S * z); }
@@ -82,7 +81,18 @@ TerrainGenerator::Column MakeColumn(float h00, float h10, float h01, float h11) 
         const float scale = TerrainGenerator::kCliffSpread / c.spread;
         for (float& corner : c.corners) corner = Quantise(mean + (corner - mean) * scale);
     }
-    c.surfaceRow = static_cast<int>(std::floor(std::min(std::min(c.corners[0], c.corners[1]), std::min(c.corners[2], c.corners[3]))));
+    // Its surface is one sloped block, in the cell holding its average height (a mean on
+    // a row's line counts as the top of the cell under it): corners above that cell are
+    // brought down to its top, corners below it up to a pixel over its floor. (A block
+    // reaching into the cell above would hang there, flat underneath, over the slope
+    // below it.) With every corner at the top it's a whole block: the top of the ground
+    // is the block under the surface row, which is left open.
+    const float mean = (c.corners[0] + c.corners[1] + c.corners[2] + c.corners[3]) * 0.25f;
+    const int cell = static_cast<int>(std::floor(mean - 0.5f / kSmoothness));
+    bool whole = true;
+    for (const float corner : c.corners) whole &= corner >= cell + 1.0f - 0.25f / kSmoothness;
+    c.sloped = !whole;
+    c.surfaceRow = whole ? cell + 1 : cell;
     return c;
 }
 
@@ -97,10 +107,13 @@ bool TerrainGenerator::DeepstoneAt(int x, int y, int z) {
 }
 
 EdgeData TerrainGenerator::Column::EdgesAt(int row) const {
-    // (A corner at or below the cell's floor, where some of the surface is in it, is a
-    // pixel tall: natural ground has no corners of nothing, Block::SetEdgeData.)
+    // Only the surface row has the sloped block; its corners within its cell (a pixel tall
+    // at least: natural ground has no corners of nothing, Block::SetEdgeData).
     EdgeData edges;
-    for (int i = 0; i < 4; i++) edges.SetTopY(i, EdgeHeight(corners[i] - row));
+    for (int i = 0; i < 4; i++) {
+        if (!sloped || row != surfaceRow) edges.Set(i, 0, 0);
+        else edges.Set(i, std::max<int>(1, EdgeHeight(corners[i] - row)), 0);
+    }
     return edges;
 }
 
@@ -595,17 +608,12 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
             // Beaches, rock and snow on mountains, else the biome's ground.
             const BlockType top = column.TopType(biomes[x * S + z]);
             const BlockType under = column.UnderType(biomes[x * S + z]);
-            const int topRow = column.TopRow();
             for (int y = 0; y < S; y++) {
                 const int blockY = coords.y * S + y;
                 if (blockY == m) {
                     // Sloped top. If the surface is (almost) flat at the bottom of this
                     // cell the cell stays empty and the block below is the top instead.
                     if (sloped) out[Index(x, y, z)] = Block(top, edges);
-                }
-                else if (blockY > m && blockY <= topRow) {
-                    // The slope going on above it (Column::TopRow).
-                    out[Index(x, y, z)] = Block(top, column.EdgesAt(blockY));
                 }
                 else if (blockY == m - 1 && !sloped) {
                     out[Index(x, y, z)] = Block(top);
@@ -749,10 +757,6 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
             for (int y = 0; y < S; y++) {
                 const int blockY = coords.y * S + y;
                 Block& cell = out[Index(x, y, z)];
-                if (blockY > m && blockY <= column.TopRow()) {
-                    if (cell.IsPartial()) cell = Block(BlockType::SAND, column.EdgesAt(blockY)); // (the slope above, sand too)
-                    continue;
-                }
                 if (blockY < m - 4 || blockY > m) continue;
                 const bool top = blockY == m || (blockY == m - 1 && !column.HasSlopedTop());
                 if (top && blockY == m) {

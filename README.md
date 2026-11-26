@@ -326,9 +326,10 @@ pauses. The menus can be driven with the pad as well.
 `TerrainGenerator` builds each chunk independently and deterministically:
 
 1. **Surface:** a heightmap from 8 octaves of Perlin noise, snapped to sixteenths of
-   a block (where a corner climbs past its cell, the slope goes on in the row above, so
-   neighbouring slopes always meet), plus mountain ranges, with swamps sunk to sea level (below). Each column
-   gets a sloped block on top from its biome (below): grass, dry or lush grass, snowy
+   a block, plus mountain ranges, with swamps sunk to sea level (below). Each column
+   gets one sloped block on top, in the cell its average height is in (corners above or
+   below that cell brought into it, so neighbours meet to within a little), from its
+   biome (below): grass, dry or lush grass, snowy
    grass or desert sand over dirt or sand; beaches by the sea, bare rock high up and on
    steep slopes, and snow on the peaks; stone underneath.
 2. **Caves** (`Caves.cpp`): winding tunnels where two 3D noise fields are both
@@ -784,7 +785,9 @@ Shapes are kept a byte a quarter (`EdgeData` in `src/world/Block.h`): a column's
 in sixteen levels, 0 a pixel tall to 15 the whole block, and its bottom (0 to 15); a
 bottom above the top is a quarter with nothing in it. Worlds saved before format 22
 kept eighths and are read as the same shapes. The chunk mesh keeps positions to a
-sixteenth too (`src/world/MeshVertex.h`, read by `main.vert` and `water.vert`).
+sixteenth too (`src/world/MeshVertex.h`, read by `main.vert` and `water.vert`). A natural slope's
+hidden faces aren't drawn: its sides and bottom against a whole block, and a side against
+a slope beside it that covers it.
 
 **Flattening with a shovel.** Right-click soft ground (dirt, grass, sand, snow or
 gravel) with a shovel and the area round it (3 by 3; **V** makes it 5 by 5 or 7 by 7,
@@ -848,7 +851,8 @@ through the gaps to the ground behind.
 `ShapeTest` checks standing heights and water for both styles, aiming past and into
 partial blocks, the outlines' shapes, the sixteen levels (a slab a pixel thin drawn a
 sixteenth high, an old save's shapes read the same, a vertex kept to a sixteenth), chiselling (down to
-nothing and back to whole), that the mesher draws quarter-columns, joins slopes
+nothing and back to whole), that the mesher draws quarter-columns, leaves out slopes'
+hidden faces, joins slopes
 across rows and tapers thin water to nothing with no walls, chiselling over the
 network, and the mountains: high snowy peaks, bare rock with nothing growing above the
 tree line, steep slopes (cliffs, each still sloped), and that a player spawning on a peak lands on top.

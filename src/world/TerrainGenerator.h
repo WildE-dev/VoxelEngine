@@ -79,35 +79,23 @@ public:
     using SurfaceRows = std::array<int, S * S>;
 
     // The surface of one block column: quantised corner heights (in EdgeData order)
-    // and the surface row, i.e. the row holding the sloped grass block. Everything
-    // below the surface row is solid ground, before caves are carved.
+    // and the surface row, i.e. the row holding the sloped grass block, the one cell its
+    // surface is drawn in (the cell its average height is in). Everything below the
+    // surface row is solid ground, before caves are carved.
     struct Column {
         float corners[4];
         int surfaceRow;
         // How far its corners were apart, before a cliff's were brought in (MakeColumn):
         // more than kCliffSpread and it's a cliff, its slope a block from low to high.
         float spread = 0.0f;
+        // Whether the surface row holds a sloped block (else the block under it is a whole
+        // one, the top of the ground).
+        bool sloped = false;
 
         // Edge data for the sloped block at `row` (any corner of it at or under the
         // cell's floor a pixel tall), and whether there's a block there at all.
         EdgeData EdgesAt(int row) const;
-        bool HasSlopedTop() const {
-            const EdgeData e = EdgesAt(surfaceRow);
-            return !(e.IsEmpty(0) && e.IsEmpty(1) && e.IsEmpty(2) && e.IsEmpty(3));
-        }
-        // The highest row the surface reaches: above the surface row where a corner
-        // climbs past its cell, the slope goes on in the rows over it (a piece of it
-        // there, down to a one-cornered peak), else it would stop flat at the top of
-        // the cell and leave its neighbour's side showing.
-        int TopRow() const {
-            int row = surfaceRow;
-            for (int r = surfaceRow + 1; r <= surfaceRow + 4; r++) {
-                const EdgeData e = EdgesAt(r);
-                if (e.IsEmpty(0) && e.IsEmpty(1) && e.IsEmpty(2) && e.IsEmpty(3)) break;
-                row = r;
-            }
-            return row;
-        }
+        bool HasSlopedTop() const { return sloped; }
         // Height of the visible ground at the column's centre.
         float GroundHeightAtCentre() const;
         // First row above the ground that's entirely open (water fills from here).

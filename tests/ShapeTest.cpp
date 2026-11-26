@@ -406,6 +406,34 @@ int main() {
         std::set<float> heights;
         for (const auto& p : Positions(v, false)) heights.insert(p.y - 4.0f);
         Check(heights == std::set<float>{ 0.0f, 0.25f, 0.5f, 0.75f, 1.0f }, "a stepped block is drawn as quarter-columns at their heights");
+        {
+            // Natural slopes' hidden faces aren't drawn: two dirt half slabs side by side (at
+            // x 4 and 5), a stone block beyond the second, stone under both. Nothing is drawn
+            // on the planes they share (x 5, x 6) or under them (y 4).
+            Chunk::Blocks row{};
+            for (int x = 3; x <= 7; x++) row[Chunk::Index(x, 3, 4)] = Block(BlockType::STONE);
+            row[Chunk::Index(4, 4, 4)] = Block::Placed(BlockType::DIRT, 8);
+            row[Chunk::Index(5, 4, 4)] = Block::Placed(BlockType::DIRT, 8);
+            row[Chunk::Index(6, 4, 4)] = Block(BlockType::STONE);
+            std::vector<uint32_t> rv, rw;
+            Mesh(row, rv, rw);
+            const auto ps = Positions(rv, false);
+            int hidden = 0, sides = 0;
+            const TextureData dirtTex = GetTextureData(BlockType::DIRT);
+            for (size_t f = 0; f + 6 <= ps.size(); f += 6) {
+                // (The slabs' own faces: the stone's, toward the half-height slabs, are seen.)
+                const int tex = static_cast<int>(rv[f * 2 + 1] & (MeshVertex::kMaxTextures - 1));
+                if (tex != dirtTex.top && tex != dirtTex.bottom && tex != dirtTex.left && tex != dirtTex.right && tex != dirtTex.front && tex != dirtTex.back) continue;
+                bool atX5 = true, atX6 = true, under = true, nearSlabs = true;
+                for (size_t k = f; k < f + 6; k++) {
+                    atX5 &= std::abs(ps[k].x - 5.0f) < 1e-4f, atX6 &= std::abs(ps[k].x - 6.0f) < 1e-4f, under &= std::abs(ps[k].y - 4.0f) < 1e-4f;
+                    nearSlabs &= ps[k].y >= 4.0f - 1e-4f && ps[k].x <= 6.0f + 1e-4f && ps[k].x >= 4.0f - 1e-4f;
+                }
+                hidden += nearSlabs && (atX5 || atX6 || under);
+                sides += nearSlabs && !atX5 && !atX6 && !under;
+            }
+            Check(hidden == 0 && sides > 0, "a slope's faces against a whole block, or against a slope that covers them, aren't drawn (" + std::to_string(hidden) + " drawn)");
+        }
 
         // A slope climbing more than its block: the column at x=4 rises from 4.5 at x=4
         // to a true 5.25 at x=5, clipped to the top of its block (5.0); the column at
@@ -445,14 +473,15 @@ int main() {
         }
         Check(confined, "every face of the terrain's blocks lies inside its own block's cell");
         {
-            // The land's slopes meet: a slope's side never stands above the ground next to it
-            // (where a corner climbs past its cell, the slope goes on in the row above).
+            // The land's slopes nearly meet: each column's surface is in one cell (its
+            // corners brought into it), so a side stands a little above the ground next to
+            // it only where a corner was brought in.
             Generated land;
             // EdgeData corner positions: 0 (0,1), 1 (1,0), 2 (0,0), 3 (1,1). For each side,
             // our two corners on it and the neighbour's two matching corners.
             struct Side { glm::ivec3 d; int ours[2], theirs[2]; };
             const Side sides[4] = { { { 1, 0, 0 }, { 1, 3 }, { 2, 0 } }, { { -1, 0, 0 }, { 2, 0 }, { 1, 3 } }, { { 0, 0, 1 }, { 0, 3 }, { 2, 1 } }, { { 0, 0, -1 }, { 2, 1 }, { 0, 3 } } };
-            int exposed = 0, sidesSeen = 0, naturalSlopes = 0, emptyCorners = 0;
+            int exposed = 0, sidesSeen = 0, naturalSlopes = 0, emptyCorners = 0, biggestStep = 0;
             for (int x = -8; x < 40; x++)
                 for (int z = -8; z < 40; z++)
                     for (int y = -6; y < 24; y++) {
@@ -469,6 +498,7 @@ int main() {
                             for (int k = 0; k < 2; k++) {
                                 const int ours = b.edgeData.GetTopY(s.ours[k]);
                                 const int theirs = n.IsPartial() && !n.IsStepped() ? n.edgeData.GetTopY(s.theirs[k]) : 0;
+                                if (n.IsPartial() && !n.IsStepped()) biggestStep = std::max(biggestStep, ours - theirs);
                                 if (ours > theirs + 1) { // (a pixel's lip: a corner on the cell's floor is a pixel tall)
                                     exposed++;
                                     break;
@@ -476,7 +506,9 @@ int main() {
                             }
                         }
                     }
-            Check(sidesSeen > 1000 && exposed * 100 < sidesSeen, "the land's slopes meet, with no step showing between them (" + std::to_string(exposed) + " of " + std::to_string(sidesSeen) + " sides)");
+            Check(sidesSeen > 1000 && exposed * 50 < sidesSeen && biggestStep <= EdgeData::kSteps / 2,
+                  "on low ground the slopes nearly meet: few steps between them, none over half a block (" + std::to_string(exposed) + " of " + std::to_string(sidesSeen) +
+                      " sides, at most " + std::to_string(biggestStep) + " sixteenths)");
             Check(naturalSlopes > 1000 && emptyCorners == 0, "and none has a corner of nothing: each is at least a pixel tall (" + std::to_string(emptyCorners) + " in " + std::to_string(naturalSlopes) + " slopes)");
         }
 

@@ -581,6 +581,29 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                         continue;
                     }
                     if (full && isOpaque(front)) continue;
+                    // A slope's faces that can't be seen: its sides and bottom (lying on its
+                    // cell's faces) against a whole block, and a side against a slope beside it
+                    // that covers it there (as high, from as low, at both shared corners). (Its
+                    // top is never on the cell's face; nor its bottom where it's cut from below.)
+                    if (!full && face != static_cast<int>(Face::Top)) {
+                        if (face == static_cast<int>(Face::Bottom)) {
+                            bool onFloor = true;
+                            for (int e = 0; e < 4; e++) onFloor &= block.edgeData.GetBottomY(e) == 0;
+                            if (onFloor && isOpaque(front)) continue;
+                        }
+                        else {
+                            if (isOpaque(front)) continue;
+                            const Block& beside = cellAt(front);
+                            if (beside.IsPartial() && !beside.IsStepped() && beside.ShapeDir() == 0 && !beside.IsPlant()) {
+                                const SideEdges edges = sideEdges(face);
+                                bool covered = true;
+                                for (int k = 0; k < 2; k++)
+                                    covered &= beside.edgeData.GetTopY(edges.theirs[k]) >= block.edgeData.GetTopY(edges.ours[k]) &&
+                                               beside.edgeData.GetBottomY(edges.theirs[k]) <= block.edgeData.GetBottomY(edges.ours[k]);
+                                if (covered) continue;
+                            }
+                        }
+                    }
                     // Glass against glass: no face between them (a pane, not a stack of boxes).
                     if (full && block.type == BlockType::GLASS && cellAt(front).type == BlockType::GLASS) continue;
                     drawn.AddFaceVertices(vertices, static_cast<Face>(face), x, y, z, shadeFace(pos, face, true, !full));
