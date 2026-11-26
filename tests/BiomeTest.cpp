@@ -460,6 +460,62 @@ int main() {
               "cave floors, ceilings (" + std::to_string(ceilings) + ") and walls (" + std::to_string(walls) + ") meet their neighbours at shared corners (" +
                   std::to_string(agree) + " of " + std::to_string(shared) + ")");
     }
+    // Cave rock doesn't hang out over open space: no floor or wall leans out over the
+    // rock under it, nor sticks out as a ledge over the wall below. (A ceiling hangs over
+    // the cave, as it must, and rock over open cave or over a wall under a ceiling.)
+    {
+        TerrainGenerator rock(TerrainGenerator::Type::Normal);
+        long points = 0, leaning = 0, lips = 0;
+        auto stone = [](const Block& b) { return b.type == BlockType::STONE || b.type == BlockType::DEEPSTONE; };
+        auto solid = [](const Block& b, float x, float y, float z) {
+            if (b.IsFullBlock()) return true;
+            if (!b.IsPartial()) return false;
+            constexpr float d = 0.01f;
+            return b.ShapeOverlaps({ x - d, y - d, z - d }, { x + d, y + d, z + d });
+        };
+        for (int cx = -3; cx < 3; cx++)
+            for (int cz = -3; cz < 3; cz++) {
+                TerrainGenerator::ColumnHeights h;
+                rock.ComputeColumnHeights(cx, cz, h);
+                for (int cy = -6; cy <= -1; cy++) {
+                    TerrainGenerator::Blocks blocks;
+                    rock.GenerateChunk({ cx, cy, cz }, h, blocks);
+                    constexpr int S = TerrainGenerator::S;
+                    for (int x = 0; x < S; x++)
+                        for (int y = 1; y < S; y++)
+                            for (int z = 0; z < S; z++) {
+                                const Block& b = blocks[x + S * (y + S * z)];
+                                const Block& under = blocks[x + S * (y - 1 + S * z)];
+                                if (!stone(b) || (b.IsPartial() && b.ShapeDir() == 3)) continue;
+                                if (!b.IsPartial() && !under.IsPartial()) continue;
+                                for (int i = 0; i < 4; i++)
+                                    for (int k = 0; k < 4; k++) {
+                                        const float fx = (i + 0.5f) / 4, fz = (k + 0.5f) / 4;
+                                        float lowest = -1.0f;
+                                        for (int s = 0; s < 16 && lowest < 0.0f; s++)
+                                            if (solid(b, fx, (s + 0.5f) / 16, fz)) lowest = (s + 0.5f) / 16;
+                                        if (lowest < 0.0f) continue;
+                                        points++;
+                                        if (lowest > 0.1f) {
+                                            // (Unless it curves out into a ceiling over the cave it faces.)
+                                            const glm::ivec3 over = glm::ivec3(x, y + 1, z) + glm::ivec3(glm::round(Block::ShapeVectorToCell(b.ShapeDir(), { 0.0f, 1.0f, 0.0f })));
+                                            const bool inside = over.x >= 0 && over.y >= 0 && over.z >= 0 && over.x < S && over.y < S && over.z < S;
+                                            if (inside && blocks[over.x + S * (over.y + S * over.z)].IsAir()) leaning++;
+                                            continue;
+                                        }
+                                        if (!under.IsPartial() || !stone(under) || solid(under, fx, 0.97f, fz)) continue;
+                                        // (A ledge: open beyond it the way the wall under it faces.)
+                                        const glm::ivec3 beyond = glm::ivec3(x, y, z) + glm::ivec3(glm::round(Block::ShapeVectorToCell(under.ShapeDir(), { 0.0f, 1.0f, 0.0f })));
+                                        if (beyond.x < 0 || beyond.y < 0 || beyond.z < 0 || beyond.x >= S || beyond.y >= S || beyond.z >= S) continue;
+                                        if (!blocks[beyond.x + S * (beyond.y + S * beyond.z)].IsAir()) continue;
+                                        lips++;
+                                    }
+                            }
+                }
+            }
+        Check(leaning + lips <= points / 500, "cave rock doesn't hang out over the rock under it (" + std::to_string(leaning) + " leaning out, " +
+                                                 std::to_string(lips) + " sticking out over a slope, of " + std::to_string(points) + " points)");
+    }
     // Below the lava level: deepstone, not stone, and caves much rarer.
     {
         long above = 0, below = 0, samples = 0;
