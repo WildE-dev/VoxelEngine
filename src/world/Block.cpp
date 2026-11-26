@@ -1021,14 +1021,16 @@ std::vector<glm::vec3> Block::OutlineSegments(const glm::ivec3& cell, unsigned j
     // Corner heights at (0,0), (1,0), (1,1), (0,1) (EdgeData edges 2, 1, 3, 0).
     const float h[4] = { edgeData.GetTopY(2) / kSteps, edgeData.GetTopY(1) / kSteps, edgeData.GetTopY(3) / kSteps, edgeData.GetTopY(0) / kSteps };
     if (IsStepped()) {
-        // One box when all four quarters match (a slab, a plate), else each quarter.
-        if (h[0] == h[1] && h[1] == h[2] && h[2] == h[3]) {
-            box(glm::vec3(0.0f), glm::vec3(1.0f, h[0], 1.0f));
+        // Each quarter from its bottom (above the floor where it's been cut from below)
+        // to its top; one box when all four match (a slab, a plate).
+        const float b[4] = { edgeData.GetBottomY(2) / kSteps, edgeData.GetBottomY(1) / kSteps, edgeData.GetBottomY(3) / kSteps, edgeData.GetBottomY(0) / kSteps };
+        if (h[0] == h[1] && h[1] == h[2] && h[2] == h[3] && b[0] == b[1] && b[1] == b[2] && b[2] == b[3]) {
+            box(glm::vec3(0.0f, b[0], 0.0f), glm::vec3(1.0f, h[0], 1.0f));
             return lines;
         }
         const glm::vec2 q[4] = { { 0, 0 }, { 0.5f, 0 }, { 0.5f, 0.5f }, { 0, 0.5f } };
         for (int i = 0; i < 4; i++)
-            if (h[i] > 0.0f) box({ q[i].x, 0.0f, q[i].y }, { q[i].x + 0.5f, h[i], q[i].y + 0.5f });
+            if (h[i] > b[i]) box({ q[i].x, b[i], q[i].y }, { q[i].x + 0.5f, h[i], q[i].y + 0.5f });
         return lines;
     }
     // A slope: its base, the corners up to their heights, the sloped top's edges, and

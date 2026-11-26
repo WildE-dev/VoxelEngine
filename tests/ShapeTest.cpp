@@ -191,6 +191,12 @@ int main() {
             const Collision::AABB below{ { 0.6f, 0.0f, 0.1f }, { 0.9f, 0.2f, 0.4f } }, inIt{ { 0.6f, 0.3f, 0.1f }, { 0.9f, 0.5f, 0.4f } };
             Check(undersideAt && !Collision::BoxBlocked(cut, below) && Collision::BoxBlocked(cut, inIt),
                   "it's drawn with an underside a quarter up, and there's room under it");
+            // Its outline too: the quarter's box from its new underside (the corner at x 1,
+            // z 0 is that quarter's alone).
+            float outlineFrom = 1.0f;
+            for (const auto& q : under.OutlineSegments())
+                if (q.x > 0.99f && q.z < 0.01f) outlineFrom = std::min(outlineFrom, q.y);
+            Check(std::abs(outlineFrom - 0.25f) < 1e-4f, "and outlined from its underside, not the floor (from " + std::to_string(outlineFrom) + ")");
         }
         Check(!Block(BlockType::PUMP).CanChisel() && !Block::Water(128).CanChisel() && Block(BlockType::LOG).CanChisel(), "machines and water can't be chiselled");
     }
