@@ -29,7 +29,7 @@ class ClientWorld;
 class Renderer;
 class Server;
 struct FrameParams;
-namespace net { class RelayHost; }
+namespace net { class RelayHost; class LanHost; class LanBrowser; }
 
 // How the game connects: to an in-process server (singleplayer, the default) or to a
 // server elsewhere. Either way the game is a network client of that server.
@@ -83,6 +83,7 @@ private:
     void DrawPauseMenu();
     void DrawSettingsPage(bool inGame);
     void DrawOpenToFriends();
+    void DrawOpenToLan();
     void RefreshWorlds();
     void PlayWorld(const std::string& directory, bool empty, int mode);
     void LoadBlockTextures();
@@ -201,6 +202,12 @@ private:
     // ...opened to friends through the relay (the pause menu's "Open to friends").
     std::unique_ptr<net::RelayHost> relayHost;
     std::string relayError;
+    // ...opened to the local network ("Open to LAN"), and announced on it.
+    std::unique_ptr<net::LanHost> lanHost;
+    std::string lanError;
+    std::string worldName; // singleplayer: the world's name, for announcing it
+    // The Multiplayer page: games heard announced on the local network.
+    std::unique_ptr<net::LanBrowser> lanBrowser;
     // Both own GL resources, so they're destroyed explicitly before the context.
     std::unique_ptr<Renderer> renderer;
     std::unique_ptr<ClientWorld> world;

@@ -93,7 +93,8 @@ cd build && ./VoxelEngine --connect 192.168.1.20 --name Alice
 ```
 
 `--connect host:port` sets the port. To play on the same machine as the server,
-connect to `127.0.0.1`. Over the internet, forward UDP port 27450 to the server, or use a join code (see
+connect to `127.0.0.1`. On the same network, games opened to LAN are listed (see
+[Playing on your local network](#playing-on-your-local-network)). Over the internet, forward UDP port 27450 to the server, or use a join code (see
 [Playing with friends over the internet](#playing-with-friends-over-the-internet)).
 Other players appear as box figures in their own colour, with a dark visor on the
 side they're facing. Each has a right arm holding whatever is in their hand: a block
@@ -102,6 +103,25 @@ over them (see [Swords and armour](#swords-and-armour)). Their name floats over 
 head, within 40 blocks and only when nothing's in the way. The server sends names once
 (when someone joins), and what's in hand and the armour with every position update.
 The server saves the world (see [Saving](#saving)).
+
+### Playing on your local network
+
+In a singleplayer world, the pause menu's **Open to LAN** lets anyone on the same
+network join. The game then listens on the network (on port 27450 if that's free) and
+announces itself every second. Other machines' Multiplayer pages list it under **On your
+network**, with who's hosting, the world, and how many are playing: press **Join**.
+The pause menu shows this machine's address too, for typing into the Address box. **Close
+to LAN**, or leaving the world, closes it, and it drops off the lists at once.
+`VoxelServer --lan` announces a dedicated server the same way. The first time, Windows
+may ask whether to let VoxelEngine use the network: allow it on private networks.
+
+Announcements are UDP broadcasts to port 27451, on each network the machine is on
+(virtual adapters such as WSL's are skipped when showing the address). The singleplayer
+server itself still only listens on 127.0.0.1; the game passes each network player's
+packets to it over loopback, one socket per player, as the relay does. `LanTest` opens
+a game to LAN on the loopback interface (no firewall involved), finds it with the
+browser, joins it with two clients, and checks the names, the player count, edits
+crossing, the goodbye when it closes, and a dedicated server's announcement.
 
 ### Playing with friends over the internet
 

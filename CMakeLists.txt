@@ -30,6 +30,8 @@ add_library(voxel_common STATIC
     src/net/Protocol.h
     src/net/Transport.cpp
     src/net/Transport.h
+    src/net/Lan.cpp
+    src/net/Lan.h
     src/net/RelayHost.cpp
     src/net/RelayHost.h
     src/relay/RelayProtocol.h
@@ -73,7 +75,7 @@ target_include_directories(voxel_common PUBLIC src)
 target_link_libraries(voxel_common PUBLIC glm::glm unofficial::enet::enet Threads::Threads)
 # ENet's Windows backend uses Winsock and the multimedia timer.
 if(WIN32)
-    target_link_libraries(voxel_common PUBLIC ws2_32 winmm)
+    target_link_libraries(voxel_common PUBLIC ws2_32 winmm iphlpapi)
 endif()
 
 # The authoritative server: world simulation (water, light, generation) and
@@ -270,6 +272,8 @@ endfunction()
 voxel_test(NetSmokeTest SOURCES src/app/Player.cpp LIBS voxel_server voxel_client)
 # A relay, a game opened to friends through it, and two friends joining by code.
 voxel_test(RelayTest SOURCES src/app/Player.cpp LIBS voxel_server voxel_client voxel_relay)
+# A game opened to LAN, found by its announcement, and joined through its listener.
+voxel_test(LanTest SOURCES src/app/Player.cpp LIBS voxel_server voxel_client)
 # Saves a world, restarts, and checks edits, light and players come back.
 voxel_test(SaveTest SOURCES src/app/Player.cpp LIBS voxel_server voxel_client)
 # Water only flows within the simulation distance of players.

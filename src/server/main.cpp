@@ -1,7 +1,7 @@
 // Dedicated server without any GL or windowing dependency:
 //   VoxelServer [port] [--world DIR] [--no-save] [--water-distance N] [--empty-world]
 //               [--weather clear|rain|auto] [--day-length SECONDS] [--op NAME]...
-//               [--mode creative|survival] [--relay HOST[:PORT]]
+//               [--mode creative|survival] [--relay HOST[:PORT]] [--lan]
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -12,6 +12,7 @@
 #include <thread>
 
 #include "net/Protocol.h"
+#include "net/Lan.h"
 #include "net/RelayHost.h"
 #include "server/Server.h"
 
@@ -43,6 +44,7 @@ void StartConsole(Server& server) {
 
 int main(int argc, char** argv) {
     std::string relayAddress;
+    bool announceOnLan = false;
     Server::Options options;
     options.worldDirectory = "world";
     bool worldGiven = false, modeGiven = false;
@@ -84,6 +86,10 @@ int main(int argc, char** argv) {
             if (!worldGiven && !options.worldDirectory.empty()) options.worldDirectory = "world-empty";
             continue;
         }
+        if (arg == "--lan") {
+            announceOnLan = true;
+            continue;
+        }
         if (arg == "--relay" && i + 1 < argc) {
             relayAddress = argv[++i];
             continue;
@@ -113,7 +119,8 @@ int main(int argc, char** argv) {
                       << "  --op NAME      make a player an operator (repeatable; kept in ops.txt)\n"
                       << "  --mode M       creative or survival: a new world's game mode (default survival)\n"
                       << "  --view-distance N  chunks loaded and sent around each player (2-12, default 12)\n"
-                      << "  --relay HOST[:PORT]  also open it to friends through that relay (VoxelRelay): prints a join code" << std::endl;
+                      << "  --relay HOST[:PORT]  also open it to friends through that relay (VoxelRelay): prints a join code\n"
+                      << "  --lan          announce it on the local network (listed on the Multiplayer page)" << std::endl;
             return EXIT_FAILURE;
         }
         options.port = static_cast<uint16_t>(port);
@@ -139,6 +146,14 @@ int main(int argc, char** argv) {
             }
         });
     }
+    // Announced on the local network: listed on other machines' Multiplayer pages.
+    net::LanHost lanHost;
+    if (announceOnLan) {
+        std::string error;
+        const std::string world = options.worldDirectory.empty() ? "unsaved world" : options.worldDirectory;
+        if (!lanHost.Start("Server", world, server.GetPort(), false, error)) std::cerr << "[lan] " << error << std::endl;
+        else std::cout << "[lan] announced on the local network" << std::endl;
+    }
     std::signal(SIGINT, StopServer);
     std::signal(SIGTERM, StopServer);
 #ifdef SIGBREAK
@@ -149,6 +164,7 @@ int main(int argc, char** argv) {
     serverRunning = false;
     if (relayReporter.joinable()) relayReporter.join();
     relayHost.Stop();
+    lanHost.Stop();
 #ifdef SIGBREAK
     serverDone = true;
 #endif

@@ -36,6 +36,7 @@
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "net/Protocol.h"
+#include "net/Lan.h"
 #include "net/RelayHost.h"
 #include "render/Renderer.h"
 #include "server/Server.h"
@@ -438,6 +439,8 @@ bool Application::Init(const ClientOptions& options) {
 
 bool Application::StartGame(const ClientOptions& options) {
     menuMessage.clear();
+    lanBrowser.reset(); // (no more looking for games: one's starting)
+    worldName = std::filesystem::path(options.worldDirectory).filename().string();
     world = std::make_unique<ClientWorld>();
     client = std::make_unique<Client>(*world);
 
@@ -526,6 +529,8 @@ void Application::StopGame() {
     world.reset();
     relayHost.reset(); // (closes the game to friends)
     relayError.clear();
+    lanHost.reset();
+    lanError.clear();
     if (localServer) localServer->Stop(); // (saves the world)
     localServer.reset();
     joined = false;
@@ -720,6 +725,8 @@ void Application::Shutdown() {
     world.reset();
     renderer.reset();
     relayHost.reset();
+    lanHost.reset();
+    lanBrowser.reset();
     if (localServer) localServer->Stop();
     localServer.reset();
 

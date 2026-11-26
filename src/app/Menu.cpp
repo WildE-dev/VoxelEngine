@@ -5,6 +5,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <system_error>
 
 #include <GLFW/glfw3.h>
@@ -13,6 +14,7 @@
 #include "app/Application.h"
 #include "client/Client.h"
 #include "net/Protocol.h"
+#include "net/Lan.h"
 #include "net/RelayHost.h"
 #include "relay/RelayProtocol.h"
 #include "server/Server.h"
@@ -209,6 +211,12 @@ void Application::DrawMenu() {
         break;
     }
     case Page::Multiplayer: {
+        // Listening for games announced on the local network while this page is open.
+        if (!lanBrowser) {
+            lanBrowser = std::make_unique<net::LanBrowser>();
+            std::string error;
+            if (!lanBrowser->Start(error)) std::cerr << "[lan] " << error << std::endl;
+        }
         if (BeginCentred("Multiplayer", 420.0f)) {
             ui::TextWrapped("Join a server (VoxelServer, or VoxelEngine --server; the default port is %u), or a friend's game "
                             "with the join code they were given.", net::kDefaultPort);
@@ -254,7 +262,34 @@ void Application::DrawMenu() {
                     StartGame(options);
                 }
             }
-            if (WideButton("Back")) page = Page::Title;
+            ui::Spacing();
+            ui::SeparatorText("On your network");
+            const std::vector<net::LanGame> games = lanBrowser->GetGames();
+            if (games.empty()) ui::TextDisabled("Looking for games opened to LAN...");
+            for (size_t g = 0; g < games.size() && !client; g++) {
+                const net::LanGame& game = games[g];
+                ui::PushID(static_cast<int>(g));
+                ui::AlignTextToFramePadding();
+                ui::Text("%s - %s", game.name.c_str(), game.world.c_str());
+                ui::SameLine();
+                if (game.players >= 0) ui::TextDisabled("(%d playing)", game.players);
+                else ui::TextDisabled("(server)");
+                ui::SameLine(ui::GetWindowWidth() - 70.0f);
+                if (!game.compatible) ui::TextDisabled("other version");
+                else if (ui::SmallButton("Join")) {
+                    ClientOptions options;
+                    options.host = game.address;
+                    options.port = game.port;
+                    options.name = settings.name;
+                    StartGame(options);
+                }
+                ui::PopID();
+            }
+            ui::Spacing();
+            if (WideButton("Back")) {
+                lanBrowser.reset();
+                page = Page::Title;
+            }
         }
         ui::End();
         break;
@@ -362,6 +397,30 @@ void Application::DrawOpenToFriends() {
     ui::Separator();
 }
 
+// Singleplayer's pause menu: open the world to the local network (announced, so it's
+// listed on other machines' Multiplayer pages), or close it again.
+void Application::DrawOpenToLan() {
+    if (!lanHost) {
+        if (WideButton("Open to LAN")) {
+            lanHost = std::make_unique<net::LanHost>();
+            lanError.clear();
+            if (!lanHost->Start(settings.name, worldName.empty() ? "World" : worldName, localServer->GetPort(), true, lanError)) lanHost.reset();
+        }
+        if (!lanError.empty()) ui::TextColored(ui::Vec4(1.0f, 0.5f, 0.45f, 1.0f), "%s", lanError.c_str());
+        else ui::TextDisabled("Players on your network see it on their Multiplayer page.");
+    }
+    else {
+        const std::vector<std::string> addresses = lanHost->GetAddresses();
+        std::string at = addresses.empty() ? std::string("this machine") : addresses.front();
+        if (lanHost->GetPort() != net::kDefaultPort) at += ":" + std::to_string(lanHost->GetPort());
+        ui::TextDisabled("Open to LAN at %s", at.c_str());
+        const int n = lanHost->PlayerCount();
+        ui::TextDisabled("%s", n == 0 ? "No one on the network has joined yet" : n == 1 ? "1 player from the network" : (std::to_string(n) + " players from the network").c_str());
+        if (WideButton("Close to LAN")) lanHost.reset();
+    }
+    ui::Separator();
+}
+
 void Application::DrawPauseMenu() {
     // The game dimmed behind.
     const ui::Viewport* viewport = ui::GetMainViewport();
@@ -383,6 +442,7 @@ void Application::DrawPauseMenu() {
         }
         if (connected && WideButton("Settings")) pauseSettings = true;
         if (connected && localServer) DrawOpenToFriends();
+        if (connected && localServer) DrawOpenToLan();
         if (WideButton(localServer ? "Save and quit to title" : connected ? "Disconnect" : "Back to title")) pendingStop = true;
         if (WideButton("Quit the game")) glfwSetWindowShouldClose(window, GLFW_TRUE);
     }
