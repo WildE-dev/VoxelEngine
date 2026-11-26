@@ -294,6 +294,41 @@ int main() {
     server.QueueConsoleCommand("fluid 16 0 20 steam");
     Check(Pump(a, 10.0, [&] { return steamAt({ 21, 0, 20 }); }), "and open, the steam gets through to the far end");
 
+    // Shutting a valve keeps what was in it: a tank of water, a pipe, an open valve, a
+    // pipe and an empty tank; shut, the two sides hold all of it between them.
+    {
+        auto waterIn = [&](const glm::ivec3& p) {
+            // (The newest answer: the list is capped, so it's told by when it came.)
+            const double before = a.client.GetInspections().empty() ? -1.0 : a.client.GetInspections().back().time;
+            a.client.Inspect(p);
+            int amount = -1;
+            Pump(a, 5.0, [&] {
+                const auto& lines = a.client.GetInspections();
+                if (lines.empty() || lines.back().time <= before) return false;
+                const std::string& t = lines.back().text;
+                const size_t w = t.find("water ");
+                amount = w == std::string::npos ? 0 : std::atoi(t.c_str() + w + 6);
+                return true;
+            });
+            return amount;
+        };
+        server.QueueConsoleCommand("tp Smith 18.5 0 22.5");
+        Pump(a, 5.0, [&] { return std::abs(a.feet.z - 22.5f) < 0.1f; });
+        server.QueueConsoleCommand("fill 16 0 25 20 0 25 fluid_pipe");
+        server.QueueConsoleCommand("fill 16 0 25 16 0 25 fluid_tank");
+        server.QueueConsoleCommand("fill 20 0 25 20 0 25 fluid_tank");
+        server.QueueConsoleCommand("fill 18 0 25 18 0 25 fluid_valve_open");
+        Pump(a, 10.0, [&] { return at({ 18, 0, 25 }).type == BlockType::FLUID_VALVE_OPEN && at({ 20, 0, 25 }).type == BlockType::FLUID_TANK; });
+        server.QueueConsoleCommand("fluid 16 0 25 water");
+        Check(Pump(a, 10.0, [&] { return waterIn({ 20, 0, 25 }) > 0; }), "water in a tank spreads through an open valve to the far tank");
+        Pump(a, 1.0, [] { return false; }); // (a power update or two: its share is in the valve too)
+        a.client.UseBed({ 18, 0, 25 });
+        Check(Pump(a, 5.0, [&] { return at({ 18, 0, 25 }).type == BlockType::FLUID_VALVE; }), "the valve shuts by hand");
+        Pump(a, 1.0, [] { return false; });
+        const int near = waterIn({ 16, 0, 25 }), far = waterIn({ 20, 0, 25 });
+        Check(near + far == Fluids::kPerTank, "and the two sides keep all of it (" + std::to_string(near) + " + " + std::to_string(far) + " of " + std::to_string(Fluids::kPerTank) + ")");
+    }
+
     // Obsidian takes a blast: TNT between it and stone, lit.
     server.QueueConsoleCommand("tp Smith 26.5 0 26.5");
     Pump(a, 5.0, [&] { return std::abs(a.feet.x - 26.5f) < 0.1f; });

@@ -103,7 +103,47 @@ void Server::UpdatePower() {
         glm::ivec3 port;
         if (Multiblocks::PortOf(pos, b, Multiblocks::Role::AirPort, port)) structureAtAir[port] = pos;
     }
+    // A valve shut since the last update is no longer part of its network, so what it
+    // held goes to the sides it now divides instead of being lost with it: its air
+    // shared between the air parts beside it, its fluid into the networks beside it
+    // (that take that fluid) as far as they have room.
+    {
+        std::vector<std::pair<glm::ivec3, float>> shutAir;
+        for (const auto& [pos, held] : air)
+            if (held > 0.0f && blockAt(pos).type == BlockType::VALVE) shutAir.emplace_back(pos, held);
+        for (const auto& [pos, held] : shutAir) {
+            air.erase(pos);
+            std::vector<glm::ivec3> sides;
+            for (const auto& d : kFaces)
+                if (Power::IsAirPart(blockAt(pos + d).type)) sides.push_back(pos + d);
+            for (const auto& side : sides) air[side] += held / static_cast<float>(sides.size());
+        }
+    }
+    struct ShutValve {
+        glm::ivec3 pos;
+        int held;
+        Fluids::Kind kind;
+    };
+    std::vector<ShutValve> shutValves;
+    for (const auto& [pos, held] : fluidHeld)
+        if (held > 0 && blockAt(pos).type == BlockType::FLUID_VALVE) {
+            auto k = fluidKind.find(pos);
+            shutValves.push_back({ pos, held, k != fluidKind.end() ? k->second : Fluids::Kind::None });
+        }
+    for (const auto& v : shutValves) fluidHeld.erase(v.pos), fluidKind.erase(v.pos);
     BuildFluidNets();
+    for (const auto& v : shutValves) {
+        int left = v.kind == Fluids::Kind::None ? 0 : v.held;
+        for (const auto& d : kFaces) {
+            FluidNet* net = FluidNetAt(v.pos + d);
+            if (left <= 0) break;
+            if (!net || !net->Takes(v.kind) || net->Room() <= 0) continue;
+            const int give = std::min(left, net->Room());
+            net->amount += give;
+            net->kind = v.kind;
+            left -= give;
+        }
+    }
 
     // A piston's head with no piston behind it (broken, or turned) goes too.
     for (const auto& pos : machineList) {

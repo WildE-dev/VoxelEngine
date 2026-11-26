@@ -1522,7 +1522,7 @@ wheels** through **shafts**:
   however much air the machines use, with no wheels or compressor needed. It has no
   recipe, survival players can't place one, and breaking one in survival gives nothing.
 - A **valve** joins the pipes either side of it only while it's open; shut, the two
-  sides are separate networks, each keeping its own air. Right-click (with an empty
+  sides are separate networks, each keeping its own air (and sharing what was in the valve). Right-click (with an empty
   hand or a tool) opens and shuts
   it, or give it a channel (see [Signals](#signals)) and it opens while that's on. It's
   drawn as a length of air pipe with a red handle on top, turned along the pipe when
@@ -1692,7 +1692,7 @@ it; they aren't part of it, so they don't join what's on either side of them:
   a fluid valve in the pipe before it.
 - A **fluid valve** (half an iron ingot and a fluid pipe) joins the fluid pipes either
   side of it only while it's open. Shut, it keeps the two sides apart and closes the
-  pipes' ends there, so nothing spills or vents. It opens and shuts by hand or by a
+  pipes' ends there, so nothing spills or vents, and what was in it goes to the sides as far as they have room. It opens and shuts by hand or by a
   channel, like the air valve, and looks like a length of fluid pipe with a red handle.
 
 A pressure gauge fixed to a fluid pipe or tank shows how full its network is, and

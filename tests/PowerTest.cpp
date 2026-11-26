@@ -279,8 +279,10 @@ int main() {
 
     std::cout << "Saving" << std::endl;
     // The tank behind the shut valve keeps what it holds, with nothing to fill or drain it.
+    // (Its answer now, not one from while the valve was open: told by when it came.)
+    const double askedAfter = a.client.GetInspections().empty() ? -1.0 : a.client.GetInspections().back().time;
     a.client.Inspect(tank);
-    pump(10.0, [&] { return TankHeld(a.client) > 0; });
+    pump(10.0, [&] { return !a.client.GetInspections().empty() && a.client.GetInspections().back().time > askedAfter && TankHeld(a.client) > 0; });
     const int held = TankHeld(a.client);
     Check(held > 0, "the shut-off tank holds air (" + std::to_string(held) + ")");
     a.client.Disconnect();
