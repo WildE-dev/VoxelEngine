@@ -41,7 +41,7 @@ public:
     // in place of units by type, tool and upgrade masks (older ones are converted); ...;
     // 17: items their own types, not blocks (block numbers and ItemIds saved before are
     // turned into today's: see world/Legacy.h)
-    static constexpr uint32_t kFormatVersion = 19; // 19: whether the clock is stopped
+    static constexpr uint32_t kFormatVersion = 20; // 20: chests left where players died
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};
@@ -107,6 +107,9 @@ public:
     // Leaves players put down (they don't fall when a tree's logs go), format 16 on.
     std::vector<glm::ivec3> GetPlacedLeaves() const;
     void SetPlacedLeaves(std::vector<glm::ivec3> leaves);
+    // Chests left where players died (format 20 on), which fire doesn't burn.
+    std::vector<glm::ivec3> GetDeathChests() const;
+    void SetDeathChests(std::vector<glm::ivec3> chests);
 
     // One bit per block column of a chunk (index x * CHUNK_SIZE + z).
     using ColumnMask = std::array<uint64_t, Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE / 64>;
@@ -210,4 +213,5 @@ private:
     std::vector<SavedAir> air;
     std::vector<SavedItem> items;
     std::vector<glm::ivec3> placedLeaves;
+    std::vector<glm::ivec3> deathChests;
 };

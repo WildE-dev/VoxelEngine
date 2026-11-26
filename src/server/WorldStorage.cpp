@@ -302,6 +302,17 @@ bool WorldStorage::ReadWorldFile() {
         }
         placedLeaves.push_back(pos);
     }
+    // Chests left where players died (format 20 on).
+    uint32_t deathChestCount = 0;
+    if (version >= 20 && !r.VarU32(deathChestCount)) deathChestCount = 0;
+    for (uint32_t i = 0; i < deathChestCount; i++) {
+        glm::ivec3 pos;
+        if (!r.IVec3(pos)) {
+            std::cerr << "[storage] " << path.string() << " is truncated (death chests)" << std::endl;
+            return false;
+        }
+        deathChests.push_back(pos);
+    }
     return true;
 }
 
@@ -543,6 +554,17 @@ void WorldStorage::SetCrops(std::vector<glm::ivec3> c) {
     playersDirty = true;
 }
 
+std::vector<glm::ivec3> WorldStorage::GetDeathChests() const {
+    std::lock_guard<std::mutex> lock(mutex);
+    return deathChests;
+}
+
+void WorldStorage::SetDeathChests(std::vector<glm::ivec3> c) {
+    std::lock_guard<std::mutex> lock(mutex);
+    deathChests = std::move(c);
+    playersDirty = true;
+}
+
 std::vector<glm::ivec3> WorldStorage::GetPlacedLeaves() const {
     std::lock_guard<std::mutex> lock(mutex);
     return placedLeaves;
@@ -652,6 +674,8 @@ bool WorldStorage::Flush() {
             }
             w.VarU32(static_cast<uint32_t>(placedLeaves.size()));
             for (const auto& pos : placedLeaves) w.IVec3(pos);
+            w.VarU32(static_cast<uint32_t>(deathChests.size()));
+            for (const auto& pos : deathChests) w.IVec3(pos);
             files.emplace_back(directory / "world.dat", std::move(w.data));
             writePlayers = true;
             playersDirty = false;

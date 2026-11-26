@@ -197,6 +197,7 @@ bool Server::Start(const Options& opts) {
         for (const auto& [pos, held] : storage->GetChests()) chests[pos] = held;
         for (const auto& pos : storage->GetCrops()) crops.insert(pos);
         for (const auto& pos : storage->GetPlacedLeaves()) placedLeaves.insert(pos);
+        for (const auto& pos : storage->GetDeathChests()) deathChests.insert(pos);
         for (const auto& [pos, text] : storage->GetSigns()) signs[pos] = text;
         for (const auto& sig : storage->GetSignals()) {
             SignalBlock& b = signalBlocks[sig.pos];
@@ -329,6 +330,8 @@ void Server::Save(bool shuttingDown) {
         else ++it;
     }
     storage->SetPlacedLeaves({ placedLeaves.begin(), placedLeaves.end() });
+    for (auto it = deathChests.begin(); it != deathChests.end();) it = chests.count(*it) ? std::next(it) : deathChests.erase(it); // (taken apart some other way)
+    storage->SetDeathChests({ deathChests.begin(), deathChests.end() });
     storage->SetSigns({ signs.begin(), signs.end() });
     std::vector<WorldStorage::SavedSignal> savedSignals;
     for (const auto& [pos, b] : signalBlocks)
@@ -1624,6 +1627,7 @@ void Server::DropOnDeath(ClientState& client) {
     if (!spot) return; // nowhere to put it: they keep it all
     world->SetBlock(spot->x, spot->y, spot->z, Block(BlockType::CHEST));
     chests[*spot] = dropped;
+    deathChests.insert(*spot); // (fire spares it: everything they had is in it)
     client.inventory = Inventory(Inventory::kPlayerSlots);
     client.armour = 0;
     SendInventory(client);
@@ -1971,6 +1975,7 @@ Server::ChestItems& Server::ChestAt(const glm::ivec3& pos) {
 void Server::RemoveChest(const glm::ivec3& pos, ClientState* breaker) {
     if (breaker) ChestAt(pos); // (an unopened dungeon chest still holds its loot)
     auto it = chests.find(pos);
+    deathChests.erase(pos);
     if (it == chests.end()) return;
     // What was in it spills out where it was.
     if (breaker) {
@@ -2478,7 +2483,7 @@ void Server::UpdateFire() {
             Block b;
             if (!world->GetBlock(n.x, n.y, n.z, b)) continue;
             if (b.type == BlockType::TNT) LightTnt(n, 0.5 + FireRandom());
-            if (!Fire::Burns(b.type)) continue;
+            if (!Fire::Burns(b.type) || deathChests.count(n)) continue; // (a chest left where someone died never burns)
             fuel = true;
             fireLit[f] = now; // (it dies down a while after it last had something to burn, not after it was lit)
             if (FireRandom() >= Fire::BurnRate(b.type) * dt * (rainedOn ? 0.5f : 1.0f)) continue;

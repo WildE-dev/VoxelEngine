@@ -195,11 +195,26 @@ int main() {
         // at the spawn point, and not still alight.
         fill({ 34, -1, 60 }, { 34, -1, 60 }, "lava");
         Pump(a, 5.0, [&] { return at({ 34, -1, 60 }) == BlockType::LAVA; });
+        server.QueueConsoleCommand("give dirt 1 Warden"); // (something to leave behind)
+        Pump(a, 5.0, [&] { return a.client.GetResources(BlockType::DIRT) > 0; });
         const double diedBefore = a.client.GetLastDeath();
         server.QueueConsoleCommand("tp Warden 34.5 -1 60.5");
         Check(Pump(a, 20.0, [&] { return a.client.GetLastDeath() > diedBefore && std::abs(a.feet.x - 34.5f) > 1.0f; }), "wading in lava kills");
         Check(a.client.GetHealth() == a.client.GetMaxHealth() && !a.client.Burning(), "and they come back whole, no longer on fire");
         fill({ 34, -1, 60 }, { 34, -1, 60 }, "stone");
+
+        // What they had is in a chest where they died, which fire doesn't burn; an
+        // ordinary chest on the fire's other side does.
+        Check(Pump(a, 5.0, [&] { return at({ 34, 0, 60 }) == BlockType::CHEST; }), "their things are left in a chest where they died");
+        fill({ 36, 0, 60 }, { 36, 0, 60 }, "chest");
+        fill({ 35, 0, 61 }, { 35, 0, 61 }, "leaves");
+        bool plainBurnt = false;
+        for (int tries = 0; tries < 10 && !plainBurnt; tries++) {
+            if (at({ 35, 0, 60 }) != BlockType::FIRE) fill({ 35, 0, 60 }, { 35, 0, 60 }, "fire");
+            plainBurnt = Pump(a, 4.0, [&] { return at({ 36, 0, 60 }) != BlockType::CHEST; });
+        }
+        Check(plainBurnt && at({ 34, 0, 60 }) == BlockType::CHEST, "a fire beside both burns the ordinary chest and leaves the one they died by");
+        fill({ 34, 0, 60 }, { 36, 0, 61 }, "air");
 
         // Items in it are lost.
         server.QueueConsoleCommand("gamemode creative Warden");
