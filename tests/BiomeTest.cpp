@@ -503,9 +503,13 @@ int main() {
                                             if (inside && blocks[over.x + S * (over.y + S * over.z)].IsAir()) leaning++;
                                             continue;
                                         }
-                                        if (!under.IsPartial() || !stone(under) || solid(under, fx, 0.97f, fz)) continue;
-                                        // (A ledge: open beyond it the way the wall under it faces.)
-                                        const glm::ivec3 beyond = glm::ivec3(x, y, z) + glm::ivec3(glm::round(Block::ShapeVectorToCell(under.ShapeDir(), { 0.0f, 1.0f, 0.0f })));
+                                        if (!under.IsPartial() || !stone(under) || !solid(b, fx, 0.01f, fz)) continue;
+                                        // (A ledge: open beyond it the way the wall under it faces, and
+                                        // sticking out a pixel or more past the wall's top.)
+                                        const glm::vec3 out = Block::ShapeVectorToCell(under.ShapeDir(), { 0.0f, 1.0f, 0.0f });
+                                        const float bx = std::clamp(fx - out.x / 16, 0.005f, 0.995f), bz = std::clamp(fz - out.z / 16, 0.005f, 0.995f);
+                                        if (solid(under, bx, 0.99f, bz)) continue;
+                                        const glm::ivec3 beyond = glm::ivec3(x, y, z) + glm::ivec3(glm::round(out));
                                         if (beyond.x < 0 || beyond.y < 0 || beyond.z < 0 || beyond.x >= S || beyond.y >= S || beyond.z >= S) continue;
                                         if (!blocks[beyond.x + S * (beyond.y + S * beyond.z)].IsAir()) continue;
                                         lips++;
@@ -513,8 +517,50 @@ int main() {
                             }
                 }
             }
-        Check(leaning + lips <= points / 500, "cave rock doesn't hang out over the rock under it (" + std::to_string(leaning) + " leaning out, " +
+        Check(leaning + lips <= points / 1000, "cave rock doesn't hang out over the rock under it (" + std::to_string(leaning) + " leaning out, " +
                                                  std::to_string(lips) + " sticking out over a slope, of " + std::to_string(points) + " points)");
+    }
+    // A natural slope's flat face (its base, the side opposite its top) is always against a
+    // full block, so none of it hangs over open space or another slope: in caves and on the
+    // land, within a chunk and across chunks' borders.
+    {
+        TerrainGenerator rock(TerrainGenerator::Type::Normal);
+        constexpr int S = TerrainGenerator::S;
+        std::map<std::tuple<int, int, int>, TerrainGenerator::Blocks> chunks;
+        for (int cx = -3; cx < 3; cx++)
+            for (int cz = -3; cz < 3; cz++) {
+                TerrainGenerator::ColumnHeights h;
+                rock.ComputeColumnHeights(cx, cz, h);
+                for (int cy = -6; cy <= 6; cy++) rock.GenerateChunk({ cx, cy, cz }, h, chunks[{ cx, cy, cz }]);
+            }
+        using Coords::FloorDiv;
+        auto at = [&](const glm::ivec3& w) -> const Block* {
+            const auto it = chunks.find({ FloorDiv(w.x, S), FloorDiv(w.y, S), FloorDiv(w.z, S) });
+            if (it == chunks.end()) return nullptr;
+            const glm::ivec3 l = w - glm::ivec3(FloorDiv(w.x, S), FloorDiv(w.y, S), FloorDiv(w.z, S)) * S;
+            return &it->second[l.x + S * (l.y + S * l.z)];
+        };
+        long caveSlopes = 0, caveLoose = 0, landSlopes = 0, landLoose = 0, borders = 0;
+        for (const auto& [where, blocks] : chunks) {
+            const glm::ivec3 origin = glm::ivec3(std::get<0>(where), std::get<1>(where), std::get<2>(where)) * S;
+            for (int x = 0; x < S; x++)
+                for (int y = 0; y < S; y++)
+                    for (int z = 0; z < S; z++) {
+                        const Block& b = blocks[x + S * (y + S * z)];
+                        if (!b.IsPartial() || b.IsStepped()) continue;
+                        const glm::ivec3 local(x, y, z);
+                        const glm::ivec3 base = origin + local - glm::ivec3(glm::round(Block::ShapeVectorToCell(b.ShapeDir(), { 0.0f, 1.0f, 0.0f })));
+                        const Block* under = at(base);
+                        if (!under) continue;
+                        const bool cave = b.type == BlockType::STONE || b.type == BlockType::DEEPSTONE;
+                        const bool loose = !under->IsFullBlock();
+                        (cave ? caveSlopes : landSlopes)++;
+                        (cave ? caveLoose : landLoose) += loose;
+                        borders += loose && glm::any(glm::notEqual(glm::ivec3(FloorDiv(base.x, S), FloorDiv(base.y, S), FloorDiv(base.z, S)) * S, origin));
+                    }
+        }
+        Check(caveSlopes > 1000 && caveLoose == 0, "cave slopes' flat faces are all against full blocks (" + std::to_string(caveLoose) + " of " + std::to_string(caveSlopes) + " not)");
+        Check(landSlopes > 1000 && landLoose == 0, "and the land's slopes' too (" + std::to_string(landLoose) + " of " + std::to_string(landSlopes) + " not)");
     }
     // Below the lava level: deepstone, not stone, and caves much rarer.
     {

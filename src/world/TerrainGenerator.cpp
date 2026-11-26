@@ -665,18 +665,32 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
     // wall with open cave over the way it faces leans back, never out (under a ceiling it
     // may curve out into it), and no wall's foot reaches further out than the wall under
     // it; and rock over a wall that's open the way the wall faces carries that wall on up,
-    // rather than a floor's edge sticking out over it.
+    // rather than a floor's edge sticking out over it. And a slope's flat face (its base,
+    // opposite its top) is always against a full block: it's turned only a way whose base
+    // is one (beyond the chunk: rock with no cave beside it, which that chunk leaves whole
+    // too), and left whole if the block at its base is shaped after all.
     {
         std::optional<Caves::Field> caves; // (sampled only if this chunk has any rock to shape)
         // How open a point is (above 0: carved out), remembered for the points of this
         // chunk and the ones round it.
         constexpr int P = S + 2;
         std::vector<float> memo(P * P * P, std::numeric_limits<float>::quiet_NaN());
+        // The surface row of a column, this chunk's or one round it (as that chunk has it).
+        std::vector<int> ring(P * P, std::numeric_limits<int>::min());
+        auto rowAt = [&](int wx, int wz) {
+            const int lx = wx - coords.x * S, lz = wz - coords.z * S;
+            if (lx >= 0 && lz >= 0 && lx < S && lz < S) return rows[lx * S + lz];
+            int* slot = lx >= -1 && lz >= -1 && lx <= S && lz <= S ? &ring[(lx + 1) * P + (lz + 1)] : nullptr;
+            if (slot && *slot != std::numeric_limits<int>::min()) return *slot;
+            const int row = ColumnAt(wx, wz).surfaceRow;
+            if (slot) *slot = row;
+            return row;
+        };
         auto open = [&](const glm::ivec3& w) {
             const glm::ivec3 l = w - coords * S + glm::ivec3(1);
             float* slot = l.x >= 0 && l.y >= 0 && l.z >= 0 && l.x < P && l.y < P && l.z < P ? &memo[(l.x * P + l.y) * P + l.z] : nullptr;
             if (slot && !std::isnan(*slot)) return *slot;
-            const int row = rows[std::clamp(l.x - 1, 0, S - 1) * S + std::clamp(l.z - 1, 0, S - 1)];
+            const int row = rowAt(w.x, w.z);
             if (!caves) caves.emplace(coords);
             const float o = std::max(caves->Openness(w.x, w.y, w.z, row), DeepOpenness(w.x, w.y, w.z) * 0.1f);
             if (slot) *slot = o;
@@ -685,6 +699,29 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
         // EdgeData's corners (x, z) in a shape's own frame: 0 (0,1), 1 (1,0), 2 (0,0), 3 (1,1).
         constexpr int kCorner[4][2] = { { 0, 1 }, { 1, 0 }, { 0, 0 }, { 1, 1 } };
         const glm::ivec3 kOpenings[6] = { { 0, 1, 0 }, { 0, -1, 0 }, { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+        auto inChunk = [](const glm::ivec3& l) { return l.x >= 0 && l.y >= 0 && l.z >= 0 && l.x < S && l.y < S && l.z < S; };
+        // Whether the cave opens beside a cell, the way kOpenings[i] points. (A neighbour in
+        // this chunk is open if it was carved out, underground here; one beyond it, by the
+        // field.)
+        auto opensTo = [&](const glm::ivec3& local, const glm::ivec3& at, int i) {
+            const glm::ivec3 n = local + kOpenings[i];
+            if (inChunk(n)) return out[Index(n.x, n.y, n.z)].IsAir() && open(at + kOpenings[i]) > 0.0f;
+            return open(at + kOpenings[i]) > 0.0f;
+        };
+        // Whether the block behind a cell (opposite kOpenings[i]) is full, so a slope facing
+        // that way has its base against it. Beyond the chunk: underground rock with no cave
+        // beside it, which its own chunk doesn't shape (it shapes only rock with cave beside).
+        auto backedTo = [&](const glm::ivec3& local, const glm::ivec3& at, int i) {
+            const glm::ivec3 n = local - kOpenings[i];
+            if (inChunk(n)) return out[Index(n.x, n.y, n.z)].IsFullBlock();
+            const glm::ivec3 w = at - kOpenings[i];
+            if (w.y >= rowAt(w.x, w.z) - 1 || open(w) > 0.0f) return false;
+            for (const glm::ivec3& o : kOpenings)
+                if (open(w + o) > 0.0f) return false;
+            return true;
+        };
+        // The cells shaped, and the way each faces (kOpenings), to check their bases after.
+        std::vector<std::pair<int, int>> shapedCells;
         for (int x = 0; x < S; x++)
             for (int z = 0; z < S; z++) {
                 const int m = rows[x * S + z];
@@ -694,29 +731,29 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                     Block& cell = out[Index(x, y, z)];
                     if ((cell.type != BlockType::STONE && cell.type != BlockType::DEEPSTONE) || !cell.IsFullBlock()) continue;
                     const glm::ivec3 at(coords.x * S + x, wy, coords.z * S + z);
-                    // (A neighbour in this chunk is open if it was carved out, underground
-                    // here; one beyond it, by the field.)
-                    int facing = -1;
-                    for (int i = 0; i < 6 && facing < 0; i++) {
-                        const glm::ivec3 n = glm::ivec3(x, y, z) + kOpenings[i];
-                        const bool inside = n.x >= 0 && n.y >= 0 && n.z >= 0 && n.x < S && n.y < S && n.z < S;
-                        if (inside ? out[Index(n.x, n.y, n.z)].IsAir() && open(at + kOpenings[i]) > 0.0f : open(at + kOpenings[i]) > 0.0f) facing = i;
-                    }
-                    if (facing < 0) continue;
-                    int dir = Block::ShapeDirFacing(kOpenings[facing]);
+                    const glm::ivec3 local(x, y, z);
+                    // The first way (floor, ceiling, walls) the cave opens to with a full
+                    // block behind; but where it's no ceiling, the way the wall under it
+                    // faces, if it opens that way here too (carrying the wall on up).
+                    int first = -1, facing = -1;
+                    for (int i = 0; i < 6 && facing < 0; i++)
+                        if (opensTo(local, at, i)) {
+                            if (first < 0) first = i;
+                            if (backedTo(local, at, i)) facing = i;
+                        }
+                    if (first < 0) continue;
                     // The wall under it, if it's a wall open the way it faces here too.
                     const Block* under = y > 0 ? &out[Index(x, y - 1, z)] : nullptr;
                     if (under && !(under->IsPartial() && under->ShapeDir() != 0 && under->ShapeDir() != 3 &&
                                    (under->type == BlockType::STONE || under->type == BlockType::DEEPSTONE)))
                         under = nullptr;
-                    if (under && dir != 3) {
-                        const int wall = under->ShapeDir();
+                    if (under && first != 1) {
                         int i = 0;
-                        while (Block::ShapeDirFacing(kOpenings[i]) != wall) i++;
-                        const glm::ivec3 n = glm::ivec3(x, y, z) + kOpenings[i];
-                        const bool inside = n.x >= 0 && n.z >= 0 && n.x < S && n.z < S;
-                        if (inside ? out[Index(n.x, n.y, n.z)].IsAir() && open(at + kOpenings[i]) > 0.0f : open(at + kOpenings[i]) > 0.0f) dir = wall;
+                        while (Block::ShapeDirFacing(kOpenings[i]) != under->ShapeDir()) i++;
+                        if (opensTo(local, at, i) && backedTo(local, at, i)) facing = i;
                     }
+                    if (facing < 0) continue; // (nowhere with a full block behind: left whole)
+                    const int dir = Block::ShapeDirFacing(kOpenings[facing]);
                     const bool isWall = dir != 0 && dir != 3;
                     if (!isWall || (under && under->ShapeDir() != dir)) under = nullptr;
                     int heights[4];
@@ -756,8 +793,23 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                     Block shaped(cell.type, edges);
                     shaped.SetShapeDir(dir);
                     cell = shaped;
+                    shapedCells.emplace_back(Index(x, y, z), facing);
                 }
             }
+        // A slope whose base turned out against another slope after all is left whole (which
+        // can only give others a full block behind them), until none is.
+        for (bool changed = true; changed;) {
+            changed = false;
+            for (const auto& [index, facing] : shapedCells) {
+                Block& cell = out[index];
+                if (cell.IsFullBlock()) continue;
+                const int x = index % S, y = (index / S) % S, z = index / (S * S);
+                const glm::ivec3 n = glm::ivec3(x, y, z) - kOpenings[facing];
+                if (!inChunk(n) || out[Index(n.x, n.y, n.z)].IsFullBlock()) continue;
+                cell = Block(cell.type);
+                changed = true;
+            }
+        }
     }
 
     // Lakes and rivers: their water level per column, and their beds kept whole (a
