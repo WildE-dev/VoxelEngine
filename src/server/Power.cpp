@@ -1,8 +1,10 @@
 // Air power: water wheels, air pipes and machines (see world/Power.h).
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <optional>
 #include <unordered_set>
 
 #include "server/Server.h"
@@ -426,44 +428,29 @@ void Server::UpdatePower() {
     }
     air.swap(newAir);
 
-    // Drains and fluid outlets: the water they traded since the last update into or out
-    // of their pipes, and what they may trade until the next.
+    // Pumps, drains and fluid outlets: the water each traded since the last update, into
+    // or out of the network that allowed it (fluidGrants: a part of it beside the
+    // machine). What each may trade until the next update is handed out further on.
+    {
+        std::unordered_map<glm::ivec3, glm::ivec3, Coords::IVec3Hash> grants;
+        grants.swap(fluidGrants);
+        for (const auto& pos : machineList) {
+            const BlockType t = blockAt(pos).type;
+            if (t != BlockType::PUMP && t != BlockType::DRAIN && t != BlockType::FLUID_OUTLET) continue;
+            const int used = water.TakeDrainUse(pos);
+            auto g = grants.find(pos);
+            FluidNet* net = g != grants.end() ? FluidNetAt(g->second) : nullptr;
+            if (!net || used <= 0) continue; // (its pipes are gone: what it moved went with them)
+            if (t == BlockType::FLUID_OUTLET) net->amount = std::max(0, net->amount - used);
+            else if (net->Takes(Fluids::Kind::Water)) {
+                net->amount = std::min(net->capacity, net->amount + used);
+                if (net->amount > 0) net->kind = Fluids::Kind::Water;
+            }
+        }
+    }
     for (const auto& pos : machineList) {
         const BlockType t = blockAt(pos).type;
-        if (t == BlockType::PUMP) {
-            // Pipes holding another fluid (oil, fuel, steam) aren't for its water: it stands.
-            bool otherFluid = false;
-            for (const auto& d : kFaces)
-                if (const FluidNet* n = FluidNetAt(pos + d); n && n->amount > 0 && n->kind != Fluids::Kind::Water) otherFluid = true;
-            if (otherFluid) {
-                water.TakeDrainUse(pos);
-                water.SetDrainBudget(pos, -1); // (server/Water.h: a pump told -1 stands)
-                continue;
-            }
-            // A pump whose pipes reach a tank or machine fills them (server/Water.h); one
-            // whose pipes just end lets its water out there, and puts none in.
-            if (FluidNet* in = FluidNetBeside(pos, Fluids::Kind::Water, false)) {
-                in->amount = std::min(in->capacity, in->amount + water.TakeDrainUse(pos));
-                if (in->amount > 0) in->kind = Fluids::Kind::Water;
-                water.SetDrainBudget(pos, in->Room());
-            }
-            else {
-                water.TakeDrainUse(pos);
-                water.SetDrainBudget(pos, 0);
-            }
-        }
-        else if (t == BlockType::DRAIN) {
-            if (FluidNet* in = FluidNetBeside(pos, Fluids::Kind::Water, false)) {
-                in->amount = std::min(in->capacity, in->amount + water.TakeDrainUse(pos));
-                if (in->amount > 0) in->kind = Fluids::Kind::Water;
-                water.SetDrainBudget(pos, in->Room());
-            }
-            else {
-                water.TakeDrainUse(pos);
-                water.SetDrainBudget(pos, 0);
-            }
-        }
-        else if (t == BlockType::BOILER) {
+        if (t == BlockType::BOILER) {
             // Water under it, steam over it, while there's fire.
             Worker& w = workers[pos];
             FluidNet* in = FluidNetAt(pos - glm::ivec3(0, 1, 0));
@@ -521,16 +508,6 @@ void Server::UpdatePower() {
                 w.last = now;
             }
         }
-        else if (t == BlockType::FLUID_OUTLET) {
-            if (FluidNet* from = FluidNetBeside(pos, Fluids::Kind::Water, true)) {
-                from->amount = std::max(0, from->amount - water.TakeDrainUse(pos));
-                water.SetDrainBudget(pos, from->amount);
-            }
-            else {
-                water.TakeDrainUse(pos);
-                water.SetDrainBudget(pos, 0);
-            }
-        }
     }
     // Obsidian pipes touching lava draw it in, as far as their network has room.
     {
@@ -576,6 +553,57 @@ void Server::UpdatePower() {
             const Block outlet = blockAt(pos);
             if (outlet.type != BlockType::FLUID_OUTLET) continue;
             if (FluidNet* from = FluidNetBeside(pos, Fluids::Kind::Steam, true)) vent(*from, pos + outlet.Facing(), perOutlet);
+        }
+    }
+    // What pumps, drains and fluid outlets may trade until the next update: each
+    // network's room (into it) and water (out of it) shared out once, first come first
+    // served, so several on one network never promise more than it has.
+    {
+        std::vector<int> promisedIn(fluidNets.size(), 0), promisedOut(fluidNets.size(), 0);
+        // The first part beside `pos` whose network will take water and has room left
+        // to promise (out = false), or holds water not yet promised (out = true).
+        auto grantFrom = [&](const glm::ivec3& pos, bool out, int& index) -> std::optional<glm::ivec3> {
+            for (const auto& d : kFaces) {
+                auto it = fluidNetOf.find(pos + d);
+                if (it == fluidNetOf.end()) continue;
+                const FluidNet& net = fluidNets[it->second];
+                const bool ok = out ? net.kind == Fluids::Kind::Water && net.amount - promisedOut[it->second] > 0
+                                    : net.Takes(Fluids::Kind::Water) && net.Room() - promisedIn[it->second] > 0;
+                if (ok) {
+                    index = it->second;
+                    return pos + d;
+                }
+            }
+            return std::nullopt;
+        };
+        for (const auto& pos : machineList) {
+            const BlockType t = blockAt(pos).type;
+            if (t != BlockType::PUMP && t != BlockType::DRAIN && t != BlockType::FLUID_OUTLET) continue;
+            if (t == BlockType::PUMP) {
+                // Pipes holding another fluid (oil, fuel, steam) aren't for its water: it stands.
+                bool otherFluid = false;
+                for (const auto& d : kFaces)
+                    if (const FluidNet* n = FluidNetAt(pos + d); n && n->amount > 0 && n->kind != Fluids::Kind::Water) otherFluid = true;
+                if (otherFluid) {
+                    water.SetDrainBudget(pos, -1); // (server/Water.h: a pump told -1 stands)
+                    continue;
+                }
+            }
+            // (A pump whose pipes reach a tank or machine fills them, server/Water.h; one
+            // whose pipes just end lets its water out there, and puts none in.)
+            const bool out = t == BlockType::FLUID_OUTLET;
+            int index = 0;
+            const std::optional<glm::ivec3> side = grantFrom(pos, out, index);
+            if (!side) {
+                water.SetDrainBudget(pos, 0);
+                continue;
+            }
+            const FluidNet& net = fluidNets[index];
+            int& promised = out ? promisedOut[index] : promisedIn[index];
+            const int budget = (out ? net.amount : net.Room()) - promised;
+            promised += budget;
+            water.SetDrainBudget(pos, budget);
+            fluidGrants[pos] = *side;
         }
     }
     StoreFluids();
@@ -919,14 +947,21 @@ void Server::BuildFluidNets() {
                 net.members.push_back(n);
             }
         net.lavaProof = true;
+        // (Parts that held different fluids, joined now by a valve or a new pipe: the
+        // network keeps whichever there's most of, and the rest is lost rather than
+        // turned into it.)
+        std::array<int, static_cast<size_t>(Fluids::Kind::Count)> held{};
         for (const auto& m : net.members) {
             net.capacity += Fluids::CapacityOf(blockAt(m).type);
             net.lavaProof &= blockAt(m).type == BlockType::OBSIDIAN_PIPE;
             auto h = fluidHeld.find(m);
             if (h == fluidHeld.end() || h->second <= 0) continue;
-            net.amount += h->second;
-            if (net.kind == Fluids::Kind::None) net.kind = fluidKind[m];
+            auto k = fluidKind.find(m);
+            const size_t kind = k != fluidKind.end() ? static_cast<size_t>(k->second) : 0;
+            if (kind > 0 && kind < held.size()) held[kind] += h->second;
         }
+        for (size_t k = 1; k < held.size(); k++)
+            if (held[k] > net.amount) net.amount = held[k], net.kind = static_cast<Fluids::Kind>(k);
         net.amount = std::min(net.amount, net.capacity);
     };
     for (const auto& pos : machineList) {

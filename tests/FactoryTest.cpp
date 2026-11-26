@@ -384,6 +384,29 @@ int main(int argc, char** argv) {
                   }),
                   "and it comes out of the outlet (" + std::to_string(around) + " units out there)");
 
+            // Three outlets on one network share what it holds: a pipe run of 64 units of
+            // water lets no more than that out into a walled pool between them.
+            server.QueueConsoleCommand("tp Builder 40.5 0 54.5");
+            pump(10.0, [&] { return a.feet.z > 54.0f; });
+            server.QueueConsoleCommand("fill 43 -1 51 47 1 57 stone");
+            server.QueueConsoleCommand("fill 44 0 52 46 1 56 air");
+            server.QueueConsoleCommand("fill 43 0 53 43 0 55 air");
+            server.QueueConsoleCommand("fill 42 0 53 42 0 55 fluid_pipe");
+            Check(pump(10.0, [&] { return blockAt({ 42, 0, 55 }) == BlockType::FLUID_PIPE && blockAt({ 43, 0, 54 }) == BlockType::AIR; }), "a pipe run beside a walled pool");
+            for (int z = 53; z <= 55; z++) a.client.PlaceBlock({ 43, 0, z }, BlockType::FLUID_OUTLET, 8, 0);
+            Check(pump(10.0, [&] { return blockAt({ 43, 0, 53 }) == BlockType::FLUID_OUTLET && blockAt({ 43, 0, 55 }) == BlockType::FLUID_OUTLET; }), "with three outlets into it");
+            server.QueueConsoleCommand("fluid 42 0 54 water");
+            auto pool = [&] {
+                int n = 0;
+                for (int x = 44; x <= 46; x++)
+                    for (int y = 0; y <= 1; y++)
+                        for (int z = 52; z <= 56; z++) n += std::max(0, waterAt({ x, y, z }));
+                return n;
+            };
+            pump(10.0, [&] { return pool() >= 60; });
+            wait(3.0);
+            Check(pool() > 0 && pool() <= Fluids::kPerPipe, "they let out only what the pipes held (" + std::to_string(pool()) + " of " + std::to_string(Fluids::kPerPipe) + " units)");
+
         }
         if (sections.Run("mining")) {
             std::cout << "Mining posts" << std::endl;

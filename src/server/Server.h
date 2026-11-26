@@ -538,6 +538,9 @@ private:
     // as of the last update.
     std::unordered_map<glm::ivec3, int, Coords::IVec3Hash> fluidHeld;
     std::unordered_map<glm::ivec3, Fluids::Kind, Coords::IVec3Hash> fluidKind;
+    // Pumps', drains' and fluid outlets' allowances (server/Water.h SetDrainBudget): a
+    // part of the network each was granted from, so what it trades goes to that network.
+    std::unordered_map<glm::ivec3, glm::ivec3, Coords::IVec3Hash> fluidGrants;
     struct FluidNet {
         Fluids::Kind kind = Fluids::Kind::None;
         int amount = 0, capacity = 0;
