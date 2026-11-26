@@ -92,6 +92,48 @@ void Server::UpdatePower() {
     prune(smelters);
     prune(workers);
     prune(engines);
+    prune(diffusers);
+    prune(launcherArmed);
+    prune(launcherFired);
+    prune(refinedTowardBitumen);
+    // A machine replaced by another kind in the same place (a smelter formed into a blast
+    // furnace's core, a diffuser broken and a launcher put there) starts afresh: what was
+    // kept for the old one would otherwise be taken for the new one's (SendMachines and
+    // Signals' machine sensors look a position up in each of these in turn).
+    {
+        auto kindOf = [](BlockType t) {
+            switch (t) {
+            case BlockType::SMELTER_LIT: return BlockType::SMELTER;
+            case BlockType::VALVE_OPEN: return BlockType::VALVE;
+            case BlockType::FLUID_VALVE_OPEN: return BlockType::FLUID_VALVE;
+            default: return t;
+            }
+        };
+        std::unordered_map<glm::ivec3, BlockType, Coords::IVec3Hash> kinds;
+        for (const auto& pos : machineList) {
+            auto was = machineKinds.find(pos);
+            const BlockType kind = kindOf(blockAt(pos).type);
+            if (kind == BlockType::COUNT) { // (not loaded: as it was)
+                if (was != machineKinds.end()) kinds[pos] = was->second;
+                continue;
+            }
+            kinds[pos] = kind;
+            if (was == machineKinds.end() || was->second == kind) continue;
+            wheels.erase(pos);
+            drills.erase(pos);
+            compressors.erase(pos);
+            pumpStates.erase(pos);
+            pistonStates.erase(pos);
+            smelters.erase(pos);
+            workers.erase(pos);
+            engines.erase(pos);
+            diffusers.erase(pos);
+            launcherArmed.erase(pos);
+            launcherFired.erase(pos);
+            refinedTowardBitumen.erase(pos);
+        }
+        machineKinds.swap(kinds);
+    }
     // Formed structures no longer whole come apart; the rest are found by their air.
     std::unordered_map<glm::ivec3, glm::ivec3, Coords::IVec3Hash> structureAtAir;
     for (const auto& pos : machineList) {

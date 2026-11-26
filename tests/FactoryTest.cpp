@@ -487,6 +487,8 @@ int main(int argc, char** argv) {
             }
             const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
             Check(glass && took < 6.0, "with air it smelts the chest's 4 sand into glass, fast (" + std::to_string(took).substr(0, 4) + " s; a smelter takes 8)");
+            Check(machine({ 61, 1, 61 }) && machine({ 61, 1, 61 })->type == static_cast<uint8_t>(BlockType::MULTIBLOCK),
+                  "and it's reported as the furnace, not as the idle smelter it was made from");
             a.client.BreakBlock({ 60, 2, 62 });
             Check(pump(5.0, [&] { return blockAt({ 61, 1, 61 }) == BlockType::SMELTER && blockAt({ 60, 0, 60 }) == BlockType::FIRE_BRICK && blockAt({ 60, 2, 62 }) == BlockType::AIR; }),
                   "breaking a part takes it apart: every block back as it was (the broken one gone)");

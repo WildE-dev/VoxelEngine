@@ -605,6 +605,7 @@ private:
     std::unordered_map<glm::ivec3, float, Coords::IVec3Hash> air; // air held in each part of a network
     std::vector<AirNetwork> networks;                             // as of the last update
     std::unordered_map<glm::ivec3, int, Coords::IVec3Hash> networkOf; // each part's network, as of the last update
+    std::unordered_map<glm::ivec3, BlockType, Coords::IVec3Hash> machineKinds; // what stood at each machine's place at the last update
     std::vector<glm::ivec3> machineList;                          // (update scratch)
     std::unordered_map<glm::ivec3, glm::vec2, Coords::IVec3Hash> wheelFlow; // (update scratch)
     double nextPowerUpdate = 0.0;
