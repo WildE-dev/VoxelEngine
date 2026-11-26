@@ -1,0 +1,2 @@
+// grave: a block (the format is in README.md, here)
+{ "name": "Grave", "textures": { "top": "grave_top", "bottom": "grave", "side": "grave" }, "hardness": 2.0, "tool": "pickaxe", "sound": "hard", "light": 0, "map": "#90948c" }

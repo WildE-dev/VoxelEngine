@@ -371,7 +371,7 @@ void Server::RunCommand(const std::string& line, ClientState* sender, const Repl
         const glm::ivec3 a(glm::floor(glm::dvec3(v[0], v[1], v[2]))), b(glm::floor(glm::dvec3(v[3], v[4], v[5])));
         const glm::ivec3 lo = glm::min(a, b), hi = glm::max(a, b), size = hi - lo + 1;
         if (static_cast<long long>(size.x) * size.y * size.z > 32768) return reply(Kind::Error, "That's too big a box (32768 cells at most)");
-        const Block block = type == BlockType::WATER ? Block::Water(Block::kMaxWaterVolume) : Block(type);
+        const Block block = type == BlockType::WATER ? Block::Water(Block::kMaxWaterVolume) : type == BlockType::GRAVE ? Block::Grave() : Block(type);
         for (int x = lo.x; x <= hi.x; x++)
             for (int y = lo.y; y <= hi.y; y++)
                 for (int z = lo.z; z <= hi.z; z++) {

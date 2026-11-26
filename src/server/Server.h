@@ -389,6 +389,7 @@ private:
     ChestItems& ChestAt(const glm::ivec3& pos);  // its contents (a dungeon chest's loot is rolled the first time)
     void SendChestToViewers(const glm::ivec3& pos);
     void RemoveChest(const glm::ivec3& pos, ClientState* breaker); // gone: its contents spill out where it was if someone broke it
+    void CrumbleIfEmptyGrave(glm::ivec3 pos);                     // a grave with nothing left in it goes
     void DropOnDeath(ClientState& client); // half of what they carry, into a chest where they died
     // Right-clicked a block that does something: a bed (respawn, sleep) or a door.
     void HandleUseBed(ClientState& client, const glm::ivec3& pos);
@@ -468,7 +469,6 @@ private:
     // Leaves no log holds up any more (world/Trees.h), and when each falls away.
     std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> leafFalls;
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> placedLeaves; // put down by players: they stay (saved)
-    std::unordered_set<glm::ivec3, Coords::IVec3Hash> deathChests;  // left where players died: fire spares them (saved)
     void LoosenLeaves(const std::vector<glm::ivec3>& logsGone);
     void UpdateLeaves();
     void UpdateSteam();

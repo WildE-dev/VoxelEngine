@@ -139,8 +139,8 @@ int main(int argc, char** argv) {
               "then respawns at the spawn point with full health");
         // Respawning drops the player from high up: wait for the landing (building has a reach).
         Check(both(15.0, [&] { return a.player.GetFeetPosition().y < 0.5f && a.player.IsOnGround(); }), "and lands");
-        Check(Has(a, "in a chest where you died") && a.client.GetResources(BlockType::CRUMBLING_BRICK) == 0 && a.client.GetResources(BlockType::SPIKES) == 0,
-              "having left what they carried in a chest where they died (carrying none of it)");
+        Check(Has(a, "in a grave where you died") && a.client.GetResources(BlockType::CRUMBLING_BRICK) == 0 && a.client.GetResources(BlockType::SPIKES) == 0,
+              "having left what they carried in a grave where they died (carrying none of it)");
         {
             // And the chest holds just that half: nothing's been doubled.
             glm::ivec3 chestAt(0);
@@ -151,7 +151,7 @@ int main(int argc, char** argv) {
             both(10.0, [&] { return a.client.GetOpenChest() == chestAt; });
             const uint32_t inChest = a.client.GetChestUnits(BlockType::CRUMBLING_BRICK), spikesInChest = a.client.GetChestUnits(BlockType::SPIKES);
             Check(a.client.GetOpenChest() == chestAt && inChest == 4 * 64 && spikesInChest > 0 && spikesInChest <= 4 * 64,
-                  "the death chest holds what they had, once (bricks: " + std::to_string(inChest / 64) + " in it, " +
+                  "the grave holds what they had, once (bricks: " + std::to_string(inChest / 64) + " in it, " +
                       std::to_string(a.client.GetResources(BlockType::CRUMBLING_BRICK) / 64) + " carried)");
             a.client.CloseChest();
         }

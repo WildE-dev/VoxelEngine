@@ -131,7 +131,7 @@ inline bool IsAirPart(BlockType t) {
 }
 // What item pipes join: each other, chests, and the machines that fill or empty them.
 inline bool IsItemPart(BlockType t) {
-    return t == BlockType::ITEM_PIPE || t == BlockType::FILTER_PIPE || IsStorageType(t) || t == BlockType::DRILL || t == BlockType::SMELTER ||
+    return t == BlockType::ITEM_PIPE || t == BlockType::FILTER_PIPE || IsPipedStorageType(t) || t == BlockType::DRILL || t == BlockType::SMELTER ||
            t == BlockType::SMELTER_LIT || t == BlockType::EXTRACTOR || t == BlockType::CRAFTER || t == BlockType::HARVESTER || t == BlockType::CRUSHER || t == BlockType::BOILER;
 }
 // How much air a part holds when full.

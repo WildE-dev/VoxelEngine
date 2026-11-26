@@ -346,6 +346,7 @@ const BlockTextureNames kBlockTextureNames[kBlockTypeCount] = {
     /* GRAVEL      */ {{ "gravel", "gravel", "gravel", "gravel", "gravel", "gravel" }},
     /* REINFORCED_CONCRETE */ {{ "reinforced_concrete", "reinforced_concrete", "reinforced_concrete", "reinforced_concrete", "reinforced_concrete", "reinforced_concrete" }},
     /* DEEPSTONE   */ {{ "deepstone", "deepstone", "deepstone", "deepstone", "deepstone", "deepstone" }},
+    /* GRAVE       */ {{ "grave_top", "grave", "grave", "grave", "grave", "grave" }},
 };
 
 // What a block shows where it's been carved into (chiselled faces inside its cell),
@@ -389,7 +390,7 @@ constexpr const char* kBlockIds[kBlockTypeCount] = {
     "extractor", "filter_pipe", "crafter", "harvester", "drain", "sinkhole", "pressure_gauge",
     "oil_shale", "tar", "fluid_pipe", "fluid_tank", "oil_derrick", "refinery", "engine", "fluid_outlet", "mining_post",
     "steel_frame", "machine_casing", "fire_brick", "multiblock", "multiblock_part",
-    "crusher", "glow_fungus", "magma", "gold_ore", "machine_sensor", "boiler", "turbine", "air_diffuser", "copper_ore", "creative_air_tank", "lava", "fluid_valve", "fluid_valve_open", "obsidian", "obsidian_pipe", "fire", "launcher", "hay_bale", "heat_sensor", "sprinkler", "asphalt", "limestone", "concrete", "gravel", "reinforced_concrete", "deepstone",
+    "crusher", "glow_fungus", "magma", "gold_ore", "machine_sensor", "boiler", "turbine", "air_diffuser", "copper_ore", "creative_air_tank", "lava", "fluid_valve", "fluid_valve_open", "obsidian", "obsidian_pipe", "fire", "launcher", "hay_bale", "heat_sensor", "sprinkler", "asphalt", "limestone", "concrete", "gravel", "reinforced_concrete", "deepstone", "grave",
 };
 // Every type needs its id: a missing one would read past the table's end.
 static_assert(kBlockIds[kBlockTypeCount - 1] != nullptr, "a block type is missing from kBlockIds");
@@ -1119,6 +1120,7 @@ bool Block::CanChisel() const {
     case BlockType::TNT_LIT:
     case BlockType::OIL_SHALE:   // (its axis counts what a derrick has drawn, not a shape's turn)
     case BlockType::MINING_POST: // (it holds things, like a chest)
+    case BlockType::GRAVE:
     case BlockType::BED: return false;
     default: return true;
     }

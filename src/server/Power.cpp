@@ -35,6 +35,7 @@ bool StopsDrill(const Block& b) {
     case BlockType::PISTON_HEAD:
     case BlockType::CHEST:
     case BlockType::MINING_POST:
+    case BlockType::GRAVE:
     case BlockType::BED:
     case BlockType::DOOR:
     case BlockType::DOOR_OPEN:
@@ -703,7 +704,7 @@ std::vector<glm::ivec3> Server::ChestsJoined(const glm::ivec3& pos, ItemId item,
             Block b;
             if (seen.count(n) || !world->GetBlock(n.x, n.y, n.z, b)) continue;
             seen.insert(n);
-            if (IsStorageType(b.type)) chestsFound.push_back(n);
+            if (IsPipedStorageType(b.type)) chestsFound.push_back(n);
             else if (b.type == BlockType::ITEM_PIPE) pipes.push_back(n);
             else if (b.type == BlockType::FILTER_PIPE && (Items::FilterOf(b) == Items::kNone || (item != Items::kNone && Items::FilterOf(b) == item))) pipes.push_back(n);
         }
@@ -713,7 +714,7 @@ std::vector<glm::ivec3> Server::ChestsJoined(const glm::ivec3& pos, ItemId item,
 bool Server::Extract(const glm::ivec3& pos, const Block& extractor, Worker& w) {
     const glm::ivec3 from = pos + extractor.Facing(), back = -extractor.Facing();
     Block source;
-    if (!world->GetBlock(from.x, from.y, from.z, source) || !IsStorageType(source.type)) {
+    if (!world->GetBlock(from.x, from.y, from.z, source) || !IsPipedStorageType(source.type)) {
         w.state = Power::DrillState::NoChest;
         return false;
     }
@@ -1088,6 +1089,7 @@ bool Server::Movable(const glm::ivec3& pos, const Block& b) const {
     switch (b.type) {
     case BlockType::CHEST:
     case BlockType::MINING_POST:
+    case BlockType::GRAVE:
     case BlockType::BED:
     case BlockType::DOOR:
     case BlockType::DOOR_OPEN:

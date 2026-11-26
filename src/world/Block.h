@@ -315,6 +315,10 @@ enum class BlockType : uint8_t {
     REINFORCED_CONCRETE,
     // Deepstone: the rock below the lava level (the Deep and under it), tougher than stone.
     DEEPSTONE,
+    // A grave: where a player died, holding everything they had (opened like a chest).
+    // Only made then: it isn't carried, fire and blasts leave it be, and once it's
+    // emptied it crumbles away.
+    GRAVE,
     COUNT
 };
 // Machines with an inventory of their own (opened like a chest, empty-handed): what
@@ -340,14 +344,16 @@ inline BlockType ValveSetTo(BlockType t, bool open) {
 }
 // The pipe a valve sits in (whose tube it's drawn as, and joins like).
 inline BlockType ValvePipe(BlockType t) { return t == BlockType::FLUID_VALVE || t == BlockType::FLUID_VALVE_OPEN ? BlockType::FLUID_PIPE : BlockType::AIR_PIPE; }
-inline bool IsCreativeOnlyType(BlockType t) { return t == BlockType::CREATIVE_AIR_TANK || t == BlockType::LAVA || t == BlockType::FIRE; }
+inline bool IsCreativeOnlyType(BlockType t) { return t == BlockType::CREATIVE_AIR_TANK || t == BlockType::LAVA || t == BlockType::FIRE || t == BlockType::GRAVE; }
 // Blocks that are only ever part of something bigger: a piston's head, and a formed
 // structure's core and parts. They're made and unmade with it, never carried or put
 // down as themselves, and worth nothing by themselves (breaking one gives what it's part
 // of: Items::ResourceOf, Block::ResourceUnits, BlockAccess::CanPlace).
 inline bool IsPartOnlyType(BlockType t) { return t == BlockType::PISTON_HEAD || t == BlockType::MULTIBLOCK || t == BlockType::MULTIBLOCK_PART; }
 // Blocks that hold things like a chest (opened, filled, emptied, broken open).
-inline bool IsStorageType(BlockType t) { return t == BlockType::CHEST || t == BlockType::MINING_POST || IsMachineInventory(t); }
+inline bool IsStorageType(BlockType t) { return t == BlockType::CHEST || t == BlockType::MINING_POST || t == BlockType::GRAVE || IsMachineInventory(t); }
+// Storage that item pipes and machines join (not a grave: what's in it is for its owner to fetch).
+inline bool IsPipedStorageType(BlockType t) { return IsStorageType(t) && t != BlockType::GRAVE; }
 
 // Solid blocks drawn by a model of their own (turning wheels and shafts), and pipes
 // drawn as thin tubes: neither hides what's beside it or blocks light.
@@ -580,6 +586,12 @@ struct Block {
         EdgeData edges;
         for (int e = 0; e < 4; e++) edges.SetTopY(e, 4); // half a block high
         return Block(BlockType::BED, edges);
+    }
+    // A grave: a headstone across the back half (-z), a low mound in front of it.
+    static Block Grave() {
+        EdgeData edges;
+        edges.SetTopY(0, 2), edges.SetTopY(3, 2); // (the front quarters, z = 1)
+        return Block(BlockType::GRAVE, edges);
     }
     static Block PressurePlate() {
         EdgeData edges;
@@ -893,6 +905,7 @@ inline Block Block::Placed(BlockType t, int heightEighths, int faceAxis) {
     if (t == BlockType::WATER) return Water(kMaxWaterVolume);
     if (t == BlockType::PRESSURE_PLATE) return PressurePlate();
     if (t == BlockType::BED) return Bed();
+    if (t == BlockType::GRAVE) return Grave();
     if (t == BlockType::DOOR || t == BlockType::DOOR_OPEN) { // (a panel, not a sprite's drop; hinged left or right)
         Block door = Block(t).Turned(faceAxis & 7);
         if (faceAxis & kDoorMirrored) door.axis = static_cast<uint8_t>(door.axis | kDoorMirrored);

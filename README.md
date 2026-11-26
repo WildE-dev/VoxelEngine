@@ -744,7 +744,8 @@ Flames are drawn as glowing licks of fire shooting up from each burning cell, wi
 smoke, a crackle, and the light of a lamp. `FireTest` checks that a fire spreads
 through a little wood and burns it down, dies out on bare stone, leaves stone and
 obsidian alone, is put out by water, by smothering and by a bucket, burns a survival
-player who keeps burning until in water (their client told so), and destroys items
+player who keeps burning until in water (their client told so), spares the grave of
+someone who died in lava (which crumbles once emptied), and destroys items
 thrown into it. It also checks that a sprinkler on a tank of water puts out the fires
 below it by itself; that a sprinkler on a channel waits for it; and that a heat sensor
 turns on near fire, sets the sprinkler off on its channel, and goes off once the fire
@@ -988,9 +989,10 @@ nothing has hurt you for 5, as long as you're well fed (see
 [Food and hunger](#food-and-hunger)). With none left, everyone hears how you died and you
 respawn at the spawn point (or your bed: see [Beds](#beds)) with full health (and three seconds' grace). In survival,
 everything you carry and wear (blocks, items, tools and armour) is left behind in a
-chest placed where you died (or just beside or above, in the nearest open cell), and
-you come back empty-handed; the chat tells you where it is. Fire doesn't burn that
-chest. Anyone can open it, so a killer can take it. In no-clip
+grave where you died (or just beside or above, in the nearest open cell): a headstone
+with a low mound in front. You come back empty-handed; the chat tells you where it is.
+Open it like a chest. Fire and blasts leave it be, item pipes don't reach into it, and
+once everything's taken out of it, it crumbles away. Anyone can open it, so a killer can take it. In no-clip
 nothing can hurt you. All four blocks are in the inventory, for building traps of
 your own. `TrapTest` checks spikes, death and respawn, crumbling floors, pressure
 plates and sluice gates, falls (safe from 3 blocks, four hearts from 11), and that
@@ -1277,11 +1279,11 @@ game applies it, so the usual movement checks still hold. Killing someone tells
 everyone (`X was slain by Y`), and they respawn. Creative players and players flying in
 no-clip can't be hurt. PvP is on by default; operators switch it with `/pvp on|off`,
 and `/pvp` shows which. With it off, a hit just tells you so. Someone slain leaves
-half of what they carried in a chest where they fell (see
+everything they carried in a grave where they fell (see
 [Health and traps](#health-and-traps)). `CreatureTest` checks
 names, held items and armour reaching other players, reach, damage, the red flash,
 knockback, `/pvp off`, being slain, and the killer finding all the victim's things in
-a chest where they died.
+a grave where they died.
 
 ## Bows and arrows
 

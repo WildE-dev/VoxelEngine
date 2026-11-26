@@ -171,6 +171,7 @@ const char* DefaultBlockName(BlockType type) {
     case BlockType::DIRT:  return "Dirt";
     case BlockType::STONE: return "Stone";
     case BlockType::DEEPSTONE: return "Deepstone";
+    case BlockType::GRAVE: return "Grave";
     case BlockType::LAMP:  return "Lamp";
     case BlockType::LOG:   return "Log";
     case BlockType::LEAVES: return "Leaves";
@@ -1574,6 +1575,7 @@ uint32_t DefaultMapColour(BlockType type) {
     case BlockType::GRAVEL: return 0xFF747A80u;
     case BlockType::REINFORCED_CONCRETE: return 0xFF888C90u;
     case BlockType::DEEPSTONE: return 0xFF4C3E3Au;
+    case BlockType::GRAVE: return 0xFF8C9490u;
     case BlockType::HEAT_SENSOR: return 0xFF2040A0u;
     case BlockType::SPRINKLER: return 0xFF4090B0u;
     case BlockType::CROP:
@@ -3423,7 +3425,7 @@ void Application::OnMouseButton(int button, int action) {
         const bool connecting = holding && (IsPipeType(inHand) || inHand == BlockType::PRESSURE_GAUGE || inHand == BlockType::SHAFT ||
                                             inHand == BlockType::WATER_WHEEL || IsValveType(inHand));
         auto opens = [&](BlockType t) {
-            if (t == BlockType::CHEST || t == BlockType::MINING_POST) return true;
+            if (t == BlockType::CHEST || t == BlockType::MINING_POST || t == BlockType::GRAVE) return true;
             if (t == BlockType::CRAFTER) return !holding;
             return IsMachineInventory(t) && !connecting;
         };

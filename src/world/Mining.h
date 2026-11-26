@@ -177,6 +177,7 @@ inline float DefaultHardness(BlockType type) {
     case BlockType::CONCRETE: return 6.0f;
     case BlockType::REINFORCED_CONCRETE: return 12.0f;
     case BlockType::DEEPSTONE: return 9.0f; // (a stone pickaxe: over 2 s)
+    case BlockType::GRAVE: return 2.0f;
     case BlockType::IRON_ORE: return 6.0f;
     case BlockType::COPPER_ORE: return 5.0f;
     case BlockType::GOLD_ORE: return 7.0f;
@@ -194,6 +195,7 @@ inline Tool DefaultBestTool(BlockType type) {
     switch (type) {
     case BlockType::STONE:
     case BlockType::DEEPSTONE:
+    case BlockType::GRAVE:
     case BlockType::SPRING:
     case BlockType::DRAIN:
     case BlockType::SINKHOLE:

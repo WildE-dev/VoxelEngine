@@ -61,6 +61,7 @@ inline bool NotCarried(BlockType t) {
     case BlockType::SIGNAL_LAMP_ON:
     case BlockType::VALVE_OPEN:
     case BlockType::FLUID_VALVE_OPEN:
+    case BlockType::GRAVE:
     case BlockType::SMELTER_LIT: return true;
     default: return IsPartOnlyType(t);
     }

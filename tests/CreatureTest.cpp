@@ -456,15 +456,15 @@ int main(int argc, char** argv) {
         }
         Check(both(5.0, [&] { return Has(b, "Rival was slain by Duelist"); }), "enough axe hits slay them (and everyone's told)");
         Check(both(5.0, [&] { return b.client.GetHealth() == 20; }), "and they're back at full health");
-        Check(both(5.0, [&] { return b.client.GetResources(BlockType::STONE) == 0 && Has(b, "in a chest where you died"); }),
+        Check(both(5.0, [&] { return b.client.GetResources(BlockType::STONE) == 0 && Has(b, "in a grave where you died"); }),
               "keeping none of their stone: it's all left where they died");
         glm::ivec3 grave(0);
         for (const auto& line : b.client.GetChat())
             if (const size_t at = line.text.find("died ("); at != std::string::npos)
                 std::sscanf(line.text.c_str() + at + 6, "%d, %d, %d", &grave.x, &grave.y, &grave.z);
         Block left;
-        Check(both(20.0, [&] { return a.world.GetBlock(grave.x, grave.y, grave.z, left) && left.type == BlockType::CHEST; }),
-              "in a chest the killer can see");
+        Check(both(20.0, [&] { return a.world.GetBlock(grave.x, grave.y, grave.z, left) && left.type == BlockType::GRAVE; }),
+              "in a grave the killer can see");
         server.QueueConsoleCommand("tp Duelist " + std::to_string(grave.x - 1.5f) + " 0 " + std::to_string(grave.z + 0.5f));
         both(20.0, [&] { return std::abs(a.feet.x - (grave.x - 1.5f)) < 0.1f; });
         a.client.OpenChest(grave);

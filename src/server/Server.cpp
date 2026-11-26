@@ -197,7 +197,6 @@ bool Server::Start(const Options& opts) {
         for (const auto& [pos, held] : storage->GetChests()) chests[pos] = held;
         for (const auto& pos : storage->GetCrops()) crops.insert(pos);
         for (const auto& pos : storage->GetPlacedLeaves()) placedLeaves.insert(pos);
-        for (const auto& pos : storage->GetDeathChests()) deathChests.insert(pos);
         for (const auto& [pos, text] : storage->GetSigns()) signs[pos] = text;
         for (const auto& sig : storage->GetSignals()) {
             SignalBlock& b = signalBlocks[sig.pos];
@@ -330,8 +329,6 @@ void Server::Save(bool shuttingDown) {
         else ++it;
     }
     storage->SetPlacedLeaves({ placedLeaves.begin(), placedLeaves.end() });
-    for (auto it = deathChests.begin(); it != deathChests.end();) it = chests.count(*it) ? std::next(it) : deathChests.erase(it); // (taken apart some other way)
-    storage->SetDeathChests({ deathChests.begin(), deathChests.end() });
     storage->SetSigns({ signs.begin(), signs.end() });
     std::vector<WorldStorage::SavedSignal> savedSignals;
     for (const auto& [pos, b] : signalBlocks)
@@ -975,7 +972,10 @@ void Server::HandleInventoryMove(ClientState& client, const net::InventoryMove& 
     if (chest) chest->Trim(Inventory::kChestSlots);
     if ((client.armour & (Armour::Bit(ArmourPiece::Cap) | Armour::Bit(ArmourPiece::Boots))) == (Armour::Bit(ArmourPiece::Cap) | Armour::Bit(ArmourPiece::Boots)) && Armour::InSlot(client.armour, BodySlot::Body) != ArmourPiece::Count) Award(client, Achievement::Armoured);
     SendInventory(client);
-    if (chest) SendChestToViewers(*client.openChest);
+    if (chest) {
+        SendChestToViewers(*client.openChest);
+        CrumbleIfEmptyGrave(*client.openChest);
+    }
 }
 
 void Server::HandleCreativeSlot(ClientState& client, const net::CreativeSlot& m) {
@@ -1608,7 +1608,7 @@ void Server::DropOnDeath(ClientState& client) {
     for (int p = 0; p < static_cast<int>(ArmourPiece::Count); p++)
         if (client.armour & Armour::Bit(static_cast<ArmourPiece>(p))) dropped.Add(Items::OfArmour(static_cast<ArmourPiece>(p)), 1, true);
     if (dropped == Inventory(Inventory::kChestSlots)) return; // (nothing to leave)
-    // Into a chest in the nearest open cell where they died: their feet's cell, or one
+    // Into a grave in the nearest open cell where they died: their feet's cell, or one
     // around or just above it (air first; water or a wild plant will do, not a trap).
     const glm::ivec3 at(glm::floor(client.feet + glm::vec3(0.0f, 0.1f, 0.0f)));
     std::optional<glm::ivec3> spot;
@@ -1625,15 +1625,14 @@ void Server::DropOnDeath(ClientState& client) {
                         if (ok) spot = p;
                     }
     if (!spot) return; // nowhere to put it: they keep it all
-    world->SetBlock(spot->x, spot->y, spot->z, Block(BlockType::CHEST));
+    world->SetBlock(spot->x, spot->y, spot->z, Block::Grave());
     chests[*spot] = dropped;
-    deathChests.insert(*spot); // (fire spares it: everything they had is in it)
     client.inventory = Inventory(Inventory::kPlayerSlots);
     client.armour = 0;
     SendInventory(client);
     char where[64];
     std::snprintf(where, sizeof where, "%d, %d, %d", spot->x, spot->y, spot->z);
-    SendChat(client, net::ChatMessage::Kind::Info, std::string("Your things are in a chest where you died (") + where + ")");
+    SendChat(client, net::ChatMessage::Kind::Info, std::string("Your things are in a grave where you died (") + where + ")");
 }
 
 void Server::HandleUseBed(ClientState& client, const glm::ivec3& pos) {
@@ -1943,6 +1942,7 @@ void Server::HandleChestMove(ClientState& client, const glm::ivec3& pos, ItemId 
     chest->Trim(Inventory::kChestSlots);
     SendInventory(client);
     SendChestToViewers(pos);
+    CrumbleIfEmptyGrave(pos);
 }
 
 void Server::SendChest(ClientState& client) {
@@ -1972,10 +1972,24 @@ Server::ChestItems& Server::ChestAt(const glm::ivec3& pos) {
     return chest;
 }
 
+void Server::CrumbleIfEmptyGrave(glm::ivec3 pos) { // (by value: emptying it clears openChest)
+    Block b;
+    auto it = chests.find(pos);
+    if (it == chests.end() || !world->GetBlock(pos.x, pos.y, pos.z, b) || b.type != BlockType::GRAVE) return;
+    for (const Stack& st : it->second.slots)
+        if (!st.Empty()) return;
+    // (Offcuts, less than an item's worth, can't be taken out one by one: they're left
+    // on the ground where it was.)
+    const auto offcuts = it->second.offcuts;
+    for (size_t t = 0; t < offcuts.size(); t++)
+        if (offcuts[t]) dropped.DropUnits(Items::OfKind(t), offcuts[t], pos);
+    RemoveChest(pos, nullptr); // (closes it for whoever had it open)
+    world->SetBlock(pos.x, pos.y, pos.z, Block());
+}
+
 void Server::RemoveChest(const glm::ivec3& pos, ClientState* breaker) {
     if (breaker) ChestAt(pos); // (an unopened dungeon chest still holds its loot)
     auto it = chests.find(pos);
-    deathChests.erase(pos);
     if (it == chests.end()) return;
     // What was in it spills out where it was.
     if (breaker) {
@@ -2041,7 +2055,7 @@ void Server::Explode(const glm::ivec3& pos, int radius) {
                 if (x * x + y * y + z * z > radius * radius + 1) continue;
                 const glm::ivec3 p = pos + glm::ivec3(x, y, z);
                 Block b;
-                if (!world->GetBlock(p.x, p.y, p.z, b) || b.IsAir() || b.type == BlockType::OBSIDIAN || b.type == BlockType::REINFORCED_CONCRETE) continue; // (obsidian and reinforced concrete take it)
+                if (!world->GetBlock(p.x, p.y, p.z, b) || b.IsAir() || b.type == BlockType::OBSIDIAN || b.type == BlockType::REINFORCED_CONCRETE || b.type == BlockType::GRAVE) continue; // (obsidian, reinforced concrete and graves take it)
                 if (b.type == BlockType::TNT && p != pos) {
                     LightTnt(p, 0.4 + 0.1 * (std::abs(x) + std::abs(z)));
                     continue;
@@ -2264,7 +2278,10 @@ void Server::HandleDropItem(ClientState& client, const net::DropItem& m) {
     const float speed = net::kThrowSpeed + (net::kThrowSpeedMax - net::kThrowSpeed) * (m.strength / 255.0f);
     dropped.Drop(item, n, 0, eye + dir * 0.3f - glm::vec3(0.0f, 0.3f, 0.0f), dir * speed + glm::vec3(0.0f, 1.5f, 0.0f), DroppedItems::kThrowDelay);
     SendInventory(client);
-    if (boxKind == net::Box::Chest) SendChestToViewers(*client.openChest);
+    if (boxKind == net::Box::Chest) {
+        SendChestToViewers(*client.openChest);
+        CrumbleIfEmptyGrave(*client.openChest);
+    }
 }
 
 void Server::UpdateDroppedItems() {
@@ -2483,7 +2500,7 @@ void Server::UpdateFire() {
             Block b;
             if (!world->GetBlock(n.x, n.y, n.z, b)) continue;
             if (b.type == BlockType::TNT) LightTnt(n, 0.5 + FireRandom());
-            if (!Fire::Burns(b.type) || deathChests.count(n)) continue; // (a chest left where someone died never burns)
+            if (!Fire::Burns(b.type)) continue;
             fuel = true;
             fireLit[f] = now; // (it dies down a while after it last had something to burn, not after it was lit)
             if (FireRandom() >= Fire::BurnRate(b.type) * dt * (rainedOn ? 0.5f : 1.0f)) continue;

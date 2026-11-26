@@ -203,9 +203,9 @@ int main() {
         Check(a.client.GetHealth() == a.client.GetMaxHealth() && !a.client.Burning(), "and they come back whole, no longer on fire");
         fill({ 34, -1, 60 }, { 34, -1, 60 }, "stone");
 
-        // What they had is in a chest where they died, which fire doesn't burn; an
+        // What they had is in a grave where they died, which fire doesn't burn; an
         // ordinary chest on the fire's other side does.
-        Check(Pump(a, 5.0, [&] { return at({ 34, 0, 60 }) == BlockType::CHEST; }), "their things are left in a chest where they died");
+        Check(Pump(a, 5.0, [&] { return at({ 34, 0, 60 }) == BlockType::GRAVE; }), "their things are left in a grave where they died");
         fill({ 36, 0, 60 }, { 36, 0, 60 }, "chest");
         fill({ 35, 0, 61 }, { 35, 0, 61 }, "leaves");
         bool plainBurnt = false;
@@ -213,8 +213,16 @@ int main() {
             if (at({ 35, 0, 60 }) != BlockType::FIRE) fill({ 35, 0, 60 }, { 35, 0, 60 }, "fire");
             plainBurnt = Pump(a, 4.0, [&] { return at({ 36, 0, 60 }) != BlockType::CHEST; });
         }
-        Check(plainBurnt && at({ 34, 0, 60 }) == BlockType::CHEST, "a fire beside both burns the ordinary chest and leaves the one they died by");
-        fill({ 34, 0, 60 }, { 36, 0, 61 }, "air");
+        Check(plainBurnt && at({ 34, 0, 60 }) == BlockType::GRAVE, "a fire beside both burns the ordinary chest and leaves the grave");
+        fill({ 35, 0, 60 }, { 36, 0, 61 }, "air");
+        // Emptied, the grave crumbles away.
+        server.QueueConsoleCommand("tp Warden 34.5 0 62.5");
+        Pump(a, 5.0, [&] { return std::abs(a.feet.z - 62.5f) < 0.1f; });
+        a.client.OpenChest({ 34, 0, 60 });
+        Check(Pump(a, 5.0, [&] { return a.client.GetOpenChest() == glm::ivec3(34, 0, 60) && a.client.GetChestUnits(BlockType::DIRT) > 0; }), "it opens like a chest, with their dirt in it");
+        for (const Stack& st : Inventory(a.client.GetChest()).slots)
+            if (!st.Empty()) a.client.MoveChestItems(st.item, st.count, false);
+        Check(Pump(a, 5.0, [&] { return at({ 34, 0, 60 }) == BlockType::AIR; }) && !a.client.GetOpenChest(), "and once everything's taken out of it, the grave is gone");
 
         // Items in it are lost.
         server.QueueConsoleCommand("gamemode creative Warden");
@@ -231,14 +239,16 @@ int main() {
         server.QueueConsoleCommand("tp Warden 62.5 0 62.5"); // (in it: creative players aren't burned)
         Pump(a, 5.0, [&] { return std::abs(a.feet.z - 62.5f) < 0.1f; });
         a.client.DropItem(net::Box::Player, slot, 1, glm::vec3(0.0f, -1.0f, 0.0f));
+        // (Dirt by this fire: any left elsewhere, as by the grave earlier, doesn't count.)
+        auto nearFire = [&](const net::ItemInfo& i) { return i.item == Items::OfBlock(BlockType::DIRT) && glm::distance(i.position, glm::vec3(62.5f, 0.5f, 62.5f)) < 4.0f; };
         bool seen = false;
         Pump(a, 3.0, [&] {
-            for (const auto& i : a.client.GetItems()) seen |= i.item == Items::OfBlock(BlockType::DIRT);
+            for (const auto& i : a.client.GetItems()) seen |= nearFire(i);
             return seen;
         });
         Check(Pump(a, 6.0, [&] {
                   for (const auto& i : a.client.GetItems())
-                      if (i.item == Items::OfBlock(BlockType::DIRT)) return false;
+                      if (nearFire(i)) return false;
                   return true;
               }),
               "an item thrown into fire is lost");
