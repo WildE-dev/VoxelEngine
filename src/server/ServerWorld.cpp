@@ -1,4 +1,5 @@
 #include "server/ServerWorld.h"
+#include "world/Grains.h"
 
 #include "server/WorldStorage.h"
 #include "world/Power.h"
@@ -118,6 +119,17 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
 
     // Water around the change may need to flow (or settle).
     water.Activate({ x, y, z });
+    // Sand and gravel in it or round it may fall, slide or reshape (world/Grains.h).
+    // (Not for water only changing its volume: most of what flowing water does.)
+    if (!previous.DiffersOnlyInWaterVolume(block))
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dz = -1; dz <= 1; dz++) {
+                    Block n;
+                    if (dx == 0 && dy == 0 && dz == 0) n = block;
+                    else if (!GetBlock(x + dx, y + dy, z + dz, n)) continue;
+                    if (Grains::IsGrain(n)) grainWake.insert({ x + dx, y + dy, z + dz });
+                }
 
     // Water only changing volume (most of what flowing water does) can't affect light,
     // and only changes what clients draw if its drawn surface height changes. Those

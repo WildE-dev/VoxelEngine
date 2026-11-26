@@ -436,6 +436,7 @@ inline ShapeStyle StyleOf(BlockType type) {
     case BlockType::GRASS:
     case BlockType::DIRT:
     case BlockType::SAND:
+    case BlockType::GRAVEL:
     case BlockType::TAR:
     case BlockType::STONE:
     case BlockType::DEEPSTONE:

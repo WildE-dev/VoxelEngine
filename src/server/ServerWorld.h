@@ -110,6 +110,18 @@ public:
     // them or beside them (or by loading), for the server to step. Any thread; takes
     // the edit mutex.
     void TakeLavaWake(std::vector<glm::ivec3>& out);
+    // Sand and gravel (world/Grains.h): the cells woken since the last call, by a change
+    // in or near them, for the server to step; and cells to look at again next time.
+    // Any thread; takes the edit mutex.
+    void TakeGrainWake(std::vector<glm::ivec3>& out) {
+        std::lock_guard<std::recursive_mutex> edit(editMutex);
+        out.assign(grainWake.begin(), grainWake.end());
+        grainWake.clear();
+    }
+    void WakeGrains(const std::vector<glm::ivec3>& cells) {
+        std::lock_guard<std::recursive_mutex> edit(editMutex);
+        grainWake.insert(cells.begin(), cells.end());
+    }
     // Every loaded fire (world/Fire.h). Any thread; takes the edit mutex.
     void GetFires(std::vector<glm::ivec3>& out) {
         std::lock_guard<std::recursive_mutex> edit(editMutex);
@@ -195,6 +207,7 @@ private:
     // Lava, guarded by the edit mutex: every loaded lava cell, and those woken.
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> lavaCells, lavaWake;
     std::unordered_set<glm::ivec3, Coords::IVec3Hash> fireCells; // (edit mutex)
+    std::unordered_set<glm::ivec3, Coords::IVec3Hash> grainWake; // sand and gravel to step (edit mutex)
     int lavaPrune = 0; // (TakeLavaWake calls since loaded lava was last looked through)
     std::vector<std::pair<glm::ivec3, Block>> knockedOff; // (guarded by logMutex)
     std::thread worker;

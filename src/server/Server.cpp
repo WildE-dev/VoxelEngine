@@ -8,6 +8,7 @@
 #include "world/Trades.h"
 #include "world/Mining.h"
 #include "world/Flatten.h"
+#include "world/Grains.h"
 #include "world/Crafting.h"
 #include "world/Smelting.h"
 #include <filesystem>
@@ -2609,6 +2610,24 @@ void Server::UpdateLava() {
     for (const auto& b : boils) steam.Add(b.pos, b.steam);
 }
 
+void Server::UpdateGrains() {
+    const double now = Now();
+    if (now < nextGrains) return;
+    nextGrains = now + Grains::kInterval;
+    std::vector<glm::ivec3> woken;
+    world->TakeGrainWake(woken);
+    if (woken.empty()) return;
+    if (woken.size() > Grains::kMaxCellsPerStep) {
+        // A landslide: the lowest first; the rest wait.
+        std::nth_element(woken.begin(), woken.begin() + Grains::kMaxCellsPerStep, woken.end(), [](const glm::ivec3& a, const glm::ivec3& b) { return a.y < b.y; });
+        world->WakeGrains(std::vector<glm::ivec3>(woken.begin() + Grains::kMaxCellsPerStep, woken.end()));
+        woken.resize(Grains::kMaxCellsPerStep);
+    }
+    std::vector<Grains::Change> changes;
+    Grains::Step(*world, woken, changes, grainSteps++);
+    for (const auto& c : changes) world->SetBlock(c.pos.x, c.pos.y, c.pos.z, c.block);
+}
+
 void Server::UpdateSteam() {
     const double now = Now();
     if (now < nextSteam) return;
@@ -2941,6 +2960,7 @@ void Server::Tick() {
     UpdateArrows();
     UpdateDroppedItems();
     UpdateLava();
+    UpdateGrains();
     UpdateSteam();
     UpdateLeaves();
     UpdateFire();

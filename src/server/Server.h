@@ -455,8 +455,10 @@ private:
     // Lava (world/Lava.h), stepped every Lava::kInterval, and steam in the air
     // (server/Steam.h), every SteamCloud::kInterval and sent out a few times a second.
     SteamCloud steam;
-    double nextLava = 0.0, nextSteam = 0.0, nextSteamSend = 0.0;
+    double nextLava = 0.0, nextSteam = 0.0, nextSteamSend = 0.0, nextGrains = 0.0;
+    uint32_t grainSteps = 0;
     void UpdateLava();
+    void UpdateGrains(); // sand and gravel falling and settling into piles (world/Grains.h)
     // Fire (world/Fire.h): when each was lit (it dies down a while after it has nothing to
     // burn), the next step, and lighting one (false: it can't be there).
     std::unordered_map<glm::ivec3, double, Coords::IVec3Hash> fireLit;

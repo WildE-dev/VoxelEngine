@@ -298,6 +298,8 @@ voxel_test(WeatherTest LIBS voxel_server voxel_client)
 voxel_test(ChatTest LIBS voxel_server voxel_client)
 # Dungeon layouts and generation.
 voxel_test(DungeonTest LIBS voxel_common)
+# Sand and gravel falling and settling into piles (world/Grains.h).
+voxel_test(GrainsTest LIBS voxel_common)
 # Traps, health, no-clip and the laser between a server and two clients.
 voxel_test(TrapTest SOURCES src/app/Player.cpp LIBS voxel_server voxel_client GROUPS traps falling tnt)
 # Block shapes (sloped and stepped), the chisel, joined slopes, thin water, mountains.
