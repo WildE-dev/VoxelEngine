@@ -1141,6 +1141,28 @@ Block Block::Chiselled(int edge, int deltaEighths) const {
     return b;
 }
 
+void Block::RepairEdgeData() {
+    if (IsPlant()) {
+        const uint8_t drop = std::min<uint8_t>(edgeData.edges[0] & 0x0F, 8);
+        edgeData.MakeFull();
+        edgeData.edges[0] = drop;
+        return;
+    }
+    if (IsAir() || IsLiquid() || IsLava()) {
+        edgeData.MakeFull();
+        return;
+    }
+    EdgeData edges;
+    for (int e = 0; e < 4; e++) {
+        const uint8_t top = std::min<uint8_t>(edgeData.GetTopY(e), 8);
+        edges.SetTopY(e, top);
+        edges.SetBottomY(e, std::min(edgeData.GetBottomY(e), top));
+    }
+    const BlockType was = type;
+    SetEdgeData(edges);
+    if (type != was) type = was, edgeData.MakeFull();
+}
+
 void Block::SetEdgeData(EdgeData edges) {
     // A stepped block stands as long as any quarter does; a slope needs at least two
     // corners above its base.

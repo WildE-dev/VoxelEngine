@@ -246,6 +246,34 @@ int main() {
         net::ByteReader r(w.data.data(), w.data.size());
         Check(net::DecodeBlockPlanes(r, back) && r.AtEnd() && back[5].axis == Block::kAlongX && back[77].axis == Block::kAlongZ && back[300].axis == Block::kUpright,
               "the axis survives encoding");
+
+        // Shape bytes out of range (a damaged save, a bad host) come back in range.
+        net::ChunkBlocks bad{}, fixed{};
+        bad[1] = Block(BlockType::STONE);
+        bad[1].edgeData.edges[0] = 0xF0; // top 15
+        bad[2] = Block(BlockType::STONE);
+        bad[2].edgeData.edges[1] = 0x37; // bottom above top
+        bad[3] = Block(BlockType::STONE);
+        for (auto& e : bad[3].edgeData.edges) e = 0x00; // flat: can't stand
+        bad[4] = Block::Plant(BlockType::TALL_GRASS, 0x0E);
+        bad[5] = Block(BlockType::AIR);
+        bad[5].edgeData.edges[2] = 0x12;
+        bad[6] = Block::Placed(BlockType::STONE, 4); // a good slab is left alone
+        net::ByteWriter bw;
+        net::EncodeBlockPlanes(bw, bad);
+        net::ByteReader br(bw.data.data(), bw.data.size());
+        bool decoded = net::DecodeBlockPlanes(br, fixed);
+        bool inRange = true;
+        for (const Block& b : fixed)
+            for (int e = 0; e < 4 && !b.IsPlant(); e++) inRange &= b.edgeData.GetTopY(e) <= 8 && b.edgeData.GetBottomY(e) <= b.edgeData.GetTopY(e);
+        Check(decoded && inRange && fixed[1].ResourceUnits() <= Block::kUnitsPerBlock && fixed[3].type == BlockType::STONE && fixed[3].IsFullBlock() &&
+                  fixed[4].PlantDrop() <= 1.0f && fixed[5].edgeData.IsFull() && fixed[6] == bad[6],
+              "shape bytes out of range are repaired when read");
+        Block one = bad[2], back1;
+        net::ByteWriter ow;
+        net::WriteBlock(ow, one);
+        net::ByteReader orr(ow.data.data(), ow.data.size());
+        Check(net::ReadBlock(orr, back1) && back1.edgeData.GetBottomY(1) <= back1.edgeData.GetTopY(1), "and so are a single block's");
     }
 
     std::cout << "Meshing" << std::endl;

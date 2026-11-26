@@ -812,6 +812,10 @@ struct Block {
     }
 
     void SetEdgeData(EdgeData edges);
+    // Brings shape bytes read from a save or the network back into range: heights at
+    // most 8, no bottom above its top, a plant's drop at most 8, and nothing on blocks
+    // that have no shape. A shape that can't stand becomes a whole block.
+    void RepairEdgeData();
     void Shrink();
     bool IsStepped() const { return StyleOf(type) == ShapeStyle::Stepped; }
     // Whether a block can be chiselled (shaped by quarters): solid building blocks,

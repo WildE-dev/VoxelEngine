@@ -84,6 +84,7 @@ bool ReadBlock(ByteReader& in, Block& b) {
     for (int e = 0; e < 4; e++)
         if (!in.U8(b.edgeData.edges[e])) return false;
     if (!in.U8(b.water) || !in.U8(b.shown) || !in.U8(b.axis)) return false;
+    b.RepairEdgeData();
     // (The axis byte means different things to different blocks: any value is fine.)
     return b.water <= Block::kMaxWaterVolume && b.shown <= Block::kMaxWaterVolume;
 }
@@ -130,6 +131,8 @@ bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis, bool 
     }
     else if (!DecodePlane(in, [&](int i, uint8_t v) { blocks[i].axis = v; }))
         return false;
+    if (valid)
+        for (auto& b : blocks) b.RepairEdgeData();
     if (v16)
         for (auto& b : blocks)
             if (b.type == BlockType::FILTER_PIPE) b.axis = Legacy::FilterAxisFromV16(b.axis); // (it held an old block number)
