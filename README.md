@@ -304,7 +304,7 @@ pauses. The menus can be driven with the pad as well.
 | Left click | Break block (survival: hold to mine it), or hit the creature in front of you |
 | Right click | Place the selected block; eat food in hand; open a chest, a machine's menu or a structure's, whatever's in hand; use a bed (crouching: place against it instead). With a block in hand, pipes, shafts, wheels and valves are built onto |
 | Middle click | Pick the block you're looking at: creative puts a stack of it in the selected hotbar slot; survival selects the hotbar slot holding it, or swaps a stack of it from the rest of the inventory into the selected slot |
-| V / Crouch+V | Placement height for building blocks: full, 3/4, 1/2, 1/4 (and back); with the chisel in hand, how fine it cuts: 1/8, 1/4, 1/2 |
+| V / Crouch+V | Placement height for building blocks: full, 3/4, 1/2, 1/4 (and back); with the chisel in hand, how fine it cuts: 1/16, 1/8, 1/4, 1/2 |
 | 1-9, 0 / mouse wheel | Select the hotbar slot to place from |
 | Tab | Inventory: move stacks between slots, the hotbar and your armour; craft (survival), or take any block or item (creative). Let go of a stack outside the window to throw it away |
 | G / Crouch+G | Throw one of the item in hand / the whole stack: tap to toss it, hold to throw it further (a bar under the crosshair fills as you wind up) |
@@ -769,11 +769,18 @@ mode (F) moves freely through blocks like the old free camera.
 
 ## Block shapes
 
-A block can be shaped by its four quarters, each 0 to 8 eighths high (the terrain's
+A block can be shaped by its four quarters, each from a pixel (a sixteenth of a block) to
+its full height, or gone (the terrain's
 sloped tops are shaped this way). How a shape is drawn, and stood on, depends on the
 block: natural ground (grass, dirt, sand, stone, snow) slopes smoothly between its
 four corners, while anything built (bricks, logs, lamps and the rest) is four
 quarter-columns, each as high as its corner, like small steps.
+
+Shapes are kept a byte a quarter (`EdgeData` in `src/world/Block.h`): a column's top
+in sixteen levels, 0 a pixel tall to 15 the whole block, and its bottom (0 to 15); a
+bottom above the top is a quarter with nothing in it. Worlds saved before format 22
+kept eighths and are read as the same shapes. The chunk mesh keeps positions to a
+sixteenth too (`src/world/MeshVertex.h`, read by `main.vert` and `water.vert`).
 
 **Flattening with a shovel.** Right-click soft ground (dirt, grass, sand, snow or
 gravel) with a shovel and the area round it (3 by 3; **V** makes it 5 by 5 or 7 by 7,
@@ -787,7 +794,7 @@ checks a bump, a slab and a dip levelled, stone kept, and the survival costs.
 Shape blocks yourself with the chisel, a tool (in survival, made from a little wood
 and stone). With it in hand, right-click lowers the quarter you're looking
 at, and crouching and right-clicking raises it again. **V** sets how far each stroke
-goes: an eighth of a block (as fine as natural slopes), a quarter, or a half. Raising every quarter to the top
+goes: a sixteenth of a block (a pixel), an eighth (as fine as natural slopes), a quarter, or a half. Raising every quarter to the top
 makes the block whole; lowering them all removes it.
 The quarter you're looking at is the one your view actually lands on (a low step
 seen past a taller one, the side of a quarter, the underside of one chiselled from
@@ -827,7 +834,8 @@ solid pixels of their pictures, and pebbles by their stones, so you can click
 through the gaps to the ground behind.
 
 `ShapeTest` checks standing heights and water for both styles, aiming past and into
-partial blocks, the outlines' shapes, chiselling (down to
+partial blocks, the outlines' shapes, the sixteen levels (a slab a pixel thin drawn a
+sixteenth high, an old save's shapes read the same, a vertex kept to a sixteenth), chiselling (down to
 nothing and back to whole), that the mesher draws quarter-columns, joins slopes
 across rows and tapers thin water to nothing with no walls, chiselling over the
 network, and the mountains: high snowy peaks, bare rock with nothing growing above the

@@ -182,7 +182,7 @@ int main(int argc, char** argv) {
             server.QueueConsoleCommand("tp Builder 17.5 0 6.5");
             pump(10.0, [&] { return a.feet.z < 7.0f; });
             a.client.CloseChest();
-            a.client.PlaceBlock(extractor, BlockType::EXTRACTOR, 8, 1);
+            a.client.PlaceBlock(extractor, BlockType::EXTRACTOR, 16, 1);
             fill({ 17, 0, 8 }, { 18, 0, 8 }, "item_pipe");
             fill(chestA, chestA, "chest");
             fill(filter, filter, "filter_pipe");
@@ -267,8 +267,8 @@ int main(int argc, char** argv) {
             std::cout << "Gauges" << std::endl;
             // A gauge fixed on top of an air pipe, and another on bare ground.
             const glm::ivec3 gauge{ 14, 2, 8 }, loose{ 21, 0, 9 };
-            a.client.PlaceBlock(gauge, BlockType::PRESSURE_GAUGE, 8, 2);
-            a.client.PlaceBlock(loose, BlockType::PRESSURE_GAUGE, 8, 2);
+            a.client.PlaceBlock(gauge, BlockType::PRESSURE_GAUGE, 16, 2);
+            a.client.PlaceBlock(loose, BlockType::PRESSURE_GAUGE, 16, 2);
             auto reading = [&](const glm::ivec3& p) {
                 for (const auto& m : a.client.GetMachines())
                     if (m.pos == p && m.type == static_cast<uint8_t>(BlockType::PRESSURE_GAUGE)) return static_cast<int>(m.pressure);
@@ -314,7 +314,7 @@ int main(int argc, char** argv) {
             // Air to the derrick's and refinery's air pipes.
             fill({ 29, 0, 29 }, { 29, 0, 31 }, "air_pipe");
             fill({ 30, 0, 29 }, { 35, 0, 29 }, "air_pipe");
-            a.client.PlaceBlock(engineGauge, BlockType::PRESSURE_GAUGE, 8, 2);
+            a.client.PlaceBlock(engineGauge, BlockType::PRESSURE_GAUGE, 16, 2);
             Check(pump(10.0, [&] { return blockAt(engineGauge) == BlockType::PRESSURE_GAUGE && blockAt({ 35, 0, 31 }) == BlockType::REFINERY && blockAt({ 31, 4, 31 }) == BlockType::STEEL_FRAME; }),
                   "an oil derrick and a refinery built, tanks between them, an engine with its own air pipe and gauge");
             a.held = ItemType::HAMMER;
@@ -366,7 +366,7 @@ int main(int argc, char** argv) {
             fill({ 41, 0, 40 }, { 41, 0, 40 }, "fluid_pipe");
             fill({ 42, 0, 40 }, { 42, 0, 40 }, "fluid_tank");
             fill({ 43, 0, 40 }, { 43, 0, 40 }, "fluid_pipe");
-            a.client.PlaceBlock(outlet, BlockType::FLUID_OUTLET, 8, 0);
+            a.client.PlaceBlock(outlet, BlockType::FLUID_OUTLET, 16, 0);
             fill({ 40, 2, 40 }, { 40, 2, 40 }, "air");
             fill(cup, cup, "water");
             Check(pump(10.0, [&] { return blockAt(outlet) == BlockType::FLUID_OUTLET; }), "a drain under a cup of water, piped through a tank to an outlet");
@@ -393,7 +393,7 @@ int main(int argc, char** argv) {
             server.QueueConsoleCommand("fill 43 0 53 43 0 55 air");
             server.QueueConsoleCommand("fill 42 0 53 42 0 55 fluid_pipe");
             Check(pump(10.0, [&] { return blockAt({ 42, 0, 55 }) == BlockType::FLUID_PIPE && blockAt({ 43, 0, 54 }) == BlockType::AIR; }), "a pipe run beside a walled pool");
-            for (int z = 53; z <= 55; z++) a.client.PlaceBlock({ 43, 0, z }, BlockType::FLUID_OUTLET, 8, 0);
+            for (int z = 53; z <= 55; z++) a.client.PlaceBlock({ 43, 0, z }, BlockType::FLUID_OUTLET, 16, 0);
             Check(pump(10.0, [&] { return blockAt({ 43, 0, 53 }) == BlockType::FLUID_OUTLET && blockAt({ 43, 0, 55 }) == BlockType::FLUID_OUTLET; }), "with three outlets into it");
             server.QueueConsoleCommand("fluid 42 0 54 water");
             auto pool = [&] {

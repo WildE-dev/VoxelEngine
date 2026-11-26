@@ -339,14 +339,14 @@ bool WorldStorage::ReadRegion(const fs::path& path) {
         for (uint32_t b = 0; b < length; b++) r.U8(chunk.data[b]);
 
         net::ByteReader planes(chunk.data.data(), chunk.data.size());
-        if (!net::DecodeBlockPlanes(planes, *blocks, version >= 5, version < 17) || !planes.AtEnd()) {
+        if (!net::DecodeBlockPlanes(planes, *blocks, version >= 5, version < 17, version < 22) || !planes.AtEnd()) {
             std::cerr << "[storage] chunk " << coords.x << "," << coords.y << "," << coords.z << " in " << path.string()
                       << " is corrupt" << std::endl;
             return false;
         }
-        if (version < 17) {
-            // Saved before blocks had an axis, or before items had their own types: kept
-            // in the current format from now on.
+        if (version < 22) {
+            // Saved before blocks had an axis, before items had their own types, or with
+            // shapes in eighths: kept in the current format from now on.
             net::ByteWriter current;
             net::EncodeBlockPlanes(current, *blocks);
             chunk.data = std::move(current.data);

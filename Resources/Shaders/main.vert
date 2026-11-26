@@ -39,27 +39,32 @@ struct Data
   float skyLight;
 };
 
+// The vertex's two words: see src/world/MeshVertex.h (positions in sixteenths).
+vec3 decodeNormal(uint bits)
+{
+    vec2 f = vec2(float((bits >> 4) & 0xFu), float(bits & 0xFu)) / 7.0 - 1.0;
+    vec3 n = vec3(f, 1.0 - abs(f.x) - abs(f.y));
+    if (n.z < 0.0) n.xy = (1.0 - abs(f.yx)) * vec2(f.x >= 0.0 ? 1.0 : -1.0, f.y >= 0.0 ? 1.0 : -1.0);
+    return normalize(n);
+}
+
 Data getData()
 {
-    float x = ((aData1 >> 24) & 0xFFu) / 8.0f;
-    float y = ((aData1 >> 16) & 0xFFu) / 8.0f - 1.0f; // stored one block up (see Block.cpp)
-    float z = ((aData1 >> 8) & 0xFFu) / 8.0f;
-    
-    float u = ((aData1 >> 4) & 0xFu) / 8.0f;
-    float v = (aData1 & 0xFu) / 8.0f;
+    float x = float((aData1 >> 23) & 0x1FFu) / 16.0f;
+    float y = float((aData1 >> 14) & 0x1FFu) / 16.0f - 1.0f; // stored one block up
+    float z = float((aData1 >> 5) & 0x1FFu) / 16.0f;
 
-    int textureIndex = int(aData2 & 0x3FFu);
-    float blockLight = float((aData2 >> 14) & 0xFu);
-    float skyLight = float((aData2 >> 10) & 0xFu);
-    float ao = float((aData2 >> 18) & 0x3u) / 3.0f; // (water is drawn by water.vert)
-    
+    float u = float(aData1 & 0x1Fu) / 16.0f;
+    float v = float((aData2 >> 27) & 0x1Fu) / 16.0f;
+
+    int textureIndex = int(aData2 & 0x1FFu);
+    float blockLight = float((aData2 >> 13) & 0xFu);
+    float skyLight = float((aData2 >> 9) & 0xFu);
+    float ao = float((aData2 >> 17) & 0x3u) / 3.0f; // (water is drawn by water.vert)
+
     vec2 coords = getTextureCoords(textureIndex, u, v);
 
-    float nX = ((aData2 >> 28) & 0xFu) / 7.5f - 1.0f;
-    float nY = ((aData2 >> 24) & 0xFu) / 7.5f - 1.0f;
-    float nZ = ((aData2 >> 20) & 0xFu) / 7.5f - 1.0f;
-
-    return Data(vec3(x, y, z), coords, normalize(vec3(nX, nY, nZ)), ao, blockLight, skyLight);
+    return Data(vec3(x, y, z), coords, decodeNormal((aData2 >> 19) & 0xFFu), ao, blockLight, skyLight);
 }
 
 void main()

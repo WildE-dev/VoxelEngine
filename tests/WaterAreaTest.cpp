@@ -103,9 +103,9 @@ int main() {
             world.SetBlock(2, 44, z, carved);
         };
         // One quarter cut to the floor, on the side toward the pool ((0,0): edge 2).
-        const Block notched = Block(BlockType::STONE_BRICK).Chiselled(2, -8);
+        const Block notched = Block(BlockType::STONE_BRICK).Chiselled(2, -16);
         Block slope(BlockType::DIRT);
-        slope = slope.Chiselled(0, -8);                                        // one corner of a slope cut down
+        slope = slope.Chiselled(0, -16);                                        // one corner of a slope cut down
         Check(notched.WaterFloor() > Block::kMaxWaterVolume / 2 && slope.WaterFloor() > Block::kMaxWaterVolume / 2,
               "the carved blocks' average heights are above half a block");
         Check(notched.WaterLevelFor(0) == 0 && notched.WaterVolumeAt(64) == 16 && notched.WaterLevelFor(16) >= 64 && notched.WaterLevelFor(16) < 68 && notched.WaterLevelFor(notched.WaterCapacity()) == 128 &&
@@ -114,11 +114,11 @@ int main() {
         trough(4, notched);
         trough(8, slope);
         // A notch on the far side: the side toward the pool is solid all the way up.
-        const Block farNotch = Block(BlockType::STONE_BRICK).Chiselled(3, -8);
+        const Block farNotch = Block(BlockType::STONE_BRICK).Chiselled(3, -16);
         trough(12, farNotch);
         // Two notches meeting only at a corner ((0,0) and (1,1)), with an empty cell past
         // the block: water gets into the near one but can't cross to the far side.
-        const Block diagonal = Block(BlockType::STONE_BRICK).Chiselled(2, -8).Chiselled(3, -8);
+        const Block diagonal = Block(BlockType::STONE_BRICK).Chiselled(2, -16).Chiselled(3, -16);
         trough(16, diagonal);
         world.SetBlock(3, 44, 16, Block()); // open beyond it
         world.SetBlock(4, 44, 16, wall);

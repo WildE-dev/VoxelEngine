@@ -111,7 +111,7 @@ int main() {
         a.client.PlaceBlock(bedAt, BlockType::BED);
         Block bed;
         Check(one(20.0, [&] { return a.world.GetBlock(bedAt.x, bedAt.y, bedAt.z, bed) && bed.type == BlockType::BED; }) && bed.ResourceUnits() == kBlock &&
-                  bed.edgeData.GetTopY(0) == 4,
+                  bed.edgeData.GetTopY(0) == 8,
               "it's placed, half a block high (and worth a whole bed)");
 
         std::cout << "Sleeping" << std::endl;
@@ -218,7 +218,7 @@ int main() {
         // Mirrored: hinged on the right. Put up so, both halves are; crouching and
         // right-clicking it swaps the hinge back (and doesn't open it).
         auto mirroredAt = [&](const glm::ivec3& p) { Block t; return a.world.GetBlock(p.x, p.y, p.z, t) && t.DoorMirrored(); };
-        a.client.PlaceBlock({ 21, 0, 25 }, BlockType::DOOR, 8, 4 | Block::kDoorMirrored);
+        a.client.PlaceBlock({ 21, 0, 25 }, BlockType::DOOR, 16, 4 | Block::kDoorMirrored);
         Check(both(20.0, [&] { return typeAt({ 21, 1, 25 }) == BlockType::DOOR && mirroredAt({ 21, 0, 25 }) && mirroredAt({ 21, 1, 25 }); }) &&
                   facingOf({ 21, 0, 25 }) == glm::ivec3(0, 0, 1),
               "a door put up mirrored is hinged on the right, both halves (facing as asked)");

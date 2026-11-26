@@ -20,7 +20,7 @@ class TextureAtlas
 public:
     static constexpr int kMissingIndex = 0;
     // Tile indices are packed into 10 bits per vertex (see Block.cpp).
-    static constexpr int kMaxTextures = 1024;
+    static constexpr int kMaxTextures = 512; // (a chunk mesh vertex has 9 bits for it: world/MeshVertex.h)
 
     TextureAtlas() = default;
     ~TextureAtlas();

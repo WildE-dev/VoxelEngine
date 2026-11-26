@@ -83,14 +83,14 @@ public:
     // block, BreakBlock once it's been long enough, with the same tool.
     void StartMining(const glm::ivec3& pos, Tool tool);
     void BreakBlock(const glm::ivec3& pos, Tool tool = Tool::None);
-    // heightEighths: how tall a shapeable block is placed (8 full, see Block::Placed).
+    // heightSteps: how tall a shapeable block is placed, in sixteenths (16 full, see Block::Placed).
     // faceAxis: the axis of the face it's placed against (0 x, 1 y, 2 z); logs lie along it.
     // Returns whether it was sent (false: refused here, as the server would refuse it).
-    bool PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths = 8, int faceAxis = 1);
+    bool PlaceBlock(const glm::ivec3& pos, BlockType type, int heightSteps = EdgeData::kSteps, int faceAxis = 1);
     // Lowers (or raises) one quarter of a block by a quarter (predicted, like edits).
     // dir: the side chiselled from, for a full block (Block::ShapeDir; it becomes that way up).
-    // step: how far the corner moves, in eighths (1, 2 or 4: Block::kChiselSteps). Needs the chisel.
-    void Chisel(const glm::ivec3& pos, int edge, bool raise, int dir = 0, int step = 2);
+    // step: how far the corner moves, in sixteenths (1, 2, 4 or 8: Block::kChiselSteps). Needs the chisel.
+    void Chisel(const glm::ivec3& pos, int edge, bool raise, int dir = 0, int step = 4);
     // A shovel's right-click: level the ground round this block to its height (the
     // server works it out, and what it costs or gives back).
     void Flatten(const glm::ivec3& pos, int radius = 1);
@@ -185,7 +185,7 @@ public:
     // Creative: put `count` of an item in one of our slots (kNone empties it).
     void SetCreativeSlot(int slot, ItemId item, int count);
     // Whether we may place this (creative, or we hold enough of it).
-    bool CanAfford(BlockType type, int heightEighths) const;
+    bool CanAfford(BlockType type, int heightSteps) const;
 
     // Other players, interpolated kInterpolationDelay seconds in the past so movement is
     // smooth between snapshots.

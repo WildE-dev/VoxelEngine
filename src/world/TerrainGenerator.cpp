@@ -56,12 +56,17 @@ bool DeepCavern(int x, int y, int z) {
 }
 
 constexpr int S = TerrainGenerator::S;
-constexpr float kSmoothness = 8.0f; // surface heights snap to eighths of a block (a fine chisel's step: Block::kChiselSteps)
+// Surface heights snap to eighths of a block (two of EdgeData's sixteenths): finer, a
+// slope's corner would more often poke a sliver above its row, where its cell can't
+// stand on one corner and leaves a gap; and worlds made before shapes had sixteenths
+// would no longer join up with the land generated now.
+constexpr float kSmoothness = 8.0f;
+constexpr int kStepsPerSmooth = EdgeData::kSteps / 8;
 
 int Index(int x, int y, int z) { return x + S * (y + S * z); }
 float Quantise(float h) { return std::round(h * kSmoothness) / kSmoothness; }
-// Height above the block's base in eighths, clamped to the valid edge range.
-uint8_t EdgeHeight(float h) { return static_cast<uint8_t>(std::clamp(static_cast<int>(h * 8), 0, 8)); }
+// Height above the block's base in sixteenths (whole eighths), clamped to the valid edge range.
+uint8_t EdgeHeight(float h) { return static_cast<uint8_t>(std::clamp(static_cast<int>(h * kSmoothness) * kStepsPerSmooth, 0, EdgeData::kSteps)); }
 
 TerrainGenerator::Column MakeColumn(float h00, float h10, float h01, float h11) {
     TerrainGenerator::Column c;
@@ -637,7 +642,7 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
     {
         auto drop = [](int cx, int y, int cz) {
             const float n = Noise::Perlin3(cx * 0.21f, y * 0.37f, cz * 0.21f, 0xF1A7u);
-            return std::clamp(static_cast<int>(std::lround((n + 0.15f) * 6.0f)), 0, 4);
+            return std::clamp(static_cast<int>(std::lround((n + 0.15f) * 6.0f)), 0, 4) * kStepsPerSmooth; // (whole eighths, in sixteenths)
         };
         for (int x = 0; x < S; x++)
             for (int z = 0; z < S; z++) {
@@ -652,7 +657,7 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                     const int d[4] = { drop(wx, wy, wz + 1), drop(wx + 1, wy, wz), drop(wx, wy, wz), drop(wx + 1, wy, wz + 1) };
                     if (d[0] + d[1] + d[2] + d[3] == 0) continue;
                     EdgeData edges;
-                    for (int e = 0; e < 4; e++) edges.SetTopY(e, static_cast<uint8_t>(8 - d[e]));
+                    for (int e = 0; e < 4; e++) edges.SetTopY(e, static_cast<uint8_t>(EdgeData::kSteps - d[e]));
                     cell = Block(cell.type, edges);
                 }
             }
@@ -710,7 +715,7 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
     // each weir into the next, down to the sinkhole (deeper water would stand still,
     // generated at rest, with the spring unable to add to it).
     EdgeData slab;
-    for (int e = 0; e < 4; e++) slab.SetTopY(e, 4);
+    for (int e = 0; e < 4; e++) slab.SetTopY(e, EdgeData::kSteps / 2);
     for (int x = 0; x < S; x++)
         for (int z = 0; z < S; z++) {
             const int wx = coords.x * S + x, wz = coords.z * S + z;
@@ -841,8 +846,8 @@ void TerrainGenerator::PlacePlants(const glm::ivec3& coords, const ColumnHeights
             if (!groundIntact) continue;
 
             const float drop = plantRow - column.GroundHeightAtCentre(); // 0..1 blocks
-            const int dropEighths = std::clamp(static_cast<int>(std::lround(drop * 8.0f)), 0, 8);
-            out[Index(x, py, z)] = Block::Plant(type, static_cast<uint8_t>(dropEighths));
+            const int dropSteps = std::clamp(static_cast<int>(std::lround(drop * kSmoothness)) * kStepsPerSmooth, 0, EdgeData::kSteps - 1);
+            out[Index(x, py, z)] = Block::Plant(type, static_cast<uint8_t>(dropSteps));
         }
     }
 }

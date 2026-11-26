@@ -106,7 +106,7 @@ bool DecodeChunkPlanes(ByteReader& in, ChunkBlocks& blocks, ChunkLight& light) {
     return DecodeBlockPlanes(in, blocks) && DecodeLightPlane(in, light);
 }
 
-bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis, bool v16) {
+bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis, bool v16, bool eighths) {
     bool valid = true;
     if (!DecodePlane(in, [&](int i, uint8_t v) {
             const BlockType t = v16 ? Legacy::BlockFromV16(v) : static_cast<BlockType>(v);
@@ -131,6 +131,17 @@ bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis, bool 
     }
     else if (!DecodePlane(in, [&](int i, uint8_t v) { blocks[i].axis = v; }))
         return false;
+    if (valid && eighths)
+        // (Shapes saved in eighths: the same shapes in sixteenths. A plant's drop too.)
+        for (auto& b : blocks) {
+            if (b.IsPlant()) {
+                const int drop = b.edgeData.edges[0] & 0x0F;
+                b.edgeData.MakeFull();
+                b.edgeData.edges[0] = static_cast<uint8_t>(std::min(2 * drop, EdgeData::kSteps - 1));
+            }
+            else if (b.IsAir() || b.IsLiquid() || b.IsLava()) b.edgeData.MakeFull();
+            else b.edgeData = EdgeData::FromEighths(b.edgeData.edges);
+        }
     if (valid)
         for (auto& b : blocks) b.RepairEdgeData();
     if (v16)
@@ -996,7 +1007,7 @@ bool Decode(ByteReader& in, EditPlace& m) {
     uint8_t type;
     if (!in.IVec3(m.pos) || !in.U8(type) || type >= static_cast<uint8_t>(BlockType::COUNT)) return false;
     m.type = static_cast<BlockType>(type);
-    return in.U8(m.height) && m.height >= 1 && m.height <= 8 && in.U8(m.faceAxis) && (m.faceAxis & 7) <= 5 && m.faceAxis < 16; // (8: a door hinged on the right)
+    return in.U8(m.height) && m.height >= 1 && m.height <= EdgeData::kSteps && in.U8(m.faceAxis) && (m.faceAxis & 7) <= 5 && m.faceAxis < 16; // (8: a door hinged on the right)
 }
 
 bool Decode(ByteReader& in, EditCarve& m) {

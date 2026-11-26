@@ -416,25 +416,25 @@ void Client::SetCreativeSlot(int slot, ItemId item, int count) {
     net.Send(net::kChannelReliable, net::Encode(net::CreativeSlot{ static_cast<uint8_t>(slot), item, static_cast<uint8_t>(std::clamp(count, 0, 255)) }));
 }
 
-bool Client::CanAfford(BlockType type, int heightEighths) const {
+bool Client::CanAfford(BlockType type, int heightSteps) const {
     if (IsCreative()) return true;
     if (IsCreativeOnlyType(type)) return false; // (as the server rules)
-    const Block placed = Block::Placed(type, heightEighths);
+    const Block placed = Block::Placed(type, heightSteps);
     return !placed.IsLiquid() && GetResources(type) >= static_cast<uint32_t>(placed.ResourceUnits());
 }
 
-bool Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths, int faceAxis) {
+bool Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightSteps, int faceAxis) {
     // The server's rules (Server::HandlePlace), so what's refused here would be there too:
     // nothing (an empty hand), creative-only blocks in survival, what we can't afford, no
     // room.
-    if (!welcomed || type == BlockType::AIR || type >= BlockType::COUNT || !CanAfford(type, heightEighths)) return false;
+    if (!welcomed || type == BlockType::AIR || type >= BlockType::COUNT || !CanAfford(type, heightSteps)) return false;
     // Shown at once (predicted) only where the server will place it too, not over another
     // block, or it would show for a moment and then be taken back. Where this copy of the
     // world doesn't have the cell yet, it's left to the server (and shown when it answers).
     Block here;
     const bool known = world.GetBlock(pos.x, pos.y, pos.z, here);
     if (known && !world.CanPlace(pos, type)) return false; // the server would refuse it
-    const Block placed = Block::Placed(type, heightEighths, faceAxis);
+    const Block placed = Block::Placed(type, heightSteps, faceAxis);
     if (known && IsLeverType(type) && !world.LeverHeld(pos, placed)) return false; // (only on a solid block, as the server says)
     // Not a solid block inside another player walking there; one flying might be in
     // no-clip (which the server allows), so that's left to it, unpredicted.
@@ -454,7 +454,7 @@ bool Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightEighths
         if (type == BlockType::DOOR) world.SetBlock(pos.x, pos.y + 1, pos.z, placed); // its upper half, as the server makes it
         if (!IsCreative()) inventory.TakeUnits(Items::ResourceOf(type), static_cast<uint32_t>(placed.ResourceUnits()));
     }
-    net.Send(net::kChannelReliable, net::Encode(net::EditPlace{ pos, type, static_cast<uint8_t>(heightEighths), static_cast<uint8_t>(faceAxis) }));
+    net.Send(net::kChannelReliable, net::Encode(net::EditPlace{ pos, type, static_cast<uint8_t>(heightSteps), static_cast<uint8_t>(faceAxis) }));
     return true;
 }
 

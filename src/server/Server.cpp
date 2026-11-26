@@ -1405,14 +1405,15 @@ void Server::HandleFlatten(ClientState& client, const glm::ivec3& pos, int radiu
     auto soft = [](const Block& b) { return !b.IsAir() && !b.IsLiquid() && !b.IsPlant() && !IsModelType(b.type) && Mining::BestTool(b.type) == Tool::Shovel; };
     if (!soft(clicked) || clicked.ShapeDir() != 0) return;
     // The level: the clicked block's top (the middle of its corners, for a shaped one), in
-    // eighths from the bottom of the world's rows.
-    int top = 8;
+    // sixteenths from the bottom of the world's rows.
+    constexpr int kSteps = EdgeData::kSteps;
+    int top = kSteps;
     if (!clicked.IsFullBlock()) {
         int sum = 0;
         for (int e = 0; e < 4; e++) sum += clicked.edgeData.GetTopY(e);
         top = (sum + 2) / 4;
     }
-    const int level = pos.y * 8 + top;
+    const int level = pos.y * kSteps + top;
     struct Change {
         glm::ivec3 at;
         Block to;
@@ -1427,11 +1428,11 @@ void Server::HandleFlatten(ClientState& client, const glm::ivec3& pos, int radiu
                 if (!world->GetBlock(at.x, at.y, at.z, b) || b.HasWater() || b.IsLava()) continue;
                 const bool open = b.IsAir() || b.IsReplaceablePlant();
                 if (!open && !(soft(b) && b.ShapeDir() == 0)) continue; // (stone, wood, buildings: left be)
-                const int fill = std::clamp(level - y * 8, 0, 8);
+                const int fill = std::clamp(level - y * kSteps, 0, kSteps);
                 // Filling an empty cell: with what was clicked (soft ground keeps its own kind).
                 const BlockType kind = open ? clicked.type : b.type;
                 Block to;
-                if (fill == 8) to = Block(kind);
+                if (fill == kSteps) to = Block(kind);
                 else if (fill > 0) {
                     EdgeData edges;
                     for (int e = 0; e < 4; e++) edges.SetTopY(e, static_cast<uint8_t>(fill));

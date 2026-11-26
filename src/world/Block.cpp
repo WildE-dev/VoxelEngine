@@ -1,11 +1,15 @@
 #include "world/Block.h"
 #include "world/BlockData.h"
 #include "world/Coords.h"
+#include "world/MeshVertex.h"
 #include "world/SpriteMasks.h"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
+
+// Shapes are in sixteenths of a block (EdgeData).
+constexpr float kSteps = static_cast<float>(EdgeData::kSteps);
 
 namespace {
 
@@ -23,27 +27,9 @@ struct VertexData {
     VertexData(glm::vec3 pos, glm::vec2 tex, int textureIndex, glm::vec3 norm)
         : pos(pos), tex(tex), textureIndex(textureIndex), norm(norm) {}
 
-    // xyz in 1/8 block units (8 bits each), uv in 1/8 units (4 bits each). y is
-    // stored one block up so plant sprites can reach below their chunk's floor.
-    uint32_t PackPosition() const {
-        uint32_t x = static_cast<uint32_t>(pos.x * 8);
-        uint32_t y = static_cast<uint32_t>((pos.y + 1.0f) * 8);
-        uint32_t z = static_cast<uint32_t>(pos.z * 8);
-        uint32_t u = static_cast<uint32_t>(tex.x * 8);
-        uint32_t v = static_cast<uint32_t>(tex.y * 8);
-        return ((x & 0xFFu) << 24) | ((y & 0xFFu) << 16) | ((z & 0xFFu) << 8) | ((u & 0xFu) << 4) | (v & 0xFu);
-    }
-
-    // Normal quantised to 4 bits per axis, 2-bit ambient occlusion, 4-bit block
-    // light, 4-bit sky light, 10-bit texture index.
-    uint32_t PackShading() const {
-        uint32_t nx = static_cast<uint32_t>((norm.x + 1.0f) * 7.5f);
-        uint32_t ny = static_cast<uint32_t>((norm.y + 1.0f) * 7.5f);
-        uint32_t nz = static_cast<uint32_t>((norm.z + 1.0f) * 7.5f);
-        return ((nx & 0xFu) << 28) | ((ny & 0xFu) << 24) | ((nz & 0xFu) << 20) |
-               ((ao & 0x3u) << 18) | ((light & 0xFu) << 14) | ((sky & 0xFu) << 10) |
-               (static_cast<uint32_t>(textureIndex) & 0x3FFu);
-    }
+    // The two words of world/MeshVertex.h (sixteenths of a block).
+    uint32_t PackPosition() const { return MeshVertex::PackPosition(pos, tex.x); }
+    uint32_t PackShading() const { return MeshVertex::PackShading(tex.y, norm, ao, light, sky, textureIndex); }
 };
 
 glm::vec3 GetNormal(glm::vec3 p1, glm::vec3 p2, glm::vec3 p3) {
@@ -53,18 +39,20 @@ glm::vec3 GetNormal(glm::vec3 p1, glm::vec3 p2, glm::vec3 p3) {
     return cross;
 }
 
-std::array<VertexData, 6> GetFaceVertices(Face face, const EdgeData& edgeData, int x, int y, int z, const TextureData& textureData) {
+// Corner tops and bottoms in sixteenths (EdgeData order): any heights, a corner's top
+// and bottom may meet (water's surface meeting a slope).
+std::array<VertexData, 6> GetFaceVertices(Face face, const uint8_t tops[4], const uint8_t bottoms[4], int x, int y, int z, const TextureData& textureData) {
     std::array<VertexData, 6> vertices;
 
-    float bottomY0 = static_cast<float>(edgeData.GetBottomY(0)) / 8.0f;
-    float bottomY1 = static_cast<float>(edgeData.GetBottomY(1)) / 8.0f;
-    float bottomY2 = static_cast<float>(edgeData.GetBottomY(2)) / 8.0f;
-    float bottomY3 = static_cast<float>(edgeData.GetBottomY(3)) / 8.0f;
+    float bottomY0 = static_cast<float>(bottoms[0]) / kSteps;
+    float bottomY1 = static_cast<float>(bottoms[1]) / kSteps;
+    float bottomY2 = static_cast<float>(bottoms[2]) / kSteps;
+    float bottomY3 = static_cast<float>(bottoms[3]) / kSteps;
 
-    float topY0 = static_cast<float>(edgeData.GetTopY(0)) / 8.0f;
-    float topY1 = static_cast<float>(edgeData.GetTopY(1)) / 8.0f;
-    float topY2 = static_cast<float>(edgeData.GetTopY(2)) / 8.0f;
-    float topY3 = static_cast<float>(edgeData.GetTopY(3)) / 8.0f;
+    float topY0 = static_cast<float>(tops[0]) / kSteps;
+    float topY1 = static_cast<float>(tops[1]) / kSteps;
+    float topY2 = static_cast<float>(tops[2]) / kSteps;
+    float topY3 = static_cast<float>(tops[3]) / kSteps;
 
     switch (face) {
     case Face::Right:
@@ -463,13 +451,13 @@ void Block::AddSteppedFaces(std::vector<uint32_t>& vertices, Face face, int x, i
                       : face == Face::Left ? textures.left : face == Face::Back ? textures.back : textures.front;
     const glm::vec3 normal(kFaceOffsets[f][0], kFaceOffsets[f][1], kFaceOffsets[f][2]);
     const glm::vec3 origin(x, y, z);
-    // Quarter heights in eighths, [qx][qz]: EdgeData's edge 2 is (0,0), 1 is (1,0), 0 is
+    // Quarter heights in sixteenths, [qx][qz]: EdgeData's edge 2 is (0,0), 1 is (1,0), 0 is
     // (0,1) and 3 is (1,1).
     const int h[2][2] = { { edgeData.GetTopY(2), edgeData.GetTopY(0) }, { edgeData.GetTopY(1), edgeData.GetTopY(3) } };
     const auto& tangents = kFaceTangents[kFaceAxis[f]];
 
     // One rectangle, given its corners as seen from outside: a bottom left, b bottom
-    // right, c top left, d top right (in eighths, block-local).
+    // right, c top left, d top right (in sixteenths, block-local).
     // Faces inside the cell (a quarter's top below the block's, the step up to a taller
     // quarter) are carved: some blocks show their inside there.
     const int carvedTexture = GetCarvedTexture(type);
@@ -477,7 +465,7 @@ void Block::AddSteppedFaces(std::vector<uint32_t>& vertices, Face face, int x, i
         const glm::vec3 corners[4] = { a, b, c, d };
         VertexData v[4];
         for (int i = 0; i < 4; i++) {
-            const glm::vec3 p = corners[i] / 8.0f;
+            const glm::vec3 p = corners[i] / kSteps;
             // Texture coordinates follow the face, so quarters show their part of it.
             glm::vec2 uv;
             switch (face) {
@@ -509,9 +497,9 @@ void Block::AddSteppedFaces(std::vector<uint32_t>& vertices, Face face, int x, i
         for (int qz = 0; qz < 2; qz++) {
             const int top = h[qx][qz];
             if (top == 0) continue;
-            const float x0 = qx * 4.0f, x1 = x0 + 4.0f, z0 = qz * 4.0f, z1 = z0 + 4.0f, t = static_cast<float>(top);
+            const float half = kSteps / 2.0f, x0 = qx * half, x1 = x0 + half, z0 = qz * half, z1 = z0 + half, t = static_cast<float>(top);
             switch (face) {
-            case Face::Top: quad({ x0, t, z1 }, { x1, t, z1 }, { x0, t, z0 }, { x1, t, z0 }, top < 8); break;
+            case Face::Top: quad({ x0, t, z1 }, { x1, t, z1 }, { x0, t, z0 }, { x1, t, z0 }, top < EdgeData::kSteps); break;
             case Face::Bottom: if (outside) quad({ x0, 0, z0 }, { x1, 0, z0 }, { x0, 0, z1 }, { x1, 0, z1 }, false); break;
             default: {
                 // The side of this quarter facing that way: on the block's outside, all
@@ -580,7 +568,14 @@ void Block::AddBoxVertices(std::vector<uint32_t>& vertices, int x, int y, int z,
 }
 
 void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading) const {
-    auto v = GetFaceVertices(face, edgeData, x, y, z, GetTextureData(type));
+    uint8_t tops[4], bottoms[4];
+    for (int e = 0; e < 4; e++) tops[e] = edgeData.GetTopY(e), bottoms[e] = edgeData.GetBottomY(e);
+    AddFaceVertices(vertices, face, x, y, z, shading, tops, bottoms);
+}
+
+void Block::AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading, const uint8_t tops[4],
+                            const uint8_t bottoms[4]) const {
+    auto v = GetFaceVertices(face, tops, bottoms, x, y, z, GetTextureData(type));
     if (IsFacingType(type)) {
         // The face it points to, its back, or a side.
         const TextureData t = GetTextureData(type);
@@ -631,18 +626,18 @@ struct WaterColumns {
     int total;
 };
 WaterColumns ColumnsOf(const Block& b) {
-    constexpr int unitsPerEighth = Block::kMaxWaterVolume / 8;
+    constexpr int unitsPerStep = Block::kMaxWaterVolume / EdgeData::kSteps;
     WaterColumns c;
     const EdgeData edges = b.WaterEdges();
     if (b.WaterStepped()) {
-        for (int e = 0; e < 4; e++) c.height[e] = edges.GetTopY(e) * unitsPerEighth, c.weight[e] = 1;
+        for (int e = 0; e < 4; e++) c.height[e] = edges.GetTopY(e) * unitsPerStep, c.weight[e] = 1;
         c.total = 4;
         return c;
     }
     // Corners (edge 2 is (0,0), 1 is (1,0), 0 is (0,1), 3 is (1,1)); the surface is
     // split along the (0,1)-(1,0) diagonal, so those two corners count twice.
     const int weights[4] = { 2, 2, 1, 1 }; // edges 0, 1, 2, 3
-    for (int e = 0; e < 4; e++) c.height[e] = edges.GetTopY(e) * unitsPerEighth, c.weight[e] = weights[e];
+    for (int e = 0; e < 4; e++) c.height[e] = edges.GetTopY(e) * unitsPerStep, c.weight[e] = weights[e];
     c.total = 6;
     return c;
 }
@@ -677,18 +672,18 @@ int Block::WaterLevelFor(int volume) const {
 
 uint8_t Block::WaterFloor() const {
     if (!IsPartial()) return 0;
-    constexpr int unitsPerEighth = kMaxWaterVolume / 8;
+    constexpr int unitsPerStep = kMaxWaterVolume / EdgeData::kSteps;
     if (WaterStepped()) {
         // Four quarters: their mean height.
         const EdgeData edges = WaterEdges();
         int sum = 0;
         for (int e = 0; e < 4; e++) sum += edges.GetTopY(e);
-        return static_cast<uint8_t>((sum * unitsPerEighth + 2) / 4);
+        return static_cast<uint8_t>((sum * unitsPerStep + 2) / 4);
     }
     // Mean height of the two top triangles (see SurfaceHeight), in units.
     const int c00 = edgeData.GetTopY(2), c10 = edgeData.GetTopY(1), c01 = edgeData.GetTopY(0), c11 = edgeData.GetTopY(3);
-    const int sixths = c00 + c11 + 2 * (c10 + c01);           // 6 * mean, in eighths
-    return static_cast<uint8_t>((sixths * unitsPerEighth + 3) / 6);
+    const int sixths = c00 + c11 + 2 * (c10 + c01);           // 6 * mean, in sixteenths
+    return static_cast<uint8_t>((sixths * unitsPerStep + 3) / 6);
 }
 
 float Block::SurfaceHeight(float fx, float fz) const {
@@ -697,10 +692,10 @@ float Block::SurfaceHeight(float fx, float fz) const {
 
     // Corner heights. See GetFaceVertices(Face::Top): edge 2 is (0,0), 1 is (1,0),
     // 0 is (0,1) and 3 is (1,1), and the quad is split along the (0,1)-(1,0) diagonal.
-    const float c00 = edgeData.GetTopY(2) / 8.0f;
-    const float c10 = edgeData.GetTopY(1) / 8.0f;
-    const float c01 = edgeData.GetTopY(0) / 8.0f;
-    const float c11 = edgeData.GetTopY(3) / 8.0f;
+    const float c00 = edgeData.GetTopY(2) / kSteps;
+    const float c10 = edgeData.GetTopY(1) / kSteps;
+    const float c01 = edgeData.GetTopY(0) / kSteps;
+    const float c11 = edgeData.GetTopY(3) / kSteps;
     if (IsStepped()) return fx < 0.5f ? (fz < 0.5f ? c00 : c01) : (fz < 0.5f ? c10 : c11); // the quarter's height
 
     if (fx + fz <= 1.0f) return c00 + (c10 - c00) * fx + (c01 - c00) * fz;
@@ -742,7 +737,7 @@ bool UprightOverlaps(const Block& b, glm::vec3 lo, glm::vec3 hi) {
         for (int qx = 0; qx < 2; qx++)
             for (int qz = 0; qz < 2; qz++) {
                 const int e = kEdgeAt[qx][qz];
-                const float top = b.edgeData.GetTopY(e) / 8.0f, bottom = b.edgeData.GetBottomY(e) / 8.0f;
+                const float top = b.edgeData.GetTopY(e) / kSteps, bottom = b.edgeData.GetBottomY(e) / kSteps;
                 if (top <= bottom) continue;
                 if (std::max(lo.x, qx * 0.5f) < std::min(hi.x, qx * 0.5f + 0.5f) - kShapeEpsilon &&
                     std::max(lo.z, qz * 0.5f) < std::min(hi.z, qz * 0.5f + 0.5f) - kShapeEpsilon && lo.y < top - kShapeEpsilon &&
@@ -766,7 +761,7 @@ float UprightTop(const Block& b, float x0, float x1, float z0, float z1) {
                 if (b.edgeData.GetTopY(e) <= b.edgeData.GetBottomY(e)) continue;
                 if (std::max(x0, qx * 0.5f) < std::min(x1, qx * 0.5f + 0.5f) - kShapeEpsilon &&
                     std::max(z0, qz * 0.5f) < std::min(z1, qz * 0.5f + 0.5f) - kShapeEpsilon)
-                    top = std::max(top, b.edgeData.GetTopY(e) / 8.0f);
+                    top = std::max(top, b.edgeData.GetTopY(e) / kSteps);
             }
         return top;
     }
@@ -823,15 +818,14 @@ float Block::ShapeTop(float x0, float x1, float z0, float z1) const {
 
 EdgeData Block::WaterEdges() const {
     if (ShapeDir() == 0) return edgeData;
-    // Each quarter as high as the most of it the turned shape fills, rounded up to eighths.
+    // Each quarter as high as the most of it the turned shape fills, rounded up to sixteenths.
     constexpr int kEdgeAt[2][2] = { { 2, 0 }, { 1, 3 } };
     EdgeData edges;
     for (int qx = 0; qx < 2; qx++)
         for (int qz = 0; qz < 2; qz++) {
             const float top = ShapeTop(qx * 0.5f, qx * 0.5f + 0.5f, qz * 0.5f, qz * 0.5f + 0.5f);
             const int e = kEdgeAt[qx][qz];
-            edges.SetBottomY(e, 0);
-            edges.SetTopY(e, static_cast<uint8_t>(top <= 0.0f ? 0 : std::clamp(static_cast<int>(std::ceil(top * 8.0f - 0.01f)), 0, 8)));
+            edges.Set(e, top <= 0.0f ? 0 : std::clamp(static_cast<int>(std::ceil(top * kSteps - 0.01f)), 0, EdgeData::kSteps), 0);
         }
     return edges;
 }
@@ -1012,7 +1006,7 @@ std::vector<glm::vec3> Block::OutlineSegments(const glm::ivec3& cell, unsigned j
         return lines;
     }
     // Corner heights at (0,0), (1,0), (1,1), (0,1) (EdgeData edges 2, 1, 3, 0).
-    const float h[4] = { edgeData.GetTopY(2) / 8.0f, edgeData.GetTopY(1) / 8.0f, edgeData.GetTopY(3) / 8.0f, edgeData.GetTopY(0) / 8.0f };
+    const float h[4] = { edgeData.GetTopY(2) / kSteps, edgeData.GetTopY(1) / kSteps, edgeData.GetTopY(3) / kSteps, edgeData.GetTopY(0) / kSteps };
     if (IsStepped()) {
         // One box when all four quarters match (a slab, a plate), else each quarter.
         if (h[0] == h[1] && h[1] == h[2] && h[2] == h[3]) {
@@ -1050,15 +1044,15 @@ int Block::ResourceUnits() const {
     if (type == BlockType::PEBBLES) return kPebbleUnits;
     if (IsFullBlock() || !CanChisel()) return kUnitsPerBlock;
     if (IsStepped()) {
-        // Four quarters: each eighth of a quarter's height is 1/32 of the block.
-        int eighths = 0;
-        for (int e = 0; e < 4; e++) eighths += edgeData.GetTopY(e);
-        return eighths * kUnitsPerBlock / 32;
+        // Four quarters: each sixteenth of a quarter's height is 1/64 of the block.
+        int steps = 0;
+        for (int e = 0; e < 4; e++) steps += edgeData.GetTopY(e);
+        return steps * kUnitsPerBlock / (4 * EdgeData::kSteps);
     }
     // A slope's volume is its mean height (the two triangles it's drawn as).
     const int c00 = edgeData.GetTopY(2), c10 = edgeData.GetTopY(1), c01 = edgeData.GetTopY(0), c11 = edgeData.GetTopY(3);
-    const int sixths = c00 + c11 + 2 * (c10 + c01); // 6 * mean height, in eighths
-    return (sixths * kUnitsPerBlock + 24) / 48;
+    const int sixths = c00 + c11 + 2 * (c10 + c01); // 6 * mean height, in sixteenths
+    return (sixths * kUnitsPerBlock + 3 * EdgeData::kSteps) / (6 * EdgeData::kSteps);
 }
 
 bool Block::CanChisel() const {
@@ -1126,9 +1120,9 @@ bool Block::CanChisel() const {
     }
 }
 
-Block Block::Chiselled(int edge, int deltaEighths) const {
+Block Block::Chiselled(int edge, int deltaSteps) const {
     Block b = *this;
-    const int height = std::clamp(edgeData.GetTopY(edge) + deltaEighths, 0, 8);
+    const int height = std::clamp(edgeData.GetTopY(edge) + deltaSteps, 0, EdgeData::kSteps);
     b.edgeData.SetTopY(edge, static_cast<uint8_t>(height));
     if (b.edgeData.IsFull()) {
         b.water = b.shown = 0; // a full block holds no water
@@ -1144,8 +1138,10 @@ Block Block::Chiselled(int edge, int deltaEighths) const {
 }
 
 void Block::RepairEdgeData() {
+    // (Every byte is some column, or an empty one: what's left is a plant's drop, blocks
+    // with no shape, and shapes that can't stand.)
     if (IsPlant()) {
-        const uint8_t drop = std::min<uint8_t>(edgeData.edges[0] & 0x0F, 8);
+        const uint8_t drop = edgeData.edges[0] & 0x0F;
         edgeData.MakeFull();
         edgeData.edges[0] = drop;
         return;
@@ -1154,12 +1150,7 @@ void Block::RepairEdgeData() {
         edgeData.MakeFull();
         return;
     }
-    EdgeData edges;
-    for (int e = 0; e < 4; e++) {
-        const uint8_t top = std::min<uint8_t>(edgeData.GetTopY(e), 8);
-        edges.SetTopY(e, top);
-        edges.SetBottomY(e, std::min(edgeData.GetBottomY(e), top));
-    }
+    const EdgeData edges = edgeData;
     const BlockType was = type;
     SetEdgeData(edges);
     if (type != was) type = was, edgeData.MakeFull();

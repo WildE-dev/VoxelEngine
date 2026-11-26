@@ -164,8 +164,8 @@ int main() {
           "the wrong tool is no better than a hand");
     Check(Seconds(Block::Placed(BlockType::TALL_GRASS), Tool::None) == 0.0f && Seconds(Block::Placed(BlockType::FLOWER_RED), Tool::None) == 0.0f,
           "plants break at once");
-    Check(Near(Seconds(Block::Placed(BlockType::STONE_BRICK, 4), Tool::None), 2.5) &&
-              Near(Seconds(Block::Placed(BlockType::STONE_BRICK, 2), Tool::None), 5.0 * kMinVolumeShare),
+    Check(Near(Seconds(Block::Placed(BlockType::STONE_BRICK, 8), Tool::None), 2.5) &&
+              Near(Seconds(Block::Placed(BlockType::STONE_BRICK, 4), Tool::None), 5.0 * kMinVolumeShare),
           "a half slab takes half as long; a thin one no less than 30%");
     bool everyType = true;
     for (int t = 1; t < static_cast<int>(BlockType::COUNT); t++) {

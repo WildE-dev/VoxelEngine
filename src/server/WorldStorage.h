@@ -41,7 +41,7 @@ public:
     // in place of units by type, tool and upgrade masks (older ones are converted); ...;
     // 17: items their own types, not blocks (block numbers and ItemIds saved before are
     // turned into today's: see world/Legacy.h)
-    static constexpr uint32_t kFormatVersion = 21; // 21: (graves, a block: format 20's list of chests left where players died dropped)
+    static constexpr uint32_t kFormatVersion = 22; // 22: shapes in sixteenths (EdgeData), not eighths
 
     struct PlayerRecord {
         glm::vec3 feet{0.0f};

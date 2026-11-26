@@ -1,4 +1,5 @@
 #include "client/ChunkMesher.h"
+#include "world/MeshVertex.h"
 #include "world/Lava.h"
 #include "world/Power.h"
 
@@ -140,10 +141,10 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
     // faces are drawn between water cells. A column's surface is taken near this row:
     // one row up where that column is taller, one row down where it's lower and open
     // above, so flowing water slopes smoothly between rows instead of breaking into
-    // separate boxes. Heights are in 32nds of a block: the mesh geometry has eighths
-    // (rounded up), and the 0..3 32nds to take back off go in the vertex bits water
+    // separate boxes. Heights are in 32nds of a block: the mesh geometry has sixteenths
+    // (rounded up), and the 0..1 32nds to take back off go in the vertex bits water
     // doesn't use for AO (water.vert subtracts them). Rounding up keeps a corner's top
-    // vertex at least an eighth above the cell's bottom, so the two can be told apart
+    // vertex at least a sixteenth above the cell's bottom, so the two can be told apart
     // even for a surface only a 32nd high.
     constexpr int kUnitsPer32nd = Block::kMaxWaterVolume / 32;
     constexpr int kFullUnits = Block::kMaxWaterVolume;
@@ -265,7 +266,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
     };
 
     auto emitWater = [&](const glm::ivec3& here, const Block& self) {
-        uint8_t top[4], fine[4], bottom[4]; // top in eighths, rounded up, less fine (0..3 32nds); bottom in eighths
+        uint8_t top[4], fine[4], bottom[4]; // top in sixteenths, rounded up, less fine (0..1 32nds); bottom in sixteenths
         int top32[4];
         bool visible = false;
         // With more water directly above, this cell is full and meets it exactly.
@@ -277,11 +278,11 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
             top32[e] = covered ? 32
                      : selfApart ? std::clamp((self.WaterShownLevel() + kUnitsPer32nd / 2) / kUnitsPer32nd, 1, kOpenSurfaceTop)
                                         : cornerHeight(here, kCornerOfEdge[e][0], kCornerOfEdge[e][1]);
-            top[e] = static_cast<uint8_t>((top32[e] + 3) / 4);
-            fine[e] = static_cast<uint8_t>(top[e] * 4 - top32[e]);
+            top[e] = static_cast<uint8_t>((top32[e] + 1) / 2);
+            fine[e] = static_cast<uint8_t>(top[e] * 2 - top32[e]);
             // In a waterlogged block the water sits on the slope.
             bottom[e] = self.IsPartial() ? std::min(self.WaterEdges().GetTopY(e), top[e]) : 0;
-            visible |= top32[e] > bottom[e] * 4;
+            visible |= top32[e] > bottom[e] * 2;
         }
         // Entirely below the slope: nothing shows. But a thin layer on more water whose
         // surface rounds down to the bottom of its cell still draws its top there (the
@@ -316,45 +317,45 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
             };
             if (face == static_cast<int>(Face::Bottom) && self.IsPartial()) continue; // the slope is the floor
 
-            Block shape;
-            shape.type = BlockType::WATER;
-            for (int e = 0; e < 4; e++) {
-                shape.edgeData.SetTopY(e, top[e]);
-                shape.edgeData.SetBottomY(e, bottom[e]);
-            }
+            // The face's shape: each corner's top and bottom (sixteenths). (Not an
+            // EdgeData: a corner's top may come down to its bottom anywhere.)
+            Block water(BlockType::WATER);
+            uint8_t faceBottom[4];
+            for (int e = 0; e < 4; e++) faceBottom[e] = bottom[e];
             // Adds the face as shaped; with `half` set (0 or 1), only the half of the
             // side by corner edges.ours[half]: the other corner is pulled in to the
             // middle of the side.
-            auto addFace = [&](const Block& faceShape, int keepCorner, int dropCorner) {
+            using MeshVertex::kAoShift;
+            constexpr int kUnits = EdgeData::kSteps;
+            auto addFace = [&](const uint8_t* bottoms, int keepCorner, int dropCorner) {
                 const size_t first = waterVertices.size();
-                faceShape.AddFaceVertices(waterVertices, static_cast<Face>(face), here.x, here.y, here.z, shadeFace(here, face, false));
+                water.AddFaceVertices(waterVertices, static_cast<Face>(face), here.x, here.y, here.z, shadeFace(here, face, false), top, bottoms);
                 // Fine height: vertices on a corner's top edge get the 32nds that corner
-                // sits below its rounded-up top (in the AO bits, 18-19); all others get
-                // none. A bottom vertex never matches: a visible corner's top is above
-                // its bottom.
+                // sits below its rounded-up top (in the AO bits); all others get none. A
+                // bottom vertex never matches: a visible corner's top is above its bottom.
                 const int tangent = (face == static_cast<int>(Face::Right) || face == static_cast<int>(Face::Left)) ? 2 : 0;
                 for (size_t i = first; i < waterVertices.size(); i += 2) {
                     uint32_t position = waterVertices[i];
-                    const int cx = static_cast<int>((position >> 24) & 0xFF) - here.x * 8; // 0 or 8
-                    const int cz = static_cast<int>((position >> 8) & 0xFF) - here.z * 8;
-                    const int y = static_cast<int>((position >> 16) & 0xFF) - 8 - here.y * 8; // eighths within the cell
+                    const int cx = static_cast<int>((position >> 23) & 0x1FFu) - here.x * kUnits; // 0 or 16
+                    const int cz = static_cast<int>((position >> 5) & 0x1FFu) - here.z * kUnits;
+                    const int y = static_cast<int>((position >> 14) & 0x1FFu) - kUnits - here.y * kUnits; // sixteenths within the cell
                     const int e = cx == 0 ? (cz == 0 ? 2 : 0) : (cz == 0 ? 1 : 3);
                     const uint32_t extra = y == top[e] ? fine[e] : 0u;
-                    waterVertices[i + 1] = (waterVertices[i + 1] & ~(0x3u << 18)) | (extra << 18);
+                    waterVertices[i + 1] = (waterVertices[i + 1] & ~(0x3u << kAoShift)) | (extra << kAoShift);
                     // Half a side: the far corner's vertices move to the middle, and its
                     // top comes down (or up) to the surface's height there, halfway
                     // between the two corners (rounded down, so the side never pokes up
                     // through the surface to be seen from the far side).
                     if (dropCorner >= 0 && e == dropCorner) {
-                        const int shift = tangent == 0 ? 24 : 8;
-                        const int at = static_cast<int>((position >> shift) & 0xFF) + (((tangent == 0 ? cx : cz) == 0) ? 4 : -4);
-                        position = (position & ~(0xFFu << shift)) | (static_cast<uint32_t>(at & 0xFF) << shift);
-                        if (y == top[e] && top[e] > faceShape.edgeData.GetBottomY(e)) {
+                        const int shift = tangent == 0 ? 23 : 5;
+                        const int at = static_cast<int>((position >> shift) & 0x1FFu) + (((tangent == 0 ? cx : cz) == 0) ? kUnits / 2 : -kUnits / 2);
+                        position = (position & ~(0x1FFu << shift)) | (static_cast<uint32_t>(at & 0x1FF) << shift);
+                        if (y == top[e] && top[e] > bottoms[e]) {
                             const int mid32 = (top32[keepCorner] + top32[dropCorner]) / 2;
-                            const int y8 = std::max(static_cast<int>(faceShape.edgeData.GetBottomY(e)), (mid32 + 3) / 4);
-                            const int midFine = std::clamp(y8 * 4 - mid32, 0, 3);
-                            position = (position & ~(0xFFu << 16)) | (static_cast<uint32_t>((y8 + 8 + here.y * 8) & 0xFF) << 16);
-                            waterVertices[i + 1] = (waterVertices[i + 1] & ~(0x3u << 18)) | (static_cast<uint32_t>(midFine) << 18);
+                            const int y16 = std::max(static_cast<int>(bottoms[e]), (mid32 + 1) / 2);
+                            const int midFine = std::clamp(y16 * 2 - mid32, 0, 1);
+                            position = (position & ~(0x1FFu << 14)) | (static_cast<uint32_t>((y16 + kUnits + here.y * kUnits) & 0x1FF) << 14);
+                            waterVertices[i + 1] = (waterVertices[i + 1] & ~(0x3u << kAoShift)) | (static_cast<uint32_t>(midFine) << kAoShift);
                         }
                         waterVertices[i] = position;
                     }
@@ -370,7 +371,7 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     uint8_t from = bottom[e];
                     if (neighbour.IsPartial()) from = std::max(from, std::min(neighbour.WaterEdges().GetTopY(edges.theirs[k]), top[e]));
                     const int theirs = theirWater32(e);
-                    if (theirs >= 0) from = std::max(from, static_cast<uint8_t>(std::min(theirs / 4, static_cast<int>(top[e]))));
+                    if (theirs >= 0) from = std::max(from, static_cast<uint8_t>(std::min(theirs / 2, static_cast<int>(top[e]))));
                     return from;
                 };
                 // A stepped block on either side has a step in the middle of the side: two
@@ -380,24 +381,25 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                 if (steps) {
                     for (int k = 0; k < 2; k++) {
                         const uint8_t from = exposedFrom(k);
-                        Block halfShape = shape;
-                        halfShape.edgeData.SetBottomY(edges.ours[0], from);
-                        halfShape.edgeData.SetBottomY(edges.ours[1], from);
+                        uint8_t halfBottom[4];
+                        for (int e = 0; e < 4; e++) halfBottom[e] = faceBottom[e];
+                        halfBottom[edges.ours[0]] = from;
+                        halfBottom[edges.ours[1]] = from;
                         bool exposed = false;
-                        for (int j = 0; j < 2; j++) exposed |= top32[edges.ours[j]] > std::max(from * 4, theirWater32(edges.ours[j]));
-                        if (exposed) addFace(halfShape, edges.ours[k], edges.ours[1 - k]);
+                        for (int j = 0; j < 2; j++) exposed |= top32[edges.ours[j]] > std::max(from * 2, theirWater32(edges.ours[j]));
+                        if (exposed) addFace(halfBottom, edges.ours[k], edges.ours[1 - k]);
                     }
                     continue;
                 }
                 bool exposed = false;
                 for (int k = 0; k < 2; k++) {
                     const uint8_t from = exposedFrom(k);
-                    shape.edgeData.SetBottomY(edges.ours[k], from);
-                    exposed |= top32[edges.ours[k]] > std::max(from * 4, theirWater32(edges.ours[k])); // (none where both stand level)
+                    faceBottom[edges.ours[k]] = from;
+                    exposed |= top32[edges.ours[k]] > std::max(from * 2, theirWater32(edges.ours[k])); // (none where both stand level)
                 }
                 if (!exposed) continue;
             }
-            addFace(shape, -1, -1);
+            addFace(faceBottom, -1, -1);
         }
     };
 
@@ -559,17 +561,11 @@ void ChunkMesher::Build(const Chunk& chunk, const Chunk::Neighbours& neighbours,
                     }
                     for (size_t i = first; i + 1 < vertices.size(); i += 2) {
                         const uint32_t p = vertices[i], s = vertices[i + 1];
-                        // Position: eighths in the chunk (y one block up), see Block's VertexData.
-                        const glm::vec3 local(((p >> 24) & 0xFFu) / 8.0f - x, (static_cast<int>((p >> 16) & 0xFFu) - 8) / 8.0f - y, ((p >> 8) & 0xFFu) / 8.0f - z);
-                        const glm::vec3 c = Block::ShapeToCell(dir, local);
-                        const uint32_t px = static_cast<uint32_t>(std::lround((x + c.x) * 8.0f)), py = static_cast<uint32_t>(std::lround((y + c.y + 1.0f) * 8.0f)),
-                                       pz = static_cast<uint32_t>(std::lround((z + c.z) * 8.0f));
-                        vertices[i] = ((px & 0xFFu) << 24) | ((py & 0xFFu) << 16) | ((pz & 0xFFu) << 8) | (p & 0xFFu);
-                        // Normal: 4 bits an axis.
-                        const glm::vec3 normal(((s >> 28) & 0xFu) / 7.5f - 1.0f, ((s >> 24) & 0xFu) / 7.5f - 1.0f, ((s >> 20) & 0xFu) / 7.5f - 1.0f);
-                        const glm::vec3 turned = Block::ShapeVectorToCell(dir, normal);
-                        auto bits = [](float v) { return static_cast<uint32_t>(std::clamp(std::lround((v + 1.0f) * 7.5f), 0L, 15L)); };
-                        vertices[i + 1] = (s & ~(0xFFFu << 20)) | (bits(turned.x) << 28) | (bits(turned.y) << 24) | (bits(turned.z) << 20);
+                        // Turned into place: the position (world/MeshVertex.h) and the normal.
+                        const glm::vec3 origin(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+                        const glm::vec3 c = Block::ShapeToCell(dir, MeshVertex::UnpackPosition(p) - origin);
+                        vertices[i] = MeshVertex::WithPosition(p, origin + c);
+                        vertices[i + 1] = MeshVertex::WithNormal(s, Block::ShapeVectorToCell(dir, MeshVertex::ShadingNormal(s)));
                     }
                     if (block.HasWater()) emitWater(pos, block); // (water standing in it)
                     continue;

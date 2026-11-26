@@ -35,6 +35,7 @@
 #include "world/BlockData.h"
 #include "world/Collision.h"
 #include "world/Coords.h"
+#include "world/MeshVertex.h"
 #include "world/Multiblocks.h"
 #include "world/Raycast.h"
 #include "world/SpriteMasks.h"
@@ -53,12 +54,12 @@ void Check(bool ok, const std::string& what) {
     if (!ok) failures++;
 }
 
-Block Shaped(BlockType type, int e2, int e1, int e0, int e3) {
+Block Shaped(BlockType type, int e2, int e1, int e0, int e3) { // (heights in eighths, as the checks were written: made sixteenths)
     EdgeData d;
-    d.SetTopY(2, static_cast<uint8_t>(e2));
-    d.SetTopY(1, static_cast<uint8_t>(e1));
-    d.SetTopY(0, static_cast<uint8_t>(e0));
-    d.SetTopY(3, static_cast<uint8_t>(e3));
+    d.SetTopY(2, static_cast<uint8_t>(2 * e2));
+    d.SetTopY(1, static_cast<uint8_t>(2 * e1));
+    d.SetTopY(0, static_cast<uint8_t>(2 * e0));
+    d.SetTopY(3, static_cast<uint8_t>(2 * e3));
     return Block(type, d);
 }
 
@@ -66,9 +67,8 @@ Block Shaped(BlockType type, int e2, int e1, int e0, int e3) {
 std::vector<glm::vec3> Positions(const std::vector<uint32_t>& vertices, bool water) {
     std::vector<glm::vec3> out;
     for (size_t i = 0; i < vertices.size(); i += 2) {
-        const uint32_t p = vertices[i];
-        const float fine = water ? ((vertices[i + 1] >> 18) & 0x3u) / 32.0f : 0.0f;
-        out.emplace_back(((p >> 24) & 0xFF) / 8.0f, ((p >> 16) & 0xFF) / 8.0f - 1.0f - fine, ((p >> 8) & 0xFF) / 8.0f);
+        const float fine = water ? ((vertices[i + 1] >> MeshVertex::kAoShift) & 0x3u) / 32.0f : 0.0f;
+        out.push_back(MeshVertex::UnpackPosition(vertices[i]) - glm::vec3(0.0f, fine, 0.0f));
     }
     return out;
 }
@@ -140,20 +140,20 @@ int main() {
         Check(steps.WaterFloor() == Block::kMaxWaterVolume * 20 / 32, "the water a stepped block holds sits at its quarters' mean height");
 
         Block b(BlockType::STONE_BRICK);
-        b = b.Chiselled(2, -2);
-        Check(b.type == BlockType::STONE_BRICK && !b.IsFullBlock() && b.edgeData.GetTopY(2) == 6, "chiselling lowers one quarter by a quarter");
-        Check(b.Chiselled(2, 2).IsFullBlock(), "and raising it again makes the block full");
+        b = b.Chiselled(2, -4);
+        Check(b.type == BlockType::STONE_BRICK && !b.IsFullBlock() && b.edgeData.GetTopY(2) == 12, "chiselling lowers one quarter by a quarter");
+        Check(b.Chiselled(2, 4).IsFullBlock(), "and raising it again makes the block full");
         Block gone = b;
         for (int e = 0; e < 4; e++)
-            for (int i = 0; i < 4; i++) gone = gone.Chiselled(e, -2);
+            for (int i = 0; i < 4; i++) gone = gone.Chiselled(e, -4);
         Check(gone.IsAir(), "lowering every quarter all the way removes the block");
         Block one(BlockType::STONE_BRICK);
         for (int e : { 0, 1, 3 })
-            for (int i = 0; i < 4; i++) one = one.Chiselled(e, -2);
+            for (int i = 0; i < 4; i++) one = one.Chiselled(e, -4);
         Check(one.type == BlockType::STONE_BRICK, "a stepped block stands on a single quarter");
         Block dirt(BlockType::DIRT);
         for (int e : { 0, 1, 3 })
-            for (int i = 0; i < 4; i++) dirt = dirt.Chiselled(e, -2);
+            for (int i = 0; i < 4; i++) dirt = dirt.Chiselled(e, -4);
         Check(dirt.IsAir(), "a slope with three corners gone falls away");
         Check(!Block(BlockType::PUMP).CanChisel() && !Block::Water(128).CanChisel() && Block(BlockType::LOG).CanChisel(), "machines and water can't be chiselled");
     }
@@ -163,33 +163,33 @@ int main() {
         // No atlas here: give every texture name its own index, so faces can be told apart.
         std::map<std::string, int> names;
         ResolveBlockTextures([&](const std::string& name) { return names.emplace(name, static_cast<int>(names.size()) + 1).first->second; });
-        Check(Block::Placed(BlockType::LOG, 8, 0).axis == Block::kAlongX && Block::Placed(BlockType::LOG, 8, 2).axis == Block::kAlongZ &&
+        Check(Block::Placed(BlockType::LOG, 16, 0).axis == Block::kAlongX && Block::Placed(BlockType::LOG, 16, 2).axis == Block::kAlongZ &&
                   Block::Placed(BlockType::LOG).axis == Block::kUpright,
               "a log lies along the axis of the face it's placed against");
-        Check(Block::Placed(BlockType::LOG, 4, 0).axis == Block::kAlongX && !Block::Placed(BlockType::LOG, 4, 0).IsFullBlock(), "log slabs too");
-        Check(Block::Placed(BlockType::STONE, 8, 0).axis == Block::kUpright && Block::Placed(BlockType::STONE_BRICK, 4, 2).axis == Block::kUpright,
+        Check(Block::Placed(BlockType::LOG, 8, 0).axis == Block::kAlongX && !Block::Placed(BlockType::LOG, 8, 0).IsFullBlock(), "log slabs too");
+        Check(Block::Placed(BlockType::STONE, 16, 0).axis == Block::kUpright && Block::Placed(BlockType::STONE_BRICK, 8, 2).axis == Block::kUpright,
               "other blocks don't turn");
-        Check(Block::Placed(BlockType::LOG, 8, 0).Chiselled(0, -2).axis == Block::kAlongX, "chiselling keeps the axis");
+        Check(Block::Placed(BlockType::LOG, 16, 0).Chiselled(0, -4).axis == Block::kAlongX, "chiselling keeps the axis");
         // A face's vertices: texture index, and which world axis the texture's v runs along.
         struct FaceLook { int texture = -1; int vAxis = -1; };
         auto look = [](const Block& b, Face face) {
             std::vector<uint32_t> v;
             b.AddFaceVertices(v, face, 0, 0, 0, FaceShading{});
             FaceLook out;
-            out.texture = static_cast<int>(v[1] & 0x3FFu);
+            out.texture = static_cast<int>(v[1] & (MeshVertex::kMaxTextures - 1));
             for (size_t i = 0; i < v.size() && out.vAxis < 0; i += 2)
                 for (size_t j = 0; j < v.size() && out.vAxis < 0; j += 2) {
-                    const int ui = (v[i] >> 4) & 0xF, vi = v[i] & 0xF, uj = (v[j] >> 4) & 0xF, vj = v[j] & 0xF;
+                    // (u in the position word's low bits, v in the shading word's top ones.)
+                    const int ui = v[i] & 0x1F, vi = (v[i + 1] >> 27) & 0x1F, uj = v[j] & 0x1F, vj = (v[j + 1] >> 27) & 0x1F;
                     if (ui != uj || vi == vj) continue;
-                    const int d[3] = { std::abs(int((v[i] >> 24) & 0xFF) - int((v[j] >> 24) & 0xFF)),
-                                       std::abs(int((v[i] >> 16) & 0xFF) - int((v[j] >> 16) & 0xFF)),
-                                       std::abs(int((v[i] >> 8) & 0xFF) - int((v[j] >> 8) & 0xFF)) };
+                    const glm::vec3 pd = glm::abs(MeshVertex::UnpackPosition(v[i]) - MeshVertex::UnpackPosition(v[j]));
+                    const float d[3] = { pd.x, pd.y, pd.z };
                     out.vAxis = d[0] >= d[1] && d[0] >= d[2] ? 0 : d[1] >= d[2] ? 1 : 2;
                 }
             return out;
         };
         const TextureData tex = GetTextureData(BlockType::LOG);
-        const Block upright(BlockType::LOG), alongX = Block::Placed(BlockType::LOG, 8, 0), alongZ = Block::Placed(BlockType::LOG, 8, 2);
+        const Block upright(BlockType::LOG), alongX = Block::Placed(BlockType::LOG, 16, 0), alongZ = Block::Placed(BlockType::LOG, 16, 2);
         Check(look(upright, Face::Top).texture == tex.top && look(upright, Face::Back).texture == tex.back && look(upright, Face::Back).vAxis == 1,
               "an upright log: end grain on top, bark up the sides");
         Check(look(alongX, Face::Right).texture == tex.top && look(alongX, Face::Left).texture == tex.bottom && look(alongX, Face::Top).texture == tex.front &&
@@ -202,9 +202,9 @@ int main() {
         {
             // A stepped slab of a sideways log: its quarters' faces turn the same way.
             std::vector<uint32_t> v;
-            Block::Placed(BlockType::LOG, 4, 0).AddSteppedFaces(v, Face::Right, 0, 0, 0, FaceShading{}, true);
+            Block::Placed(BlockType::LOG, 8, 0).AddSteppedFaces(v, Face::Right, 0, 0, 0, FaceShading{}, true);
             bool ends = !v.empty();
-            for (size_t i = 1; i < v.size(); i += 2) ends &= static_cast<int>(v[i] & 0x3FFu) == tex.top;
+            for (size_t i = 1; i < v.size(); i += 2) ends &= static_cast<int>(v[i] & (MeshVertex::kMaxTextures - 1)) == tex.top;
             Check(ends, "a sideways log slab shows end grain at its ends too");
         }
         {
@@ -217,12 +217,12 @@ int main() {
                 std::vector<uint32_t> v;
                 b.AddSteppedFaces(v, face, 0, 0, 0, FaceShading{}, true);
                 std::multiset<int> out;
-                for (size_t i = 1; i < v.size(); i += 6 * 2) out.insert(static_cast<int>(v[i] & 0x3FFu)); // one per quad
+                for (size_t i = 1; i < v.size(); i += 6 * 2) out.insert(static_cast<int>(v[i] & (MeshVertex::kMaxTextures - 1))); // one per quad
                 return out;
             };
             // Quarter 3 ((1,1), +x +z) cut down to half: its top and the steps up to
             // its neighbours are carved; the outside isn't.
-            const Block cut = Block(BlockType::LOG).Chiselled(3, -4);
+            const Block cut = Block(BlockType::LOG).Chiselled(3, -8);
             const auto tops = textures(cut, Face::Top);
             Check(tops.count(inside) == 1 && tops.count(tex.top) == 3, "an upright log cut down: the cut quarter's top is inside wood, the rest end grain");
             // Facing +x: the quarter at (0,1) rises above the cut one, an inside step;
@@ -231,10 +231,10 @@ int main() {
             Check(right.count(inside) == 1 && right.count(tex.right) == 2, "the step up from the cut is inside wood, the outer sides bark");
             const auto left = textures(cut, Face::Left);
             Check(left.count(inside) == 0 && left.count(tex.left) == 2, "and the far side is untouched bark");
-            const auto sideways = textures(Block::Placed(BlockType::LOG, 8, 0).Chiselled(3, -4), Face::Top);
+            const auto sideways = textures(Block::Placed(BlockType::LOG, 16, 0).Chiselled(3, -8), Face::Top);
             Check(sideways.count(inside) == 1 && sideways.count(tex.front) == 3, "a sideways log cut down shows inside wood on the cut too");
-            Check(textures(Block::Placed(BlockType::LOG, 4, 1), Face::Top).count(inside) == 4, "a log slab's top is cut, so it's all inside wood");
-            Check(textures(Block::Placed(BlockType::STONE_BRICK, 4, 1), Face::Top).count(GetTextureData(BlockType::STONE_BRICK).top) == 4,
+            Check(textures(Block::Placed(BlockType::LOG, 8, 1), Face::Top).count(inside) == 4, "a log slab's top is cut, so it's all inside wood");
+            Check(textures(Block::Placed(BlockType::STONE_BRICK, 8, 1), Face::Top).count(GetTextureData(BlockType::STONE_BRICK).top) == 4,
                   "a brick slab's top is still brick");
         }
         net::ChunkBlocks blocks{}, back{};
@@ -247,33 +247,75 @@ int main() {
         Check(net::DecodeBlockPlanes(r, back) && r.AtEnd() && back[5].axis == Block::kAlongX && back[77].axis == Block::kAlongZ && back[300].axis == Block::kUpright,
               "the axis survives encoding");
 
-        // Shape bytes out of range (a damaged save, a bad host) come back in range.
+        // Shape bytes, sixteen levels: the top's level 0 is a pixel tall, 15 the whole
+        // cell; a bottom above the top is an empty column.
+        {
+            EdgeData e;
+            e.Set(0, 1, 0), e.Set(1, 16, 0), e.Set(2, 16, 15), e.Set(3, 4, 4);
+            Check(e.edges[0] == 0x00 && e.edges[1] == 0xF0 && e.edges[2] == 0xFF && e.IsEmpty(3) && !e.IsEmpty(0) &&
+                      e.GetTopY(0) == 1 && e.GetTopY(1) == 16 && e.GetBottomY(2) == 15 && e.GetTopY(3) == 0,
+                  "sixteen levels a corner: 0 a pixel tall, 15 the whole block; a bottom above the top is no column at all");
+            const uint8_t old[4] = { 0x80, 0x40, 0x84, 0x22 }; // eighths: whole, half, top half, nothing
+            const EdgeData converted = EdgeData::FromEighths(old);
+            Check(converted.GetTopY(0) == 16 && converted.GetTopY(1) == 8 && converted.GetBottomY(2) == 8 && converted.GetTopY(2) == 16 && converted.IsEmpty(3),
+                  "a shape saved in eighths is the same shape in sixteenths");
+            Block thin(BlockType::STONE_BRICK);
+            thin.SetEdgeData([] { EdgeData d; for (int i = 0; i < 4; i++) d.Set(i, 1, 0); return d; }());
+            std::vector<uint32_t> v, w;
+            Chunk::Blocks one{};
+            one[Chunk::Index(4, 4, 4)] = thin;
+            Mesh(one, v, w);
+            float top = 0.0f;
+            for (const auto& q : Positions(v, false)) top = std::max(top, q.y - 4.0f);
+            Check(thin.type == BlockType::STONE_BRICK && std::abs(top - 1.0f / 16.0f) < 1e-4f && thin.ResourceUnits() == 4,
+                  "a slab a pixel thin is drawn a sixteenth high (and worth a sixteenth of the block)");
+            // A chunk saved in eighths reads back in sixteenths, a plant's drop too.
+            net::ChunkBlocks saved{}, read{};
+            saved[1] = Block(BlockType::STONE);
+            for (auto& b : saved[1].edgeData.edges) b = 0x40; // a half slab, in eighths
+            saved[2] = Block(BlockType::TALL_GRASS);
+            saved[2].edgeData.edges[0] = 0x03; // three eighths down
+            net::ByteWriter sw;
+            net::EncodeBlockPlanes(sw, saved);
+            net::ByteReader sr(sw.data.data(), sw.data.size());
+            Check(net::DecodeBlockPlanes(sr, read, true, false, true) && read[1].edgeData.GetTopY(0) == 8 && read[1].ResourceUnits() == 32 &&
+                      std::abs(read[2].PlantDrop() - 3.0f / 8.0f) < 1e-4f && read[3].IsAir(),
+                  "an old save's half slab is still a half slab, and a plant's drop the same");
+        }
+        // A shape that can't stand (more than two empty columns), as from a damaged save
+        // or a bad host, is put right when read.
         net::ChunkBlocks bad{}, fixed{};
         bad[1] = Block(BlockType::STONE);
-        bad[1].edgeData.edges[0] = 0xF0; // top 15
-        bad[2] = Block(BlockType::STONE);
-        bad[2].edgeData.edges[1] = 0x37; // bottom above top
-        bad[3] = Block(BlockType::STONE);
-        for (auto& e : bad[3].edgeData.edges) e = 0x00; // flat: can't stand
-        bad[4] = Block::Plant(BlockType::TALL_GRASS, 0x0E);
-        bad[5] = Block(BlockType::AIR);
-        bad[5].edgeData.edges[2] = 0x12;
-        bad[6] = Block::Placed(BlockType::STONE, 4); // a good slab is left alone
+        for (auto& e : bad[1].edgeData.edges) e = EdgeData::kEmpty;
+        bad[2] = Block::Plant(BlockType::TALL_GRASS, 14);
+        bad[2].edgeData.edges[1] = 0x37;
+        bad[3] = Block(BlockType::AIR);
+        bad[3].edgeData.edges[2] = 0x12;
+        bad[4] = Block::Placed(BlockType::STONE, 8); // a good slab is left alone
         net::ByteWriter bw;
         net::EncodeBlockPlanes(bw, bad);
         net::ByteReader br(bw.data.data(), bw.data.size());
-        bool decoded = net::DecodeBlockPlanes(br, fixed);
-        bool inRange = true;
-        for (const Block& b : fixed)
-            for (int e = 0; e < 4 && !b.IsPlant(); e++) inRange &= b.edgeData.GetTopY(e) <= 8 && b.edgeData.GetBottomY(e) <= b.edgeData.GetTopY(e);
-        Check(decoded && inRange && fixed[1].ResourceUnits() <= Block::kUnitsPerBlock && fixed[3].type == BlockType::STONE && fixed[3].IsFullBlock() &&
-                  fixed[4].PlantDrop() <= 1.0f && fixed[5].edgeData.IsFull() && fixed[6] == bad[6],
-              "shape bytes out of range are repaired when read");
-        Block one = bad[2], back1;
+        const bool decoded = net::DecodeBlockPlanes(br, fixed);
+        Check(decoded && fixed[1].type == BlockType::STONE && fixed[1].IsFullBlock() && fixed[2].PlantDrop() < 1.0f && fixed[2].edgeData.edges[1] == EdgeData::kFull &&
+                  fixed[3].edgeData.IsFull() && fixed[4] == bad[4],
+              "a shape that can't stand is put right when read");
+        Block one = bad[1], back1;
         net::ByteWriter ow;
         net::WriteBlock(ow, one);
         net::ByteReader orr(ow.data.data(), ow.data.size());
-        Check(net::ReadBlock(orr, back1) && back1.edgeData.GetBottomY(1) <= back1.edgeData.GetTopY(1), "and so are a single block's");
+        Check(net::ReadBlock(orr, back1) && back1.IsFullBlock(), "and so is a single block's");
+        // The mesh vertex: sixteenths, and a normal that turns into place exactly.
+        {
+            const glm::vec3 at(15.9375f, -0.9375f, 16.0f);
+            const uint32_t p = MeshVertex::PackPosition(at, 1.0f);
+            bool axes = true;
+            for (const glm::vec3 n : { glm::vec3(1, 0, 0), glm::vec3(-1, 0, 0), glm::vec3(0, 1, 0), glm::vec3(0, -1, 0), glm::vec3(0, 0, 1), glm::vec3(0, 0, -1) })
+                axes &= glm::distance(MeshVertex::UnpackNormal(MeshVertex::PackNormal(n)), n) < 1e-5f;
+            const glm::vec3 slope = glm::normalize(glm::vec3(0.3f, 0.9f, -0.2f));
+            Check(glm::distance(MeshVertex::UnpackPosition(p), at) < 1e-5f && (p & 0x1Fu) == 16 && axes &&
+                      glm::dot(MeshVertex::UnpackNormal(MeshVertex::PackNormal(slope)), slope) > 0.95f, // (within 18 degrees; the axes exact)
+                  "a vertex keeps its place to a sixteenth, and its normal (the axes exactly)");
+        }
     }
 
     std::cout << "Meshing" << std::endl;
@@ -340,7 +382,7 @@ int main() {
         for (size_t i = 0; i < wv.size(); i++) {
             const auto& p = wv[i];
             if (p.x < 4.0f || p.x > 7.0f || p.z < 4.0f || p.z > 7.0f || p.y < 5.0f) continue;
-            const float ny = ((w[i * 2 + 1] >> 24) & 0xFu) / 7.5f - 1.0f;
+            const float ny = MeshVertex::ShadingNormal(w[i * 2 + 1]).y;
             if (std::abs(ny) < 0.5f) walls++;
             else lowest = std::min(lowest, p.y), highest = std::max(highest, p.y);
         }
@@ -367,7 +409,7 @@ int main() {
                 for (int z = 2; z <= 8; z++) {
                     bool covered = false;
                     for (size_t f = 0; f + 6 <= tv.size() && !covered; f += 6) {
-                        const float ny = ((w[f * 2 + 1] >> 24) & 0xFu) / 7.5f - 1.0f;
+                        const float ny = MeshVertex::ShadingNormal(w[f * 2 + 1]).y;
                         if (ny < 0.5f) continue; // not facing up
                         glm::vec3 lo(1e9f), hi(-1e9f);
                         for (size_t k = f; k < f + 6; k++) lo = glm::min(lo, tv[k]), hi = glm::max(hi, tv[k]);
@@ -390,7 +432,7 @@ int main() {
                 const bool rim = x == 0 || x == 8 || z == 0 || z == 8 || x == 6;
                 filling[Chunk::Index(x, 4, z)] = rim ? Block(BlockType::STONE) : Block::Water(Block::kMaxWaterVolume);
             }
-        for (int z = 1; z <= 7; z++) filling[Chunk::Index(5, 4, z)] = Block(BlockType::STONE_BRICK).Chiselled(2, -8).WithWater(16);
+        for (int z = 1; z <= 7; z++) filling[Chunk::Index(5, 4, z)] = Block(BlockType::STONE_BRICK).Chiselled(2, -16).WithWater(16);
         v.clear();
         w.clear();
         Mesh(filling, v, w);
@@ -403,7 +445,7 @@ int main() {
             if (lo != 4.0f && !(lo == 5.0f && hi == 5.0f)) continue; // the pool cell beside the brick (x 4..5), or a face on x=5
             for (size_t i = f; i < f + 6; i++) {
                 const auto& p = fv[i];
-                const float nx = ((w[i * 2 + 1] >> 28) & 0xFu) / 7.5f - 1.0f, ny = ((w[i * 2 + 1] >> 24) & 0xFu) / 7.5f - 1.0f;
+                const float nx = MeshVertex::ShadingNormal(w[i * 2 + 1]).x, ny = MeshVertex::ShadingNormal(w[i * 2 + 1]).y;
                 if (p.z < 2.0f || p.z > 6.0f) continue;
                 if (ny > 0.5f && lo == 4.0f && p.x == 5.0f) edgeLow = std::min(edgeLow, p.y); // its top along the brick
                 if (nx > 0.5f && p.x == 5.0f && p.y > 4.6f) sideVerts++;                     // its side facing the brick, above the brick's water
@@ -416,7 +458,7 @@ int main() {
         // right down to the notch's floor, flat along the bottom, as a half-width face (a
         // straight edge from the notch's corner up to the other quarter's would leave a
         // triangle open).
-        for (int z = 1; z <= 7; z++) filling[Chunk::Index(5, 4, z)] = Block(BlockType::STONE_BRICK).Chiselled(2, -8);
+        for (int z = 1; z <= 7; z++) filling[Chunk::Index(5, 4, z)] = Block(BlockType::STONE_BRICK).Chiselled(2, -16);
         v.clear();
         w.clear();
         Mesh(filling, v, w);
@@ -425,7 +467,7 @@ int main() {
         for (size_t f = 0; f + 6 <= dv.size(); f += 6) {
             glm::vec3 lo(99.0f), hi(-99.0f);
             for (size_t k = f; k < f + 6; k++) lo = glm::min(lo, dv[k]), hi = glm::max(hi, dv[k]);
-            const float nx = ((w[f * 2 + 1] >> 28) & 0xFu) / 7.5f - 1.0f;
+            const float nx = MeshVertex::ShadingNormal(w[f * 2 + 1]).x;
             if (nx > 0.5f && lo.x == 5.0f && hi.x == 5.0f && lo.z == 3.0f && hi.z == 3.5f && lo.y == 4.0f) halfFace = true;
         }
         Check(halfFace, "beside a dry carved brick, the pool's side covers the notch right down, a half-width face with a flat bottom");
@@ -434,7 +476,7 @@ int main() {
         // well above the water: the water stays level up to the brick (it doesn't climb
         // toward the brick's top), and nothing of it (no half side) pokes up above its
         // surface, to be seen from across the pool.
-        for (int z = 1; z <= 7; z++) filling[Chunk::Index(5, 4, z)] = Block(BlockType::STONE_BRICK).Chiselled(2, -2); // notch floor 3/4 up
+        for (int z = 1; z <= 7; z++) filling[Chunk::Index(5, 4, z)] = Block(BlockType::STONE_BRICK).Chiselled(2, -4); // notch floor 3/4 up
         for (int x = 1; x <= 4; x++)
             for (int z = 1; z <= 7; z++) filling[Chunk::Index(x, 4, z)] = Block::Water(Block::kMaxWaterVolume * 3 / 4);
         v.clear();
@@ -459,7 +501,7 @@ int main() {
         slit[Chunk::Index(4, 4, 4)] = Block();                                   // dry, beside the corner
         slit[Chunk::Index(5, 4, 4)] = Block::Water(Block::kMaxWaterVolume);      // the water in front
         {
-            const Block notched = Block(BlockType::STONE_BRICK).Chiselled(2, -8); // notch at (0,0): toward -x and -z
+            const Block notched = Block(BlockType::STONE_BRICK).Chiselled(2, -16); // notch at (0,0): toward -x and -z
             slit[Chunk::Index(5, 4, 5)] = notched.WithWater(notched.WaterCapacity());
         }
         v.clear();
@@ -471,7 +513,7 @@ int main() {
         for (size_t f = 0; f + 6 <= sv.size(); f += 6) {
             glm::vec3 lo(99.0f), hi(-99.0f);
             for (size_t k = f; k < f + 6; k++) lo = glm::min(lo, sv[k]), hi = glm::max(hi, sv[k]);
-            const float ny = ((w[f * 2 + 1] >> 24) & 0xFu) / 7.5f - 1.0f;
+            const float ny = MeshVertex::ShadingNormal(w[f * 2 + 1]).y;
             if (lo.z == 5.0f && hi.z == 5.0f) between++;
             if (ny < 0.5f) continue;
             for (size_t k = f; k < f + 6; k++)
@@ -492,10 +534,10 @@ int main() {
             }
         {
             Block slope = Block(BlockType::SAND);
-            slope.edgeData.SetTopY(0, 2);
-            slope.edgeData.SetTopY(1, 2);
+            slope.edgeData.SetTopY(0, 4);
+            slope.edgeData.SetTopY(1, 4);
             slope.edgeData.SetTopY(2, 0);
-            slope.edgeData.SetTopY(3, 3);
+            slope.edgeData.SetTopY(3, 6);
             lake[Chunk::Index(4, 4, 4)] = slope.WithWater(slope.WaterCapacity() - 10);
         }
         v.clear();
@@ -504,7 +546,7 @@ int main() {
         const auto lv = Positions(w, true);
         int sides = 0;
         for (size_t i = 0; i < lv.size(); i++) {
-            const float ny = ((w[i * 2 + 1] >> 24) & 0xFu) / 7.5f - 1.0f;
+            const float ny = MeshVertex::ShadingNormal(w[i * 2 + 1]).y;
             if (std::abs(ny) < 0.5f && lv[i].x > 3.0f && lv[i].x < 6.0f && lv[i].z > 3.0f && lv[i].z < 6.0f) sides++;
         }
         Check(lake[Chunk::Index(4, 4, 4)].IsPartial() && sides == 0,
@@ -523,8 +565,8 @@ int main() {
                 return true;
             }
         } cells;
-        cells.blocks[{ 0, 0, 0 }] = Block::Placed(BlockType::DOOR, 8, 4);
-        cells.blocks[{ 0, 1, 0 }] = Block::Placed(BlockType::DOOR, 8, 4);
+        cells.blocks[{ 0, 0, 0 }] = Block::Placed(BlockType::DOOR, 16, 4);
+        cells.blocks[{ 0, 1, 0 }] = Block::Placed(BlockType::DOOR, 16, 4);
         auto box = [](float x0, float z0, float x1, float z1) { return Collision::AABB{ { x0, 0.0f, z0 }, { x1, 1.8f, z1 } }; };
         Check(cells.blocks[{ 0, 0, 0 }].Facing() == glm::ivec3(0, 0, 1), "a door keeps the way it was put up facing");
         Check(Collision::BoxBlocked(cells, box(0.2f, 0.05f, 0.8f, 0.15f)), "a closed door blocks its thin panel");
@@ -535,7 +577,7 @@ int main() {
 
         // A ladder facing +x hangs on the wall to its -x side: a thin panel, not a cube.
         Chunk::Blocks ladder{};
-        ladder[Chunk::Index(4, 4, 4)] = Block::Placed(BlockType::LADDER, 8, 0);
+        ladder[Chunk::Index(4, 4, 4)] = Block::Placed(BlockType::LADDER, 16, 0);
         std::vector<uint32_t> v, w;
         Mesh(ladder, v, w);
         float lo = 99.0f, hi = -99.0f;
@@ -548,12 +590,12 @@ int main() {
         // Chiselled on its +x side, a full block turns that way up: its shape now runs
         // along +x, the corner looked at lowered a quarter.
         const Block full(BlockType::STONE);
-        const Block cut = full.ChiselledFrom(1, 0, -2);
-        Check(cut.ShapeDir() == 1 && cut.edgeData.GetTopY(0) == 6 && cut.ResourceUnits() == full.Chiselled(0, -2).ResourceUnits() && cut.ResourceUnits() < full.ResourceUnits(),
+        const Block cut = full.ChiselledFrom(1, 0, -4);
+        Check(cut.ShapeDir() == 1 && cut.edgeData.GetTopY(0) == 12 && cut.ResourceUnits() == full.Chiselled(0, -4).ResourceUnits() && cut.ResourceUnits() < full.ResourceUnits(),
               "chiselled from its side, a block turns that way (one corner down a quarter, for what that costs from the top)");
 
         // A half slab turned along +x fills the half of its cell against its -x side.
-        Block wall = Block::Placed(BlockType::STONE, 4);
+        Block wall = Block::Placed(BlockType::STONE, 8);
         wall.axis = 1;
         glm::vec3 lo, hi;
         wall.ShapeBounds(lo, hi);
@@ -576,7 +618,7 @@ int main() {
             // Chiselled from below: its quarters start halfway up. Aimed at from under them,
             // it's hit on its underside (a block put there goes below it, not on top).
             Block raised(BlockType::PLANKS);
-            for (int e = 0; e < 4; e++) raised.edgeData.SetBottomY(e, 4);
+            for (int e = 0; e < 4; e++) raised.edgeData.SetBottomY(e, 8);
             cells.blocks[{ 0, 3, 10 }] = raised;
             const auto under = Raycast(cells, glm::vec3(2.0f, 3.0f, 10.5f), glm::normalize(glm::vec3(-1.0f, 0.3f, 0.0f)), 6.0f);
             Check(under && under->block == glm::ivec3(0, 3, 10) && under->normal == glm::ivec3(0, -1, 0),
@@ -586,8 +628,8 @@ int main() {
             // Stepped: a low step on the -x side, a tall one on the +x side. Aimed at
             // from -x over the low step, it's the tall one's -x side that's hit.
             Block step(BlockType::PLANKS);
-            step.edgeData.SetTopY(2, 2);
-            step.edgeData.SetTopY(0, 2);
+            step.edgeData.SetTopY(2, 4);
+            step.edgeData.SetTopY(0, 4);
             cells.blocks[{ 0, 3, 12 }] = step;
             const auto side = Raycast(cells, glm::vec3(-2.0f, 3.5f, 12.5f), glm::vec3(1.0f, 0.0f, 0.0f), 6.0f);
             Check(side && side->block == glm::ivec3(0, 3, 12) && side->normal == glm::ivec3(-1, 0, 0),
@@ -644,12 +686,12 @@ int main() {
 
         // A log turns too, its grain running the way it did; built back up whole, it's
         // upright again (and still along z).
-        const Block log = Block::Placed(BlockType::LOG, 8, 2);
-        const Block turnedLog = log.ChiselledFrom(1, 0, -2);
+        const Block log = Block::Placed(BlockType::LOG, 16, 2);
+        const Block turnedLog = log.ChiselledFrom(1, 0, -4);
         Check(log.GrainAxis() == 2 && turnedLog.ShapeDir() == 1 && turnedLog.GrainAxis() == 2 && turnedLog.Upright().ShapeDir() == 0 &&
                   turnedLog.Upright().GrainAxis() == 2,
               "a log turns when chiselled from its side, keeping its grain");
-        Check(turnedLog.Chiselled(0, 2).IsFullBlock() && turnedLog.Chiselled(0, 2).ShapeDir() == 0 && turnedLog.Chiselled(0, 2).GrainAxis() == 2,
+        Check(turnedLog.Chiselled(0, 4).IsFullBlock() && turnedLog.Chiselled(0, 4).ShapeDir() == 0 && turnedLog.Chiselled(0, 4).GrainAxis() == 2,
               "and built back up whole, it's an ordinary log along z again");
 
         // Exact collision. A wedge of dirt rising along z (height = z), upright, upside down
@@ -752,7 +794,7 @@ int main() {
         // Water stands in a turned shape above what it fills of each quarter: a half slab on
         // its side fills the two quarters toward -x right up.
         const EdgeData edges = wall.WaterEdges();
-        Check(wall.CanHoldWater() && wall.WaterStepped() && edges.GetTopY(2) == 8 && edges.GetTopY(0) == 8 && edges.GetTopY(1) == 0 && edges.GetTopY(3) == 0 &&
+        Check(wall.CanHoldWater() && wall.WaterStepped() && edges.GetTopY(2) == 16 && edges.GetTopY(0) == 16 && edges.GetTopY(1) == 0 && edges.GetTopY(3) == 0 &&
                   wall.WaterCapacity() == Block::kMaxWaterVolume / 2,
               "a turned shape holds water beside it (half a cell, for a half slab on its side)");
         Chunk::Blocks wet{};
@@ -787,7 +829,7 @@ int main() {
         Cells works;
         works.blocks[{ 20, 0, 0 }] = Block(BlockType::AIR_PIPE);
         works.blocks[{ 21, 0, 0 }] = Block(BlockType::AIR_PIPE);
-        works.blocks[{ 24, 0, 0 }] = Block::Placed(BlockType::SHAFT, 8, 2);
+        works.blocks[{ 24, 0, 0 }] = Block::Placed(BlockType::SHAFT, 16, 2);
         auto blocked = [&](glm::vec3 lo, glm::vec3 hi) { return Collision::BoxBlocked(works, Collision::AABB{ lo, hi }); };
         Check(!blocked({ 20.0f, 0.0f, 0.0f }, { 20.2f, 1.0f, 0.2f }) && blocked({ 20.4f, 0.4f, 0.4f }, { 20.6f, 0.6f, 0.6f }) &&
                   blocked({ 20.85f, 0.4f, 0.4f }, { 20.95f, 0.6f, 0.6f }) && !blocked({ 20.85f, 0.4f, 0.0f }, { 20.95f, 0.6f, 0.2f }),
@@ -801,8 +843,8 @@ int main() {
         Check(Block(BlockType::AIR_PIPE).OutlineSegments({ 20, 0, 0 }, 1u << 0).size() == 2 * 24, "and outlined as its core and arms");
         // A lever on a wall: aimed at by its base and handle, passed through (not bumped into).
         works.blocks[{ 30, 1, 0 }] = Block(BlockType::STONE);
-        works.blocks[{ 31, 1, 0 }] = Block::Placed(BlockType::LEVER, 8, 0);
-        Check(works.LeverHeld({ 31, 1, 0 }, works.blocks[{ 31, 1, 0 }]) && !works.LeverHeld({ 31, 3, 0 }, Block::Placed(BlockType::LEVER, 8, 0)) &&
+        works.blocks[{ 31, 1, 0 }] = Block::Placed(BlockType::LEVER, 16, 0);
+        Check(works.LeverHeld({ 31, 1, 0 }, works.blocks[{ 31, 1, 0 }]) && !works.LeverHeld({ 31, 3, 0 }, Block::Placed(BlockType::LEVER, 16, 0)) &&
                   Block(BlockType::LEVER).LeverFacing() == glm::ivec3(0, 1, 0),
               "a lever is held by the solid block behind it (and the old ones stand on the floor)");
         const auto atLever = Raycast(works, { 31.3f, 1.5f, 3.0f }, { 0.0f, 0.0f, -1.0f }, 5.0f);
@@ -835,10 +877,10 @@ int main() {
         Check(cells.InsideStructure({ 11, 2, 11 }) && !cells.CanPlace({ 11, 2, 11 }, BlockType::STONE) && cells.CanPlace({ 11, 4, 11 }, BlockType::STONE),
               "nothing can be built into a formed structure's hollow (but above it, yes)");
 
-        // A fine chisel moves a corner an eighth (as fine as natural slopes), a coarse one a half.
-        Check(full.Chiselled(0, -1).edgeData.GetTopY(0) == 7 && full.Chiselled(0, -4).edgeData.GetTopY(0) == 4 && Block::IsChiselStep(1) &&
+        // The finest chisel moves a corner a sixteenth (a pixel, as fine as natural slopes), the coarsest a half.
+        Check(full.Chiselled(0, -1).edgeData.GetTopY(0) == 15 && full.Chiselled(0, -8).edgeData.GetTopY(0) == 8 && Block::IsChiselStep(1) && Block::IsChiselStep(8) &&
                   !Block::IsChiselStep(3),
-              "a chisel stroke moves a corner an eighth, a quarter or a half");
+              "a chisel stroke moves a corner a sixteenth, an eighth, a quarter or a half");
     }
 
     std::cout << "Seeing through chunks (cave culling)" << std::endl;
@@ -956,10 +998,10 @@ int main() {
         a.client.Chisel({ 9, 0, 7 }, 3, false);
         a.client.Chisel({ 10, 0, 7 }, 3, false);
         Block seen;
-        Check(Pump({ &a, &b }, 20.0, [&] { return b.world.GetBlock(9, 0, 7, seen) && seen.edgeData.GetTopY(3) == 4; }) && seen.edgeData.GetTopY(2) == 8,
+        Check(Pump({ &a, &b }, 20.0, [&] { return b.world.GetBlock(9, 0, 7, seen) && seen.edgeData.GetTopY(3) == 8; }) && seen.edgeData.GetTopY(2) == 16,
               "two chisel strokes take a quarter down by half a block, and the other player sees it");
         Check(b.world.GetBlock(10, 0, 7, seen) && seen.type == BlockType::PUMP && seen.IsFullBlock(), "a pump can't be chiselled");
-        a.client.PlaceBlock({ 11, 0, 7 }, BlockType::LOG, 8, 0);
+        a.client.PlaceBlock({ 11, 0, 7 }, BlockType::LOG, 16, 0);
         Check(Pump({ &a, &b }, 20.0, [&] { return b.world.GetBlock(11, 0, 7, seen) && seen.type == BlockType::LOG; }) && seen.axis == Block::kAlongX,
               "a log placed against a side face is seen lying along x by the other player");
 
@@ -968,7 +1010,7 @@ int main() {
         server.QueueConsoleCommand("fill 20 0 20 20 0 20 dirt");   // a bump
         server.QueueConsoleCommand("fill 22 -1 20 22 -1 20 air");  // a dip
         server.QueueConsoleCommand("fill 21 0 21 21 0 21 stone");  // a stone, to keep
-        a.client.PlaceBlock({ 20, 0, 21 }, BlockType::DIRT, 4);       // a half slab of dirt
+        a.client.PlaceBlock({ 20, 0, 21 }, BlockType::DIRT, 8);       // a half slab of dirt
         Pump({ &a, &b }, 1.0, [] { return false; });
         server.QueueConsoleCommand("tp Mason 21.5 0 18.5");
         Pump({ &a, &b }, 1.0, [] { return false; }); // (in reach)

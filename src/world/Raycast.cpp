@@ -181,8 +181,9 @@ bool HitsShape(const Block& block, const glm::ivec3& cell, const glm::vec3& orig
                 const int e = kEdgeAt[qx][qz];
                 const int top = block.edgeData.GetTopY(e), bottom = block.edgeData.GetBottomY(e);
                 if (top <= bottom) continue;
-                const glm::vec3 lo = base + glm::vec3(qx * 0.5f, bottom / 8.0f, qz * 0.5f);
-                const glm::vec3 hi = base + glm::vec3(qx * 0.5f + 0.5f, top / 8.0f, qz * 0.5f + 0.5f);
+                constexpr float kStep = 1.0f / EdgeData::kSteps;
+                const glm::vec3 lo = base + glm::vec3(qx * 0.5f, bottom * kStep, qz * 0.5f);
+                const glm::vec3 hi = base + glm::vec3(qx * 0.5f + 0.5f, top * kStep, qz * 0.5f + 0.5f);
                 float t0 = tEnter, t1 = tExit;
                 int enteredBy = -1;
                 for (int a = 0; a < 3 && t0 <= t1; a++) {

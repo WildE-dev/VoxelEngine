@@ -32,7 +32,7 @@ Quarters OpenQuarters(const Block& b, int level) {
     Quarters q;
     for (int x = 0; x < 2; x++)
         for (int z = 0; z < 2; z++)
-            q.open[x][z] = !b.IsPartial() || b.WaterEdges().GetTopY(kEdgeAt[x][z]) * (Block::kMaxWaterVolume / 8) < level;
+            q.open[x][z] = !b.IsPartial() || b.WaterEdges().GetTopY(kEdgeAt[x][z]) * (Block::kMaxWaterVolume / EdgeData::kSteps) < level;
     return q;
 }
 // The quarters on the face toward horizontal direction d.

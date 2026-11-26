@@ -174,11 +174,11 @@ int main() {
     }
     std::cout << "What blocks are worth" << std::endl;
     Check(Block(BlockType::STONE).ResourceUnits() == 64 && Block(BlockType::STONE_BRICK).ResourceUnits() == 64, "a full block is worth 64");
-    Check(Block::Placed(BlockType::STONE_BRICK, 4).ResourceUnits() == 32 && Block::Placed(BlockType::DIRT, 4).ResourceUnits() == 32,
+    Check(Block::Placed(BlockType::STONE_BRICK, 8).ResourceUnits() == 32 && Block::Placed(BlockType::DIRT, 8).ResourceUnits() == 32,
           "a half slab 32, stepped or sloped");
-    Check(Block::Placed(BlockType::STONE_BRICK, 2).ResourceUnits() == 16 && Block::Placed(BlockType::STONE_BRICK, 6).ResourceUnits() == 48,
+    Check(Block::Placed(BlockType::STONE_BRICK, 4).ResourceUnits() == 16 && Block::Placed(BlockType::STONE_BRICK, 12).ResourceUnits() == 48,
           "a quarter 16, three quarters 48");
-    Check(Block(BlockType::STONE_BRICK).Chiselled(0, -2).ResourceUnits() == 60, "chiselling a quarter of a brick down by a quarter takes 4");
+    Check(Block(BlockType::STONE_BRICK).Chiselled(0, -4).ResourceUnits() == 60, "chiselling a quarter of a brick down by a quarter takes 4");
     {
         // A slope's worth is its volume: lowering any corner makes it worth less, and
         // raising it back restores it.
@@ -230,15 +230,15 @@ int main() {
     const BlockType groundType = At(*a, ground).type;
     mine(ground);
     Check(both(20.0, [&] { return At(*b, ground).IsAir() && a->client.GetResources(groundType) == 64; }), "breaking a block gives 64 of it");
-    a->client.PlaceBlock(ground, groundType, 4);
+    a->client.PlaceBlock(ground, groundType, 8);
     Check(both(20.0, [&] { return At(*b, ground).type == groundType && At(*b, ground).ResourceUnits() == 32; }) &&
               a->client.GetResources(groundType) == 32,
           "placing it as a half slab costs 32");
     const glm::ivec3 spot(12, 0, 10);
-    a->client.PlaceBlock(spot, groundType, 8);
+    a->client.PlaceBlock(spot, groundType, 16);
     both(1.0, [] { return false; });
     Check(At(*b, spot).IsAir() && a->client.GetResources(groundType) == 32, "a full block (64) can't be afforded with 32 left");
-    a->client.PlaceBlock(spot, groundType, 2);
+    a->client.PlaceBlock(spot, groundType, 4);
     Check(both(20.0, [&] { return At(*b, spot).type == groundType; }) && a->client.GetResources(groundType) == 16, "but a quarter (16) can");
     mine(spot);
     Check(both(20.0, [&] { return At(*b, spot).IsAir() && a->client.GetResources(groundType) == 32; }), "and breaking it gives the 16 back");

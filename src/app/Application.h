@@ -343,8 +343,8 @@ private:
     Tool miningTool = Tool::None;
     double miningStart = 0.0, nextMineAt = 0.0;
     float mineProgress = 0.0f; // 0..1
-    int placeHeight = 8;  // eighths: how tall shapeable blocks are placed (V / Shift+V)
-    int chiselStep = 2;   // eighths: how far a chisel stroke moves a corner (V / Crouch+V with the chisel)
+    int placeHeight = EdgeData::kSteps; // sixteenths: how tall shapeable blocks are placed (V / Shift+V)
+    int chiselStep = 4;                 // sixteenths: how far a chisel stroke moves a corner (V / Crouch+V with the chisel)
     int flattenRadius = 1; // a shovel's right-click levels this far round (1: 3 by 3; V / Crouch+V with the shovel)
     bool inventoryOpen = false;
     bool cursorBeforeInventory = true;

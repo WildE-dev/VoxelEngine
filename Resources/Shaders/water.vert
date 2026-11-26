@@ -22,29 +22,36 @@ uniform vec2 atlasCellUV;
 uniform vec2 atlasPaddingUV;
 uniform vec2 atlasTileUV;
 
+// The vertex's two words: see src/world/MeshVertex.h (positions in sixteenths).
+vec3 decodeNormal(uint bits)
+{
+    vec2 f = vec2(float((bits >> 4) & 0xFu), float(bits & 0xFu)) / 7.0 - 1.0;
+    vec3 n = vec3(f, 1.0 - abs(f.x) - abs(f.y));
+    if (n.z < 0.0) n.xy = (1.0 - abs(f.yx)) * vec2(f.x >= 0.0 ? 1.0 : -1.0, f.y >= 0.0 ? 1.0 : -1.0);
+    return normalize(n);
+}
+
 void main()
 {
-    float x = float((aData1 >> 24) & 0xFFu) / 8.0;
-    float y = float((aData1 >> 16) & 0xFFu) / 8.0 - 1.0 - float((aData2 >> 18) & 0x3u) / 32.0;
-    float z = float((aData1 >> 8) & 0xFFu) / 8.0;
+    float x = float((aData1 >> 23) & 0x1FFu) / 16.0;
+    float y = float((aData1 >> 14) & 0x1FFu) / 16.0 - 1.0 - float((aData2 >> 17) & 0x3u) / 32.0;
+    float z = float((aData1 >> 5) & 0x1FFu) / 16.0;
 
-    float nX = float((aData2 >> 28) & 0xFu) / 7.5 - 1.0;
-    float nY = float((aData2 >> 24) & 0xFu) / 7.5 - 1.0;
-    float nZ = float((aData2 >> 20) & 0xFu) / 7.5 - 1.0;
+    vec3 normal = decodeNormal((aData2 >> 19) & 0xFFu);
 
-    float blockLevel = float((aData2 >> 14) & 0xFu);
-    float skyLevel = float((aData2 >> 10) & 0xFu);
+    float blockLevel = float((aData2 >> 13) & 0xFu);
+    float skyLevel = float((aData2 >> 9) & 0xFu);
     // Each light level is ~85% as bright as the one above; 0 is dark.
     BlockLight = blockLevel > 0.0 ? pow(0.85, 15.0 - blockLevel) : 0.0;
     SkyLight = skyLevel > 0.0 ? pow(0.85, 15.0 - skyLevel) : 0.0;
 
-    int textureIndex = int(aData2 & 0x3FFu);
+    int textureIndex = int(aData2 & 0x1FFu);
     vec2 cell = vec2(textureIndex % atlasColumns, textureIndex / atlasColumns);
-    vec2 uv = vec2(float((aData1 >> 4) & 0xFu), float(aData1 & 0xFu)) / 8.0;
+    vec2 uv = vec2(float(aData1 & 0x1Fu), float((aData2 >> 27) & 0x1Fu)) / 16.0;
     TexCoord = cell * atlasCellUV + atlasPaddingUV + uv * atlasTileUV;
 
     vec4 world = model * vec4(x, y, z, 1.0);
     WorldPos = world.xyz;
-    FaceNormal = normalize(mat3(model) * vec3(nX, nY, nZ));
+    FaceNormal = normalize(mat3(model) * normal);
     gl_Position = projection * view * world;
 }

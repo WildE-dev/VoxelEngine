@@ -205,7 +205,7 @@ int main(int argc, char** argv) {
                 for (int x = 9; x <= 13; x++)
                     for (int z = 10; z <= 14; z++)
                         if (x == 9 || x == 13 || z == 10 || z == 14) ring.push_back({ x, 0, z });
-                for (const auto& p : ring) a.client.PlaceBlock(p, BlockType::STONE, 6);
+                for (const auto& p : ring) a.client.PlaceBlock(p, BlockType::STONE, 12);
                 Check(both(10.0, [&] {
                           for (const auto& p : ring) {
                               Block b;

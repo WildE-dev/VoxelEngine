@@ -251,7 +251,7 @@ void Stamp(const TerrainGenerator& terrain, const glm::ivec3& coords, Blocks& ou
     };
     const Block kAir{}, kLog(BlockType::LOG), kPlanks(BlockType::PLANKS), kDirt(BlockType::DIRT), kLamp(BlockType::LAMP), kChest(BlockType::CHEST);
     EdgeData slab;
-    for (int e = 0; e < 4; e++) slab.SetTopY(e, 4);
+    for (int e = 0; e < 4; e++) slab.SetTopY(e, EdgeData::kSteps / 2);
     const int r0x = FloorDiv(lo.x - 80, kRegionSize), r1x = FloorDiv(hi.x + 80, kRegionSize);
     const int r0z = FloorDiv(lo.z - 80, kRegionSize), r1z = FloorDiv(hi.z + 80, kRegionSize);
     for (int rx = r0x; rx <= r1x; rx++)

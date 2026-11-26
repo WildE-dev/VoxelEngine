@@ -30,7 +30,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 73;
+constexpr uint32_t kProtocolVersion = 74;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -44,7 +44,7 @@ enum class MsgType : uint8_t {
     EditPlace,     // place a block type at a position
     EditCarve,     // laser: clear spheres around a list of centres
     ChatSend,      // a chat line, or a command if it starts with '/'
-    EditChisel,    // lower (or raise) one quarter of a block by an eighth, a quarter or a half
+    EditChisel,    // lower (or raise) one quarter of a block by a sixteenth, an eighth, a quarter or a half
     MineStart,     // started mining a block (survival: breaking it takes time)
     Attack,        // hit a creature
     Craft,         // make something from what you carry (survival)
@@ -175,7 +175,7 @@ void EncodeBlockPlanes(ByteWriter& out, const ChunkBlocks& blocks);
 // withAxis: false for planes saved before blocks had an axis (region format < 5).
 // v16: saved when block numbers counted items too (region format < 17, see
 // world/Legacy.h): they're turned into today's.
-bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis = true, bool v16 = false);
+bool DecodeBlockPlanes(ByteReader& in, ChunkBlocks& blocks, bool withAxis = true, bool v16 = false, bool eighths = false); // eighths: shapes saved before format 22
 void EncodeLightPlane(ByteWriter& out, const ChunkLight& light);
 bool DecodeLightPlane(ByteReader& in, ChunkLight& light);
 
@@ -252,7 +252,7 @@ struct MineStart {
 struct EditPlace {
     glm::ivec3 pos{0};
     BlockType type = BlockType::AIR;
-    uint8_t height = 8; // eighths: a slab lower than full (blocks that can be shaped)
+    uint8_t height = 16; // sixteenths: a slab lower than full (blocks that can be shaped)
     uint8_t faceAxis = 1; // axis of the face it was placed against (0 x, 1 y, 2 z): logs lie along it; a facing block's Face (0..5)
 };
 
@@ -310,7 +310,7 @@ struct EditChisel {
     uint8_t edge = 0;  // which quarter (EdgeData order, 0..3)
     uint8_t raise = 0; // 1: raise it instead of lowering it
     uint8_t dir = 0;   // the side chiselled from, for a full block (Block::ShapeDir: 0 its top)
-    uint8_t step = 2;  // how far, in eighths (Block::kChiselSteps: 1, 2 or 4)
+    uint8_t step = 4;  // how far, in sixteenths (Block::kChiselSteps: 1, 2, 4 or 8)
 };
 
 struct EditCarve {

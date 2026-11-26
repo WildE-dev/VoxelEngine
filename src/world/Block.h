@@ -8,63 +8,87 @@
 
 #include <glm/glm.hpp>
 
-// Per-column heights for a partial ("sloped") block. Each of the 4 vertical
-// edges stores a bottom and top height in eighths of a block (0..8), packed as
-// top in the high nibble and bottom in the low nibble.
+// Per-column heights for a partial ("sloped") block, in sixteenths of a block (a pixel
+// of a block's texture): each of its 4 vertical edges (a slope's corners, a stepped
+// block's quarters) is a column from a bottom height (0..15) up to a top height
+// (1..16), at least a pixel tall, or empty (none: a stepped block's quarter cut away).
+// Packed a byte an edge: the top's level in the high nibble (0, a pixel up, to 15, the
+// top of the cell) and the bottom's in the low nibble (0..15); a bottom above the top
+// is an empty column. Whole: 0xF0 on every edge.
 struct EdgeData {
+    static constexpr int kSteps = 16; // heights in sixteenths of a block
+    static constexpr uint8_t kFull = 0xF0, kEmpty = 0x01;
     uint8_t edges[4];
 
     EdgeData() { MakeFull(); }
 
     void MakeFull() {
-        for (auto& e : edges) e = 0x80; // top = 8, bottom = 0
+        for (auto& e : edges) e = kFull;
     }
 
     bool IsFull() const {
         for (auto e : edges)
-            if (e != 0x80) return false;
+            if (e != kFull) return false;
         return true;
     }
 
-    // A block is only valid if at most two of its edges are collapsed.
-    bool IsValid() const {
-        int collapsed = 0;
-        for (int i = 0; i < 4; i++)
-            if (GetTopY(i) == GetBottomY(i)) collapsed++;
-        return collapsed <= 2;
+    bool IsEmpty(int edgeIndex) const {
+        if (edgeIndex < 0 || edgeIndex >= 4) return true;
+        return (edges[edgeIndex] & 0x0F) > (edges[edgeIndex] >> 4);
     }
 
+    // A block is only valid if at most two of its edges are empty.
+    bool IsValid() const {
+        int empty = 0;
+        for (int i = 0; i < 4; i++) empty += IsEmpty(i);
+        return empty <= 2;
+    }
+
+    // Every column a sixteenth lower (one a pixel tall goes).
     void Shrink() {
         for (int i = 0; i < 4; i++) {
-            uint8_t top = GetTopY(i);
-            if (top > 0) SetTopY(i, top - 1);
+            const int top = GetTopY(i);
+            if (top > 0) SetTopY(i, static_cast<uint8_t>(top - 1));
         }
     }
 
-    void SetBottomY(int edgeIndex, uint8_t value) {
-        if (edgeIndex < 0 || edgeIndex >= 4 || value > 8) return;
-        edges[edgeIndex] = (edges[edgeIndex] & 0xF0) | (value & 0x0F);
+    // A column from `bottom` to `top` (sixteenths; top <= bottom: empty).
+    void Set(int edgeIndex, int top, int bottom) {
+        if (edgeIndex < 0 || edgeIndex >= 4) return;
+        top = top < 0 ? 0 : top > kSteps ? kSteps : top;
+        bottom = bottom < 0 ? 0 : bottom > kSteps ? kSteps : bottom;
+        edges[edgeIndex] = top <= bottom ? kEmpty : static_cast<uint8_t>(((top - 1) << 4) | bottom);
     }
+    // One end of a column, the other kept (an empty column's ends are both 0).
+    void SetBottomY(int edgeIndex, uint8_t value) { Set(edgeIndex, GetTopY(edgeIndex), value); }
+    void SetTopY(int edgeIndex, uint8_t value) { Set(edgeIndex, value, GetBottomY(edgeIndex)); }
 
-    void SetTopY(int edgeIndex, uint8_t value) {
-        if (edgeIndex < 0 || edgeIndex >= 4 || value > 8) return;
-        edges[edgeIndex] = (edges[edgeIndex] & 0x0F) | ((value & 0x0F) << 4);
-    }
-
+    // Heights in sixteenths: the bottom 0..15, the top 1..16 (an empty column: 0 and 0).
     uint8_t GetBottomY(int edgeIndex) const {
-        if (edgeIndex < 0 || edgeIndex >= 4) return 0;
+        if (IsEmpty(edgeIndex)) return 0;
         return edges[edgeIndex] & 0x0F;
     }
 
     uint8_t GetTopY(int edgeIndex) const {
-        if (edgeIndex < 0 || edgeIndex >= 4) return 0;
-        return (edges[edgeIndex] >> 4) & 0x0F;
+        if (IsEmpty(edgeIndex)) return 0;
+        return static_cast<uint8_t>((edges[edgeIndex] >> 4) + 1);
     }
 
     bool operator==(const EdgeData& o) const {
         for (int i = 0; i < 4; i++)
             if (edges[i] != o.edges[i]) return false;
         return true;
+    }
+
+    // Saves before format 22 (and their chunks) kept eighths: top in the high nibble
+    // 0..8, bottom in the low 0..8 (equal: empty). The same shape in sixteenths.
+    static EdgeData FromEighths(const uint8_t old[4]) {
+        EdgeData e;
+        for (int i = 0; i < 4; i++) {
+            const int top = old[i] >> 4, bottom = old[i] & 0x0F;
+            e.Set(i, top > 8 ? kSteps : 2 * top, bottom > 8 ? kSteps : 2 * bottom);
+        }
+        return e;
     }
 };
 
@@ -579,49 +603,49 @@ struct Block {
     // Partial block. Falls back to air if the edge data is degenerate.
     Block(BlockType t, EdgeData edges) : type(t) { SetEdgeData(edges); }
 
-    // A plant whose sprite is drawn `dropEighths` (0..8) below its cell's floor, so it
+    // A plant whose sprite is drawn `dropSteps` sixteenths (0..15) below its cell's floor, so it
     // stands on a sloped block underneath. Stored in the otherwise unused edge data.
-    // A pressure plate: a slab an eighth of a block high.
+    // A pressure plate: a slab an eighth of a block high (two sixteenths).
     static Block Bed() {
         EdgeData edges;
-        for (int e = 0; e < 4; e++) edges.SetTopY(e, 4); // half a block high
+        for (int e = 0; e < 4; e++) edges.SetTopY(e, EdgeData::kSteps / 2); // half a block high
         return Block(BlockType::BED, edges);
     }
     // A grave: a headstone across the back half (-z), a low mound in front of it.
     static Block Grave() {
         EdgeData edges;
-        edges.SetTopY(0, 2), edges.SetTopY(3, 2); // (the front quarters, z = 1)
+        edges.SetTopY(0, 4), edges.SetTopY(3, 4); // (the front quarters, z = 1: a quarter high)
         return Block(BlockType::GRAVE, edges);
     }
     static Block PressurePlate() {
         EdgeData edges;
-        for (int e = 0; e < 4; e++) edges.SetTopY(e, 1);
+        for (int e = 0; e < 4; e++) edges.SetTopY(e, 2);
         return Block(BlockType::PRESSURE_PLATE, edges);
     }
     // What placing a block of this type puts in the world (a full cell of water, a
     // plate's slab, a sprite standing on the floor below). Blocks that can be shaped
-    // may be placed lower than full: a slab `heightEighths` high (2, 4 or 6 of 8).
+    // may be placed lower than full: a slab `heightSteps` sixteenths high (1..15; 16 is whole).
     // Orientable blocks run along `faceAxis` (0 x, 1 y, 2 z): the axis of the face
     // they were placed against.
-    static Block Placed(BlockType t, int heightEighths = 8, int faceAxis = 1);
+    static Block Placed(BlockType t, int heightSteps = EdgeData::kSteps, int faceAxis = 1);
     // Whether a type can be placed as a slab (and chiselled): building blocks, not
     // liquids, plants or machines.
     static bool CanShape(BlockType t) { return Block(t).CanChisel(); }
 
     // Worth (survival mode, see world/Inventory.h): a full block is worth kUnitsPerBlock
-    // units of its type; a shaped one is worth its volume (a half slab 32, each eighth of a
-    // quarter 2). Things that can't be shaped (plants, machines) are worth a full block.
+    // units of its type; a shaped one is worth its volume (a half slab 32, each sixteenth of a
+    // quarter 1). Things that can't be shaped (plants, machines) are worth a full block.
     static constexpr int kUnitsPerBlock = 64;
     static constexpr int kPebbleUnits = 16; // a quarter of a block of stone
     int ResourceUnits() const;
 
-    static Block Plant(BlockType t, uint8_t dropEighths) {
+    static Block Plant(BlockType t, uint8_t dropSteps) {
         Block b(t);
-        b.edgeData.edges[0] = dropEighths;
+        b.edgeData.edges[0] = static_cast<uint8_t>(dropSteps > 15 ? 15 : dropSteps);
         return b;
     }
     bool IsPlant() const { return IsPlantType(type); }
-    float PlantDrop() const { return (edgeData.edges[0] & 0x0F) / 8.0f; }
+    float PlantDrop() const { return (edgeData.edges[0] & 0x0F) / static_cast<float>(EdgeData::kSteps); }
 
     // Water volumes are in units: a full cell holds 128, so surfaces can level to within
     // a small fraction of a block.
@@ -684,7 +708,7 @@ struct Block {
     // clipped to the cell; -1 if it misses the cell).
     float SurfaceMax(float x0, float x1, float z0, float z1) const;
     // What water sees of a partial block: four quarter-columns (WaterStepped) or an
-    // upright slope's corners, heights in eighths. A turned shape is its quarters each as
+    // upright slope's corners, heights in sixteenths. A turned shape is its quarters each as
     // high as the most it fills of them.
     EdgeData WaterEdges() const;
     bool WaterStepped() const { return IsStepped() || ShapeDir() != 0; }
@@ -754,7 +778,8 @@ struct Block {
     std::vector<glm::vec3> QuarterOutline(int dir, int edge) const {
         const float x0 = edge == 1 || edge == 3 ? 0.5f : 0.0f, z0 = edge == 0 || edge == 3 ? 0.5f : 0.0f;
         float y0 = 0.0f, y1 = 1.0f;
-        if (!IsFullBlock()) y0 = edgeData.GetBottomY(edge) / 8.0f, y1 = std::max(edgeData.GetTopY(edge) / 8.0f, y0 + 0.02f);
+        constexpr float kStep = 1.0f / EdgeData::kSteps;
+        if (!IsFullBlock()) y0 = edgeData.GetBottomY(edge) * kStep, y1 = std::max(edgeData.GetTopY(edge) * kStep, y0 + 0.02f);
         const glm::vec3 lo(x0, y0, z0), hi(x0 + 0.5f, y1, z0 + 0.5f);
         std::vector<glm::vec3> lines;
         auto corner = [&](int i) { return ShapeToCell(dir, glm::vec3(i & 1 ? hi.x : lo.x, i & 2 ? hi.y : lo.y, i & 4 ? hi.z : lo.z)); };
@@ -765,21 +790,25 @@ struct Block {
     }
     // The box (in the cell, 0..1) a shape fills, turned (round it: ShapeOverlaps is exact).
     void ShapeBounds(glm::vec3& lo, glm::vec3& hi) const {
-        int top = 0, bottom = 8;
-        for (int e = 0; e < 4; e++) top = std::max<int>(top, edgeData.GetTopY(e)), bottom = std::min<int>(bottom, edgeData.GetBottomY(e));
-        const glm::vec3 a = ShapeToCell(ShapeDir(), { 0.0f, bottom / 8.0f, 0.0f }), b = ShapeToCell(ShapeDir(), { 1.0f, top / 8.0f, 1.0f });
+        int top = 0, bottom = EdgeData::kSteps;
+        for (int e = 0; e < 4; e++)
+            if (!edgeData.IsEmpty(e)) top = std::max<int>(top, edgeData.GetTopY(e)), bottom = std::min<int>(bottom, edgeData.GetBottomY(e));
+        if (top <= bottom) bottom = top = 0;
+        constexpr float kStep = 1.0f / EdgeData::kSteps;
+        const glm::vec3 a = ShapeToCell(ShapeDir(), { 0.0f, bottom * kStep, 0.0f }), b = ShapeToCell(ShapeDir(), { 1.0f, top * kStep, 1.0f });
         lo = glm::min(a, b);
         hi = glm::max(a, b);
     }
     // Chiselled (see Chiselled), from the side `dir` says when it's still a full block that
     // can turn (that side then becomes its top); a shaped one keeps its own direction.
-    // How far a chisel stroke moves a corner, in eighths, finest first (V picks one).
-    static constexpr int kChiselSteps[] = { 1, 2, 4 };
-    static constexpr bool IsChiselStep(int s) { return s == 1 || s == 2 || s == 4; }
-    Block ChiselledFrom(int dir, int edge, int deltaEighths) const {
+    // How far a chisel stroke moves a corner, in sixteenths, finest first (V picks one):
+    // a pixel, an eighth, a quarter, a half.
+    static constexpr int kChiselSteps[] = { 1, 2, 4, 8 };
+    static constexpr bool IsChiselStep(int s) { return s == 1 || s == 2 || s == 4 || s == 8; }
+    Block ChiselledFrom(int dir, int edge, int deltaSteps) const {
         Block b = *this;
         if (b.IsFullBlock() && CanTurnShape(b.type) && dir >= 0 && dir <= 5) b.SetShapeDir(dir);
-        return b.Chiselled(edge, deltaEighths);
+        return b.Chiselled(edge, deltaSteps);
     }
     // Water in a partial block sits above its slope. For flow it's treated as a cell
     // with a raised floor at the slope's average height, so the capacity is right.
@@ -834,10 +863,10 @@ struct Block {
     // Whether a block can be chiselled (shaped by quarters): solid building blocks,
     // not liquids, plants or machines.
     bool CanChisel() const;
-    // Height of the quarter (or slope corner) `edge` (EdgeData order), in eighths.
+    // Height of the quarter (or slope corner) `edge` (EdgeData order), moved by `deltaSteps` sixteenths.
     // Raising every corner to the top makes the block full again; lowering them all
     // removes it (air).
-    Block Chiselled(int edge, int deltaEighths) const;
+    Block Chiselled(int edge, int deltaSteps) const;
 
     bool IsAir() const { return type == BlockType::AIR; }
     // Full, opaque cube that hides any neighbouring face touching it, and collides.
@@ -890,6 +919,10 @@ struct Block {
 
     // Appends 6 vertices (2 packed uint32 each) for the given face.
     void AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading) const;
+    // The same with the corners' tops and bottoms given (sixteenths, EdgeData order) in
+    // place of its own shape: water's surface, whose corners may come to nothing.
+    void AddFaceVertices(std::vector<uint32_t>& vertices, Face face, int x, int y, int z, const FaceShading& shading, const uint8_t tops[4],
+                         const uint8_t bottoms[4]) const;
     // A stepped partial block's faces pointing one way: the quarters' own faces, and
     // where a quarter stands above its neighbour, the exposed part of its side. Faces on
     // the block's outside are left out when `outside` is false (a solid block there).
@@ -901,7 +934,7 @@ struct Block {
     bool operator!=(const Block& o) const { return !(*this == o); }
 };
 
-inline Block Block::Placed(BlockType t, int heightEighths, int faceAxis) {
+inline Block Block::Placed(BlockType t, int heightSteps, int faceAxis) {
     if (t == BlockType::WATER) return Water(kMaxWaterVolume);
     if (t == BlockType::PRESSURE_PLATE) return PressurePlate();
     if (t == BlockType::BED) return Bed();
@@ -918,8 +951,8 @@ inline Block Block::Placed(BlockType t, int heightEighths, int faceAxis) {
         return lever;
     }
     if (IsPlantType(t)) return Plant(t, 0);
-    if (heightEighths >= 8 || heightEighths <= 0 || !CanShape(t)) return Block(t).Turned(faceAxis);
+    if (heightSteps >= EdgeData::kSteps || heightSteps <= 0 || !CanShape(t)) return Block(t).Turned(faceAxis);
     EdgeData slab;
-    for (int e = 0; e < 4; e++) slab.SetTopY(e, static_cast<uint8_t>(heightEighths));
+    for (int e = 0; e < 4; e++) slab.SetTopY(e, static_cast<uint8_t>(heightSteps));
     return Block(t, slab).Turned(faceAxis);
 }

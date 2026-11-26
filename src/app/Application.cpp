@@ -82,19 +82,21 @@ std::string FormatBlocks(uint32_t units) {
     return s;
 }
 
-const char* HeightName(int eighths) {
-    switch (eighths) {
-    case 2: return "1/4";
-    case 4: return "1/2";
-    case 6: return "3/4";
+// Heights and chisel steps are in sixteenths of a block (EdgeData).
+const char* HeightName(int steps) {
+    switch (steps) {
+    case 4: return "1/4";
+    case 8: return "1/2";
+    case 12: return "3/4";
     default: return "full";
     }
 }
 
-const char* ChiselStepName(int eighths) {
-    switch (eighths) {
-    case 1: return "1/8";
-    case 4: return "1/2";
+const char* ChiselStepName(int steps) {
+    switch (steps) {
+    case 1: return "1/16";
+    case 2: return "1/8";
+    case 8: return "1/2";
     default: return "1/4";
     }
 }
@@ -2345,9 +2347,9 @@ void Application::DrawHotbar() {
         if (selectedTool == Tool::Chisel) label += std::string(" - ") + ChiselStepName(chiselStep) + " a stroke (V)";
         if (selectedTool == Tool::Shovel) label += " - flattens " + std::to_string(2 * flattenRadius + 1) + "x" + std::to_string(2 * flattenRadius + 1) + " (V)";
         if (selectedTool == Tool::None && Block::CanShape(selected))
-            label += std::string(" - ") + HeightName(placeHeight) + (placeHeight < 8 ? " height" : " block") + " (V)";
+            label += std::string(" - ") + HeightName(placeHeight) + (placeHeight < EdgeData::kSteps ? " height" : " block") + " (V)";
         const bool affordable = SelectedItem() == Items::kNone || !Items::IsBlock(SelectedItem()) ||
-                                client->CanAfford(selected, Block::CanShape(selected) ? placeHeight : 8);
+                                client->CanAfford(selected, Block::CanShape(selected) ? placeHeight : EdgeData::kSteps);
         const bool affordableShown = affordable;
         const float nameWidth = ui::CalcTextSize(label.c_str()).x;
         ui::SetCursorPosX(ui::GetCursorPosX() + std::max(0.0f, (barWidth - nameWidth) * 0.5f));
@@ -2502,7 +2504,7 @@ void Application::OnKey(int key, int action) {
     if (is(Action::Inventory)) return SetInventoryOpen(true);
     if (is(Action::PlaceHeight)) {
         // Placement height: full, 3/4, 1/2, 1/4 (crouching, back up). With the chisel in
-        // hand, how fine it cuts instead: an eighth, a quarter, a half (crouching: back).
+        // hand, how fine it cuts instead: a sixteenth, an eighth, a quarter, a half (crouching: back).
         const bool shift = CrouchHeld();
         if (SelectedTool() == Tool::Shovel) {
             flattenRadius = shift ? (flattenRadius <= 1 ? net::kMaxFlattenRadius : flattenRadius - 1) : (flattenRadius >= net::kMaxFlattenRadius ? 1 : flattenRadius + 1);
@@ -2515,7 +2517,8 @@ void Application::OnKey(int key, int action) {
             chiselStep = Block::kChiselSteps[(i + (shift ? kSteps - 1 : 1)) % kSteps];
             return;
         }
-        placeHeight = shift ? (placeHeight >= 8 ? 2 : placeHeight + 2) : (placeHeight <= 2 ? 8 : placeHeight - 2);
+        constexpr int kFull = EdgeData::kSteps, kStep = kFull / 4;
+        placeHeight = shift ? (placeHeight >= kFull ? kStep : placeHeight + kStep) : (placeHeight <= kStep ? kFull : placeHeight - kStep);
         return;
     }
     if (is(Action::Drop)) {
@@ -3596,7 +3599,7 @@ void Application::OnMouseButton(int button, int action) {
                 const bool intoPlant = world->GetBlock(at->block.x, at->block.y, at->block.z, aimed) && aimed.IsReplaceablePlant();
                 const glm::ivec3 plot = intoPlant ? at->block : at->block + at->normal;
                 if ((intoPlant || at->normal == glm::ivec3(0, 1, 0)) && world->GetBlock(plot.x, plot.y - 1, plot.z, soil) &&
-                    (soil.type == BlockType::DIRT || IsGrassType(soil.type)) && client->CanAfford(BlockType::CROP, 8)) {
+                    (soil.type == BlockType::DIRT || IsGrassType(soil.type)) && client->CanAfford(BlockType::CROP, EdgeData::kSteps)) {
                     if (client->PlaceBlock(plot, BlockType::CROP)) PlayAt("place", plot, 0.5f);
                 }
             }
@@ -3634,7 +3637,7 @@ void Application::OnMouseButton(int button, int action) {
         // pressure plates are fine).
         const BlockType placeBlock = SelectedBlock();
         if (placeBlock == BlockType::AIR) return; // (an empty hand, or armour: nothing to place)
-        const int height = Block::CanShape(placeBlock) ? placeHeight : 8;
+        const int height = Block::CanShape(placeBlock) ? placeHeight : EdgeData::kSteps;
         if (!client->CanAfford(placeBlock, height)) return;
         const Block placed = Block::Placed(placeBlock, height);
         if (!(player.IsFlying() && !player.IsFlyingSolid()) && placed.IsFullBlock()) {
