@@ -195,6 +195,40 @@ int main(int argc, char** argv) {
             server.QueueConsoleCommand("gamemode creative Hunter");
             both(20.0, [&] { return a.client.GetCreatures().empty() && a.client.IsCreative(); });
 
+            std::cout << "Slopes" << std::endl;
+            {
+                // A pen of stone slabs three quarters high (natural ground: a slope, which
+                // players can't walk into): a deer in it goes over them, not through them.
+                server.QueueConsoleCommand("tp Hunter 11.5 0 12.5");
+                both(10.0, [&] { return std::abs(a.feet.z - 12.5f) < 0.1f; });
+                std::vector<glm::ivec3> ring;
+                for (int x = 9; x <= 13; x++)
+                    for (int z = 10; z <= 14; z++)
+                        if (x == 9 || x == 13 || z == 10 || z == 14) ring.push_back({ x, 0, z });
+                for (const auto& p : ring) a.client.PlaceBlock(p, BlockType::STONE, 6);
+                Check(both(10.0, [&] {
+                          for (const auto& p : ring) {
+                              Block b;
+                              if (!a.world.GetBlock(p.x, p.y, p.z, b) || b.type != BlockType::STONE || b.IsFullBlock()) return false;
+                          }
+                          return true;
+                      }),
+                      "a pen of stone slabs, three quarters high");
+                server.QueueConsoleCommand("summon deer 11.5 0 11.5");
+                both(10.0, [&] { return a.Find(CreatureType::Deer) != nullptr; });
+                bool embedded = false;
+                both(15.0, [&] {
+                    if (const auto* d = a.Find(CreatureType::Deer))
+                        for (const auto& p : ring)
+                            if (d->feet.x > p.x + 0.1f && d->feet.x < p.x + 0.9f && d->feet.z > p.z + 0.1f && d->feet.z < p.z + 0.9f && d->feet.y < 0.7f) embedded = true;
+                    return embedded;
+                });
+                Check(a.Find(CreatureType::Deer) && !embedded, "a deer wandering in it never walks into the slabs");
+                server.QueueConsoleCommand("creatures clear");
+                server.QueueConsoleCommand("fill 9 0 10 13 0 14 air");
+                both(20.0, [&] { return a.client.GetCreatures().empty(); });
+            }
+
             std::cout << "Bats" << std::endl;
             server.QueueConsoleCommand("summon bat 12.5 6 12.5");
             Check(both(20.0, [&] { return a.Find(CreatureType::Bat) != nullptr; }), "a bat is summoned in mid air");

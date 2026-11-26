@@ -128,7 +128,7 @@ void DroppedItems::Move(const BlockAccess& world, Item& item, float dt) {
         for (const int a : { 0, 2 }) {
             glm::vec3 next = p;
             next[a] += v[a] * h;
-            if (Collision::BoxBlocked(world, Box(next))) v[a] *= -0.2f; // (a little bounce off walls)
+            if (Collision::SideBlocked(world, Box(next), 0.3f)) v[a] *= -0.2f; // (a little bounce off walls, and slopes steeper than it slides up)
             else p = next;
         }
         const float dy = v.y * h;

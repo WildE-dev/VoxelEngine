@@ -615,12 +615,13 @@ void CreatureSystem::Move(ServerWorld& world, Creature& c, const glm::vec2& move
         if (step == 0.0f) continue;
         glm::vec3 next = c.feet;
         next[axis] += step;
-        if (!Collision::BoxBlocked(world, BoxAt(next, spec))) {
+        // (Up a slope only as far as a step: a steeper one is a wall, as for players.)
+        if (!Collision::SideBlocked(world, BoxAt(next, spec), kStepUp)) {
             c.feet = next;
             continue;
         }
         const glm::vec3 up(0.0f, 1.05f, 0.0f);
-        if ((c.onGround || swimming) && !Collision::BoxBlocked(world, BoxAt(c.feet + up, spec)) && !Collision::BoxBlocked(world, BoxAt(next + up, spec)))
+        if ((c.onGround || swimming) && !Collision::SideBlocked(world, BoxAt(c.feet + up, spec), kStepUp) && !Collision::SideBlocked(world, BoxAt(next + up, spec), kStepUp))
             c.velocity.y = kJumpSpeed;
         c.velocity[axis] = 0.0f;
     }
@@ -635,7 +636,7 @@ void CreatureSystem::Move(ServerWorld& world, Creature& c, const glm::vec2& move
         return;
     }
     bool unknown = false;
-    const auto ground = Collision::GroundHeight(world, BoxAt(c.feet, spec), 0.55f, -dy + 0.05f, unknown);
+    const auto ground = Collision::GroundHeight(world, BoxAt(c.feet, spec), kStepUp, -dy + 0.05f, unknown);
     if (unknown) {
         c.velocity.y = 0.0f; // terrain not loaded: hold still
         return;

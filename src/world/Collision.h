@@ -34,6 +34,11 @@ bool BlockOverlaps(const BlockAccess& world, const glm::ivec3& cell, const Block
 // walking under it), not ground underfoot (which is stood on and walked up).
 bool BoxBlocked(const BlockAccess& world, const AABB& box);
 bool BoxBlocked(const BlockAccess& world, const AABB& box, float slopesFrom);
+// Whether a box moved sideways to here is stopped: by whatever BoxBlocked says, or by
+// an upright slope under it rising more than `step` above its bottom (one it couldn't
+// walk or slide up), or by unloaded space. For creatures and dropped items: the player
+// does the same in Player::MoveHorizontal, and more.
+bool SideBlocked(const BlockAccess& world, const AABB& box, float step);
 
 struct Ground {
     float height = 0.0f;

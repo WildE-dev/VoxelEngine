@@ -51,6 +51,13 @@ bool BlockOverlaps(const BlockAccess& world, const glm::ivec3& cell, const Block
 
 bool BoxBlocked(const BlockAccess& world, const AABB& box) { return BoxBlocked(world, box, 1e30f); }
 
+bool SideBlocked(const BlockAccess& world, const AABB& box, float step) {
+    if (BoxBlocked(world, box)) return true;
+    bool unknown = false;
+    const auto slope = SlopeHeight(world, box, box.min.y, box.max.y, unknown);
+    return unknown || (slope && *slope > box.min.y + step);
+}
+
 bool BoxBlocked(const BlockAccess& world, const AABB& box, float slopesFrom) {
     int x0, x1, y0, y1, z0, z1;
     CellRange(box.min.x, box.max.x, x0, x1);

@@ -673,6 +673,13 @@ int main() {
         bool unknown = false;
         const auto ground = Collision::GroundHeight(slopes, Collision::AABB{ { 5.2f, 0.5f, 5.2f }, { 5.8f, 2.3f, 5.8f } }, 0.6f, 1.0f, unknown);
         Check(ground && std::abs(*ground - 0.8f) < 1e-3f, "standing on a slope, you stand on its highest point under you, not its middle");
+        // Creatures and dropped items moving sideways: a slab of natural ground higher than
+        // a step stops them (BoxBlocked alone never does: slopes are stood on), a low one doesn't.
+        slopes.blocks[{ 5, 0, 7 }] = Shaped(BlockType::STONE, 6, 6, 6, 6);
+        slopes.blocks[{ 7, 0, 7 }] = Shaped(BlockType::STONE, 2, 2, 2, 2);
+        const Collision::AABB intoHigh{ { 4.8f, 0.0f, 7.2f }, { 5.3f, 1.4f, 7.7f } }, intoLow{ { 6.8f, 0.0f, 7.2f }, { 7.3f, 1.4f, 7.7f } };
+        Check(!Collision::BoxBlocked(slopes, intoHigh) && Collision::SideBlocked(slopes, intoHigh, 0.55f) && !Collision::SideBlocked(slopes, intoLow, 0.55f),
+              "natural ground higher than a step stops a creature walking into it; a low slab doesn't");
 
         // Walking into quarters stops at the quarter's face, not at the edge of its cell: a
         // ledge a block high over the far half of each cell at x = 3.

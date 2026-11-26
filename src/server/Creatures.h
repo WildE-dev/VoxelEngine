@@ -75,6 +75,7 @@ public:
     std::vector<BossDeath> TakeBossDeaths() { return std::exchange(bossDeaths, {}); }
     // How long a creature counts as attacking or working after it did, for the clients.
     static constexpr double kAttackShown = 0.6, kWorkShown = 0.9;
+    static constexpr float kStepUp = 0.55f; // what a creature walks up (a slope rising more is a wall)
     // A creature did something (1 attacked, 2 worked).
     void Act(uint16_t id, uint8_t what, double now);
 
