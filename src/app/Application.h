@@ -29,6 +29,7 @@ class ClientWorld;
 class Renderer;
 class Server;
 struct FrameParams;
+namespace net { class RelayHost; }
 
 // How the game connects: to an in-process server (singleplayer, the default) or to a
 // server elsewhere. Either way the game is a network client of that server.
@@ -36,6 +37,8 @@ struct ClientOptions {
     std::string host;  // empty: start a local server and connect to it
     uint16_t port = 0; // 0: the default port
     std::string name = "Player";
+    // Joining a friend's game through the relay at host:port: its join code.
+    std::string joinCode;
     // Singleplayer: where the local server saves the world (empty: don't save).
     std::string worldDirectory = "saves/singleplayer";
     int waterSimulationDistance = 6; // singleplayer's local server
@@ -79,6 +82,7 @@ private:
     void DrawMenu();
     void DrawPauseMenu();
     void DrawSettingsPage(bool inGame);
+    void DrawOpenToFriends();
     void RefreshWorlds();
     void PlayWorld(const std::string& directory, bool empty, int mode);
     void LoadBlockTextures();
@@ -194,6 +198,9 @@ private:
     Player player{ glm::vec3(7.0f, 7.0f, 7.0f) };
     // Singleplayer only: the server this game connects to, in this process.
     std::unique_ptr<Server> localServer;
+    // ...opened to friends through the relay (the pause menu's "Open to friends").
+    std::unique_ptr<net::RelayHost> relayHost;
+    std::string relayError;
     // Both own GL resources, so they're destroyed explicitly before the context.
     std::unique_ptr<Renderer> renderer;
     std::unique_ptr<ClientWorld> world;

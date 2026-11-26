@@ -1,0 +1,22 @@
+# systemd unit for VoxelRelay on a Linux VPS (see README.md, "Playing with friends over
+# the internet"):
+#   sudo cp voxel-relay.service /etc/systemd/system/
+#   sudo systemctl enable --now voxel-relay
+#   journalctl -u voxel-relay -f        (what it's doing)
+[Unit]
+Description=VoxelEngine relay (join codes)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/voxel-relay --port 25700
+Restart=always
+RestartSec=2
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

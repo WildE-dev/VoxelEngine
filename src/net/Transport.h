@@ -57,8 +57,9 @@ public:
     NetClient(const NetClient&) = delete;
     NetClient& operator=(const NetClient&) = delete;
 
-    // Blocks until connected or timeoutMs passes.
-    bool Connect(const std::string& host, uint16_t port, uint32_t timeoutMs, std::string& error);
+    // Blocks until connected or timeoutMs passes. With a join code, host:port is a relay
+    // (VoxelRelay): it's asked for the game opened with that code first.
+    bool Connect(const std::string& host, uint16_t port, uint32_t timeoutMs, std::string& error, const std::string& joinCode = "");
     bool IsConnected() const;
     bool Poll(NetEvent& event, uint32_t timeoutMs);
     void Send(uint8_t channel, const std::vector<uint8_t>& data);

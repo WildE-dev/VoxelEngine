@@ -49,7 +49,8 @@ public:
     // Connects and sends Hello (blocks up to a few seconds). The server's Welcome
     // arrives through Poll.
     // viewDistance: chunks we'd like to see (0: as far as the server sends).
-    bool Connect(const std::string& host, uint16_t port, const std::string& name, std::string& error, int viewDistance = 0);
+    bool Connect(const std::string& host, uint16_t port, const std::string& name, std::string& error, int viewDistance = 0,
+                 const std::string& joinCode = "");
     void Disconnect();
 
     // Handles what has arrived. Call once per frame. `budget` (seconds, 0: no limit):

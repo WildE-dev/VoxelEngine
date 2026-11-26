@@ -30,6 +30,9 @@ add_library(voxel_common STATIC
     src/net/Protocol.h
     src/net/Transport.cpp
     src/net/Transport.h
+    src/net/RelayHost.cpp
+    src/net/RelayHost.h
+    src/relay/RelayProtocol.h
 
     src/world/Block.cpp
     src/world/Block.h
@@ -172,6 +175,10 @@ add_executable(${PROJECT_NAME}
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${STB_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} PRIVATE voxel_server voxel_client glfw glad::glad)
+# The relay a fresh settings.txt points at, for opening games to friends (host or
+# host:port; see README.md): -DVOXEL_DEFAULT_RELAY=relay.example.com builds it in.
+set(VOXEL_DEFAULT_RELAY "" CACHE STRING "Default relay server for join codes (host or host:port)")
+target_compile_definitions(${PROJECT_NAME} PRIVATE VOXEL_DEFAULT_RELAY="${VOXEL_DEFAULT_RELAY}")
 
 # The model editor (src/editor/ModelEditor.cpp): its own program, for the creature and
 # structure models in Resources/Data, drawn as the game draws them.
@@ -189,6 +196,16 @@ target_compile_definitions(ModelEditor PRIVATE VOXEL_SOURCE_DIR="${CMAKE_SOURCE_
 add_executable(VoxelServer src/server/main.cpp)
 target_link_libraries(VoxelServer PRIVATE voxel_server)
 
+# The relay that lets friends join a game by code (run on a VPS: see README.md). It needs
+# nothing but the system's sockets, so it also builds alone there with one g++ line.
+add_library(voxel_relay STATIC src/relay/RelayServer.cpp src/relay/RelayServer.h src/relay/RelayProtocol.h)
+target_include_directories(voxel_relay PUBLIC src)
+if(WIN32)
+    target_link_libraries(voxel_relay PUBLIC ws2_32)
+endif()
+add_executable(VoxelRelay src/relay/main.cpp)
+target_link_libraries(VoxelRelay PRIVATE voxel_relay)
+
 # Warnings for our own code. (MSVC's "unsafe" notes about getenv, localtime and the like
 # are off: those are the standard functions, and its replacements for them aren't.)
 function(voxel_warnings target)
@@ -199,7 +216,7 @@ function(voxel_warnings target)
         target_compile_options(${target} PRIVATE -Wall -Wextra)
     endif()
 endfunction()
-foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} ModelEditor VoxelServer)
+foreach(target voxel_common voxel_server voxel_client ${PROJECT_NAME} ModelEditor VoxelServer voxel_relay VoxelRelay)
     voxel_warnings(${target})
 endforeach()
 
@@ -251,6 +268,8 @@ endfunction()
 # Starts a server and two network clients in one process and checks that chunks,
 # edits, water flow and player positions reach both clients.
 voxel_test(NetSmokeTest SOURCES src/app/Player.cpp LIBS voxel_server voxel_client)
+# A relay, a game opened to friends through it, and two friends joining by code.
+voxel_test(RelayTest SOURCES src/app/Player.cpp LIBS voxel_server voxel_client voxel_relay)
 # Saves a world, restarts, and checks edits, light and players come back.
 voxel_test(SaveTest SOURCES src/app/Player.cpp LIBS voxel_server voxel_client)
 # Water only flows within the simulation distance of players.

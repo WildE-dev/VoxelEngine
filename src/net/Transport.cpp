@@ -9,6 +9,7 @@
 #include <enet/enet.h>
 
 #include "net/Protocol.h"
+#include "relay/RelayProtocol.h"
 
 namespace net {
 
@@ -175,6 +176,44 @@ PeerStats NetServer::GetStats(PeerId id) const {
 
 // --- Client -----------------------------------------------------------------------
 
+namespace {
+
+// Asks a relay for the game opened with a join code, from the socket ENet will play on
+// (the relay knows us by its address): until it says yes, no, or the time's up.
+bool JoinThroughRelay(ENetSocket socket, const ENetAddress& relayAddress, const std::string& code, uint32_t timeoutMs, std::string& error) {
+    using Clock = std::chrono::steady_clock;
+    const auto deadline = Clock::now() + std::chrono::milliseconds(timeoutMs);
+    const auto join = relay::Writer(relay::Msg::Join).Str(relay::NormalizeCode(code)).bytes;
+    auto lastAsked = Clock::now() - std::chrono::seconds(10);
+    uint8_t reply[relay::kMaxDatagram];
+    while (Clock::now() < deadline) {
+        if (Clock::now() - lastAsked > std::chrono::milliseconds(500)) {
+            lastAsked = Clock::now();
+            ENetBuffer out;
+            out.data = const_cast<uint8_t*>(join.data());
+            out.dataLength = join.size();
+            enet_socket_send(socket, &relayAddress, &out, 1);
+        }
+        enet_uint32 condition = ENET_SOCKET_WAIT_RECEIVE;
+        if (enet_socket_wait(socket, &condition, 100) != 0 || !(condition & ENET_SOCKET_WAIT_RECEIVE)) continue;
+        ENetAddress from;
+        ENetBuffer in;
+        in.data = reply;
+        in.dataLength = sizeof reply;
+        const int n = enet_socket_receive(socket, &from, &in, 1);
+        if (n <= 0 || from.host != relayAddress.host || from.port != relayAddress.port || !relay::IsControl(reply, static_cast<size_t>(n))) continue;
+        if (relay::TypeOf(reply) == relay::Msg::JoinOk) return true;
+        if (relay::TypeOf(reply) == relay::Msg::Refused) {
+            error.assign(reinterpret_cast<const char*>(reply + relay::kHeader), static_cast<size_t>(n) - relay::kHeader);
+            return false;
+        }
+    }
+    error = "no answer from the relay";
+    return false;
+}
+
+} // namespace
+
 struct NetClient::Impl {
     ENetHost* host = nullptr;
     ENetPeer* peer = nullptr;
@@ -188,7 +227,7 @@ NetClient::~NetClient() {
     if (impl->host) enet_host_destroy(impl->host);
 }
 
-bool NetClient::Connect(const std::string& host, uint16_t port, uint32_t timeoutMs, std::string& error) {
+bool NetClient::Connect(const std::string& host, uint16_t port, uint32_t timeoutMs, std::string& error, const std::string& joinCode) {
     EnsureEnetInitialized();
     if (!impl->host) {
         impl->host = enet_host_create(nullptr, 1, kChannelCount, 0, 0);
@@ -204,6 +243,7 @@ bool NetClient::Connect(const std::string& host, uint16_t port, uint32_t timeout
         return false;
     }
     address.port = port;
+    if (!joinCode.empty() && !JoinThroughRelay(impl->host->socket, address, joinCode, timeoutMs, error)) return false;
     impl->peer = enet_host_connect(impl->host, &address, kChannelCount, 0);
     if (!impl->peer) {
         error = "no free peer slot";

@@ -1,7 +1,7 @@
 // Dedicated server without any GL or windowing dependency:
 //   VoxelServer [port] [--world DIR] [--no-save] [--water-distance N] [--empty-world]
 //               [--weather clear|rain|auto] [--day-length SECONDS] [--op NAME]...
-//               [--mode creative|survival]
+//               [--mode creative|survival] [--relay HOST[:PORT]]
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -12,6 +12,7 @@
 #include <thread>
 
 #include "net/Protocol.h"
+#include "net/RelayHost.h"
 #include "server/Server.h"
 
 namespace {
@@ -41,6 +42,7 @@ void StartConsole(Server& server) {
 } // namespace
 
 int main(int argc, char** argv) {
+    std::string relayAddress;
     Server::Options options;
     options.worldDirectory = "world";
     bool worldGiven = false, modeGiven = false;
@@ -82,6 +84,10 @@ int main(int argc, char** argv) {
             if (!worldGiven && !options.worldDirectory.empty()) options.worldDirectory = "world-empty";
             continue;
         }
+        if (arg == "--relay" && i + 1 < argc) {
+            relayAddress = argv[++i];
+            continue;
+        }
         if (arg == "--no-save") {
             options.worldDirectory.clear();
             continue;
@@ -106,7 +112,8 @@ int main(int argc, char** argv) {
                       << "  --day-length S seconds in a day (default 1200)\n"
                       << "  --op NAME      make a player an operator (repeatable; kept in ops.txt)\n"
                       << "  --mode M       creative or survival: a new world's game mode (default survival)\n"
-                      << "  --view-distance N  chunks loaded and sent around each player (2-12, default 12)" << std::endl;
+                      << "  --view-distance N  chunks loaded and sent around each player (2-12, default 12)\n"
+                      << "  --relay HOST[:PORT]  also open it to friends through that relay (VoxelRelay): prints a join code" << std::endl;
             return EXIT_FAILURE;
         }
         options.port = static_cast<uint16_t>(port);
@@ -116,6 +123,22 @@ int main(int argc, char** argv) {
     runningServer = &server;
     StartConsole(server);
     std::cout << "[server] type commands here (help lists them)" << std::endl;
+    // Opened to friends through a relay: the join code is printed once the relay gives it.
+    net::RelayHost relayHost;
+    std::atomic<bool> serverRunning{ true };
+    std::thread relayReporter;
+    if (!relayAddress.empty()) {
+        std::string error;
+        if (!relayHost.Start(relayAddress, server.GetPort(), error)) std::cerr << "[relay] " << error << std::endl;
+        else relayReporter = std::thread([&] {
+            std::string said;
+            while (serverRunning) {
+                const std::string now = relayHost.GetState() == net::RelayHost::State::Open ? "join code: " + relayHost.GetCode() : relayHost.GetStatus();
+                if (now != said) std::cout << "[relay] " << (said = now) << std::endl;
+                std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            }
+        });
+    }
     std::signal(SIGINT, StopServer);
     std::signal(SIGTERM, StopServer);
 #ifdef SIGBREAK
@@ -123,6 +146,9 @@ int main(int argc, char** argv) {
 #endif
     server.Run();
     runningServer = nullptr;
+    serverRunning = false;
+    if (relayReporter.joinable()) relayReporter.join();
+    relayHost.Stop();
 #ifdef SIGBREAK
     serverDone = true;
 #endif

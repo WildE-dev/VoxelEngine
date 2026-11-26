@@ -36,6 +36,7 @@
 #include "client/Client.h"
 #include "client/ClientWorld.h"
 #include "net/Protocol.h"
+#include "net/RelayHost.h"
 #include "render/Renderer.h"
 #include "server/Server.h"
 #include "world/Achievements.h"
@@ -469,6 +470,10 @@ bool Application::StartGame(const ClientOptions& options) {
         serverLabel = "singleplayer";
         mapCacheFile = options.worldDirectory.empty() ? std::string() : options.worldDirectory + "/map_cache.bin"; // (--no-save: no map kept either)
     }
+    else if (!options.joinCode.empty()) {
+        serverLabel = "a friend's game (" + options.joinCode + ")";
+        mapCacheFile.clear(); // (a fresh code each time it's opened: nothing to match a map to)
+    }
     else {
         serverLabel = host + ":" + std::to_string(port);
         std::string safe = host + "_" + std::to_string(port);
@@ -479,14 +484,21 @@ bool Application::StartGame(const ClientOptions& options) {
     LoadMapCache();
 
     std::string error;
-    if (!client->Connect(host, port, options.name, error, settings.renderDistance)) {
+    if (!client->Connect(host, port, options.name, error, settings.renderDistance, options.joinCode)) {
         std::cerr << "ERROR: Could not connect to " << host << ":" << port << ": " << error << std::endl;
-        menuMessage = "Couldn't connect to " + host + ":" + std::to_string(port) + ": " + error;
+        menuMessage = options.joinCode.empty() ? "Couldn't connect to " + host + ":" + std::to_string(port) + ": " + error
+                                               : "Couldn't join " + options.joinCode + ": " + error;
         StopGame();
         return false;
     }
     paused = false;
     SetCursorCaptured(true);
+    // VOXEL_RELAY=host:port and VOXEL_OPEN_TO_FRIENDS=1 open singleplayer to friends at
+    // once, through that relay (for screenshots and trying it out).
+    if (const char* relayAddress = std::getenv("VOXEL_RELAY"); relayAddress && localServer && std::getenv("VOXEL_OPEN_TO_FRIENDS")) {
+        relayHost = std::make_unique<net::RelayHost>();
+        if (!relayHost->Start(relayAddress, localServer->GetPort(), relayError)) relayHost.reset();
+    }
     // VOXEL_PAUSE=1 starts with the pause menu open (for screenshots).
     if (std::getenv("VOXEL_PAUSE")) {
         paused = true;
@@ -512,6 +524,8 @@ void Application::StopGame() {
         freeingWorld = std::async(std::launch::async, [chunks = world->Release()]() mutable { chunks.clear(); });
     }
     world.reset();
+    relayHost.reset(); // (closes the game to friends)
+    relayError.clear();
     if (localServer) localServer->Stop(); // (saves the world)
     localServer.reset();
     joined = false;
@@ -705,6 +719,7 @@ void Application::Shutdown() {
     if (world) new ClientWorld::ChunkMap(world->Release()); // (deliberately never freed)
     world.reset();
     renderer.reset();
+    relayHost.reset();
     if (localServer) localServer->Stop();
     localServer.reset();
 

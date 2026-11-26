@@ -11,6 +11,10 @@
 
 inline constexpr const char* kSettingsFile = "settings.txt";
 
+#ifndef VOXEL_DEFAULT_RELAY
+#define VOXEL_DEFAULT_RELAY ""
+#endif
+
 struct Settings {
     std::string name = "Player";
     int renderDistance = 12;  // chunks (the server may send fewer)
@@ -20,6 +24,9 @@ struct Settings {
     float volume = 0.8f;      // sound, 0..1
     bool viewBobbing = true;  // the view bobs a little while walking
     std::string lastServer = "localhost";
+    // The relay (VoxelRelay) games are opened to friends through, and join codes are
+    // looked up on: host or host:port. Empty: none (opening to friends is off).
+    std::string relay = VOXEL_DEFAULT_RELAY;
     std::array<int, kActionCount> keys = Bindings::Defaults(); // (GLFW key codes)
     float padLook = 160.0f;   // a gamepad's right stick: degrees a second, full over
     int bindingsVersion = 2;  // (as read: older files get the newer defaults, see Load)
@@ -58,6 +65,7 @@ struct Settings {
             else if (key == "vsync") vsync = rest != "0";
             else if (key == "volume") volume = static_cast<float>(std::atof(rest.c_str()));
             else if (key == "last_server") lastServer = rest;
+            else if (key == "relay") relay = rest;
             else if (key == "view_bobbing") viewBobbing = rest != "0";
             else if (key == "pad_look") padLook = static_cast<float>(std::atof(rest.c_str()));
             else if (key == "bindings_version") bindingsVersion = std::atoi(rest.c_str());
@@ -83,6 +91,7 @@ struct Settings {
              << "vsync " << (vsync ? 1 : 0) << "\n"
              << "volume " << volume << "\n"
              << "last_server " << lastServer << "\n"
+             << "relay " << relay << "\n"
              << "view_bobbing " << (viewBobbing ? 1 : 0) << "\n"
              << "pad_look " << padLook << "\n"
              << "bindings_version 2\n";

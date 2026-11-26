@@ -93,7 +93,8 @@ cd build && ./VoxelEngine --connect 192.168.1.20 --name Alice
 ```
 
 `--connect host:port` sets the port. To play on the same machine as the server,
-connect to `127.0.0.1`. Over the internet, forward UDP port 27450 to the server.
+connect to `127.0.0.1`. Over the internet, forward UDP port 27450 to the server, or use a join code (see
+[Playing with friends over the internet](#playing-with-friends-over-the-internet)).
 Other players appear as box figures in their own colour, with a dark visor on the
 side they're facing. Each has a right arm holding whatever is in their hand: a block
 as a little textured cube, a tool or item as its icon. Survival players' armour shows
@@ -101,6 +102,62 @@ over them (see [Swords and armour](#swords-and-armour)). Their name floats over 
 head, within 40 blocks and only when nothing's in the way. The server sends names once
 (when someone joins), and what's in hand and the armour with every position update.
 The server saves the world (see [Saving](#saving)).
+
+### Playing with friends over the internet
+
+A friend behind a home router can't reach your game directly, so it goes through a
+**relay**: a small program (`VoxelRelay`) on a machine anyone can reach, such as a
+cheap VPS. In a singleplayer world, open the pause menu and press **Open to friends**:
+the game asks the relay for a **join code** (like `amber-otter-42`) and shows it, with a
+button to copy it. Friends type the code into the Multiplayer page's Address box (as
+they'd type an address; capitals and spaces don't matter) and press Join. The pause
+menu shows how many are playing; **Close to friends**, or leaving the world, closes it.
+`VoxelServer --relay HOST[:PORT]` opens a dedicated server the same way and prints its
+code.
+
+Both sides need the relay's address in **Settings, Relay server** (`relay` in
+`settings.txt`): `host` or `host:port`, UDP port 25700 by default. Building with
+`-DVOXEL_DEFAULT_RELAY=relay.example.com` makes that the setting a new player starts
+with.
+
+How it works: the host's game keeps a UDP connection out to the relay (so nothing on
+the host's router needs opening), and a friend's game sends the code from the socket
+it plays on and then talks to the relay as if it were the server. The relay passes
+each friend's packets down the host's connection, and the host's game hands them to
+its own server over loopback, one socket per friend, so to the server a friend is just
+another client. Nothing is reliable twice over: it's the game's own ENet packets,
+passed on as they are, so a game through the relay plays like a direct one, plus the
+trip to the relay and back. The relay keeps nothing on disk. It closes a game whose
+host has been quiet for 30 seconds, and forgets a friend after a quiet minute. It takes
+at most 200 games, 4 from one address, and 32 friends in each, and 20 join attempts a
+minute from one address (so codes can't be guessed quickly). The format is in
+`src/relay/RelayProtocol.h`.
+
+**Running the relay on a VPS** (any small Linux machine with a public address: it
+uses almost no CPU or memory, and only the bandwidth the games use). It needs nothing
+but a C++17 compiler. Copy `src/relay` over, build it, and run it as a service:
+
+```bash
+scp -r src/relay you@your-vps:~/          # from here
+sudo apt install g++                      # on the VPS, then:
+g++ -O2 -std=c++17 -I. -o voxel-relay relay/main.cpp relay/RelayServer.cpp
+sudo install voxel-relay /usr/local/bin/
+sudo cp relay/voxel-relay.service /etc/systemd/system/
+sudo systemctl enable --now voxel-relay
+```
+
+Then let UDP port 25700 in: `sudo ufw allow 25700/udp` if the VPS runs ufw, and in the
+provider's firewall too (on Oracle Cloud, an ingress rule for UDP 25700 in the subnet's
+security list, and its Ubuntu images also need
+`sudo iptables -I INPUT -p udp --dport 25700 -j ACCEPT` plus
+`sudo netfilter-persistent save`). `journalctl -u voxel-relay -f` shows games opening
+and closing. `voxel-relay --port N` uses another port; `--max-rooms N` and `--quiet`
+are there too. On Windows the build makes `VoxelRelay.exe`, for trying it at home.
+
+`RelayTest` starts a relay, a server opened to friends through it, and two clients
+that join with the code (one typing it in capitals with spaces), all in one process,
+and checks that a wrong code is refused, both land on streamed terrain and see each
+other's edits, and closing the game closes its room.
 
 `NetSmokeTest` starts a server and two clients in one process (real sockets on
 localhost, no windows) and checks that chunks stream, edits and flowing water
@@ -2341,6 +2398,7 @@ For unattended screenshots there are a few environment variables:
 
 - `VOXEL_MENU_PAGE=worlds|new|multiplayer|settings` opens that page;
 - `VOXEL_PAUSE=1` opens the pause menu;
+- `VOXEL_RELAY=host:port` with `VOXEL_OPEN_TO_FRIENDS=1` opens singleplayer to friends through that relay at once;
 - `VOXEL_RUN="/time noon;/summon deer"` sends those chat lines a second after landing;
 - `VOXEL_HOLD_MINE=1` mines whatever's in view;
 - `VOXEL_AUTO_FLY=1` flies straight ahead, sprinting (creative): with `VOXEL_BENCH=1`,

@@ -13,6 +13,9 @@
 #include "app/Application.h"
 #include "client/Client.h"
 #include "net/Protocol.h"
+#include "net/RelayHost.h"
+#include "relay/RelayProtocol.h"
+#include "server/Server.h"
 
 namespace fs = std::filesystem;
 
@@ -207,13 +210,32 @@ void Application::DrawMenu() {
     }
     case Page::Multiplayer: {
         if (BeginCentred("Multiplayer", 420.0f)) {
-            ui::TextWrapped("Join a server (VoxelServer, or VoxelEngine --server). The default port is %u.", net::kDefaultPort);
+            ui::TextWrapped("Join a server (VoxelServer, or VoxelEngine --server; the default port is %u), or a friend's game "
+                            "with the join code they were given.", net::kDefaultPort);
             ui::Spacing();
             ui::InputText("Address", serverAddress, sizeof serverAddress);
-            ui::TextDisabled("host or host:port");
+            ui::TextDisabled("host, host:port, or a code like amber-otter-42");
             if (!menuMessage.empty()) ui::TextColored(ui::Vec4(1.0f, 0.5f, 0.45f, 1.0f), "%s", menuMessage.c_str());
             ui::Spacing();
-            if (WideButton("Join")) {
+            const bool join = WideButton("Join");
+            if (join && relay::LooksLikeCode(serverAddress)) {
+                // A join code: the game is found through the relay.
+                std::string host;
+                uint16_t port;
+                if (!net::SplitAddress(settings.relay, relay::kDefaultPort, host, port))
+                    menuMessage = "That's a join code, but no relay server is set (Settings)";
+                else {
+                    settings.lastServer = serverAddress;
+                    settings.Save(kSettingsFile);
+                    ClientOptions options;
+                    options.host = host;
+                    options.port = port;
+                    options.joinCode = relay::NormalizeCode(serverAddress);
+                    options.name = settings.name;
+                    StartGame(options);
+                }
+            }
+            else if (join) {
                 std::string host = serverAddress;
                 uint16_t port = net::kDefaultPort;
                 const size_t colon = host.rfind(':');
@@ -256,6 +278,11 @@ void Application::DrawSettingsPage(bool inGame) {
         if (ui::SliderFloat("Mouse sensitivity", &settings.sensitivity, Settings::kMinSensitivity, Settings::kMaxSensitivity, "%.2f"))
             ApplySettings();
         if (ui::Checkbox("Vsync", &settings.vsync)) ApplySettings();
+        static char relayServer[128];
+        if (std::strcmp(relayServer, settings.relay.c_str()) != 0 && !ui::IsAnyItemActive())
+            std::snprintf(relayServer, sizeof relayServer, "%s", settings.relay.c_str());
+        if (ui::InputText("Relay server", relayServer, sizeof relayServer)) settings.relay = relayServer;
+        ui::TextDisabled("For join codes: host or host:port (default %u).", relay::kDefaultPort);
         ui::Checkbox("View bobbing", &settings.viewBobbing);
         int volume = static_cast<int>(settings.volume * 100.0f + 0.5f);
         if (ui::SliderInt("Volume", &volume, 0, 100, "%d%%")) settings.volume = volume / 100.0f;
@@ -308,6 +335,33 @@ void Application::DrawSettingsPage(bool inGame) {
     ui::End();
 }
 
+// Singleplayer's pause menu: open the world to friends through the relay (they join with
+// the code shown), or close it again.
+void Application::DrawOpenToFriends() {
+    ui::Separator();
+    if (!relayHost) {
+        if (WideButton("Open to friends")) {
+            relayHost = std::make_unique<net::RelayHost>();
+            relayError.clear();
+            if (!relayHost->Start(settings.relay, localServer->GetPort(), relayError)) relayHost.reset();
+        }
+        if (!relayError.empty()) ui::TextColored(ui::Vec4(1.0f, 0.5f, 0.45f, 1.0f), "%s", relayError.c_str());
+        else if (settings.relay.empty()) ui::TextDisabled("Set a relay server in Settings first.");
+        else ui::TextDisabled("Friends join with a code, via %s.", settings.relay.c_str());
+    }
+    else {
+        const std::string code = relayHost->GetCode();
+        if (relayHost->GetState() == net::RelayHost::State::Open) {
+            CentredText("Join code", 1.0f);
+            CentredText(code.c_str(), 1.8f);
+            if (WideButton("Copy the code")) glfwSetClipboardString(window, code.c_str());
+        }
+        ui::TextDisabled("%s", relayHost->GetStatus().c_str());
+        if (WideButton("Close to friends")) relayHost.reset();
+    }
+    ui::Separator();
+}
+
 void Application::DrawPauseMenu() {
     // The game dimmed behind.
     const ui::Viewport* viewport = ui::GetMainViewport();
@@ -328,6 +382,7 @@ void Application::DrawPauseMenu() {
             SetCursorCaptured(true);
         }
         if (connected && WideButton("Settings")) pauseSettings = true;
+        if (connected && localServer) DrawOpenToFriends();
         if (WideButton(localServer ? "Save and quit to title" : connected ? "Disconnect" : "Back to title")) pendingStop = true;
         if (WideButton("Quit the game")) glfwSetWindowShouldClose(window, GLFW_TRUE);
     }

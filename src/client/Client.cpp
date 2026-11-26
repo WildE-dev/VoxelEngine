@@ -34,8 +34,9 @@ double Client::Now() {
     return duration<double>(steady_clock::now().time_since_epoch()).count();
 }
 
-bool Client::Connect(const std::string& host, uint16_t port, const std::string& name, std::string& error, int viewDistance) {
-    if (!net.Connect(host, port, 5000, error)) return false;
+bool Client::Connect(const std::string& host, uint16_t port, const std::string& name, std::string& error, int viewDistance,
+                     const std::string& joinCode) {
+    if (!net.Connect(host, port, 5000, error, joinCode)) return false;
     disconnectReason.clear();
     myName = name;
     net::Hello hello;
