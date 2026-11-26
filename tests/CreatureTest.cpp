@@ -335,6 +335,41 @@ int main(int argc, char** argv) {
             server.QueueConsoleCommand("creatures clear");
             both(20.0, [&] { return a.client.GetCreatures().empty(); });
 
+            std::cout << "Coming back" << std::endl;
+            {
+                // A third player tames a wolf, drops off (their connection goes quiet) and
+                // comes back on a new connection, with a new id: the wolf still follows them.
+                TestClient t;
+                t.client.Connect("127.0.0.1", server.GetPort(), "Tamer", error, kTestViewDistance);
+                auto withTamer = [&](TestClient& c, double s, const std::function<bool()>& done) { return Pump({ &a, &b, &c }, s, done); };
+                Check(withTamer(t, 20.0, [&] { return t.joined; }), "a third player joins");
+                server.QueueConsoleCommand("tp Tamer 50.5 0 8.5");
+                server.QueueConsoleCommand("summon wolf 52.5 0 8.5");
+                server.QueueConsoleCommand("give raw_venison 1 Tamer");
+                withTamer(t, 20.0, [&] { return t.Find(CreatureType::Wolf) && t.client.GetResources(ItemType::RAW_VENISON) > 0; });
+                const auto* found = t.Find(CreatureType::Wolf);
+                const uint16_t theirs = found ? found->id : 0;
+                t.heldBlock = ItemType::RAW_VENISON;
+                withTamer(t, 0.3, [] { return false; });
+                t.client.Interact(theirs);
+                Check(withTamer(t, 20.0, [&] { const auto* w = t.Find(CreatureType::Wolf); return w && w->tame; }), "tames a wolf");
+                wait(4.0); // (their connection quiet, as when it drops)
+                TestClient back;
+                back.client.Connect("127.0.0.1", server.GetPort(), "Tamer", error, kTestViewDistance);
+                Check(withTamer(back, 20.0, [&] { return back.joined; }), "and comes back on a new connection");
+                server.QueueConsoleCommand("tp Tamer 64.5 0 8.5");
+                Check(withTamer(back, 30.0, [&] {
+                          const auto* w = back.Find(CreatureType::Wolf);
+                          return w && glm::distance(glm::vec2(w->feet.x, w->feet.z), glm::vec2(64.5f, 8.5f)) < 5.0f;
+                      }),
+                      "their wolf still follows them");
+                back.client.Disconnect();
+                t.client.Disconnect();
+                withTamer(back, 0.5, [] { return false; });
+            }
+            server.QueueConsoleCommand("creatures clear");
+            both(20.0, [&] { return a.client.GetCreatures().empty(); });
+
         }
         if (sections.Run("raids")) {
             std::cout << "Raids" << std::endl;

@@ -722,6 +722,9 @@ private:
     uint32_t weatherSeed = 0x9E3779B9u;
     std::unordered_map<net::PeerId, ClientState> clients;
     uint16_t nextPlayerId = 1;
+    // The id each player (by lowercased name) last had: one who comes back (a new
+    // connection, a new id) gets their tame wolves and hired guards back.
+    std::unordered_map<std::string, uint16_t> lastIdOf;
     uint32_t tickCount = 0;
     double startTime = 0.0;
 

@@ -587,6 +587,15 @@ void Server::HandleHello(ClientState& client, const net::Hello& hello) {
         }
     }
     client.welcomed = true;
+    {
+        std::string key = client.name;
+        for (char& c : key) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        auto [last, first] = lastIdOf.try_emplace(key, client.id);
+        if (!first) {
+            creatures.Rebind(last->second, client.id);
+            last->second = client.id;
+        }
+    }
 
     // Spread players out a little so they don't spawn inside each other. The client
     // drops onto the terrain below this point once it has loaded.

@@ -122,6 +122,11 @@ public:
     // A dwarf guard hired by a player, standing here (0: too many creatures).
     uint16_t Hire(const glm::vec3& feet, uint16_t player, double now, double seconds);
     int HiredBy(uint16_t player) const;
+    // A player came back with a new id (a reconnect): their wolves and guards follow it.
+    void Rebind(uint16_t from, uint16_t to) {
+        for (auto& c : creatures)
+            if (c.owner == from) c.owner = to;
+    }
     // A raid: a war band (three warriors and a crossbowman) on open ground some way from
     // a player's bed, making for it. They break through planks, doors, glass, logs and
     // leaves in their way. Returns how many came (0: nowhere to stand).
