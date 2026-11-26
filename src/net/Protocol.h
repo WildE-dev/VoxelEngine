@@ -23,8 +23,9 @@
 //
 // Channels:
 //  - kChannelReliable (reliable, ordered): handshake, chunks, block deltas, light,
-//    edits, corrections. Ordering matters: a block delta always follows the chunk data
-//    it applies to.
+//    edits, corrections, and the last (empty) list of arrows, items or steam near a
+//    player, which is sent only once. Ordering matters: a block delta always follows
+//    the chunk data it applies to.
 //  - kChannelUnreliable (unreliable, sequenced): player states and snapshots, which
 //    are superseded by the next one anyway.
 namespace net {

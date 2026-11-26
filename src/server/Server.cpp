@@ -2262,7 +2262,9 @@ void Server::SendArrows() {
             if (glm::distance(a.position, client.feet) < kSendRange) m.arrows.push_back({ a.position, a.velocity });
         if (m.arrows.empty() && !client.sentArrows) continue; // (nothing, and they know it)
         client.sentArrows = !m.arrows.empty();
-        net.Send(peer, net::kChannelUnreliable, net::Encode(m));
+        // (The last "none" goes reliably: it's sent once, and lost the client would go on
+        // drawing the last arrows it heard of. A late one is put right by the next list.)
+        net.Send(peer, m.arrows.empty() ? net::kChannelReliable : net::kChannelUnreliable, net::Encode(m));
     }
 }
 
@@ -2392,7 +2394,7 @@ void Server::SendDroppedItems() {
         if (m.items.empty() && client.sentItems == 0) continue; // (nothing, and they know it)
         client.sentItems = m.items.empty() ? 0 : (hash ? hash : 1);
         client.itemsQuiet = 0;
-        net.Send(peer, net::kChannelUnreliable, net::Encode(m));
+        net.Send(peer, m.items.empty() ? net::kChannelReliable : net::kChannelUnreliable, net::Encode(m)); // (the last "none" reliably: see SendArrows)
     }
 }
 
@@ -2643,7 +2645,7 @@ void Server::SendSteam() {
         }
         if (m.cells.empty() && !client.sentSteam) continue; // (none, and they know it)
         client.sentSteam = !m.cells.empty();
-        net.Send(peer, net::kChannelUnreliable, net::Encode(m));
+        net.Send(peer, m.cells.empty() ? net::kChannelReliable : net::kChannelUnreliable, net::Encode(m)); // (the last "none" reliably: see SendArrows)
     }
 }
 
