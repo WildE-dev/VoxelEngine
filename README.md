@@ -1214,7 +1214,10 @@ follow you more than 18 blocks from his throne. Near him, his health shows as a 
 across the top of the screen.
 
 Defeat him and his hoard is yours (6 steel and 8 iron ingots), everyone's told, and
-you earn **Kingslayer**. He doesn't come back: the strongholds whose king has fallen
+you earn **Kingslayer**. It's yours however he falls, as long as you were the last to
+hurt him: your hit, or a bite from your tame wolf or a blow from a guard you hired
+(a forge golem the same). Finished by TNT, fire or spikes with nobody's hit on him,
+the hoard is left where he fell. He doesn't come back: the strongholds whose king has fallen
 are kept in the world's `kings.txt`. `/locate stronghold` finds the nearest, and
 `/summon dwarf_king` brings one, who keeps to where he was brought (and isn't counted
 as a stronghold's). `BiomeTest` checks a stronghold's

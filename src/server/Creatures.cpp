@@ -197,7 +197,7 @@ const CreatureSystem::Creature* CreatureSystem::Find(uint16_t id) const {
     return nullptr;
 }
 
-bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, int tier, double now, bool& killed) {
+bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, int tier, double now, bool& killed, uint16_t by) {
     killed = false;
     auto it = std::find_if(creatures.begin(), creatures.end(), [&](const Creature& c) { return c.id == id; });
     if (it == creatures.end()) return false;
@@ -207,14 +207,15 @@ bool CreatureSystem::Attack(uint16_t id, const glm::vec3& eye, Tool tool, int ti
     const Collision::AABB box = BoxAt(c.feet, spec);
     const glm::vec3 nearest = glm::clamp(eye, box.min, box.max);
     if (glm::distance(eye, nearest) > Combat::kReach + 0.5f) return false; // (slack for movement in flight)
-    return Damage(id, Combat::Damage(tool, tier), eye, now, killed);
+    return Damage(id, Combat::Damage(tool, tier), eye, now, killed, by);
 }
 
-bool CreatureSystem::Damage(uint16_t id, int damage, const glm::vec3& from, double now, bool& killed) {
+bool CreatureSystem::Damage(uint16_t id, int damage, const glm::vec3& from, double now, bool& killed, uint16_t by) {
     killed = false;
     auto it = std::find_if(creatures.begin(), creatures.end(), [&](const Creature& c) { return c.id == id; });
     if (it == creatures.end()) return false;
     Creature& c = *it;
+    if (by != 0) c.hurtBy = by;
     const glm::vec3 eye = from;
     c.health -= damage;
     c.hurtUntil = now + 0.3;
@@ -267,7 +268,9 @@ void CreatureSystem::EndRaids() {
 }
 
 void CreatureSystem::Fallen(const Creature& c) {
-    if ((c.type == CreatureType::DwarfKing || c.type == CreatureType::ForgeGolem) && c.hasHome && !c.summoned) fallenKings.insert(SiteKey(c.site));
+    if (c.type != CreatureType::DwarfKing && c.type != CreatureType::ForgeGolem) return;
+    if (c.hasHome && !c.summoned) fallenKings.insert(SiteKey(c.site));
+    bossDeaths.push_back({ c.type, c.feet, c.hurtBy });
 }
 
 Collision::AABB CreatureSystem::Box(const Creature& c) { return BoxAt(c.feet, SpecOf(c.type)); }
@@ -360,6 +363,7 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
             if (foe) {
                 chaseAndBite(foe->feet, [&] {
                     foe->health -= 4;
+                    foe->hurtBy = c.owner; // (its owner's kill)
                     foe->hurtUntil = now + 0.3;
                 });
                 return;
@@ -450,6 +454,7 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
         if (foe) {
             strike(foe->feet, [&] {
                 foe->health -= spec.attackDamage + 1;
+                if (c.owner != 0) foe->hurtBy = c.owner; // (a hired guard's kill is its hirer's)
                 foe->hurtUntil = now + 0.3;
             });
             return;

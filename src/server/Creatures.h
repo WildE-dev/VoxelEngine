@@ -13,6 +13,7 @@
 // players (world/Dwarves.h): a site fills up when a player first comes near, then
 // gets one back every kSiteRefill seconds. On a horde night a war band of dwarves
 // (no home) comes for players from all round.
+#include <utility>
 #include <cstdint>
 #include <functional>
 #include <random>
@@ -62,7 +63,16 @@ public:
         bool raider = false;     // come for a player's home (its home: their bed), gone at dawn
         bool summoned = false;   // brought by /summon (a boss so brought isn't a stronghold's)
         float stuck = 0.0f;      // how long it's been pushing against something (raiders hack through)
+        uint16_t hurtBy = 0;     // the player whose hit (or whose wolf's or guard's) last hurt it
     };
+    // A boss (a Dwarf King, a forge golem) gone down, however it went: who it's credited
+    // to (hurtBy: 0 for nobody, as when TNT or fire finished it unhelped), for its reward.
+    struct BossDeath {
+        CreatureType type;
+        glm::vec3 feet;
+        uint16_t by;
+    };
+    std::vector<BossDeath> TakeBossDeaths() { return std::exchange(bossDeaths, {}); }
     // How long a creature counts as attacking or working after it did, for the clients.
     static constexpr double kAttackShown = 0.6, kWorkShown = 0.9;
     // A creature did something (1 attacked, 2 worked).
@@ -104,9 +114,9 @@ public:
 
     // A player at `eye` hits creature `id` with `tool`. Returns whether it landed
     // (exists, in reach); `killed` says if it died.
-    bool Attack(uint16_t id, const glm::vec3& eye, Tool tool, int tier, double now, bool& killed);
+    bool Attack(uint16_t id, const glm::vec3& eye, Tool tool, int tier, double now, bool& killed, uint16_t by = 0);
     // Hurts it (from anywhere: an arrow), knocking it back away from `from`.
-    bool Damage(uint16_t id, int damage, const glm::vec3& from, double now, bool& killed);
+    bool Damage(uint16_t id, int damage, const glm::vec3& from, double now, bool& killed, uint16_t by = 0); // by: the player (0: none)
     // Thrown (an air launcher): off the ground at this velocity.
     void Launch(uint16_t id, const glm::vec3& velocity) {
         for (auto& c : creatures)
@@ -178,6 +188,7 @@ private:
     };
     std::vector<Pending> pending;
     void Fallen(const Creature& c);
+    std::vector<BossDeath> bossDeaths;
     uint16_t nextId = 1;
     std::mt19937 rng;
     bool naturalSpawning = true;

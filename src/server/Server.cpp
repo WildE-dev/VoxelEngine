@@ -1004,7 +1004,7 @@ void Server::HandleAttack(ClientState& client, uint16_t creature, Tool tool) {
     const CreatureSystem::Creature* target = creatures.Find(creature);
     const CreatureType type = target ? target->type : CreatureType::Count;
     const bool raider = target && target->raider;
-    const bool landed = creatures.Attack(creature, eye, tool, ToolTier(client, tool), now, killed);
+    const bool landed = creatures.Attack(creature, eye, tool, ToolTier(client, tool), now, killed, client.id);
     if (landed && !killed) creatures.Provoke(creature, client.id, now);
     if (landed && killed) RewardKill(client, type, raider);
 }
@@ -1022,8 +1022,7 @@ void Server::RewardKill(ClientState& client, CreatureType type, bool raider) {
         Give(client, ItemType::ARROW, 2 * Block::kUnitsPerBlock);
         SendInventory(client);
     }
-    if (type == CreatureType::DwarfKing) KingSlain(client);
-    if (type == CreatureType::ForgeGolem) GolemSlain(client);
+    // (A boss's reward comes with its death, however it went: RewardBosses.)
     if (raider) Award(client, Achievement::Defender);
     if (type == CreatureType::Deer) Award(client, Achievement::Hunter);
     else if (SpecOf(type).hostile) Award(client, Achievement::DwarfSlayer);
@@ -1055,6 +1054,33 @@ void Server::HandleInteract(ClientState& client, uint16_t creature) {
     }
     SendChat(client, net::ChatMessage::Kind::Info, "Wolf tamed");
     Award(client, Achievement::BestFriend);
+}
+
+void Server::RewardBosses() {
+    for (const auto& death : creatures.TakeBossDeaths()) {
+        ClientState* by = nullptr;
+        for (auto& [peer, client] : clients)
+            if (client.welcomed && death.by != 0 && client.id == death.by) by = &client;
+        if (by) {
+            if (death.type == CreatureType::DwarfKing) KingSlain(*by);
+            else GolemSlain(*by);
+            continue;
+        }
+        // Nobody to credit (TNT or fire finished it, or they've gone): its hoard is left
+        // where it fell, for whoever comes for it.
+        const glm::ivec3 at(glm::floor(death.feet + glm::vec3(0.0f, 0.5f, 0.0f)));
+        const bool king = death.type == CreatureType::DwarfKing;
+        if (king) {
+            dropped.DropUnits(ItemType::STEEL_INGOT, 6 * Block::kUnitsPerBlock, at);
+            dropped.DropUnits(ItemType::IRON_INGOT, 8 * Block::kUnitsPerBlock, at);
+        }
+        else {
+            dropped.DropUnits(ItemType::FORGE_CORE, Block::kUnitsPerBlock, at);
+            dropped.DropUnits(ItemType::STEEL_INGOT, 3 * Block::kUnitsPerBlock, at);
+        }
+        for (auto& [peer, other] : clients)
+            if (other.welcomed) SendChat(other, net::ChatMessage::Kind::Info, king ? "A Dwarf King has fallen: his hoard lies where he fell" : "A forge golem has fallen: its forge core lies where it fell");
+    }
 }
 
 void Server::KingSlain(ClientState& client) {
@@ -2215,7 +2241,7 @@ void Server::UpdateArrows() {
                 const uint16_t id = c.id;
                 const CreatureType type = c.type;
                 const bool raider = c.raider;
-                creatures.Damage(id, a.damage, a.position - a.velocity * 0.05f, now, killed);
+                creatures.Damage(id, a.damage, a.position - a.velocity * 0.05f, now, killed, a.shooter != kCreatureShooter ? a.shooter : 0);
                 if (!killed && a.shooter != kCreatureShooter) creatures.Provoke(id, a.shooter, now);
                 if (killed)
                     for (auto& [peer, shooter] : clients)
@@ -2943,6 +2969,7 @@ void Server::Tick() {
     UpdateCreatures();
     section(1);
     UpdateCrops();
+    RewardBosses();
     UpdateArrows();
     UpdateDroppedItems();
     UpdateLava();

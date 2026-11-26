@@ -335,6 +335,36 @@ int main(int argc, char** argv) {
             server.QueueConsoleCommand("creatures clear");
             both(20.0, [&] { return a.client.GetCreatures().empty(); });
 
+            std::cout << "Bosses that fall to other hands" << std::endl;
+            {
+                // A pit of spikes walled in obsidian. A forge golem the hunter has hit,
+                // finished by the spikes, still gives them its forge core; one nobody hit
+                // leaves it where it fell.
+                server.QueueConsoleCommand("fill 19 0 19 23 3 23 obsidian");
+                server.QueueConsoleCommand("fill 20 0 20 22 3 22 air");
+                server.QueueConsoleCommand("fill 20 0 20 22 0 22 spikes");
+                server.QueueConsoleCommand("tp Hunter 18.5 0 21.5");
+                both(10.0, [&] { return std::abs(a.feet.x - 18.5f) < 0.1f; });
+                const uint32_t cores = a.client.GetResources(ItemType::FORGE_CORE);
+                server.QueueConsoleCommand("summon forge_golem 21.5 0 21.5");
+                Check(both(20.0, [&] { return a.Find(CreatureType::ForgeGolem) != nullptr; }), "a forge golem in a pit of spikes");
+                a.client.Attack(a.Find(CreatureType::ForgeGolem)->id, Tool::Sword);
+                Check(both(60.0, [&] { return a.Find(CreatureType::ForgeGolem) == nullptr; }) &&
+                          both(5.0, [&] { return a.client.GetResources(ItemType::FORGE_CORE) == cores + Block::kUnitsPerBlock; }),
+                      "hit once by the hunter and finished by the spikes, its forge core is still theirs");
+                server.QueueConsoleCommand("tp Hunter 8.5 0 8.5"); // (out of reach of what it leaves)
+                both(10.0, [&] { return std::abs(a.feet.x - 8.5f) < 0.1f; });
+                server.QueueConsoleCommand("summon forge_golem 21.5 0 21.5");
+                Check(both(20.0, [&] { return a.Find(CreatureType::ForgeGolem) != nullptr; }), "another, that nobody hits");
+                Check(both(60.0, [&] { return a.Find(CreatureType::ForgeGolem) == nullptr; }) && both(5.0, [&] {
+                          for (const auto& i : a.client.GetItems())
+                              if (i.item == Items::Of(ItemType::FORGE_CORE) && glm::distance(glm::vec2(i.position.x, i.position.z), glm::vec2(21.5f)) < 3.0f) return true;
+                          return false;
+                      }) && Has(a, "its forge core lies where it fell"),
+                      "falls to the spikes and leaves its forge core where it fell");
+                server.QueueConsoleCommand("fill 19 0 19 23 3 23 air");
+            }
+
             std::cout << "Coming back" << std::endl;
             {
                 // A third player tames a wolf, drops off (their connection goes quiet) and
