@@ -2,7 +2,7 @@
 //  - natural blocks slope and built blocks step: standing heights follow the quarters,
 //    and the water a shape holds follows its mean height,
 //  - chiselling lowers and raises a quarter, back to a full block or away to nothing,
-//    a slope with three corners gone left as a little peak, and a built block's
+//    a slope's corners kept a pixel tall (chiselled down, or cut from below), a built block's
 //    quarters cut from below as well (drawn, stood under, worth what's left),
 //  - the mesher draws a stepped block as quarter-columns (tops at each quarter's
 //    height), joins natural slopes across rows (no notch where a slope climbs into the
@@ -155,9 +155,10 @@ int main() {
         Block dirt(BlockType::DIRT);
         for (int e : { 0, 1, 3 })
             for (int i = 0; i < 4; i++) dirt = dirt.Chiselled(e, -4);
-        Check(dirt.type == BlockType::DIRT && dirt.edgeData.GetTopY(2) == 16 && dirt.edgeData.IsEmpty(0),
-              "a slope with three corners gone is a little peak on the one left");
-        Check(dirt.Chiselled(2, -16).IsAir(), "and with the last gone too, it's gone");
+        Check(dirt.type == BlockType::DIRT && dirt.edgeData.GetTopY(2) == 16 && dirt.edgeData.GetTopY(0) == 1 && dirt.edgeData.GetTopY(1) == 1 && dirt.edgeData.GetTopY(3) == 1,
+              "a slope's corners chiselled all the way down keep a pixel at the bottom of the cell");
+        const Block flat = dirt.Chiselled(2, -16);
+        Check(flat.type == BlockType::DIRT && flat.ResourceUnits() == 4, "and with the last down too, it's a slab a pixel thin (natural ground is broken, not chiselled away)");
 
         // Cut from below: a brick shaped from its top can have a quarter's bottom raised
         // (a stroke at its underside), and lowered back.

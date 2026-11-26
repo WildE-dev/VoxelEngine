@@ -796,12 +796,13 @@ Shape blocks yourself with the chisel, a tool (in survival, made from a little w
 and stone). With it in hand, right-click lowers the quarter you're looking
 at, and crouching and right-clicking raises it again. **V** sets how far each stroke
 goes: a sixteenth of a block (a pixel), an eighth (as fine as natural slopes), a quarter, or a half. Raising every quarter to the top
-makes the block whole; lowering them all removes it. Any shaped block
+makes the block whole; lowering a built block's quarters all the way removes it. A natural
+block's corners always keep at least a pixel (sixteenth) of height, even at the bottom of the
+cell, so chiselled all the way down it's a slab a pixel thin, broken like any block. Any shaped block
 can be cut from below too: a stroke at its underside raises that
 quarter's bottom instead (crouching lowers it back), so a quarter can be trimmed from
 both ends, or cut right through (natural ground's underside slopes like its surface, and
-its corners keep at least a pixel). Natural ground left with a single corner up stays as
-a little peak.
+its corners keep at least a pixel).
 The quarter you're looking at is the one your view actually lands on (a low step
 seen past a taller one, the side of a quarter, the underside of one chiselled from
 below), and while the chisel's in hand it's outlined in gold, so you can see which

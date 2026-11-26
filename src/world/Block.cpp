@@ -1184,8 +1184,10 @@ Block Block::ChiselledBottom(int edge, int deltaSteps) const {
 
 Block Block::Chiselled(int edge, int deltaSteps) const {
     Block b = *this;
-    // (A slope's corner cut from below keeps a pixel over its bottom, as in ChiselledBottom.)
-    const int floor = !IsStepped() && edgeData.GetBottomY(edge) > 0 ? edgeData.GetBottomY(edge) + 1 : 0;
+    // (A slope's corner always keeps a pixel over its bottom, the floor of the cell or
+    // where it's been cut from below, as in ChiselledBottom: chiselled all the way down,
+    // natural ground is a slab a pixel thin. A quarter can be cut away.)
+    const int floor = IsStepped() ? 0 : edgeData.GetBottomY(edge) + 1;
     const int height = std::clamp(edgeData.GetTopY(edge) + deltaSteps, floor, EdgeData::kSteps);
     b.edgeData.SetTopY(edge, static_cast<uint8_t>(height));
     if (b.edgeData.IsFull()) {
