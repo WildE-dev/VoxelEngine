@@ -989,8 +989,8 @@ nothing has hurt you for 5, as long as you're well fed (see
 respawn at the spawn point (or your bed: see [Beds](#beds)) with full health (and three seconds' grace). In survival,
 everything you carry and wear (blocks, items, tools and armour) is left behind in a
 chest placed where you died (or just beside or above, in the nearest open cell), and
-you come back empty-handed; the chat tells you where it is. Anyone can open it, so a
-killer can take it. In no-clip
+you come back empty-handed; the chat tells you where it is. Fire doesn't burn that
+chest. Anyone can open it, so a killer can take it. In no-clip
 nothing can hurt you. All four blocks are in the inventory, for building traps of
 your own. `TrapTest` checks spikes, death and respawn, crumbling floors, pressure
 plates and sluice gates, falls (safe from 3 blocks, four hearts from 11), and that
