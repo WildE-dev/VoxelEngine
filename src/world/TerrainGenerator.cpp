@@ -56,17 +56,15 @@ bool DeepCavern(int x, int y, int z) {
 }
 
 constexpr int S = TerrainGenerator::S;
-// Surface heights snap to eighths of a block (two of EdgeData's sixteenths): finer, a
-// slope's corner would more often poke a sliver above its row, where its cell can't
-// stand on one corner and leaves a gap; and worlds made before shapes had sixteenths
-// would no longer join up with the land generated now.
-constexpr float kSmoothness = 8.0f;
-constexpr int kStepsPerSmooth = EdgeData::kSteps / 8;
+// Surface heights snap to sixteenths of a block (EdgeData's steps, the finest chisel
+// stroke). (A corner poking a sliver above its row makes a little one-cornered peak
+// there: see Block::SetEdgeData.)
+constexpr float kSmoothness = static_cast<float>(EdgeData::kSteps);
 
 int Index(int x, int y, int z) { return x + S * (y + S * z); }
 float Quantise(float h) { return std::round(h * kSmoothness) / kSmoothness; }
-// Height above the block's base in sixteenths (whole eighths), clamped to the valid edge range.
-uint8_t EdgeHeight(float h) { return static_cast<uint8_t>(std::clamp(static_cast<int>(h * kSmoothness) * kStepsPerSmooth, 0, EdgeData::kSteps)); }
+// Height above the block's base in sixteenths, clamped to the valid edge range.
+uint8_t EdgeHeight(float h) { return static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(h * kSmoothness)), 0, EdgeData::kSteps)); }
 
 TerrainGenerator::Column MakeColumn(float h00, float h10, float h01, float h11) {
     TerrainGenerator::Column c;
@@ -587,12 +585,17 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
             // Beaches, rock and snow on mountains, else the biome's ground.
             const BlockType top = column.TopType(biomes[x * S + z]);
             const BlockType under = column.UnderType(biomes[x * S + z]);
+            const int topRow = column.TopRow();
             for (int y = 0; y < S; y++) {
                 const int blockY = coords.y * S + y;
                 if (blockY == m) {
                     // Sloped top. If the surface is (almost) flat at the bottom of this
                     // cell the cell stays empty and the block below is the top instead.
                     if (sloped) out[Index(x, y, z)] = Block(top, edges);
+                }
+                else if (blockY > m && blockY <= topRow) {
+                    // The slope going on above it (Column::TopRow).
+                    out[Index(x, y, z)] = Block(top, column.EdgesAt(blockY));
                 }
                 else if (blockY == m - 1 && !sloped) {
                     out[Index(x, y, z)] = Block(top);
@@ -642,7 +645,7 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
     {
         auto drop = [](int cx, int y, int cz) {
             const float n = Noise::Perlin3(cx * 0.21f, y * 0.37f, cz * 0.21f, 0xF1A7u);
-            return std::clamp(static_cast<int>(std::lround((n + 0.15f) * 6.0f)), 0, 4) * kStepsPerSmooth; // (whole eighths, in sixteenths)
+            return std::clamp(static_cast<int>(std::lround((n + 0.15f) * 12.0f)), 0, EdgeData::kSteps / 2); // (sixteenths: up to half a block)
         };
         for (int x = 0; x < S; x++)
             for (int z = 0; z < S; z++) {
@@ -678,6 +681,10 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
             for (int y = 0; y < S; y++) {
                 const int blockY = coords.y * S + y;
                 Block& cell = out[Index(x, y, z)];
+                if (blockY > m && blockY <= column.TopRow()) {
+                    if (cell.IsPartial()) cell = Block(BlockType::SAND, column.EdgesAt(blockY)); // (the slope above, sand too)
+                    continue;
+                }
                 if (blockY < m - 4 || blockY > m) continue;
                 const bool top = blockY == m || (blockY == m - 1 && !column.HasSlopedTop());
                 if (top && blockY == m) {
@@ -698,7 +705,8 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                 const int blockY = coords.y * S + y;
                 Block& cell = out[Index(x, y, z)];
                 const int waterLevel = waterLevels[x * S + z];
-                if (blockY >= firstOpen && blockY < waterLevel) {
+                if (blockY >= firstOpen && blockY < waterLevel && cell.IsPartial()) cell.water = cell.shown = cell.WaterCapacity(); // (a piece of slope above the surface row)
+                else if (blockY >= firstOpen && blockY < waterLevel) {
                     // Frozen biomes: the sea's top layer is ice (mountain lakes stay open).
                     const bool ice = waterLevel == kSeaLevel && blockY == kSeaLevel - 1 && IsFrozen(biomes[x * S + z]);
                     cell = ice ? Block(BlockType::ICE) : Block::Water(Block::kMaxWaterVolume);
@@ -846,7 +854,7 @@ void TerrainGenerator::PlacePlants(const glm::ivec3& coords, const ColumnHeights
             if (!groundIntact) continue;
 
             const float drop = plantRow - column.GroundHeightAtCentre(); // 0..1 blocks
-            const int dropSteps = std::clamp(static_cast<int>(std::lround(drop * kSmoothness)) * kStepsPerSmooth, 0, EdgeData::kSteps - 1);
+            const int dropSteps = std::clamp(static_cast<int>(std::lround(drop * kSmoothness)), 0, EdgeData::kSteps - 1);
             out[Index(x, py, z)] = Block::Plant(type, static_cast<uint8_t>(dropSteps));
         }
     }

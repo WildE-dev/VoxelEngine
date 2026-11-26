@@ -3310,6 +3310,8 @@ std::optional<Application::ChiselAim> Application::AimChisel() {
     aim.shapeDir = aim.target.IsFullBlock() && Block::CanTurnShape(aim.target.type) ? Block::ShapeDirFacing(hit->normal) : aim.target.ShapeDir();
     const glm::vec3 p = glm::clamp(hit->point + dir * 0.002f - glm::vec3(hit->block), glm::vec3(0.0f), glm::vec3(1.0f));
     aim.edge = Block::ChiselEdgeAt(aim.shapeDir, p);
+    // At a built shape's underside (the face opposite its top): its quarter's bottom.
+    aim.bottom = !aim.target.IsFullBlock() && aim.target.CanCarveBottom() && Block::ShapeDirFacing(hit->normal) == (aim.shapeDir + 3) % 6;
     return aim;
 }
 
@@ -3343,7 +3345,7 @@ bool Application::CrouchHeld() const {
 }
 
 void Application::ChiselTarget(bool raise) {
-    if (const auto aim = AimChisel()) client->Chisel(aim->block, aim->edge, raise, aim->shapeDir, chiselStep);
+    if (const auto aim = AimChisel()) client->Chisel(aim->block, aim->edge, raise, aim->shapeDir, chiselStep, aim->bottom);
 }
 
 void Application::OnMouseButton(int button, int action) {

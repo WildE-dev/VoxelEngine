@@ -1380,7 +1380,7 @@ void Server::HandleChisel(ClientState& client, const net::EditChisel& chisel) {
     // Needs the chisel (creative has every tool), and moves the corner by the step chosen.
     if (Usable(client, Tool::Chisel) != Tool::Chisel || !InReach(client, p, EditReach(client)) || !world->GetBlock(p.x, p.y, p.z, block) || !block.CanChisel())
         return Echo(client, p);
-    const Block after = block.ChiselledFrom(chisel.dir, chisel.edge, chisel.raise ? chisel.step : -chisel.step);
+    const Block after = block.ChiselledFrom(chisel.dir, chisel.edge, chisel.raise ? chisel.step : -chisel.step, chisel.bottom != 0);
     // Survival: chiselling off gives back what it takes away; building up costs it.
     if (!Creative(client)) {
         const ItemId type = Items::ResourceOf(block.type);

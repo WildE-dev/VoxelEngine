@@ -458,11 +458,11 @@ bool Client::PlaceBlock(const glm::ivec3& pos, BlockType type, int heightSteps, 
     return true;
 }
 
-void Client::Chisel(const glm::ivec3& pos, int edge, bool raise, int dir, int step) {
+void Client::Chisel(const glm::ivec3& pos, int edge, bool raise, int dir, int step, bool bottom) {
     if (!welcomed || edge < 0 || edge > 3 || dir < 0 || dir > 5 || !Block::IsChiselStep(step) || !HasTool(Tool::Chisel)) return;
     Block block;
     if (!world.GetBlock(pos.x, pos.y, pos.z, block) || !block.CanChisel()) return;
-    const Block after = block.ChiselledFrom(dir, edge, raise ? step : -step);
+    const Block after = block.ChiselledFrom(dir, edge, raise ? step : -step, bottom);
     if (!IsCreative()) {
         const ItemId type = Items::ResourceOf(block.type);
         const int change = after.ResourceUnits() - block.ResourceUnits();
@@ -472,7 +472,7 @@ void Client::Chisel(const glm::ivec3& pos, int edge, bool raise, int dir, int st
     }
     world.SetBlock(pos.x, pos.y, pos.z, after);
     net.Send(net::kChannelReliable, net::Encode(net::EditChisel{ pos, static_cast<uint8_t>(edge), static_cast<uint8_t>(raise ? 1 : 0), static_cast<uint8_t>(dir),
-                                                                 static_cast<uint8_t>(step) }));
+                                                                 static_cast<uint8_t>(step), static_cast<uint8_t>(bottom ? 1 : 0) }));
 }
 
 void Client::Flatten(const glm::ivec3& pos, int radius) {

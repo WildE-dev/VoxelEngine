@@ -150,6 +150,7 @@ private:
     struct ChiselAim {
         glm::ivec3 block{ 0 };
         int edge = 0, shapeDir = 0;
+        bool bottom = false; // at a built shape's underside: its quarter's bottom
         Block target;
     };
     std::optional<ChiselAim> AimChisel();

@@ -587,12 +587,13 @@ std::vector<uint8_t> Encode(const EditChisel& m) {
     w.U8(m.raise);
     w.U8(m.dir);
     w.U8(m.step);
+    w.U8(m.bottom);
     return std::move(w.data);
 }
 
 bool Decode(ByteReader& in, EditChisel& m) {
-    return in.IVec3(m.pos) && in.U8(m.edge) && in.U8(m.raise) && in.U8(m.dir) && in.U8(m.step) && m.edge < 4 && m.raise <= 1 && m.dir <= 5 &&
-           Block::IsChiselStep(m.step) && in.AtEnd();
+    return in.IVec3(m.pos) && in.U8(m.edge) && in.U8(m.raise) && in.U8(m.dir) && in.U8(m.step) && in.U8(m.bottom) && m.edge < 4 && m.raise <= 1 &&
+           m.dir <= 5 && Block::IsChiselStep(m.step) && m.bottom <= 1 && in.AtEnd();
 }
 
 std::vector<uint8_t> Encode(const Abilities& m) {

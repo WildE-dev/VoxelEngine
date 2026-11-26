@@ -2,7 +2,8 @@
 //  - natural blocks slope and built blocks step: standing heights follow the quarters,
 //    and the water a shape holds follows its mean height,
 //  - chiselling lowers and raises a quarter, back to a full block or away to nothing,
-//    and a slope with three corners gone falls away,
+//    a slope with three corners gone left as a little peak, and a built block's
+//    quarters cut from below as well (drawn, stood under, worth what's left),
 //  - the mesher draws a stepped block as quarter-columns (tops at each quarter's
 //    height), joins natural slopes across rows (no notch where a slope climbs into the
 //    row above), and lets a thin layer of water on water thin out to nothing,
@@ -154,7 +155,43 @@ int main() {
         Block dirt(BlockType::DIRT);
         for (int e : { 0, 1, 3 })
             for (int i = 0; i < 4; i++) dirt = dirt.Chiselled(e, -4);
-        Check(dirt.IsAir(), "a slope with three corners gone falls away");
+        Check(dirt.type == BlockType::DIRT && dirt.edgeData.GetTopY(2) == 16 && dirt.edgeData.IsEmpty(0),
+              "a slope with three corners gone is a little peak on the one left");
+        Check(dirt.Chiselled(2, -16).IsAir(), "and with the last gone too, it's gone");
+
+        // Cut from below: a brick shaped from its top can have a quarter's bottom raised
+        // (a stroke at its underside), and lowered back.
+        {
+            const Block shaped = Block(BlockType::STONE_BRICK).Chiselled(2, -4); // (shaped: its top's quarter 2 down a quarter)
+            const Block under = shaped.ChiselledFrom(0, 1, -4, true);
+            Check(under.CanCarveBottom() && under.edgeData.GetBottomY(1) == 4 && under.edgeData.GetTopY(1) == 16 && under.ShapeDir() == 0 &&
+                      under.ResourceUnits() == shaped.ResourceUnits() - 4,
+                  "a stroke at a shaped brick's underside raises that quarter's bottom (a quarter of it, given back)");
+            Check(under.ChiselledFrom(0, 1, 4, true) == shaped, "building it back lowers the bottom again");
+            Block through = under;
+            for (int i = 0; i < 3; i++) through = through.ChiselledFrom(0, 1, -4, true);
+            Check(through.edgeData.IsEmpty(1) && through.type == BlockType::STONE_BRICK, "cut right up to its top, the quarter is gone");
+            Check(Block(BlockType::STONE_BRICK).ChiselledFrom(3, 1, -4, true).ShapeDir() == 3 && Block(BlockType::DIRT).Chiselled(2, -4).ChiselledFrom(0, 1, -4, true).edgeData.GetBottomY(1) == 0,
+                  "a whole block still turns to face the stroke; natural ground is only cut from its top");
+            // Drawn with its new underside, and stood under.
+            Chunk::Blocks blocks{};
+            blocks[Chunk::Index(4, 4, 4)] = under;
+            std::vector<uint32_t> v, w;
+            Mesh(blocks, v, w);
+            bool undersideAt = false;
+            for (const auto& q : Positions(v, false)) undersideAt |= std::abs(q.y - 4.25f) < 1e-4f && q.x > 4.49f && q.z < 4.51f;
+            struct OneCell : BlockAccess {
+                Block block;
+                bool GetBlock(int x, int y, int z, Block& out) const override {
+                    out = x == 0 && y == 0 && z == 0 ? block : (y < 0 ? Block(BlockType::STONE) : Block());
+                    return true;
+                }
+            } cut;
+            cut.block = under;
+            const Collision::AABB below{ { 0.6f, 0.0f, 0.1f }, { 0.9f, 0.2f, 0.4f } }, inIt{ { 0.6f, 0.3f, 0.1f }, { 0.9f, 0.5f, 0.4f } };
+            Check(undersideAt && !Collision::BoxBlocked(cut, below) && Collision::BoxBlocked(cut, inIt),
+                  "it's drawn with an underside a quarter up, and there's room under it");
+        }
         Check(!Block(BlockType::PUMP).CanChisel() && !Block::Water(128).CanChisel() && Block(BlockType::LOG).CanChisel(), "machines and water can't be chiselled");
     }
 
@@ -366,6 +403,38 @@ int main() {
             confined &= glm::all(glm::lessThanEqual(hi, cell + glm::vec3(1.0f + 1e-4f)));
         }
         Check(confined, "every face of the terrain's blocks lies inside its own block's cell");
+        {
+            // The land's slopes meet: a slope's side never stands above the ground next to it
+            // (where a corner climbs past its cell, the slope goes on in the row above).
+            Generated land;
+            // EdgeData corner positions: 0 (0,1), 1 (1,0), 2 (0,0), 3 (1,1). For each side,
+            // our two corners on it and the neighbour's two matching corners.
+            struct Side { glm::ivec3 d; int ours[2], theirs[2]; };
+            const Side sides[4] = { { { 1, 0, 0 }, { 1, 3 }, { 2, 0 } }, { { -1, 0, 0 }, { 2, 0 }, { 1, 3 } }, { { 0, 0, 1 }, { 0, 3 }, { 2, 1 } }, { { 0, 0, -1 }, { 2, 1 }, { 0, 3 } } };
+            int exposed = 0, sidesSeen = 0;
+            for (int x = -8; x < 40; x++)
+                for (int z = -8; z < 40; z++)
+                    for (int y = -6; y < 24; y++) {
+                        Block b;
+                        land.GetBlock(x, y, z, b);
+                        if (b.IsAir() || b.IsFullBlock() || !b.IsPartial() || b.IsStepped() || b.ShapeDir() != 0) continue;
+                        for (const Side& s : sides) {
+                            Block n;
+                            land.GetBlock(x + s.d.x, y, z + s.d.z, n);
+                            if (n.IsFullBlock()) continue;
+                            sidesSeen++;
+                            for (int k = 0; k < 2; k++) {
+                                const int ours = b.edgeData.GetTopY(s.ours[k]);
+                                const int theirs = n.IsPartial() && !n.IsStepped() ? n.edgeData.GetTopY(s.theirs[k]) : 0;
+                                if (ours > theirs) {
+                                    exposed++;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+            Check(sidesSeen > 1000 && exposed * 100 < sidesSeen, "the land's slopes meet, with no step showing between them (" + std::to_string(exposed) + " of " + std::to_string(sidesSeen) + " sides)");
+        }
 
         // A pool's top layer: a thin 3x3 patch on full water, empty all round it.
         Chunk::Blocks pool{};
@@ -1001,6 +1070,9 @@ int main() {
         Check(Pump({ &a, &b }, 20.0, [&] { return b.world.GetBlock(9, 0, 7, seen) && seen.edgeData.GetTopY(3) == 8; }) && seen.edgeData.GetTopY(2) == 16,
               "two chisel strokes take a quarter down by half a block, and the other player sees it");
         Check(b.world.GetBlock(10, 0, 7, seen) && seen.type == BlockType::PUMP && seen.IsFullBlock(), "a pump can't be chiselled");
+        a.client.Chisel({ 9, 0, 7 }, 1, false, 0, 4, true); // (at its underside)
+        Check(Pump({ &a, &b }, 20.0, [&] { return b.world.GetBlock(9, 0, 7, seen) && seen.edgeData.GetBottomY(1) == 4; }) && seen.edgeData.GetTopY(1) == 16,
+              "a stroke at its underside cuts a quarter from below, and the other player sees it");
         a.client.PlaceBlock({ 11, 0, 7 }, BlockType::LOG, 16, 0);
         Check(Pump({ &a, &b }, 20.0, [&] { return b.world.GetBlock(11, 0, 7, seen) && seen.type == BlockType::LOG; }) && seen.axis == Block::kAlongX,
               "a log placed against a side face is seen lying along x by the other player");

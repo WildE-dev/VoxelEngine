@@ -805,11 +805,21 @@ struct Block {
     // a pixel, an eighth, a quarter, a half.
     static constexpr int kChiselSteps[] = { 1, 2, 4, 8 };
     static constexpr bool IsChiselStep(int s) { return s == 1 || s == 2 || s == 4 || s == 8; }
-    Block ChiselledFrom(int dir, int edge, int deltaSteps) const {
+    // `bottom`: a stroke at the shape's underside (the side opposite its top), which on a
+    // built block works its quarter's bottom instead: carving raises it, building lowers
+    // it. (A full block turns to face the stroke instead; natural ground is only ever
+    // worked from its top.)
+    Block ChiselledFrom(int dir, int edge, int deltaSteps, bool bottom = false) const {
         Block b = *this;
-        if (b.IsFullBlock() && CanTurnShape(b.type) && dir >= 0 && dir <= 5) b.SetShapeDir(dir);
-        return b.Chiselled(edge, deltaSteps);
+        if (b.IsFullBlock() && CanTurnShape(b.type) && dir >= 0 && dir <= 5) {
+            b.SetShapeDir(dir);
+            return b.Chiselled(edge, deltaSteps);
+        }
+        return bottom && b.CanCarveBottom() ? b.ChiselledBottom(edge, deltaSteps) : b.Chiselled(edge, deltaSteps);
     }
+    // Whether a shaped block's quarters can be cut from below as well (built blocks: their
+    // quarter-columns have bottoms; a natural slope has only its surface).
+    bool CanCarveBottom() const { return CanChisel() && IsStepped() && !IsFullBlock(); }
     // Water in a partial block sits above its slope. For flow it's treated as a cell
     // with a raised floor at the slope's average height, so the capacity is right.
     uint8_t WaterFloor() const;
@@ -867,6 +877,9 @@ struct Block {
     // Raising every corner to the top makes the block full again; lowering them all
     // removes it (air).
     Block Chiselled(int edge, int deltaSteps) const;
+    // Its quarter `edge`'s bottom moved down by `deltaSteps` sixteenths (up, carving, for a
+    // negative one): the column grows or shrinks from underneath.
+    Block ChiselledBottom(int edge, int deltaSteps) const;
 
     bool IsAir() const { return type == BlockType::AIR; }
     // Full, opaque cube that hides any neighbouring face touching it, and collides.

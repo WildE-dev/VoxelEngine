@@ -325,8 +325,9 @@ pauses. The menus can be driven with the pad as well.
 
 `TerrainGenerator` builds each chunk independently and deterministically:
 
-1. **Surface:** a heightmap from 8 octaves of Perlin noise, snapped to eighths of
-   a block, plus mountain ranges, with swamps sunk to sea level (below). Each column
+1. **Surface:** a heightmap from 8 octaves of Perlin noise, snapped to sixteenths of
+   a block (where a corner climbs past its cell, the slope goes on in the row above, so
+   neighbouring slopes always meet), plus mountain ranges, with swamps sunk to sea level (below). Each column
    gets a sloped block on top from its biome (below): grass, dry or lush grass, snowy
    grass or desert sand over dirt or sand; beaches by the sea, bare rock high up and on
    steep slopes, and snow on the peaks; stone underneath.
@@ -795,7 +796,11 @@ Shape blocks yourself with the chisel, a tool (in survival, made from a little w
 and stone). With it in hand, right-click lowers the quarter you're looking
 at, and crouching and right-clicking raises it again. **V** sets how far each stroke
 goes: a sixteenth of a block (a pixel), an eighth (as fine as natural slopes), a quarter, or a half. Raising every quarter to the top
-makes the block whole; lowering them all removes it.
+makes the block whole; lowering them all removes it. A built block (not natural ground)
+can be cut from below too once it's shaped: a stroke at its underside raises that
+quarter's bottom instead (crouching lowers it back), so a quarter can be trimmed from
+both ends, or cut right through. Natural ground left with a single corner up stays as
+a little peak.
 The quarter you're looking at is the one your view actually lands on (a low step
 seen past a taller one, the side of a quarter, the underside of one chiselled from
 below), and while the chisel's in hand it's outlined in gold, so you can see which

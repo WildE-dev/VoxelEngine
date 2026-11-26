@@ -30,7 +30,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 74;
+constexpr uint32_t kProtocolVersion = 75;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -311,6 +311,7 @@ struct EditChisel {
     uint8_t raise = 0; // 1: raise it instead of lowering it
     uint8_t dir = 0;   // the side chiselled from, for a full block (Block::ShapeDir: 0 its top)
     uint8_t step = 4;  // how far, in sixteenths (Block::kChiselSteps: 1, 2, 4 or 8)
+    uint8_t bottom = 0; // 1: at a shaped block's underside, working its quarter's bottom (Block::ChiselledFrom)
 };
 
 struct EditCarve {

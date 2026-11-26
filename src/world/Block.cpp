@@ -454,6 +454,8 @@ void Block::AddSteppedFaces(std::vector<uint32_t>& vertices, Face face, int x, i
     // Quarter heights in sixteenths, [qx][qz]: EdgeData's edge 2 is (0,0), 1 is (1,0), 0 is
     // (0,1) and 3 is (1,1).
     const int h[2][2] = { { edgeData.GetTopY(2), edgeData.GetTopY(0) }, { edgeData.GetTopY(1), edgeData.GetTopY(3) } };
+    // And their bottoms (above 0 where a quarter's been cut from below).
+    const int lo[2][2] = { { edgeData.GetBottomY(2), edgeData.GetBottomY(0) }, { edgeData.GetBottomY(1), edgeData.GetBottomY(3) } };
     const auto& tangents = kFaceTangents[kFaceAxis[f]];
 
     // One rectangle, given its corners as seen from outside: a bottom left, b bottom
@@ -495,27 +497,38 @@ void Block::AddSteppedFaces(std::vector<uint32_t>& vertices, Face face, int x, i
 
     for (int qx = 0; qx < 2; qx++)
         for (int qz = 0; qz < 2; qz++) {
-            const int top = h[qx][qz];
-            if (top == 0) continue;
+            const int top = h[qx][qz], bottom = lo[qx][qz];
+            if (top <= bottom) continue; // (an empty quarter)
             const float half = kSteps / 2.0f, x0 = qx * half, x1 = x0 + half, z0 = qz * half, z1 = z0 + half, t = static_cast<float>(top);
+            const float b = static_cast<float>(bottom);
             switch (face) {
             case Face::Top: quad({ x0, t, z1 }, { x1, t, z1 }, { x0, t, z0 }, { x1, t, z0 }, top < EdgeData::kSteps); break;
-            case Face::Bottom: if (outside) quad({ x0, 0, z0 }, { x1, 0, z0 }, { x0, 0, z1 }, { x1, 0, z1 }, false); break;
+            case Face::Bottom:
+                // On the floor of the cell, the block's own underside; cut from below, carved.
+                if (bottom > 0 || outside) quad({ x0, b, z0 }, { x1, b, z0 }, { x0, b, z1 }, { x1, b, z1 }, bottom > 0);
+                break;
             default: {
                 // The side of this quarter facing that way: on the block's outside, all
-                // of it; inside, only what rises above the quarter next to it.
+                // of it; inside, only what the quarter next to it doesn't cover (below its
+                // bottom and above its top).
                 const int dx = kFaceOffsets[f][0], dz = kFaceOffsets[f][2];
                 const int nx = qx + dx, nz = qz + dz;
                 const bool atEdge = nx < 0 || nx > 1 || nz < 0 || nz > 1;
                 if (atEdge && !outside) break;
-                const float from = atEdge ? 0.0f : static_cast<float>(h[nx][nz]);
-                if (from >= t) break;
-                switch (face) {
-                // Sides on the block's outside are its own (bark); inside, carved.
-                case Face::Right: quad({ x1, from, z1 }, { x1, from, z0 }, { x1, t, z1 }, { x1, t, z0 }, !atEdge); break;
-                case Face::Left: quad({ x0, from, z0 }, { x0, from, z1 }, { x0, t, z0 }, { x0, t, z1 }, !atEdge); break;
-                case Face::Back: quad({ x0, from, z1 }, { x1, from, z1 }, { x0, t, z1 }, { x1, t, z1 }, !atEdge); break;
-                default: quad({ x1, from, z0 }, { x0, from, z0 }, { x1, t, z0 }, { x0, t, z0 }, !atEdge); break; // Front
+                auto side = [&](float from, float to) {
+                    if (from >= to) return;
+                    switch (face) {
+                    // Sides on the block's outside are its own (bark); inside, carved.
+                    case Face::Right: quad({ x1, from, z1 }, { x1, from, z0 }, { x1, to, z1 }, { x1, to, z0 }, !atEdge); break;
+                    case Face::Left: quad({ x0, from, z0 }, { x0, from, z1 }, { x0, to, z0 }, { x0, to, z1 }, !atEdge); break;
+                    case Face::Back: quad({ x0, from, z1 }, { x1, from, z1 }, { x0, to, z1 }, { x1, to, z1 }, !atEdge); break;
+                    default: quad({ x1, from, z0 }, { x0, from, z0 }, { x1, to, z0 }, { x0, to, z0 }, !atEdge); break; // Front
+                    }
+                };
+                if (atEdge || h[nx][nz] <= lo[nx][nz]) side(b, t);
+                else {
+                    side(b, std::min(t, static_cast<float>(lo[nx][nz])));
+                    side(std::max(b, static_cast<float>(h[nx][nz])), t);
                 }
             }
             }
@@ -1045,8 +1058,8 @@ int Block::ResourceUnits() const {
     if (IsFullBlock() || !CanChisel()) return kUnitsPerBlock;
     if (IsStepped()) {
         // Four quarters: each sixteenth of a quarter's height is 1/64 of the block.
-        int steps = 0;
-        for (int e = 0; e < 4; e++) steps += edgeData.GetTopY(e);
+        int steps = 0; // (each quarter from its bottom to its top)
+        for (int e = 0; e < 4; e++) steps += edgeData.GetTopY(e) - edgeData.GetBottomY(e);
         return steps * kUnitsPerBlock / (4 * EdgeData::kSteps);
     }
     // A slope's volume is its mean height (the two triangles it's drawn as).
@@ -1120,6 +1133,22 @@ bool Block::CanChisel() const {
     }
 }
 
+Block Block::ChiselledBottom(int edge, int deltaSteps) const {
+    Block b = *this;
+    const int top = edgeData.GetTopY(edge);
+    if (top == 0) return b; // (nothing there to cut from below)
+    const int bottom = std::clamp(edgeData.GetBottomY(edge) - deltaSteps, 0, EdgeData::kSteps);
+    b.edgeData.Set(edge, top, bottom);
+    if (b.edgeData.IsFull()) {
+        b.water = b.shown = 0;
+        b.SetShapeDir(0);
+        return b;
+    }
+    b.SetEdgeData(b.edgeData);
+    if (b.IsAir()) return HasWater() ? Water(water) : Block(); // nothing left: its water stays
+    return b;
+}
+
 Block Block::Chiselled(int edge, int deltaSteps) const {
     Block b = *this;
     const int height = std::clamp(edgeData.GetTopY(edge) + deltaSteps, 0, EdgeData::kSteps);
@@ -1157,11 +1186,10 @@ void Block::RepairEdgeData() {
 }
 
 void Block::SetEdgeData(EdgeData edges) {
-    // A stepped block stands as long as any quarter does; a slope needs at least two
-    // corners above its base.
-    bool valid = edges.IsValid();
-    if (IsStepped())
-        for (int e = 0; e < 4; e++) valid |= edges.GetTopY(e) > edges.GetBottomY(e);
+    // It stands as long as any quarter (or, for a slope, any corner) is left: a slope with
+    // one corner up is a little peak (where the land's surface pokes just above a row).
+    bool valid = false;
+    for (int e = 0; e < 4; e++) valid |= !edges.IsEmpty(e);
     if (valid) {
         edgeData = edges;
     }

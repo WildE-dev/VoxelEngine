@@ -90,7 +90,8 @@ public:
     // Lowers (or raises) one quarter of a block by a quarter (predicted, like edits).
     // dir: the side chiselled from, for a full block (Block::ShapeDir; it becomes that way up).
     // step: how far the corner moves, in sixteenths (1, 2, 4 or 8: Block::kChiselSteps). Needs the chisel.
-    void Chisel(const glm::ivec3& pos, int edge, bool raise, int dir = 0, int step = 4);
+    // bottom: at a shaped block's underside, working its quarter's bottom (Block::ChiselledFrom).
+    void Chisel(const glm::ivec3& pos, int edge, bool raise, int dir = 0, int step = 4, bool bottom = false);
     // A shovel's right-click: level the ground round this block to its height (the
     // server works it out, and what it costs or gives back).
     void Flatten(const glm::ivec3& pos, int radius = 1);
