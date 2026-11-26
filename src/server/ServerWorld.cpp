@@ -135,11 +135,17 @@ void ServerWorld::SetBlock(int x, int y, int z, const Block& block) {
         changedBlocks.emplace_back(x, y, z);
     }
 
-    // Plants need the block under them: any change there uproots them (dropped as an
-    // item, by the server). Doors go by their own rule, below.
+    // Plants need the block under them: a change to what they stand on uproots them
+    // (dropped as an item, by the server). Not a change only in the water there, nor
+    // between open cells (air and water: under a ladder or sign hung over a well), nor
+    // to a solid block that keeps its shape (a smelter lighting, a slab getting wet).
+    // Doors go by their own rule, below.
     Block above;
     auto isDoor = [](BlockType t) { return t == BlockType::DOOR || t == BlockType::DOOR_OPEN; };
-    if (GetBlock(x, y + 1, z, above) && above.IsPlant() && !IsLeverType(above.type) && !isDoor(above.type)) {
+    const bool openBefore = previous.IsPassable() && !previous.IsPlant(), openAfter = block.IsPassable() && !block.IsPlant();
+    const bool sameFloor = !previous.IsPassable() && !block.IsPassable() && previous.edgeData == block.edgeData;
+    const bool supportChanged = !waterVolumeOnly && !(openBefore && openAfter) && !sameFloor;
+    if (supportChanged && GetBlock(x, y + 1, z, above) && above.IsPlant() && !IsLeverType(above.type) && !isDoor(above.type)) {
         SetBlock(x, y + 1, z, Block());
         std::lock_guard<std::mutex> lock(logMutex);
         knockedOff.emplace_back(glm::ivec3(x, y + 1, z), above);

@@ -142,6 +142,31 @@ int main() {
               "two notches meeting at a corner: water gets into the near one, not past the block (" + std::to_string(beyond.WaterVolume()) + " beyond)");
     }
 
+    // What stands on a block goes when its footing does, not when only the water under
+    // it or the block's state changes.
+    {
+        auto typeAt = [&](int x, int y, int z) {
+            Block b;
+            return world.GetBlock(x, y, z, b) ? b.type : BlockType::COUNT;
+        };
+        world.SetBlock(12, 40, 12, Block::Water(Block::kMaxWaterVolume)); // a well's water,
+        world.SetBlock(12, 41, 12, Block(BlockType::LADDER));            // a ladder's foot over it
+        world.SetBlock(13, 40, 12, Block());                              // air,
+        world.SetBlock(13, 41, 12, Block(BlockType::SIGN));               // a sign hung over it
+        world.SetBlock(14, 40, 12, Block(BlockType::SMELTER));
+        world.SetBlock(14, 41, 12, Block(BlockType::SIGN));               // a sign on a smelter
+        world.SetBlock(12, 40, 14, Block(BlockType::DIRT));
+        world.SetBlock(12, 41, 14, Block(BlockType::FLOWER_RED));         // a flower on dirt
+        world.SetBlock(12, 40, 12, Block::Water(Block::kMaxWaterVolume - 40));
+        world.SetBlock(13, 40, 12, Block::Water(16));
+        world.SetBlock(14, 40, 12, Block(BlockType::SMELTER_LIT));
+        Check(typeAt(12, 41, 12) == BlockType::LADDER, "a ladder over water stays when the water level under it changes");
+        Check(typeAt(13, 41, 12) == BlockType::SIGN, "a sign hung over air stays when rain puts water under it");
+        Check(typeAt(14, 41, 12) == BlockType::SIGN, "a sign on a smelter stays when it lights");
+        world.SetBlock(12, 40, 14, Block());
+        Check(typeAt(12, 41, 14) == BlockType::AIR, "a flower goes when the dirt under it does");
+    }
+
     // The player walks over to it.
     world.Update({ glm::ivec3(5, 0, 0) });
     for (int i = 0; i < 30; i++) sim.Tick(world);
