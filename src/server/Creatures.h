@@ -13,6 +13,7 @@
 // players (world/Dwarves.h): a site fills up when a player first comes near, then
 // gets one back every kSiteRefill seconds. On a horde night a war band of dwarves
 // (no home) comes for players from all round.
+#include <optional>
 #include <utility>
 #include <cstdint>
 #include <functional>
@@ -162,6 +163,11 @@ public:
     }
     // Its box, for hit tests.
     static Collision::AABB Box(const Creature& c);
+    // A place at or near `want` where a creature of this type fits, its box clear of
+    // blocks: `want` itself, else the nearest of the cells round it (a block up or down
+    // too). None if there's nowhere: put inside blocks, a creature falls through the
+    // ground or sticks.
+    static std::optional<glm::vec3> RoomNear(const BlockAccess& world, CreatureType type, const glm::vec3& want);
 
     const std::vector<Creature>& All() const { return creatures; }
     const Creature* Find(uint16_t id) const;
@@ -169,7 +175,7 @@ public:
     void Clear() { creatures.clear(); }
 
 private:
-    void Think(Creature& c, const std::vector<Player>& players, double now, const HurtPlayer& hurt, glm::vec2& move, float& speed);
+    void Think(ServerWorld& world, Creature& c, const std::vector<Player>& players, double now, const HurtPlayer& hurt, glm::vec2& move, float& speed);
     void Move(ServerWorld& world, Creature& c, const glm::vec2& move, float speed, float dt);
     void SpawnNaturally(ServerWorld& world, const std::vector<Player>& players, float daylight);
     // Dwarves at the sites near players, and war bands on horde nights.

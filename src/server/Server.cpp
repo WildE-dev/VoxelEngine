@@ -1147,7 +1147,7 @@ void Server::HandleTrade(ClientState& client, uint16_t trader, uint8_t offerInde
             return SendChat(client, net::ChatMessage::Kind::Error, "You already have " + std::to_string(Trades::kMaxHired) + " guards");
         glm::vec2 toward(client.feet.x - at.x, client.feet.z - at.z);
         toward = glm::length(toward) > 1e-3f ? glm::normalize(toward) : glm::vec2(1.0f, 0.0f);
-        if (!creatures.Hire(at + glm::vec3(toward.x, 0.2f, toward.y), client.id, now, Trades::kHireSeconds))
+        if (!creatures.Hire(CreatureSystem::RoomNear(*world, CreatureType::DwarfGuard, at + glm::vec3(toward.x, 0.2f, toward.y)).value_or(at), client.id, now, Trades::kHireSeconds))
             return SendChat(client, net::ChatMessage::Kind::Error, "No guard is free just now");
         SendChat(client, net::ChatMessage::Kind::Info, "Guard hired (10 minutes)");
     }

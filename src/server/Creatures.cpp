@@ -318,7 +318,21 @@ bool CreatureSystem::Tame(uint16_t id, uint16_t player) {
     return false;
 }
 
-void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, double now, const HurtPlayer& hurt, glm::vec2& move, float& speed) {
+std::optional<glm::vec3> CreatureSystem::RoomNear(const BlockAccess& world, CreatureType type, const glm::vec3& want) {
+    const CreatureSpec& spec = SpecOf(type);
+    auto fits = [&](const glm::vec3& feet) { return !Collision::BoxBlocked(world, BoxAt(feet + glm::vec3(0.0f, 0.02f, 0.0f), spec)); };
+    for (const float dy : { 0.0f, 1.0f, -1.0f, 2.0f })
+        for (int ring = 0; ring <= 2; ring++)
+            for (int dx = -ring; dx <= ring; dx++)
+                for (int dz = -ring; dz <= ring; dz++) {
+                    if (std::max(std::abs(dx), std::abs(dz)) != ring) continue;
+                    const glm::vec3 p = want + glm::vec3(static_cast<float>(dx), dy, static_cast<float>(dz));
+                    if (fits(p)) return p;
+                }
+    return std::nullopt;
+}
+
+void CreatureSystem::Think(ServerWorld& world, Creature& c, const std::vector<Player>& players, double now, const HurtPlayer& hurt, glm::vec2& move, float& speed) {
     const CreatureSpec& spec = SpecOf(c.type);
     std::uniform_real_distribution<float> unit(0.0f, 1.0f);
     // Wandering: every few seconds, a new direction or a rest.
@@ -370,7 +384,7 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
             }
             const float d = HorizontalDistance(owner->feet, c.feet);
             if (d > 24.0f) {
-                c.feet = owner->feet + glm::vec3(1.0f, 0.5f, 1.0f); // (caught up)
+                c.feet = RoomNear(world, c.type, owner->feet + glm::vec3(1.0f, 0.5f, 1.0f)).value_or(owner->feet); // (caught up: beside them, or where they stand)
                 c.velocity = glm::vec3(0.0f);
             }
             if (d > 3.0f) {
@@ -464,7 +478,7 @@ void CreatureSystem::Think(Creature& c, const std::vector<Player>& players, doub
             if (!owner) return;
             const float d = HorizontalDistance(owner->feet, c.feet);
             if (d > 24.0f) {
-                c.feet = owner->feet + glm::vec3(1.0f, 0.5f, -1.0f);
+                c.feet = RoomNear(world, c.type, owner->feet + glm::vec3(1.0f, 0.5f, -1.0f)).value_or(owner->feet);
                 c.velocity = glm::vec3(0.0f);
             }
             if (d > 3.0f) {
@@ -681,8 +695,9 @@ void CreatureSystem::SpawnNaturally(ServerWorld& world, const std::vector<Player
                 const bool wolves = unit(rng) < 0.15f;
                 const int herd = wolves ? 2 : 1 + static_cast<int>(unit(rng) * 3.0f);
                 for (int i = 0; i < herd; i++) {
-                    const glm::vec3 at(x + 0.5f + (i % 2) * 1.5f, static_cast<float>(y), z + 0.5f + (i / 2) * 1.5f);
-                    if (farFromPlayers(at) && Spawn(wolves ? CreatureType::Wolf : CreatureType::Deer, at)) animals++;
+                    const CreatureType kind = wolves ? CreatureType::Wolf : CreatureType::Deer;
+                    const auto at = RoomNear(world, kind, glm::vec3(x + 0.5f + (i % 2) * 1.5f, static_cast<float>(y), z + 0.5f + (i / 2) * 1.5f));
+                    if (at && farFromPlayers(*at) && Spawn(kind, *at)) animals++;
                 }
                 break;
             }
@@ -764,7 +779,7 @@ void CreatureSystem::Update(ServerWorld& world, const std::vector<Player>& playe
         }
         glm::vec2 move(0.0f);
         float speed = 0.0f;
-        Think(c, players, now, hurt, move, speed);
+        Think(world, c, players, now, hurt, move, speed);
         const glm::vec3 before = c.feet;
         Move(world, c, move, speed, dt);
         if (c.raider) {
@@ -796,7 +811,9 @@ void CreatureSystem::Update(ServerWorld& world, const std::vector<Player>& playe
     }
     // A king's guard, called up.
     for (const auto& p : pending) {
-        const uint16_t id = Spawn(p.type, p.feet);
+        const auto at = RoomNear(world, p.type, p.feet); // (not in the hall's walls or his dais)
+        if (!at) continue;
+        const uint16_t id = Spawn(p.type, *at);
         for (auto& c : creatures)
             if (c.id == id) c.hasHome = true, c.home = p.home, c.site = p.site, c.summoner = p.summoner;
     }

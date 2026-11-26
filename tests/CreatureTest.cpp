@@ -258,6 +258,25 @@ int main(int argc, char** argv) {
             server.QueueConsoleCommand("tp Hunter 22.5 0 8.5");
             Check(both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && glm::distance(glm::vec2(w->feet.x, w->feet.z), glm::vec2(22.5f, 8.5f)) < 5.0f; }),
                   "it follows its owner");
+            // Far off down a tunnel a block wide and two high, it catches up in the tunnel,
+            // not in its walls (where it would fall through the floor).
+            server.QueueConsoleCommand("fill 50 -1 7 60 2 9 stone");
+            server.QueueConsoleCommand("fill 50 0 8 60 1 8 air");
+            server.QueueConsoleCommand("tp Hunter 55.5 0 8.5");
+            Check(both(20.0, [&] {
+                      const auto* w = a.Find(CreatureType::Wolf);
+                      return w && glm::distance(glm::vec2(w->feet.x, w->feet.z), glm::vec2(55.5f, 8.5f)) < 3.0f;
+                  }) && both(3.0, [] { return false; }) == false,
+                  "far off down a narrow tunnel, it catches up");
+            {
+                const auto* w = a.Find(CreatureType::Wolf);
+                Check(w && w->feet.y > -0.1f && w->feet.y < 0.6f && std::abs(w->feet.z - 8.5f) < 0.2f,
+                      "in the tunnel, on its floor (at " + (w ? std::to_string(w->feet.x) + ", " + std::to_string(w->feet.y) + ", " + std::to_string(w->feet.z) : std::string("nowhere")) + ")");
+            }
+            server.QueueConsoleCommand("tp Hunter 22.5 0 8.5");
+            server.QueueConsoleCommand("fill 50 -1 7 60 2 9 air");
+            server.QueueConsoleCommand("fill 50 -1 7 60 -1 9 grass");
+            both(20.0, [&] { const auto* w = a.Find(CreatureType::Wolf); return w && glm::distance(glm::vec2(w->feet.x, w->feet.z), glm::vec2(22.5f, 8.5f)) < 5.0f; });
             server.QueueConsoleCommand("time midnight");
             server.QueueConsoleCommand("summon dwarf 26.5 0 8.5");
             Check(both(20.0, [&] { return a.Find(CreatureType::DwarfWarrior) != nullptr; }), "a dwarf warrior turns up near them");
