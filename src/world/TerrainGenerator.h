@@ -129,6 +129,10 @@ public:
     // takes the water away. One that reaches the sea simply runs into it, with no
     // sinkhole (one there would drain the sea). The drains in a chunk's columns, or none.
     std::vector<glm::ivec2> DrainsIn(int chunkX, int chunkZ) const;
+    // The other end of the river from a spring or a sinkhole at this column: its
+    // sinkhole (or where it reaches the sea), or its spring, with the bed's height there.
+    // None for a column that isn't one, or a spring with no river.
+    std::optional<glm::ivec3> RiverOtherEnd(int x, int z) const;
     // Oil: pockets of oil shale in a band deep underground (kOilBottom..kOilTop), in
     // broad oil fields covering a part of the world. A function of position alone.
     static bool OilAt(int x, int y, int z);

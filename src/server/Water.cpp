@@ -122,6 +122,7 @@ void WaterSimulation::RunPumps(ServerWorld& world) {
             continue;
         }
         if (limited && !NearCenter(pos, distance)) continue;
+        if (limited && (block.type == BlockType::SPRING || block.type == BlockType::SINKHOLE) && !RiverEndNear(world, pos)) continue;
         if (block.type == BlockType::SPRING) RunSpring(world, pos);
         else if (IsDrainType(block.type)) RunDrain(world, pos, block.type == BlockType::SINKHOLE);
         else if (block.type == BlockType::FLUID_OUTLET) RunOutlet(world, pos);
@@ -131,6 +132,7 @@ void WaterSimulation::RunPumps(ServerWorld& world) {
         pumps.erase(pos);
         pumpBudget.erase(pos);
         drainBudget.erase(pos);
+        riverEnds.erase(pos);
     }
     pumpCount.store(pumps.size(), std::memory_order_relaxed);
 }
@@ -439,6 +441,12 @@ void WaterSimulation::Wake() {
         std::lock_guard<std::mutex> lock(wakeMutex);
         wake.notify_one();
     }
+}
+
+bool WaterSimulation::RiverEndNear(ServerWorld& world, const glm::ivec3& pos) {
+    auto it = riverEnds.find(pos);
+    if (it == riverEnds.end()) it = riverEnds.emplace(pos, world.GetTerrain().RiverOtherEnd(pos.x, pos.z)).first;
+    return !it->second || NearCenter(*it->second, distance);
 }
 
 bool WaterSimulation::NearCenter(const glm::ivec3& pos, int range) const {

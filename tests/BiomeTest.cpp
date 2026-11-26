@@ -246,6 +246,20 @@ int main() {
                     }
             }
     Check(drains >= 16 && drainsRight == drains, "rivers end in sinkholes (natural drains) in their beds (" + std::to_string(drainsRight) + " of " + std::to_string(drains) + ")");
+    // Each sinkhole knows its spring and the spring its sinkhole (the water simulation
+    // runs the one only while the other is in its area).
+    {
+        int ends = 0, endsRight = 0;
+        for (int cx = -40; cx <= 40 && ends < 16; cx++)
+            for (int cz = -40; cz <= 40 && ends < 16; cz++)
+                for (const glm::ivec2& d : t.DrainsIn(cx, cz)) {
+                    ends++;
+                    const auto spring = t.RiverOtherEnd(d.x, d.y);
+                    const auto back = spring ? t.RiverOtherEnd(spring->x, spring->z) : std::nullopt;
+                    if (spring && back && back->x == d.x && back->z == d.y && glm::distance(glm::vec2(spring->x, spring->z), glm::vec2(d)) >= 10.0f) endsRight++;
+                }
+        Check(ends >= 16 && endsRight == ends && !t.RiverOtherEnd(3, 3), "a river's spring and sinkhole each know the other (" + std::to_string(endsRight) + " of " + std::to_string(ends) + ")");
+    }
     Check(riverColumns > 50 && riverRight * 10 >= riverColumns * 9,
           "river pools have sand beds with water over them (" + std::to_string(riverRight) + " of " + std::to_string(riverColumns) + " pool columns looked at)");
     {

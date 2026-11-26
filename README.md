@@ -603,7 +603,8 @@ or in a puddle on dry ground. Puddles don't evaporate while it rains.
 
 **Springs** add water: each one puts up to 48 units a tick (three eighths of a block)
 into the open cells above and beside it that have room, shared between them, for as
-long as it's within the simulation area. Sinkholes take it away: up to 96 units a
+long as it and the end of its river are within the simulation area (so a river whose
+sinkhole is too far off doesn't pond at the area's edge). Sinkholes take it away: up to 96 units a
 tick from the cells above and beside them. A player's drain takes the same way but
 only as much as its fluid pipes have room for, into them; a fluid outlet lets the
 pipes' water out (see [Oil and fluids](#oil-and-fluids)). Water that reaches the open sea goes: random

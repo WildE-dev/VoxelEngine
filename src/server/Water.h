@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -211,6 +212,12 @@ private:
     static bool IsAboveSea(const ServerWorld& world, const glm::ivec3& pos);
     // Whether a cell is within `range` chunks of a simulation centre. Edit mutex held.
     bool NearCenter(const glm::ivec3& pos, int range) const;
+    // A natural spring or sinkhole runs only while the other end of its river is in the
+    // simulation area too: otherwise a spring would pour water down a channel that
+    // stops moving at the area's edge, ponding there, or a sinkhole drain a river whose
+    // spring isn't running. (The other ends, from the terrain, are kept.)
+    bool RiverEndNear(ServerWorld& world, const glm::ivec3& pos);
+    std::unordered_map<glm::ivec3, std::optional<glm::ivec3>, Coords::IVec3Hash> riverEnds;
     void Wake();
     void ThreadLoop(ServerWorld& world);
 

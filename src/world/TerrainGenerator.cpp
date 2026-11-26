@@ -409,6 +409,26 @@ std::vector<glm::ivec2> TerrainGenerator::DrainsIn(int chunkX, int chunkZ) const
     return out;
 }
 
+std::optional<glm::ivec3> TerrainGenerator::RiverOtherEnd(int x, int z) const {
+    if (type != Type::Normal) return std::nullopt;
+    // (A river runs at most kMaxRiverLength from a spring near its lake's cell: the
+    // cells within three of this one, as DrainsIn looks.)
+    const int cx = static_cast<int>(std::floor(x / static_cast<float>(kLakeCell))), cz = static_cast<int>(std::floor(z / static_cast<float>(kLakeCell)));
+    for (int dx = -3; dx <= 3; dx++)
+        for (int dz = -3; dz <= 3; dz++) {
+            const auto lakeHeld = LakeIn(cx + dx, cz + dz);
+            const Lake& lake = *lakeHeld; // (kept alive while it's read)
+            if (!lake.exists || !lake.hasSpring || lake.river.empty()) continue;
+            const glm::vec3& first = lake.river.front();
+            const glm::vec3& last = lake.river.back();
+            if (lake.spring == glm::ivec2(x, z))
+                return glm::ivec3(static_cast<int>(std::floor(last.x)), static_cast<int>(std::floor(last.z)), static_cast<int>(std::floor(last.y)));
+            if (lake.hasDrain && lake.drain == glm::ivec2(x, z))
+                return glm::ivec3(lake.spring.x, static_cast<int>(std::floor(first.z)), lake.spring.y);
+        }
+    return std::nullopt;
+}
+
 bool TerrainGenerator::OilAt(int x, int y, int z) {
     if (y > kOilTop || y < kOilBottom) return false;
     // Broad fields, and pockets in them, flattened. The fields are rare: about 3% of
