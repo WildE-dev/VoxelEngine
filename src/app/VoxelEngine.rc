@@ -1,0 +1,3 @@
+// The executables' icon (Explorer, the taskbar). GLFW also takes the icon named
+// GLFW_ICON for its windows on Windows. Drawn by tools/make_icon.py.
+GLFW_ICON ICON "VoxelEngine.ico"

@@ -198,6 +198,16 @@ target_compile_definitions(ModelEditor PRIVATE VOXEL_SOURCE_DIR="${CMAKE_SOURCE_
 add_executable(VoxelServer src/server/main.cpp)
 target_link_libraries(VoxelServer PRIVATE voxel_server)
 
+# The programs' icon on Windows (Explorer, the taskbar, and the game's window: GLFW takes
+# it from there). Drawn by tools/make_icon.py, which also makes Resources/Icon/icon.png,
+# the window icon elsewhere.
+if(WIN32)
+    enable_language(RC)
+    foreach(target ${PROJECT_NAME} ModelEditor VoxelServer)
+        target_sources(${target} PRIVATE src/app/VoxelEngine.rc)
+    endforeach()
+endif()
+
 # The relay that lets friends join a game by code (run on a VPS: see README.md). It needs
 # nothing but the system's sockets, so it also builds alone there with one g++ line.
 add_library(voxel_relay STATIC src/relay/RelayServer.cpp src/relay/RelayServer.h src/relay/RelayProtocol.h)

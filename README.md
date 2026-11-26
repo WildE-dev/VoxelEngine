@@ -2363,6 +2363,15 @@ without the extension; the face-to-texture mapping for each block type lives in
 square size (others are resampled to match the first). Missing textures show up
 as a magenta checkerboard.
 
+## The icon
+
+The programs' icon is a stone-brick block chiselled into a staircase of quarters, drawn
+from the game's own texture by `tools/make_icon.py` (Pillow; run it from the repository's
+root). It writes `src/app/VoxelEngine.ico`, built into the executables on Windows
+(`src/app/VoxelEngine.rc`: Explorer, the taskbar, the window), and
+`Resources/Icon/icon.png`, which the game sets as its window's icon on other systems.
+Small sizes are drawn flat, without the texture, so they still read at 16 pixels.
+
 ## Sound
 
 The game has sound effects, through OpenAL. Sounds in the world come from where

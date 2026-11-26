@@ -32,6 +32,7 @@
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
+#include <stb_image.h>
 
 #include "audio/Audio.h"
 #include "client/Client.h"
@@ -340,6 +341,16 @@ bool Application::Init(const ClientOptions& options) {
     if (!window) {
         std::cerr << "ERROR: Failed to create window" << std::endl;
         return false;
+    }
+    // Its icon (drawn by tools/make_icon.py). On Windows the executable carries it too
+    // (src/app/VoxelEngine.rc), for the taskbar and Explorer.
+    {
+        int w = 0, h = 0, channels = 0;
+        if (unsigned char* pixels = stbi_load("Resources/Icon/icon.png", &w, &h, &channels, 4)) {
+            GLFWimage icon{ w, h, pixels };
+            glfwSetWindowIcon(window, 1, &icon);
+            stbi_image_free(pixels);
+        }
     }
 
     glfwMakeContextCurrent(window);
