@@ -7,6 +7,7 @@
 #include <fstream>
 #include "world/Trades.h"
 #include "world/Mining.h"
+#include "world/Flatten.h"
 #include "world/Crafting.h"
 #include "world/Smelting.h"
 #include <filesystem>
@@ -1398,61 +1399,28 @@ void Server::HandleChisel(ClientState& client, const net::EditChisel& chisel) {
 }
 
 void Server::HandleFlatten(ClientState& client, const glm::ivec3& pos, int radius) {
-    radius = std::clamp(radius, 1, net::kMaxFlattenRadius);
-    Block clicked;
-    if (Usable(client, Tool::Shovel) != Tool::Shovel || !InReach(client, pos, EditReach(client)) || !world->GetBlock(pos.x, pos.y, pos.z, clicked)) return;
-    // Soft ground: what a shovel digs (dirt, grass, sand, snow, gravel), whole or shaped.
-    auto soft = [](const Block& b) { return !b.IsAir() && !b.IsLiquid() && !b.IsPlant() && !IsModelType(b.type) && Mining::BestTool(b.type) == Tool::Shovel; };
-    if (!soft(clicked) || clicked.ShapeDir() != 0) return;
-    // The level: the clicked block's top (the middle of its corners, for a shaped one), in
-    // sixteenths from the bottom of the world's rows.
-    constexpr int kSteps = EdgeData::kSteps;
-    int top = kSteps;
-    if (!clicked.IsFullBlock()) {
-        int sum = 0;
-        for (int e = 0; e < 4; e++) sum += clicked.edgeData.GetTopY(e);
-        top = (sum + 2) / 4;
-    }
-    const int level = pos.y * kSteps + top;
-    struct Change {
-        glm::ivec3 at;
-        Block to;
-    };
-    std::vector<Change> changes;
-    std::map<ItemId, long> cost; // units, by what they're made of: + taken, - given back
-    for (int dx = -radius; dx <= radius; dx++)
-        for (int dz = -radius; dz <= radius; dz++)
-            for (int y = pos.y - 1; y <= pos.y + 2; y++) {
-                const glm::ivec3 at(pos.x + dx, y, pos.z + dz);
-                Block b;
-                if (!world->GetBlock(at.x, at.y, at.z, b) || b.HasWater() || b.IsLava()) continue;
-                const bool open = b.IsAir() || b.IsReplaceablePlant();
-                if (!open && !(soft(b) && b.ShapeDir() == 0)) continue; // (stone, wood, buildings: left be)
-                const int fill = std::clamp(level - y * kSteps, 0, kSteps);
-                // Filling an empty cell: with what was clicked (soft ground keeps its own kind).
-                const BlockType kind = open ? clicked.type : b.type;
-                Block to;
-                if (fill == kSteps) to = Block(kind);
-                else if (fill > 0) {
-                    EdgeData edges;
-                    for (int e = 0; e < 4; e++) edges.SetTopY(e, static_cast<uint8_t>(fill));
-                    to = Block(kind, edges);
-                }
-                if (to == b || (open && fill == 0)) continue;
-                const int before = open ? 0 : b.ResourceUnits(), after = to.ResourceUnits();
-                if (before != after) cost[open ? Items::ResourceOf(to.type) : Items::ResourceOf(b.type)] += after - before;
-                changes.push_back({ at, to });
-            }
-    if (changes.empty()) return;
+    if (Usable(client, Tool::Shovel) != Tool::Shovel || !InReach(client, pos, EditReach(client))) return;
+    auto plan = Flatten::Work(*world, pos, radius);
+    if (!plan) return;
     if (!Creative(client)) {
+        // Only once it's been worked at for long enough (the client says when it starts,
+        // as for mining: see HandleMineStart).
+        const double needed = Flatten::Seconds(*plan, ToolTier(client, Tool::Shovel));
+        const bool started = client.mining && client.miningPos == pos && client.miningTool == Tool::Shovel;
+        const double worked = started ? Now() - client.miningSince : 0.0;
+        if (worked < needed * (1.0 - Mining::kSlackShare) - Mining::kSlackSeconds) {
+            if (options.log && started) Log(client.name + " flattened too soon");
+            return;
+        }
+        client.mining = false;
         Inventory after = client.inventory;
-        for (const auto& [type, units] : cost) {
+        for (const auto& [type, units] : plan->cost) {
             if (units > 0 && !after.TakeUnits(type, static_cast<uint32_t>(units))) {
                 SendChat(client, net::ChatMessage::Kind::Error, "Not enough " + Items::Id(type) + " to fill it in");
                 return SendInventory(client);
             }
         }
-        for (const auto& [type, units] : cost)
+        for (const auto& [type, units] : plan->cost)
             if (units < 0 && after.AddUnits(type, static_cast<uint32_t>(-units)) != 0) {
                 SendChat(client, net::ChatMessage::Kind::Error, "Your inventory is full");
                 return SendInventory(client);
@@ -1460,9 +1428,7 @@ void Server::HandleFlatten(ClientState& client, const glm::ivec3& pos, int radiu
         client.inventory = std::move(after);
         SendInventory(client);
     }
-    // (Bottom up, so what's filled in rests on what's under it.)
-    std::sort(changes.begin(), changes.end(), [](const Change& a, const Change& b) { return a.at.y < b.at.y; });
-    for (const auto& c : changes) world->SetBlock(c.at.x, c.at.y, c.at.z, c.to);
+    for (const auto& c : plan->changes) world->SetBlock(c.at.x, c.at.y, c.at.z, c.to);
 }
 
 void Server::HandleCarve(ClientState& client, const net::EditCarve& carve) {

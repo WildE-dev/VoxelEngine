@@ -1037,12 +1037,20 @@ int main() {
         server.QueueConsoleCommand("fill 25 0 20 25 0 20 dirt"); // a bump to shave
         Pump({ &a, &b }, 20.0, [&] { return !a.client.IsCreative() && a.client.HasTool(Tool::Shovel) && at(25, 0, 20).type == BlockType::DIRT; });
         const uint32_t dirtBefore = a.client.GetResources(BlockType::DIRT);
+        // It takes a while (the button held, as mining does): not at once.
+        a.client.Flatten({ 25, -1, 21 });
+        Pump({ &a, &b }, 1.0, [] { return false; });
+        Check(at(25, 0, 20).type == BlockType::DIRT, "in survival, flattening isn't instant: asked for straight away, nothing changes");
+        a.client.StartMining({ 25, -1, 21 }, Tool::Shovel);
+        Pump({ &a, &b }, 1.0, [] { return false; }); // (a bump: about 0.4 s with a stone shovel)
         a.client.Flatten({ 25, -1, 21 });
         Check(Pump({ &a, &b }, 20.0, [&] { return at(25, 0, 20).IsAir() && a.client.GetResources(BlockType::DIRT) == dirtBefore + Block::kUnitsPerBlock; }),
               "in survival, ground shaved off is given back as dirt");
         server.QueueConsoleCommand("fill 28 -1 20 28 -1 20 air"); // a dip, and no dirt to fill it but the one
         server.QueueConsoleCommand("fill 29 -1 20 29 -1 20 air");
         Pump({ &a, &b }, 20.0, [&] { return at(28, -1, 20).IsAir() && at(29, -1, 20).IsAir(); });
+        a.client.StartMining({ 28, -1, 21 }, Tool::Shovel);
+        Pump({ &a, &b }, 1.5, [] { return false; });
         a.client.Flatten({ 28, -1, 21 });
         Pump({ &a, &b }, 2.0, [] { return false; });
         Check(at(28, -1, 20).IsAir() && at(29, -1, 20).IsAir() && a.client.GetResources(BlockType::DIRT) == dirtBefore + Block::kUnitsPerBlock,

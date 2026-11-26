@@ -1,6 +1,7 @@
 #include "app/Application.h"
 #include "app/ItemPalette.h"
 #include "app/PlayerNames.h"
+#include "world/Flatten.h"
 #include "world/ModelBoxes.h"
 #include "world/Trees.h"
 #include "world/Trades.h"
@@ -110,7 +111,7 @@ const char* ToolHint(Tool tool) {
     switch (tool) {
     case Tool::Pickaxe: return "fast on stone, bricks, ice and machines";
     case Tool::Axe: return "fast on wood";
-    case Tool::Shovel: return "fast on dirt, grass, sand and snow; right-click: flatten (V: how wide)";
+    case Tool::Shovel: return "fast on dirt, grass, sand and snow; hold right-click: flatten (V: how wide)";
     case Tool::Sword: return "for fighting";
     case Tool::Bow: return "right-click to shoot (needs arrows)";
     case Tool::Rod: return "right-click water to cast";
@@ -349,6 +350,10 @@ bool Application::Init(const ClientOptions& options) {
 
     glfwSwapInterval(vsync ? 1 : 0);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    // Looking around reads the mouse's own movement, not the pointer's: Windows' pointer
+    // acceleration ("Enhance pointer precision") otherwise makes the same hand movement
+    // turn more or less depending on how fast it's made.
+    if (glfwRawMouseMotionSupported()) glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
 
     // For unattended checks: VOXEL_AUTO_SCREENSHOT="seconds:path.png" saves one
     // screenshot that long after start, and VOXEL_START_YAW sets the initial heading.
@@ -390,6 +395,9 @@ bool Application::Init(const ClientOptions& options) {
     glfwSetCursorPosCallback(window, CursorPosCallback);
     glfwSetScrollCallback(window, ScrollCallback);
     glfwSetCharCallback(window, CharCallback);
+    // Back in the window (after Alt+Tab, say): the cursor has moved meanwhile, and that
+    // isn't a turn.
+    glfwSetWindowFocusCallback(window, [](GLFWwindow* w, int) { static_cast<Application*>(glfwGetWindowUserPointer(w))->camera.ResetLook(); });
 
     {
         std::string error;
@@ -823,16 +831,19 @@ void Application::Run() {
         // With the chisel: the quarter it would cut (or build up) picked out in gold.
         params.chiselOutline.clear();
         if (const auto aim = AimChisel(); aim && params.highlightedBlock == aim->block) params.chiselOutline = aim->target.QuarterOutline(aim->shapeDir, aim->edge);
-        if (mining && mineProgress > 0.0f) {
-            // Cracks over the box the block's shape fills.
+        // Cracks over the box the block's shape fills: the block being mined, or the one
+        // the ground's being flattened to.
+        auto cracks = [&](const Block& block, const glm::ivec3& pos, float progress) {
             glm::vec3 lo(1.0f), hi(0.0f);
-            for (const glm::vec3& p : miningBlock.OutlineSegments(miningPos)) lo = glm::min(lo, p), hi = glm::max(hi, p);
+            for (const glm::vec3& p : block.OutlineSegments(pos)) lo = glm::min(lo, p), hi = glm::max(hi, p);
             if (hi.x > lo.x) {
-                params.breakProgress = mineProgress;
-                params.breakBoxMin = glm::vec3(miningPos) + lo;
+                params.breakProgress = progress;
+                params.breakBoxMin = glm::vec3(pos) + lo;
                 params.breakBoxSize = hi - lo;
             }
-        }
+        };
+        if (mining && mineProgress > 0.0f) cracks(miningBlock, miningPos, mineProgress);
+        else if (flattening && flattenProgress > 0.0f) cracks(flattenBlock, flattenPos, flattenProgress);
         // Light carried in hand: ours (a lamp or campfire selected, and some to hold), and
         // other players'.
         {
@@ -2311,6 +2322,7 @@ void Application::HandleContinuousInput(float deltaTime) {
     }
 
     UpdateMining();
+    UpdateFlattening();
     UpdateThrow();
 
     // Laser: carve a tunnel along the view ray while L is held.
@@ -3483,7 +3495,9 @@ void Application::OnMouseButton(int button, int action) {
     }
 
     // Right-click with the shovel: level the ground round the block looked at to its height.
+    // In survival it takes a while, the button held (UpdateFlattening).
     if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::Shovel) {
+        if (!client->IsCreative()) return;
         if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
             client->Flatten(hit->block, flattenRadius);
             PlayAt("place", hit->block, 0.6f);
@@ -3946,6 +3960,46 @@ void Application::UpdateMining() {
         mining = false;
         mineProgress = 0.0f;
         nextMineAt = now + 0.15; // a moment before starting on the next block
+    }
+}
+
+void Application::UpdateFlattening() {
+    flattenProgress = 0.0f;
+    const bool held = captureCursor && !chatOpen && !inventoryOpen && !paused && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS &&
+                      SelectedTool() == Tool::Shovel && client->HasTool(Tool::Shovel) && client->IsWelcomed() && !client->IsCreative();
+    auto hit = held ? Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach()) : std::nullopt;
+    auto plan = hit ? Flatten::Work(*world, hit->block, flattenRadius) : std::nullopt;
+    if (!plan) {
+        flattening = false;
+        return;
+    }
+    const double now = glfwGetTime();
+    // A new spot (or the block clicked changed): start over on it.
+    if (!flattening || hit->block != flattenPos || plan->clicked != flattenBlock) {
+        if (now < nextFlattenAt) return;
+        flattening = true;
+        flattenPos = hit->block;
+        flattenBlock = plan->clicked;
+        flattenStart = now;
+        client->StartMining(flattenPos, Tool::Shovel); // (the server times it as it does mining)
+    }
+    const double needed = Flatten::Seconds(*plan, std::max(0, client->ToolTier(Tool::Shovel))), elapsed = now - flattenStart;
+    flattenProgress = static_cast<float>(std::min(1.0, elapsed / needed));
+    if (now >= nextDig) {
+        PlayAt("dig_soft", flattenPos, 0.6f);
+        nextDig = now + 0.27;
+    }
+    if (now >= nextChip) {
+        SpawnParticles(flattenPos, flattenBlock.type, 2, 1.5f);
+        nextChip = now + 0.12;
+    }
+    if (elapsed >= needed) {
+        client->Flatten(flattenPos, flattenRadius);
+        PlayAt("place", flattenPos, 0.6f);
+        SpawnParticles(flattenPos, flattenBlock.type, 18);
+        flattening = false;
+        flattenProgress = 0.0f;
+        nextFlattenAt = now + 0.3; // a moment before starting on the next
     }
 }
 

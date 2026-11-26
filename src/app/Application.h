@@ -108,6 +108,7 @@ private:
     Tool SelectedTool() const { return Items::ToolOf(SelectedItem()); }
     // Survival: holding the left button mines the block in view (world/Mining.h).
     void UpdateMining();
+    void UpdateFlattening();
     // Sound effects for this frame: footsteps, others' edits, creatures, rain...
     void UpdateSounds();
     // A sound at a block (its centre); a block's break sound.
@@ -346,6 +347,12 @@ private:
     int placeHeight = EdgeData::kSteps; // sixteenths: how tall shapeable blocks are placed (V / Shift+V)
     int chiselStep = 4;                 // sixteenths: how far a chisel stroke moves a corner (V / Crouch+V with the chisel)
     int flattenRadius = 1; // a shovel's right-click levels this far round (1: 3 by 3; V / Crouch+V with the shovel)
+    // Flattening (survival): the right button held with the shovel, on this block, since then.
+    bool flattening = false;
+    glm::ivec3 flattenPos{ 0 };
+    Block flattenBlock;
+    double flattenStart = 0.0, nextFlattenAt = 0.0;
+    float flattenProgress = 0.0f; // 0..1
     bool inventoryOpen = false;
     bool cursorBeforeInventory = true;
     // A chest is open (in place of the inventory): asked for at chestAskedAt, and seen
