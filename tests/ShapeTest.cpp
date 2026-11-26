@@ -1178,6 +1178,25 @@ int main() {
         const bool keptNarrow = at(23, 0, 22).type == BlockType::DIRT;
         a.client.Flatten({ 21, -1, 20 }, 2);
         Check(keptNarrow && Pump({ &a, &b }, 20.0, [&] { return at(23, 0, 22).IsAir(); }), "set wider, it flattens a 5 by 5 (a 3 by 3 doesn't reach that far)");
+        // A rake's right-click smooths it: the edge of a step a block high becomes a
+        // slope, half a block up where the columns meet, across the columns either side.
+        server.QueueConsoleCommand("fill 40 0 17 46 0 25 grass"); // a plateau, a block up from the plain
+        server.QueueConsoleCommand("tp Mason 37.5 0 20.5");
+        Pump({ &a, &b }, 20.0, [&] { return at(46, 0, 25).type == BlockType::GRASS; });
+        Pump({ &a, &b }, 1.0, [] { return false; });
+        a.client.Flatten({ 40, 0, 21 }, 2, true);
+        // EdgeData corners: 0 (x, z+1), 1 (x+1, z), 2 (x, z), 3 (x+1, z+1).
+        auto slope = [&](int x, int y, int z, int low, int high) {
+            const Block t = at(x, y, z);
+            return t.type == BlockType::GRASS && !t.IsFullBlock() && t.edgeData.GetTopY(2) == low && t.edgeData.GetTopY(0) == low &&
+                   t.edgeData.GetTopY(1) == high && t.edgeData.GetTopY(3) == high;
+        };
+        Check(Pump({ &a, &b }, 20.0, [&] { return slope(40, 0, 21, 8, 16); }) && slope(39, 0, 21, 1, 8) && slope(40, 0, 23, 8, 16),
+              "a rake smooths the edge of a step into a slope: half a block up where the columns meet");
+        Check(at(41, 0, 21).IsFullBlock() && at(39, -1, 21).IsFullBlock() && at(39, -1, 21).type == BlockType::DIRT,
+              "the plateau beyond it is left whole, and the ground under the new slope is dirt");
+        server.QueueConsoleCommand("tp Mason 21.5 0 18.5"); // (back in reach of what's next)
+        Pump({ &a, &b }, 1.0, [] { return false; });
         // Survival: what's shaved off comes back (as dirt); filling in costs it, and with
         // nothing to fill with, nothing changes.
         server.QueueConsoleCommand("gamemode survival Mason");

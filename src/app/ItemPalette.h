@@ -43,7 +43,7 @@ inline const ItemRef kItems[] = {
     ItemType::COOKED_FISH, ItemType::BOAT,
 };
 
-inline constexpr Tool kTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel, Tool::Sword, Tool::Bow, Tool::Rod, Tool::Chisel };
+inline constexpr Tool kTools[] = { Tool::Pickaxe, Tool::Axe, Tool::Shovel, Tool::Sword, Tool::Bow, Tool::Rod, Tool::Chisel, Tool::Rake };
 
 // Blocks nobody carries as themselves, which the panel leaves out: air; the old water
 // pipe (a fluid pipe now: see Current); what's grown, not placed (a crop goes in as

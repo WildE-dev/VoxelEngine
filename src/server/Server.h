@@ -329,7 +329,7 @@ private:
     // A shovel's right-click: the ground `radius` round the block clicked (1: 3 by 3) levelled
     // to its surface (soft ground shaved off above, filled in below with what was clicked;
     // anything else left be). Survival: what's taken off is given back, what's filled costs.
-    void HandleFlatten(ClientState& client, const glm::ivec3& pos, int radius);
+    void HandleFlatten(ClientState& client, const glm::ivec3& pos, int radius, bool smooth);
     void HandleCarve(ClientState& client, const net::EditCarve& carve);
     void HandleChat(ClientState& client, const std::string& text);
 

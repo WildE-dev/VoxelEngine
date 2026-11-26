@@ -475,8 +475,8 @@ void Client::Chisel(const glm::ivec3& pos, int edge, bool raise, int dir, int st
                                                                  static_cast<uint8_t>(step), static_cast<uint8_t>(bottom ? 1 : 0) }));
 }
 
-void Client::Flatten(const glm::ivec3& pos, int radius) {
-    net.Send(net::kChannelReliable, net::Encode(net::Flatten{ pos, static_cast<uint8_t>(std::clamp(radius, 1, net::kMaxFlattenRadius)) }));
+void Client::Flatten(const glm::ivec3& pos, int radius, bool smooth) {
+    net.Send(net::kChannelReliable, net::Encode(net::Flatten{ pos, static_cast<uint8_t>(std::clamp(radius, 1, net::kMaxFlattenRadius)), static_cast<uint8_t>(smooth ? 1 : 0) }));
 }
 
 void Client::SendChat(const std::string& text) {

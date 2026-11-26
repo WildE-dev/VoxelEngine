@@ -518,7 +518,7 @@ void Server::HandleMessage(ClientState& client, const std::vector<uint8_t>& data
     }
     case net::MsgType::Flatten: {
         net::Flatten m;
-        if ((ok = net::Decode(in, m))) HandleFlatten(client, m.pos, m.radius);
+        if ((ok = net::Decode(in, m))) HandleFlatten(client, m.pos, m.radius, m.smooth != 0);
         break;
     }
     case net::MsgType::EditCarve: {
@@ -1398,18 +1398,19 @@ void Server::HandleChisel(ClientState& client, const net::EditChisel& chisel) {
     world->SetBlock(p.x, p.y, p.z, after);
 }
 
-void Server::HandleFlatten(ClientState& client, const glm::ivec3& pos, int radius) {
-    if (Usable(client, Tool::Shovel) != Tool::Shovel || !InReach(client, pos, EditReach(client))) return;
-    auto plan = Flatten::Work(*world, pos, radius);
+void Server::HandleFlatten(ClientState& client, const glm::ivec3& pos, int radius, bool smooth) {
+    const Tool tool = smooth ? Tool::Rake : Tool::Shovel;
+    if (Usable(client, tool) != tool || !InReach(client, pos, EditReach(client))) return;
+    auto plan = smooth ? Flatten::Smooth(*world, pos, radius) : Flatten::Work(*world, pos, radius);
     if (!plan) return;
     if (!Creative(client)) {
         // Only once it's been worked at for long enough (the client says when it starts,
         // as for mining: see HandleMineStart).
-        const double needed = Flatten::Seconds(*plan, ToolTier(client, Tool::Shovel));
-        const bool started = client.mining && client.miningPos == pos && client.miningTool == Tool::Shovel;
+        const double needed = Flatten::Seconds(*plan, ToolTier(client, tool));
+        const bool started = client.mining && client.miningPos == pos && client.miningTool == tool;
         const double worked = started ? Now() - client.miningSince : 0.0;
         if (worked < needed * (1.0 - Mining::kSlackShare) - Mining::kSlackSeconds) {
-            if (options.log && started) Log(client.name + " flattened too soon");
+            if (options.log && started) Log(client.name + (smooth ? " smoothed" : " flattened") + " too soon");
             return;
         }
         client.mining = false;

@@ -348,10 +348,11 @@ private:
     int placeHeight = EdgeData::kSteps; // sixteenths: how tall shapeable blocks are placed (V / Shift+V)
     int chiselStep = 4;                 // sixteenths: how far a chisel stroke moves a corner (V / Crouch+V with the chisel)
     int flattenRadius = 1; // a shovel's right-click levels this far round (1: 3 by 3; V / Crouch+V with the shovel)
-    // Flattening (survival): the right button held with the shovel, on this block, since then.
+    // Flattening or smoothing (survival): the right button held with the shovel or the rake, on this block, since then.
     bool flattening = false;
     glm::ivec3 flattenPos{ 0 };
     Block flattenBlock;
+    Tool flattenTool = Tool::None; // the shovel (flattening) or the rake (smoothing)
     double flattenStart = 0.0, nextFlattenAt = 0.0;
     float flattenProgress = 0.0f; // 0..1
     bool inventoryOpen = false;

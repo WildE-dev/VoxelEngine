@@ -291,10 +291,13 @@ std::vector<uint8_t> Encode(const Flatten& m) {
     Begin(w, MsgType::Flatten);
     w.IVec3(m.pos);
     w.U8(m.radius);
+    w.U8(m.smooth);
     return std::move(w.data);
 }
 
-bool Decode(ByteReader& in, Flatten& m) { return in.IVec3(m.pos) && in.U8(m.radius) && m.radius >= 1 && m.radius <= kMaxFlattenRadius && in.AtEnd(); }
+bool Decode(ByteReader& in, Flatten& m) {
+    return in.IVec3(m.pos) && in.U8(m.radius) && m.radius >= 1 && m.radius <= kMaxFlattenRadius && in.U8(m.smooth) && m.smooth <= 1 && in.AtEnd();
+}
 
 std::vector<uint8_t> Encode(const UseBucket& m) {
     ByteWriter w;

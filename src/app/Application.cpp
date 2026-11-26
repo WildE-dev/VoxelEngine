@@ -117,6 +117,7 @@ const char* ToolHint(Tool tool) {
     case Tool::Bow: return "right-click to shoot (needs arrows)";
     case Tool::Rod: return "right-click water to cast";
     case Tool::Chisel: return "right-click: cut a corner (crouch: build up); V: how fine";
+    case Tool::Rake: return "hold right-click: smooth the ground, steps into slopes (V: how wide)";
     default: return "";
     }
 }
@@ -2369,6 +2370,7 @@ void Application::DrawHotbar() {
         std::string label = SelectedItem() != Items::kNone ? ItemName(SelectedItem()) : "Empty hand";
         if (selectedTool == Tool::Chisel) label += std::string(" - ") + ChiselStepName(chiselStep) + " a stroke (V)";
         if (selectedTool == Tool::Shovel) label += " - flattens " + std::to_string(2 * flattenRadius + 1) + "x" + std::to_string(2 * flattenRadius + 1) + " (V)";
+        if (selectedTool == Tool::Rake) label += " - smooths " + std::to_string(2 * flattenRadius + 1) + "x" + std::to_string(2 * flattenRadius + 1) + " (V)";
         if (selectedTool == Tool::None && Block::CanShape(selected))
             label += std::string(" - ") + HeightName(placeHeight) + (placeHeight < EdgeData::kSteps ? " height" : " block") + " (V)";
         const bool affordable = SelectedItem() == Items::kNone || !Items::IsBlock(SelectedItem()) ||
@@ -2529,7 +2531,7 @@ void Application::OnKey(int key, int action) {
         // Placement height: full, 3/4, 1/2, 1/4 (crouching, back up). With the chisel in
         // hand, how fine it cuts instead: a sixteenth, an eighth, a quarter, a half (crouching: back).
         const bool shift = CrouchHeld();
-        if (SelectedTool() == Tool::Shovel) {
+        if (SelectedTool() == Tool::Shovel || SelectedTool() == Tool::Rake) {
             flattenRadius = shift ? (flattenRadius <= 1 ? net::kMaxFlattenRadius : flattenRadius - 1) : (flattenRadius >= net::kMaxFlattenRadius ? 1 : flattenRadius + 1);
             return;
         }
@@ -3509,10 +3511,11 @@ void Application::OnMouseButton(int button, int action) {
 
     // Right-click with the shovel: level the ground round the block looked at to its height.
     // In survival it takes a while, the button held (UpdateFlattening).
-    if (button == GLFW_MOUSE_BUTTON_RIGHT && SelectedTool() == Tool::Shovel) {
+    // A rake's: smooth it.
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && (SelectedTool() == Tool::Shovel || SelectedTool() == Tool::Rake)) {
         if (!client->IsCreative()) return;
         if (auto hit = Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach())) {
-            client->Flatten(hit->block, flattenRadius);
+            client->Flatten(hit->block, flattenRadius, SelectedTool() == Tool::Rake);
             PlayAt("place", hit->block, 0.6f);
         }
         return;
@@ -3978,25 +3981,28 @@ void Application::UpdateMining() {
 
 void Application::UpdateFlattening() {
     flattenProgress = 0.0f;
+    const Tool tool = SelectedTool();
+    const bool smooth = tool == Tool::Rake;
     const bool held = captureCursor && !chatOpen && !inventoryOpen && !paused && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS &&
-                      SelectedTool() == Tool::Shovel && client->HasTool(Tool::Shovel) && client->IsWelcomed() && !client->IsCreative();
+                      (tool == Tool::Shovel || smooth) && client->HasTool(tool) && client->IsWelcomed() && !client->IsCreative();
     auto hit = held ? Raycast(*world, camera.GetPosition(), camera.GetDirection(), Reach()) : std::nullopt;
-    auto plan = hit ? Flatten::Work(*world, hit->block, flattenRadius) : std::nullopt;
+    auto plan = !hit ? std::nullopt : smooth ? Flatten::Smooth(*world, hit->block, flattenRadius) : Flatten::Work(*world, hit->block, flattenRadius);
     if (!plan) {
         flattening = false;
         return;
     }
     const double now = glfwGetTime();
     // A new spot (or the block clicked changed): start over on it.
-    if (!flattening || hit->block != flattenPos || plan->clicked != flattenBlock) {
+    if (!flattening || hit->block != flattenPos || plan->clicked != flattenBlock || tool != flattenTool) {
         if (now < nextFlattenAt) return;
         flattening = true;
         flattenPos = hit->block;
         flattenBlock = plan->clicked;
+        flattenTool = tool;
         flattenStart = now;
-        client->StartMining(flattenPos, Tool::Shovel); // (the server times it as it does mining)
+        client->StartMining(flattenPos, tool); // (the server times it as it does mining)
     }
-    const double needed = Flatten::Seconds(*plan, std::max(0, client->ToolTier(Tool::Shovel))), elapsed = now - flattenStart;
+    const double needed = Flatten::Seconds(*plan, std::max(0, client->ToolTier(tool))), elapsed = now - flattenStart;
     flattenProgress = static_cast<float>(std::min(1.0, elapsed / needed));
     if (now >= nextDig) {
         PlayAt("dig_soft", flattenPos, 0.6f);
@@ -4007,7 +4013,7 @@ void Application::UpdateFlattening() {
         nextChip = now + 0.12;
     }
     if (elapsed >= needed) {
-        client->Flatten(flattenPos, flattenRadius);
+        client->Flatten(flattenPos, flattenRadius, smooth);
         PlayAt("place", flattenPos, 0.6f);
         SpawnParticles(flattenPos, flattenBlock.type, 18);
         flattening = false;

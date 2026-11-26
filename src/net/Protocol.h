@@ -30,7 +30,7 @@
 //    are superseded by the next one anyway.
 namespace net {
 
-constexpr uint32_t kProtocolVersion = 75;
+constexpr uint32_t kProtocolVersion = 76;
 constexpr uint16_t kDefaultPort = 27450;
 constexpr uint8_t kChannelReliable = 0;
 constexpr uint8_t kChannelUnreliable = 1;
@@ -95,7 +95,7 @@ enum class MsgType : uint8_t {
     ItemsNear,     // the items lying on the ground near you (when they change, and now and then)
     SteamNear,     // the steam in the air near you (server/Steam.h), a few times a second
     // Client -> server
-    Flatten,       // a shovel's right-click: level the ground round this block to its height
+    Flatten,       // a shovel's right-click: level the ground round this block to its height (a rake's: smooth it)
 };
 
 // ---------------------------------------------------------------------------------
@@ -412,6 +412,7 @@ struct ItemInfo {
 struct Flatten {
     glm::ivec3 pos{0}; // the ground block clicked: the area round it goes to its height
     uint8_t radius = 1; // how far round it: 1 (3 by 3) to kMaxFlattenRadius (7 by 7)
+    uint8_t smooth = 0; // 1: a rake's, smoothing it (world/Flatten.h's Smooth) instead
 };
 constexpr int kMaxFlattenRadius = 3;
 struct UseBucket {

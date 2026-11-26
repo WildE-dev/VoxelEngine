@@ -15,7 +15,7 @@
 
 // The sword is for fighting (see Combat in world/Creatures.h); it's quick on leaves too.
 // The chisel shapes blocks (C, or right-click; V sets how fine).
-enum class Tool : uint8_t { None, Pickaxe, Axe, Shovel, Sword, Bow, Rod, Chisel, Count }; // (the bow shoots arrows, the rod fishes: right-click)
+enum class Tool : uint8_t { None, Pickaxe, Axe, Shovel, Sword, Bow, Rod, Chisel, Rake, Count }; // (the bow shoots arrows, the rod fishes: right-click)
 
 namespace Mining {
 
@@ -37,6 +37,7 @@ inline const char* ToolName(Tool t) {
     case Tool::Bow: return "Bow";
     case Tool::Rod: return "Fishing rod";
     case Tool::Chisel: return "Chisel";
+    case Tool::Rake: return "Rake";
     default: return "Hand";
     }
 }
@@ -49,6 +50,7 @@ inline const char* ToolId(Tool t) {
     case Tool::Bow: return "bow";
     case Tool::Rod: return "rod";
     case Tool::Chisel: return "chisel";
+    case Tool::Rake: return "rake";
     default: return "hand";
     }
 }
@@ -62,6 +64,7 @@ inline const char* ToolTexture(Tool t) {
     case Tool::Bow: return "tool_bow";
     case Tool::Rod: return "tool_rod";
     case Tool::Chisel: return "tool_chisel";
+    case Tool::Rake: return "tool_rake";
     default: return nullptr;
     }
 }

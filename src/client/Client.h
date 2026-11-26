@@ -94,7 +94,7 @@ public:
     void Chisel(const glm::ivec3& pos, int edge, bool raise, int dir = 0, int step = 4, bool bottom = false);
     // A shovel's right-click: level the ground round this block to its height (the
     // server works it out, and what it costs or gives back).
-    void Flatten(const glm::ivec3& pos, int radius = 1);
+    void Flatten(const glm::ivec3& pos, int radius = 1, bool smooth = false); // smooth: a rake's (world/Flatten.h)
     void Carve(const std::vector<glm::ivec3>& centers, int radius);
 
     // Chat: send a line (a command if it starts with '/'), and the lines received.

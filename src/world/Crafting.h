@@ -153,6 +153,7 @@ inline std::vector<Recipe> Defaults() {
         { "mask", "Mask", { { ItemType::HIDE, kBlock }, { BlockType::GLASS, kBlock / 2 } }, {}, 0, Tool::None, ArmourPiece::Mask },
         { "leggings", "Hide leggings", { { ItemType::HIDE, 3 * kBlock } }, {}, 0, Tool::None, ArmourPiece::Leggings },
         { "copper_ingot", "Copper ingot", { { BlockType::COPPER_ORE, kBlock }, { ItemType::COAL, kBlock / 4 } }, ItemType::COPPER_INGOT, kBlock },
+        { "rake", "Rake", { { BlockType::PLANKS, kBlock * 3 / 2 }, { BlockType::STONE, kBlock / 4 } }, {}, 0, Tool::Rake },
     };
     return recipes;
 }

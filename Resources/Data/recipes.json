@@ -126,5 +126,6 @@
   { "id": "tank", "name": "Oxygen tank", "takes": { "iron_ingot": 3, "glass": 1 }, "armour": "tank" },
   { "id": "mask", "name": "Mask", "takes": { "hide": 1, "glass": 0.5 }, "armour": "mask" },
   { "id": "leggings", "name": "Hide leggings", "takes": { "hide": 3 }, "armour": "leggings" },
-  { "id": "copper_ingot", "name": "Copper ingot", "takes": { "copper_ore": 1, "coal": 0.25 }, "makes": { "copper_ingot": 1 } }
+  { "id": "copper_ingot", "name": "Copper ingot", "takes": { "copper_ore": 1, "coal": 0.25 }, "makes": { "copper_ingot": 1 } },
+  { "id": "rake", "name": "Rake", "takes": { "planks": 1.5, "stone": 0.25 }, "tool": "rake" }
 ]
