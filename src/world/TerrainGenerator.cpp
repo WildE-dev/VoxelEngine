@@ -657,9 +657,9 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
 
     // Caves' rock is shaped to the cave: stone with open cave beside it (above: a floor;
     // else below: a ceiling; else at a side: a wall) is a slope turned to face the opening
-    // (Block::ShapeDir), each corner where the cave field (Caves::Field, and the Deep's)
-    // crosses from rock to open along the line through the cell from its far face to the
-    // open one. Corners are shared with the cells beside, so the rock runs on smoothly.
+    // (Block::ShapeDir), each corner where the cave field (Caves::Field, and the Deep's,
+    // its value at each cell's middle saying whether the cell is carved out) crosses from
+    // rock to open along the line through the cell from its far face to the open one. Corners are shared with the cells beside, so the rock runs on smoothly.
     // Ores stay whole (so they show). (Not the surface's cells: those are the land's.)
     // Rock never hangs out over the rock under it (only ceilings hang, over the cave): a
     // wall with open cave over the way it faces leans back, never out (under a ceiling it
@@ -668,7 +668,8 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
     // rather than a floor's edge sticking out over it. And a slope's flat face (its base,
     // opposite its top) is always against a full block: it's turned only a way whose base
     // is one (beyond the chunk: rock with no cave beside it, which that chunk leaves whole
-    // too), and left whole if the block at its base is shaped after all.
+    // too); one whose base is shaped after all tries the other ways it opens to, so it's
+    // carved to meet the rock round it rather than left sticking out whole.
     {
         std::optional<Caves::Field> caves; // (sampled only if this chunk has any rock to shape)
         // How open a point is (above 0: carved out), remembered for the points of this
@@ -720,96 +721,162 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                 if (open(w + o) > 0.0f) return false;
             return true;
         };
-        // The cells shaped, and the way each faces (kOpenings), to check their bases after.
-        std::vector<std::pair<int, int>> shapedCells;
+        // How open the cave is at a cell's corner (its lowest one, at `w`): the field's value
+        // there, between the eight cells round it, whose own values (open() at each) say
+        // whether each is carved out. So a corner on a face shared with a carved-out cell is
+        // between it and the rock, and the rock is carved back towards it.
+        auto cornerOpen = [&](const glm::ivec3& w) {
+            float sum = 0.0f;
+            for (int i = 0; i < 8; i++) sum += open(w - glm::ivec3(i & 1, (i >> 1) & 1, i >> 2));
+            return sum * 0.125f;
+        };
+        // The way each shaped cell faces (kOpenings; -1 if it isn't), and the rock cells with
+        // cave beside them, which may be shaped.
+        std::vector<int8_t> facingOf(S * S * S, -1);
+        std::vector<int> exposed;
+        // Shapes a rock cell with cave beside it, if it can be: the first way (floor,
+        // ceiling, walls; but where it's no ceiling, first the way the wall under it faces,
+        // carrying the wall on up) the cave opens to with a full block behind and that
+        // carves something off it. False if none does (it's left whole).
+        auto tryShape = [&](const glm::ivec3& local) {
+            Block& cell = out[Index(local.x, local.y, local.z)];
+            if (!cell.IsFullBlock()) return false;
+            const glm::ivec3 at = coords * S + local;
+            int first = -1;
+            for (int i = 0; i < 6 && first < 0; i++)
+                if (opensTo(local, at, i)) first = i;
+            if (first < 0) return false;
+            // The wall under it, if it's one.
+            const Block* wallUnder = local.y > 0 ? &out[Index(local.x, local.y - 1, local.z)] : nullptr;
+            if (wallUnder && !(wallUnder->IsPartial() && wallUnder->ShapeDir() != 0 && wallUnder->ShapeDir() != 3 &&
+                               (wallUnder->type == BlockType::STONE || wallUnder->type == BlockType::DEEPSTONE)))
+                wallUnder = nullptr;
+            int order[7], count = 0;
+            if (wallUnder && first != 1) {
+                int i = 0;
+                while (Block::ShapeDirFacing(kOpenings[i]) != wallUnder->ShapeDir()) i++;
+                order[count++] = i;
+            }
+            for (int i = 0; i < 6; i++) order[count++] = i;
+            for (int c = 0; c < count; c++) {
+                const int facing = order[c];
+                if (!opensTo(local, at, facing) || !backedTo(local, at, facing)) continue;
+                const int dir = Block::ShapeDirFacing(kOpenings[facing]);
+                const bool isWall = dir != 0 && dir != 3;
+                const Block* under = isWall && wallUnder && wallUnder->ShapeDir() == dir ? wallUnder : nullptr;
+                int heights[4];
+                glm::vec3 los[4];
+                for (int e = 0; e < 4; e++) {
+                    const glm::vec3 lo = Block::ShapeToCell(dir, glm::vec3(kCorner[e][0], 0.0f, kCorner[e][1]));
+                    const glm::vec3 hi = Block::ShapeToCell(dir, glm::vec3(kCorner[e][0], 1.0f, kCorner[e][1]));
+                    const float o0 = cornerOpen(at + glm::ivec3(glm::round(lo))), o1 = cornerOpen(at + glm::ivec3(glm::round(hi)));
+                    int height = EdgeData::kSteps;                   // rock right through
+                    if (o0 > 0.0f) height = 1;                       // open from the far face on
+                    else if (o1 > 0.0f) height = static_cast<int>(std::lround(o0 / (o0 - o1) * EdgeData::kSteps));
+                    heights[e] = std::clamp(height, 1, EdgeData::kSteps);
+                    los[e] = glm::round(lo);
+                }
+                if (isWall) {
+                    // A wall's corners in pairs, one over the other: the foot no further out
+                    // than the wall under it, the top no further out than the foot (unless
+                    // there's a ceiling over the cave it faces).
+                    const bool openOver = open(at + kOpenings[facing] + glm::ivec3(0, 1, 0)) > 0.0f;
+                    for (int e = 0; e < 4; e++) {
+                        if (los[e].y != 0.0f) continue;
+                        int top = 0;
+                        while (!(los[top].y == 1.0f && los[top].x == los[e].x && los[top].z == los[e].z)) top++;
+                        if (under) heights[e] = std::min<int>(heights[e], under->edgeData.GetTopY(top));
+                        if (openOver) heights[top] = std::min(heights[top], heights[e]);
+                    }
+                }
+                EdgeData edges;
+                bool whole = true;
+                for (int e = 0; e < 4; e++) {
+                    whole &= heights[e] == EdgeData::kSteps;
+                    edges.Set(e, heights[e], 0);
+                }
+                if (whole) continue; // (nothing carved this way: try the next)
+                Block shaped(cell.type, edges);
+                shaped.SetShapeDir(dir);
+                cell = shaped;
+                facingOf[Index(local.x, local.y, local.z)] = static_cast<int8_t>(facing);
+                return true;
+            }
+            return false;
+        };
         for (int x = 0; x < S; x++)
             for (int z = 0; z < S; z++) {
                 const int m = rows[x * S + z];
                 for (int y = 0; y < S; y++) {
                     const int wy = coords.y * S + y;
                     if (wy >= m - 1) break; // (underground only: the surface is shaped already)
-                    Block& cell = out[Index(x, y, z)];
+                    const Block& cell = out[Index(x, y, z)];
                     if ((cell.type != BlockType::STONE && cell.type != BlockType::DEEPSTONE) || !cell.IsFullBlock()) continue;
                     const glm::ivec3 at(coords.x * S + x, wy, coords.z * S + z);
-                    const glm::ivec3 local(x, y, z);
-                    // The first way (floor, ceiling, walls) the cave opens to with a full
-                    // block behind; but where it's no ceiling, the way the wall under it
-                    // faces, if it opens that way here too (carrying the wall on up).
-                    int first = -1, facing = -1;
-                    for (int i = 0; i < 6 && facing < 0; i++)
-                        if (opensTo(local, at, i)) {
-                            if (first < 0) first = i;
-                            if (backedTo(local, at, i)) facing = i;
-                        }
-                    if (first < 0) continue;
-                    // The wall under it, if it's a wall open the way it faces here too.
-                    const Block* under = y > 0 ? &out[Index(x, y - 1, z)] : nullptr;
-                    if (under && !(under->IsPartial() && under->ShapeDir() != 0 && under->ShapeDir() != 3 &&
-                                   (under->type == BlockType::STONE || under->type == BlockType::DEEPSTONE)))
-                        under = nullptr;
-                    if (under && first != 1) {
-                        int i = 0;
-                        while (Block::ShapeDirFacing(kOpenings[i]) != under->ShapeDir()) i++;
-                        if (opensTo(local, at, i) && backedTo(local, at, i)) facing = i;
-                    }
-                    if (facing < 0) continue; // (nowhere with a full block behind: left whole)
-                    const int dir = Block::ShapeDirFacing(kOpenings[facing]);
-                    const bool isWall = dir != 0 && dir != 3;
-                    if (!isWall || (under && under->ShapeDir() != dir)) under = nullptr;
-                    int heights[4];
+                    bool beside = false;
+                    for (int i = 0; i < 6 && !beside; i++) beside = opensTo({ x, y, z }, at, i);
+                    if (!beside) continue;
+                    exposed.push_back(Index(x, y, z));
+                    tryShape({ x, y, z });
+                }
+            }
+        // A slope whose base turned out to be shaped after all is made whole again, and
+        // tries the other ways it might face (sideways, say) with a full block behind them,
+        // so it meets the rock round it rather than sticking out; until none changes (and at
+        // the last, any still resting on a slope is left whole).
+        auto local = [](int index) { return glm::ivec3(index % S, (index / S) % S, index / (S * S)); };
+        auto loose = [&](int index) {
+            const int facing = facingOf[index];
+            if (facing < 0 || out[index].IsFullBlock()) return false;
+            const glm::ivec3 n = local(index) - kOpenings[facing];
+            return inChunk(n) && !out[Index(n.x, n.y, n.z)].IsFullBlock();
+        };
+        for (int round = 0;; round++) {
+            std::vector<int> undone;
+            for (const int index : exposed)
+                if (loose(index)) out[index] = Block(out[index].type), facingOf[index] = -1, undone.push_back(index);
+            if (undone.empty()) break;
+            if (round >= 8) {
+                for (bool changed = true; changed;) {
+                    changed = false;
+                    for (const int index : exposed)
+                        if (loose(index)) out[index] = Block(out[index].type), facingOf[index] = -1, changed = true;
+                }
+                break;
+            }
+            // (Those made whole, and any left whole before whose way may now have a full
+            // block behind it.)
+            for (const int index : exposed)
+                if (facingOf[index] < 0) tryShape(local(index));
+        }
+        // Walls over walls facing the same way, from the bottom up, brought in again to the
+        // wall under them as it is now (it may have been shaped after them).
+        for (int x = 0; x < S; x++)
+            for (int z = 0; z < S; z++)
+                for (int y = 1; y < S; y++) {
+                    const int index = Index(x, y, z);
+                    Block& cell = out[index];
+                    const Block& under = out[Index(x, y - 1, z)];
+                    const int facing = facingOf[index];
+                    if (facing < 0 || !cell.IsPartial() || !under.IsPartial() || facingOf[Index(x, y - 1, z)] != facing) continue;
+                    const int dir = cell.ShapeDir();
+                    if (dir == 0 || dir == 3) continue;
                     glm::vec3 los[4];
+                    for (int e = 0; e < 4; e++) los[e] = glm::round(Block::ShapeToCell(dir, glm::vec3(kCorner[e][0], 0.0f, kCorner[e][1])));
+                    const bool openOver = open(coords * S + glm::ivec3(x, y, z) + kOpenings[facing] + glm::ivec3(0, 1, 0)) > 0.0f;
+                    EdgeData edges = cell.edgeData;
                     for (int e = 0; e < 4; e++) {
-                        const glm::vec3 lo = Block::ShapeToCell(dir, glm::vec3(kCorner[e][0], 0.0f, kCorner[e][1]));
-                        const glm::vec3 hi = Block::ShapeToCell(dir, glm::vec3(kCorner[e][0], 1.0f, kCorner[e][1]));
-                        const float o0 = open(at + glm::ivec3(glm::round(lo))), o1 = open(at + glm::ivec3(glm::round(hi)));
-                        int height = EdgeData::kSteps;                   // rock right through
-                        if (o0 > 0.0f) height = 1;                       // open from the far face on
-                        else if (o1 > 0.0f) height = static_cast<int>(std::lround(o0 / (o0 - o1) * EdgeData::kSteps));
-                        heights[e] = std::clamp(height, 1, EdgeData::kSteps);
-                        los[e] = glm::round(lo);
+                        if (los[e].y != 0.0f) continue;
+                        int top = 0;
+                        while (!(los[top].y == 1.0f && los[top].x == los[e].x && los[top].z == los[e].z)) top++;
+                        const int foot = std::min<int>(edges.GetTopY(e), under.edgeData.GetTopY(top));
+                        edges.Set(e, foot, 0);
+                        if (openOver) edges.Set(top, std::min<int>(edges.GetTopY(top), foot), 0);
                     }
-                    if (isWall) {
-                        // A wall's corners in pairs, one over the other: the foot no further
-                        // out than the wall under it, the top no further out than the foot
-                        // (unless there's a ceiling over the cave it faces).
-                        int i = 0;
-                        while (Block::ShapeDirFacing(kOpenings[i]) != dir) i++;
-                        const bool openOver = open(at + kOpenings[i] + glm::ivec3(0, 1, 0)) > 0.0f;
-                        for (int e = 0; e < 4; e++) {
-                            if (los[e].y != 0.0f) continue;
-                            int top = 0;
-                            while (!(los[top].y == 1.0f && los[top].x == los[e].x && los[top].z == los[e].z)) top++;
-                            if (under) heights[e] = std::min<int>(heights[e], under->edgeData.GetTopY(top));
-                            if (openOver) heights[top] = std::min(heights[top], heights[e]);
-                        }
-                    }
-                    EdgeData edges;
-                    bool whole = true;
-                    for (int e = 0; e < 4; e++) {
-                        whole &= heights[e] == EdgeData::kSteps;
-                        edges.Set(e, heights[e], 0);
-                    }
-                    if (whole) continue;
                     Block shaped(cell.type, edges);
                     shaped.SetShapeDir(dir);
                     cell = shaped;
-                    shapedCells.emplace_back(Index(x, y, z), facing);
                 }
-            }
-        // A slope whose base turned out against another slope after all is left whole (which
-        // can only give others a full block behind them), until none is.
-        for (bool changed = true; changed;) {
-            changed = false;
-            for (const auto& [index, facing] : shapedCells) {
-                Block& cell = out[index];
-                if (cell.IsFullBlock()) continue;
-                const int x = index % S, y = (index / S) % S, z = index / (S * S);
-                const glm::ivec3 n = glm::ivec3(x, y, z) - kOpenings[facing];
-                if (!inChunk(n) || out[Index(n.x, n.y, n.z)].IsFullBlock()) continue;
-                cell = Block(cell.type);
-                changed = true;
-            }
-        }
     }
 
     // Lakes and rivers: their water level per column, and their beds kept whole (a

@@ -561,6 +561,27 @@ int main() {
         }
         Check(caveSlopes > 1000 && caveLoose == 0, "cave slopes' flat faces are all against full blocks (" + std::to_string(caveLoose) + " of " + std::to_string(caveSlopes) + " not)");
         Check(landSlopes > 1000 && landLoose == 0, "and the land's slopes' too (" + std::to_string(landLoose) + " of " + std::to_string(landSlopes) + " not)");
+        // And few whole blocks are left sticking out into a cave (open on two sides or
+        // more) for want of a full block behind a slope: they're carved another way.
+        long sticking = 0;
+        const glm::ivec3 sides[6] = { { 0, 1, 0 }, { 0, -1, 0 }, { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+        for (const auto& [where, blocks] : chunks) {
+            if (std::get<1>(where) >= 0) continue; // (underground)
+            const glm::ivec3 origin = glm::ivec3(std::get<0>(where), std::get<1>(where), std::get<2>(where)) * S;
+            for (int x = 0; x < S; x++)
+                for (int y = 0; y < S; y++)
+                    for (int z = 0; z < S; z++) {
+                        const Block& b = blocks[x + S * (y + S * z)];
+                        if ((b.type != BlockType::STONE && b.type != BlockType::DEEPSTONE) || !b.IsFullBlock()) continue;
+                        int open = 0;
+                        for (const glm::ivec3& d : sides) {
+                            const Block* n = at(origin + glm::ivec3(x, y, z) + d);
+                            open += n && n->IsAir();
+                        }
+                        sticking += open >= 2;
+                    }
+        }
+        Check(sticking * 50 <= caveSlopes, "few whole blocks stick out into caves (" + std::to_string(sticking) + ", against " + std::to_string(caveSlopes) + " slopes)");
     }
     // Below the lava level: deepstone, not stone, and caves much rarer.
     {
