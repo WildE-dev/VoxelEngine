@@ -84,13 +84,17 @@ public:
     struct Column {
         float corners[4];
         int surfaceRow;
-        // How far its corners were apart, before a cliff's were levelled (MakeColumn):
-        // more than kCliffSpread and it's a cliff, its top flat at its own height.
+        // How far its corners were apart, before a cliff's were brought in (MakeColumn):
+        // more than kCliffSpread and it's a cliff, its slope a block from low to high.
         float spread = 0.0f;
 
-        // Edge data for the sloped block at `row`, and whether it's a valid block.
+        // Edge data for the sloped block at `row` (any corner of it at or under the
+        // cell's floor a pixel tall), and whether there's a block there at all.
         EdgeData EdgesAt(int row) const;
-        bool HasSlopedTop() const { return EdgesAt(surfaceRow).IsValid(); }
+        bool HasSlopedTop() const {
+            const EdgeData e = EdgesAt(surfaceRow);
+            return !(e.IsEmpty(0) && e.IsEmpty(1) && e.IsEmpty(2) && e.IsEmpty(3));
+        }
         // The highest row the surface reaches: above the surface row where a corner
         // climbs past its cell, the slope goes on in the rows over it (a piece of it
         // there, down to a one-cornered peak), else it would stop flat at the top of
@@ -171,8 +175,9 @@ public:
     static constexpr int kMaxRiverLength = 160;
     // Water fills open cells below this row: the sea's level, or a lake's.
     int WaterLevelAt(int x, int z) const { return std::max(static_cast<int>(kSeaLevel), LakeLevelAt(x, z)); }
-    // A column whose corners are more than this many blocks apart is a cliff: its top is
-    // flat, at its own height, and it stands as a step from its neighbours (rock showing).
+    // A column whose corners are more than this many blocks apart is a cliff: its slope is
+    // brought in to this, about its own height, and it stands as a step from its
+    // neighbours (rock showing).
     static constexpr float kCliffSpread = 1.0f;
     static constexpr int kLakeCell = 128;
     static constexpr float kLakeMinRadius = 14.0f, kLakeMaxRadius = 34.0f;

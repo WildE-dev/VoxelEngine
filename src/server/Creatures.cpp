@@ -43,7 +43,8 @@ bool LightAt(ServerWorld& world, const glm::ivec3& p, uint8_t& block, uint8_t& s
 // A cell a creature could stand in: room for its height above a floor.
 bool CanStand(const BlockAccess& world, const glm::ivec3& feet, int height, bool& floorIsGrass, bool* floorIsLeaves = nullptr) {
     Block floor, b;
-    if (!world.GetBlock(feet.x, feet.y - 1, feet.z, floor) || !floor.IsFullBlock()) return false;
+    // (On a whole block, or natural ground's slope: it settles onto the slope's surface.)
+    if (!world.GetBlock(feet.x, feet.y - 1, feet.z, floor) || !(floor.IsFullBlock() || (floor.IsPartial() && !floor.IsStepped() && floor.ShapeDir() == 0))) return false;
     for (int y = 0; y < height; y++)
         if (!world.GetBlock(feet.x, feet.y + y, feet.z, b) || !b.IsPassable() || b.HasWater()) return false;
     floorIsGrass = IsGrassType(floor.type);

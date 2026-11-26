@@ -1223,10 +1223,14 @@ void Block::RepairEdgeData() {
 }
 
 void Block::SetEdgeData(EdgeData edges) {
-    // It stands as long as any quarter (or, for a slope, any corner) is left: a slope with
-    // one corner up is a little peak (where the land's surface pokes just above a row).
+    // It stands as long as any quarter (or, for a slope, any corner) is left. A natural
+    // slope has no corners of nothing: one that comes to nothing is a pixel tall, on the
+    // cell's floor (a slope with one corner up is a little peak on a pixel-thin base).
     bool valid = false;
     for (int e = 0; e < 4; e++) valid |= !edges.IsEmpty(e);
+    if (valid && !IsStepped())
+        for (int e = 0; e < 4; e++)
+            if (edges.IsEmpty(e)) edges.Set(e, 1, 0);
     if (valid) {
         edgeData = edges;
     }

@@ -73,12 +73,14 @@ TerrainGenerator::Column MakeColumn(float h00, float h10, float h01, float h11) 
     c.corners[1] = Quantise(h10);
     c.corners[2] = Quantise(h00);
     c.corners[3] = Quantise(h11);
-    // Steeper than a block per block, it's a cliff: levelled at its own height, a step up
-    // or down from its neighbours, rather than one slope stretched over several rows.
+    // Steeper than a block per block, it's a cliff: its slope kept but brought in to a block
+    // from its lowest corner to its highest (about its own height), a step up or down from
+    // its neighbours, rather than one slope stretched over several rows.
     c.spread = std::max({ c.corners[0], c.corners[1], c.corners[2], c.corners[3] }) - std::min({ c.corners[0], c.corners[1], c.corners[2], c.corners[3] });
     if (c.spread > TerrainGenerator::kCliffSpread) {
-        const float level = Quantise((c.corners[0] + c.corners[1] + c.corners[2] + c.corners[3]) * 0.25f);
-        for (float& corner : c.corners) corner = level;
+        const float mean = (c.corners[0] + c.corners[1] + c.corners[2] + c.corners[3]) * 0.25f;
+        const float scale = TerrainGenerator::kCliffSpread / c.spread;
+        for (float& corner : c.corners) corner = Quantise(mean + (corner - mean) * scale);
     }
     c.surfaceRow = static_cast<int>(std::floor(std::min(std::min(c.corners[0], c.corners[1]), std::min(c.corners[2], c.corners[3]))));
     return c;
@@ -95,6 +97,8 @@ bool TerrainGenerator::DeepstoneAt(int x, int y, int z) {
 }
 
 EdgeData TerrainGenerator::Column::EdgesAt(int row) const {
+    // (A corner at or below the cell's floor, where some of the surface is in it, is a
+    // pixel tall: natural ground has no corners of nothing, Block::SetEdgeData.)
     EdgeData edges;
     for (int i = 0; i < 4; i++) edges.SetTopY(i, EdgeHeight(corners[i] - row));
     return edges;
@@ -587,7 +591,7 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
             const Column column = ColumnFrom(heights, x, z);
             const int m = column.surfaceRow;
             const EdgeData edges = column.EdgesAt(m);
-            const bool sloped = edges.IsValid();
+            const bool sloped = column.HasSlopedTop();
             // Beaches, rock and snow on mountains, else the biome's ground.
             const BlockType top = column.TopType(biomes[x * S + z]);
             const BlockType under = column.UnderType(biomes[x * S + z]);

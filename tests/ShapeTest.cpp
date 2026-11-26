@@ -157,6 +157,13 @@ int main() {
             for (int i = 0; i < 4; i++) dirt = dirt.Chiselled(e, -4);
         Check(dirt.type == BlockType::DIRT && dirt.edgeData.GetTopY(2) == 16 && dirt.edgeData.GetTopY(0) == 1 && dirt.edgeData.GetTopY(1) == 1 && dirt.edgeData.GetTopY(3) == 1,
               "a slope's corners chiselled all the way down keep a pixel at the bottom of the cell");
+        {
+            EdgeData peak;
+            peak.Set(0, 0, 0), peak.Set(1, 0, 0), peak.Set(2, 12, 0), peak.Set(3, 0, 0);
+            const Block made(BlockType::DIRT, peak), built(BlockType::STONE_BRICK, peak);
+            Check(made.type == BlockType::DIRT && made.edgeData.GetTopY(0) == 1 && made.edgeData.GetTopY(2) == 12 && built.edgeData.IsEmpty(0),
+                  "a slope made with corners of nothing has them a pixel tall (a built block's quarters may be gone)");
+        }
         const Block flat = dirt.Chiselled(2, -16);
         Check(flat.type == BlockType::DIRT && flat.ResourceUnits() == 4, "and with the last down too, it's a slab a pixel thin (natural ground is broken, not chiselled away)");
 
@@ -445,13 +452,15 @@ int main() {
             // our two corners on it and the neighbour's two matching corners.
             struct Side { glm::ivec3 d; int ours[2], theirs[2]; };
             const Side sides[4] = { { { 1, 0, 0 }, { 1, 3 }, { 2, 0 } }, { { -1, 0, 0 }, { 2, 0 }, { 1, 3 } }, { { 0, 0, 1 }, { 0, 3 }, { 2, 1 } }, { { 0, 0, -1 }, { 2, 1 }, { 0, 3 } } };
-            int exposed = 0, sidesSeen = 0;
+            int exposed = 0, sidesSeen = 0, naturalSlopes = 0, emptyCorners = 0;
             for (int x = -8; x < 40; x++)
                 for (int z = -8; z < 40; z++)
                     for (int y = -6; y < 24; y++) {
                         Block b;
                         land.GetBlock(x, y, z, b);
                         if (b.IsAir() || b.IsFullBlock() || !b.IsPartial() || b.IsStepped() || b.ShapeDir() != 0) continue;
+                        naturalSlopes++;
+                        for (int e = 0; e < 4; e++) emptyCorners += b.edgeData.IsEmpty(e);
                         for (const Side& s : sides) {
                             Block n;
                             land.GetBlock(x + s.d.x, y, z + s.d.z, n);
@@ -460,7 +469,7 @@ int main() {
                             for (int k = 0; k < 2; k++) {
                                 const int ours = b.edgeData.GetTopY(s.ours[k]);
                                 const int theirs = n.IsPartial() && !n.IsStepped() ? n.edgeData.GetTopY(s.theirs[k]) : 0;
-                                if (ours > theirs) {
+                                if (ours > theirs + 1) { // (a pixel's lip: a corner on the cell's floor is a pixel tall)
                                     exposed++;
                                     break;
                                 }
@@ -468,6 +477,7 @@ int main() {
                         }
                     }
             Check(sidesSeen > 1000 && exposed * 100 < sidesSeen, "the land's slopes meet, with no step showing between them (" + std::to_string(exposed) + " of " + std::to_string(sidesSeen) + " sides)");
+            Check(naturalSlopes > 1000 && emptyCorners == 0, "and none has a corner of nothing: each is at least a pixel tall (" + std::to_string(emptyCorners) + " in " + std::to_string(naturalSlopes) + " slopes)");
         }
 
         // A pool's top layer: a thin 3x3 patch on full water, empty all round it.
@@ -817,7 +827,7 @@ int main() {
         slopes.blocks[{ 5, 0, 5 }] = wedge;
         bool unknown = false;
         const auto ground = Collision::GroundHeight(slopes, Collision::AABB{ { 5.2f, 0.5f, 5.2f }, { 5.8f, 2.3f, 5.8f } }, 0.6f, 1.0f, unknown);
-        Check(ground && std::abs(*ground - 0.8f) < 1e-3f, "standing on a slope, you stand on its highest point under you, not its middle");
+        Check(ground && std::abs(*ground - (1.0f / 16.0f + 0.8f * 15.0f / 16.0f)) < 1e-3f, "standing on a slope, you stand on its highest point under you, not its middle"); // (its low edge a pixel up)
         // Creatures and dropped items moving sideways: a slab of natural ground higher than
         // a step stops them (BoxBlocked alone never does: slopes are stood on), a low one doesn't.
         slopes.blocks[{ 5, 0, 7 }] = Shaped(BlockType::STONE, 6, 6, 6, 6);
@@ -1066,10 +1076,10 @@ int main() {
         Check(Block::PressurePlate().OutlineSegments().size() == 24, "a pressure plate's is one thin box");
         Check(Shaped(BlockType::STONE_BRICK, 8, 6, 2, 4).OutlineSegments().size() == 96, "a stepped block's is its four quarters");
         Check(Shaped(BlockType::STONE_BRICK, 8, 0, 0, 0).OutlineSegments().size() == 24, "leaving out empty ones");
-        const auto slope = Shaped(BlockType::DIRT, 8, 4, 0, 4).OutlineSegments(); // a corner at 0: three uprights, base, top, fold
+        const auto slope = Shaped(BlockType::DIRT, 8, 4, 0, 4).OutlineSegments(); // (its corner at 0 a pixel tall: four uprights, base, top, fold)
         float top = 0.0f;
         for (const auto& p : slope) top = std::max(top, p.y);
-        Check(slope.size() == 2 * (4 + 4 + 3 + 1) && top == 1.0f, "a slope's follows its corners");
+        Check(slope.size() == 2 * (4 + 4 + 4 + 1) && top == 1.0f, "a slope's follows its corners");
     }
 
     std::cout << "Chisel over the network" << std::endl;
@@ -1181,8 +1191,8 @@ int main() {
 
         // Around the peak: rock (or snow) above the tree line, nothing growing there,
         // and steep: many columns are cliffs (steeper than a block per block), each a
-        // flat-topped step of rock.
-        int high = 0, bare = 0, steep = 0, slopes = 0, flatCliffs = 0;
+        // step of rock still sloped, as steeply as a block allows.
+        int high = 0, bare = 0, steep = 0, slopes = 0, slopedCliffs = 0;
         bool nothingGrows = true;
         for (int x = px - 120; x <= px + 120; x += 2)
             for (int z = pz - 120; z <= pz + 120; z += 2) {
@@ -1191,7 +1201,7 @@ int main() {
                 if (c.surfaceRow > 30) {
                     slopes++;
                     steep += c.spread > TerrainGenerator::kCliffSpread;
-                    flatCliffs += c.spread > TerrainGenerator::kCliffSpread && level == 0.0f;
+                    slopedCliffs += c.spread > TerrainGenerator::kCliffSpread && level > 0.0f && level <= TerrainGenerator::kCliffSpread + 1.0f / 16.0f;
                 }
                 if (c.surfaceRow < TerrainGenerator::kRockLine) continue;
                 high++;
@@ -1205,8 +1215,8 @@ int main() {
             }
         Check(high > 0 && bare == high, "every column above the tree line is bare rock or snow (" + std::to_string(high) + " checked)");
         Check(nothingGrows, "and no trees or plants grow up there (loose pebbles may lie about)");
-        Check(steep * 10 > slopes && flatCliffs == steep,
-              "steep: " + std::to_string(100 * steep / std::max(1, slopes)) + "% of mountain columns are cliffs, each flat on top (" + std::to_string(flatCliffs) + " of " + std::to_string(steep) + ")");
+        Check(steep * 10 > slopes && slopedCliffs == steep,
+              "steep: " + std::to_string(100 * steep / std::max(1, slopes)) + "% of mountain columns are cliffs, each still sloped, a block from low to high (" + std::to_string(slopedCliffs) + " of " + std::to_string(steep) + ")");
 
         Player player(glm::vec3(px + 0.5f, 0.0f, pz + 0.5f));
         Check(player.Spawn(world) && player.GetFeetPosition().y > best && player.GetFeetPosition().y < best + 2.5f,

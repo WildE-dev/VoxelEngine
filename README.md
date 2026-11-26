@@ -394,9 +394,9 @@ hills, so peaks reach around 230. Above row 44 the ground is bare rock, with not
 (trees, bushes, grass and flowers stay below that tree line); above row 70 it's snow.
 It gets colder the higher you go (a little colder every block above row 12), so high
 ground turns to taiga and tundra. They're steep: a column
-whose corners are more than a block apart is a cliff, its top levelled at its own height,
-a flat step of bare rock up or down from its neighbours, so mountainsides climb in
-rocky ledges rather than one slope stretched over several rows. The nearest ground above row 80 is about 750 blocks from spawn, towards
+whose corners are more than a block apart is a cliff: its slope is kept but brought in to
+a block from its lowest corner to its highest, so it stands as a tilted step of bare rock
+up or down from its neighbours, rather than one slope stretched over several rows. The nearest ground above row 80 is about 750 blocks from spawn, towards
 +x +z.
 
 ### Lakes
@@ -805,7 +805,9 @@ cell, so chiselled all the way down it's a slab a pixel thin, broken like any bl
 can be cut from below too: a stroke at its underside raises that
 quarter's bottom instead (crouching lowers it back), so a quarter can be trimmed from
 both ends, or cut right through (natural ground's underside slopes like its surface, and
-its corners keep at least a pixel).
+its corners keep at least a pixel). No natural block has a corner of nothing, however it was
+made (generated land, an old save, the chisel): a corner that would come to nothing is a
+pixel tall.
 The quarter you're looking at is the one your view actually lands on (a low step
 seen past a taller one, the side of a quarter, the underside of one chiselled from
 below), and while the chisel's in hand it's outlined in gold, so you can see which
@@ -849,7 +851,7 @@ sixteenth high, an old save's shapes read the same, a vertex kept to a sixteenth
 nothing and back to whole), that the mesher draws quarter-columns, joins slopes
 across rows and tapers thin water to nothing with no walls, chiselling over the
 network, and the mountains: high snowy peaks, bare rock with nothing growing above the
-tree line, steep slopes (cliffs, each flat on top), and that a player spawning on a peak lands on top.
+tree line, steep slopes (cliffs, each still sloped), and that a player spawning on a peak lands on top.
 
 ### Logs
 
