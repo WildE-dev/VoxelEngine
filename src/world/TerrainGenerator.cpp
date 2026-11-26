@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <optional>
+#include <vector>
 
 #include "world/Caves.h"
 #include "world/Dungeons.h"
@@ -47,13 +50,14 @@ BlockType OreAt(int x, int y, int z, int depth) {
 }
 
 // The Deep's caverns: huge open pockets of low-frequency noise within its band,
-// fading out towards its top and bottom.
-bool DeepCavern(int x, int y, int z) {
-    if (y >= TerrainGenerator::kDeepTop || y <= TerrainGenerator::kDeepBottom) return false;
+// fading out towards its top and bottom. How open a point is (above 0: open), and whether.
+float DeepOpenness(int x, int y, int z) {
+    if (y >= TerrainGenerator::kDeepTop || y <= TerrainGenerator::kDeepBottom) return -1.0f;
     const float edge = std::min(TerrainGenerator::kDeepTop - y, y - TerrainGenerator::kDeepBottom) / 10.0f;
     const float n = Noise::Perlin3(x * 0.022f, y * 0.05f, z * 0.022f, 0xDEE9u) + 0.5f * Noise::Perlin3(x * 0.07f, y * 0.09f, z * 0.07f, 0xDEEAu);
-    return n > 0.3f + std::max(0.0f, 1.0f - edge) * 0.6f; // (thinned: about half as much open as it was)
+    return n - (0.3f + std::max(0.0f, 1.0f - edge) * 0.6f); // (thinned: about half as much open as it was)
 }
+bool DeepCavern(int x, int y, int z) { return DeepOpenness(x, y, z) > 0.0f; }
 
 constexpr int S = TerrainGenerator::S;
 // Surface heights snap to sixteenths of a block (EdgeData's steps, the finest chisel
@@ -72,15 +76,11 @@ TerrainGenerator::Column MakeColumn(float h00, float h10, float h01, float h11) 
     c.corners[1] = Quantise(h10);
     c.corners[2] = Quantise(h00);
     c.corners[3] = Quantise(h11);
-    // Steeper than a block per block, it's a cliff: its slope kept but brought in to a block
-    // from its lowest corner to its highest (about its own height), a step up or down from
-    // its neighbours, rather than one slope stretched over several rows.
+    // (Steeper than a block per block it's a cliff: bare rock, TopType. Its surface is
+    // brought into one cell like any column's, below, so it's a slope at most a block high,
+    // a step from its neighbours where its corners don't fit; those that do keep their
+    // height, and meet the columns beside.)
     c.spread = std::max({ c.corners[0], c.corners[1], c.corners[2], c.corners[3] }) - std::min({ c.corners[0], c.corners[1], c.corners[2], c.corners[3] });
-    if (c.spread > TerrainGenerator::kCliffSpread) {
-        const float mean = (c.corners[0] + c.corners[1] + c.corners[2] + c.corners[3]) * 0.25f;
-        const float scale = TerrainGenerator::kCliffSpread / c.spread;
-        for (float& corner : c.corners) corner = Quantise(mean + (corner - mean) * scale);
-    }
     // Its surface is one sloped block, in the cell holding its average height (a mean on
     // a row's line counts as the top of the cell under it): corners above that cell are
     // brought down to its top, corners below it up to a pixel over its floor. (A block
@@ -655,89 +655,67 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                 }
             }
 
-    // Caves' rock is shaped: floors, ceilings and walls. Floors: stone with open air over it is given a sloped top, each
-    // corner up to half a block down (by a noise of the corner's own position, so
-    // neighbours share their corners and the floor runs on smoothly), instead of flat
-    // blocks. Ores stay whole (so they show). (Not the chunk's top row: what's over that
-    // is the next chunk's.)
+    // Caves' rock is shaped to the cave: stone with open cave beside it (above: a floor;
+    // else below: a ceiling; else at a side: a wall) is a slope turned to face the opening
+    // (Block::ShapeDir), each corner where the cave field (Caves::Field, and the Deep's)
+    // crosses from rock to open along the line through the cell from its far face to the
+    // open one. Corners are shared with the cells beside, so the rock runs on smoothly.
+    // Ores stay whole (so they show). (Not the surface's cells: those are the land's.)
     {
-        auto drop = [](int cx, int y, int cz) {
-            const float n = Noise::Perlin3(cx * 0.21f, y * 0.37f, cz * 0.21f, 0xF1A7u);
-            return std::clamp(static_cast<int>(std::lround((n + 0.15f) * 12.0f)), 0, EdgeData::kSteps / 2); // (sixteenths: up to half a block)
+        std::optional<Caves::Field> caves; // (sampled only if this chunk has any rock to shape)
+        // How open a point is (above 0: carved out), remembered for the points of this
+        // chunk and the ones round it.
+        constexpr int P = S + 2;
+        std::vector<float> memo(P * P * P, std::numeric_limits<float>::quiet_NaN());
+        auto open = [&](const glm::ivec3& w) {
+            const glm::ivec3 l = w - coords * S + glm::ivec3(1);
+            float* slot = l.x >= 0 && l.y >= 0 && l.z >= 0 && l.x < P && l.y < P && l.z < P ? &memo[(l.x * P + l.y) * P + l.z] : nullptr;
+            if (slot && !std::isnan(*slot)) return *slot;
+            const int row = rows[std::clamp(l.x - 1, 0, S - 1) * S + std::clamp(l.z - 1, 0, S - 1)];
+            if (!caves) caves.emplace(coords);
+            const float o = std::max(caves->Openness(w.x, w.y, w.z, row), DeepOpenness(w.x, w.y, w.z) * 0.1f);
+            if (slot) *slot = o;
+            return o;
         };
+        // EdgeData's corners (x, z) in a shape's own frame: 0 (0,1), 1 (1,0), 2 (0,0), 3 (1,1).
+        constexpr int kCorner[4][2] = { { 0, 1 }, { 1, 0 }, { 0, 0 }, { 1, 1 } };
+        const glm::ivec3 kOpenings[6] = { { 0, 1, 0 }, { 0, -1, 0 }, { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
         for (int x = 0; x < S; x++)
             for (int z = 0; z < S; z++) {
                 const int m = rows[x * S + z];
-                for (int y = 0; y + 1 < S; y++) {
+                for (int y = 0; y < S; y++) {
                     const int wy = coords.y * S + y;
                     if (wy >= m - 1) break; // (underground only: the surface is shaped already)
                     Block& cell = out[Index(x, y, z)];
-                    if ((cell.type != BlockType::STONE && cell.type != BlockType::DEEPSTONE) || !cell.IsFullBlock() || !out[Index(x, y + 1, z)].IsAir()) continue;
-                    const int wx = coords.x * S + x, wz = coords.z * S + z;
-                    // EdgeData order: 0 (x, z+1), 1 (x+1, z), 2 (x, z), 3 (x+1, z+1).
-                    const int d[4] = { drop(wx, wy, wz + 1), drop(wx + 1, wy, wz), drop(wx, wy, wz), drop(wx + 1, wy, wz + 1) };
-                    if (d[0] + d[1] + d[2] + d[3] == 0) continue;
-                    EdgeData edges;
-                    for (int e = 0; e < 4; e++) edges.SetTopY(e, static_cast<uint8_t>(EdgeData::kSteps - d[e]));
-                    cell = Block(cell.type, edges);
-                }
-            }
-        // Ceilings: stone with open air under it (and rock over it) has a sloped underside,
-        // each corner up to half a block up (a natural block cut from below).
-        for (int x = 0; x < S; x++)
-            for (int z = 0; z < S; z++) {
-                const int m = rows[x * S + z];
-                for (int y = 1; y + 1 < S; y++) {
-                    const int wy = coords.y * S + y;
-                    if (wy >= m - 1) break;
-                    Block& cell = out[Index(x, y, z)];
-                    if ((cell.type != BlockType::STONE && cell.type != BlockType::DEEPSTONE) || !cell.IsFullBlock() || !out[Index(x, y - 1, z)].IsAir() ||
-                        out[Index(x, y + 1, z)].IsAir())
-                        continue;
-                    const int wx = coords.x * S + x, wz = coords.z * S + z;
-                    const int d[4] = { drop(wx, wy + 7, wz + 1), drop(wx + 1, wy + 7, wz), drop(wx, wy + 7, wz), drop(wx + 1, wy + 7, wz + 1) };
-                    if (d[0] + d[1] + d[2] + d[3] == 0) continue;
-                    EdgeData edges;
-                    for (int e = 0; e < 4; e++) edges.Set(e, EdgeData::kSteps, d[e]);
-                    cell = Block(cell.type, edges);
-                }
-            }
-        // Walls: stone with open air beside it (rock over and under it) is a slope turned
-        // on its side to face the air (Block::ShapeDir), its face pulled back up to half a
-        // block at each corner (by the corner's place in the world, so a wall runs on).
-        const glm::ivec3 kSides[4] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
-        for (int x = 0; x < S; x++)
-            for (int z = 0; z < S; z++) {
-                const int m = rows[x * S + z];
-                for (int y = 1; y + 1 < S; y++) {
-                    const int wy = coords.y * S + y;
-                    if (wy >= m - 1) break;
-                    Block& cell = out[Index(x, y, z)];
-                    if ((cell.type != BlockType::STONE && cell.type != BlockType::DEEPSTONE) || !cell.IsFullBlock() || out[Index(x, y - 1, z)].IsAir() ||
-                        out[Index(x, y + 1, z)].IsAir())
-                        continue;
-                    int side = -1;
-                    for (int i = 0; i < 4 && side < 0; i++) {
-                        const int nx = x + kSides[i].x, nz = z + kSides[i].z;
-                        if (nx >= 0 && nx < S && nz >= 0 && nz < S && out[Index(nx, y, nz)].IsAir()) side = i;
+                    if ((cell.type != BlockType::STONE && cell.type != BlockType::DEEPSTONE) || !cell.IsFullBlock()) continue;
+                    const glm::ivec3 at(coords.x * S + x, wy, coords.z * S + z);
+                    // (A neighbour in this chunk is open if it was carved out, underground
+                    // here; one beyond it, by the field.)
+                    int facing = -1;
+                    for (int i = 0; i < 6 && facing < 0; i++) {
+                        const glm::ivec3 n = glm::ivec3(x, y, z) + kOpenings[i];
+                        const bool inside = n.x >= 0 && n.y >= 0 && n.z >= 0 && n.x < S && n.y < S && n.z < S;
+                        if (inside ? out[Index(n.x, n.y, n.z)].IsAir() && open(at + kOpenings[i]) > 0.0f : open(at + kOpenings[i]) > 0.0f) facing = i;
                     }
-                    if (side < 0) continue;
-                    const int dir = Block::ShapeDirFacing(kSides[side]);
-                    const glm::ivec3 cellAt(coords.x * S + x, wy, coords.z * S + z);
-                    // EdgeData's corners (x, z) in the shape's frame: 0 (0,1), 1 (1,0), 2 (0,0), 3 (1,1).
-                    constexpr float kCorner[4][2] = { { 0, 1 }, { 1, 0 }, { 0, 0 }, { 1, 1 } };
+                    if (facing < 0) continue;
+                    const int dir = Block::ShapeDirFacing(kOpenings[facing]);
                     EdgeData edges;
-                    int total = 0;
+                    bool whole = true;
                     for (int e = 0; e < 4; e++) {
-                        const glm::ivec3 w = cellAt + glm::ivec3(glm::round(Block::ShapeToCell(dir, glm::vec3(kCorner[e][0], 1.0f, kCorner[e][1]))));
-                        const int d = drop(w.x * 3 + 1, w.y, w.z * 3 + 2);
-                        total += d;
-                        edges.SetTopY(e, static_cast<uint8_t>(EdgeData::kSteps - d));
+                        const glm::vec3 lo = Block::ShapeToCell(dir, glm::vec3(kCorner[e][0], 0.0f, kCorner[e][1]));
+                        const glm::vec3 hi = Block::ShapeToCell(dir, glm::vec3(kCorner[e][0], 1.0f, kCorner[e][1]));
+                        const float o0 = open(at + glm::ivec3(glm::round(lo))), o1 = open(at + glm::ivec3(glm::round(hi)));
+                        int height = EdgeData::kSteps;                   // rock right through
+                        if (o0 > 0.0f) height = 1;                       // open from the far face on
+                        else if (o1 > 0.0f) height = static_cast<int>(std::lround(o0 / (o0 - o1) * EdgeData::kSteps));
+                        height = std::clamp(height, 1, EdgeData::kSteps);
+                        whole &= height == EdgeData::kSteps;
+                        edges.Set(e, height, 0);
                     }
-                    if (total == 0) continue;
-                    Block wall(cell.type, edges);
-                    wall.SetShapeDir(dir);
-                    cell = wall;
+                    if (whole) continue;
+                    Block shaped(cell.type, edges);
+                    shaped.SetShapeDir(dir);
+                    cell = shaped;
                 }
             }
     }

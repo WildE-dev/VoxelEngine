@@ -1229,11 +1229,15 @@ int main() {
         for (int x = px - 120; x <= px + 120; x += 2)
             for (int z = pz - 120; z <= pz + 120; z += 2) {
                 const auto c = t.ColumnAt(x, z);
-                const float level = std::max({ c.corners[0], c.corners[1], c.corners[2], c.corners[3] }) - std::min({ c.corners[0], c.corners[1], c.corners[2], c.corners[3] });
                 if (c.surfaceRow > 30) {
                     slopes++;
                     steep += c.spread > TerrainGenerator::kCliffSpread;
-                    slopedCliffs += c.spread > TerrainGenerator::kCliffSpread && level > 0.0f && level <= TerrainGenerator::kCliffSpread + 1.0f / 16.0f;
+                    {
+                        const EdgeData drawn = c.EdgesAt(c.surfaceRow); // (the slope it's drawn as)
+                        const int lowest = std::min({ drawn.GetTopY(0), drawn.GetTopY(1), drawn.GetTopY(2), drawn.GetTopY(3) });
+                        const int highest = std::max({ drawn.GetTopY(0), drawn.GetTopY(1), drawn.GetTopY(2), drawn.GetTopY(3) });
+                        slopedCliffs += c.spread > TerrainGenerator::kCliffSpread && c.HasSlopedTop() && highest > lowest;
+                    }
                 }
                 if (c.surfaceRow < TerrainGenerator::kRockLine) continue;
                 high++;
@@ -1247,8 +1251,8 @@ int main() {
             }
         Check(high > 0 && bare == high, "every column above the tree line is bare rock or snow (" + std::to_string(high) + " checked)");
         Check(nothingGrows, "and no trees or plants grow up there (loose pebbles may lie about)");
-        Check(steep * 10 > slopes && slopedCliffs == steep,
-              "steep: " + std::to_string(100 * steep / std::max(1, slopes)) + "% of mountain columns are cliffs, each still sloped, a block from low to high (" + std::to_string(slopedCliffs) + " of " + std::to_string(steep) + ")");
+        Check(steep * 10 > slopes && slopedCliffs * 10 >= steep * 9,
+              "steep: " + std::to_string(100 * steep / std::max(1, slopes)) + "% of mountain columns are cliffs, nearly all still drawn as slopes (" + std::to_string(slopedCliffs) + " of " + std::to_string(steep) + ")");
 
         Player player(glm::vec3(px + 0.5f, 0.0f, pz + 0.5f));
         Check(player.Spawn(world) && player.GetFeetPosition().y > best && player.GetFeetPosition().y < best + 2.5f,

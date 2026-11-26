@@ -335,12 +335,12 @@ pauses. The menus can be driven with the pad as well.
 2. **Caves** (`Caves.cpp`): winding tunnels where two 3D noise fields are both
    near zero, plus large caverns more than 24 blocks down. Tunnels that reach
    the surface form entrances. Noise is sampled every 4 blocks and interpolated.
-   Their rock (and the Deep's caverns') is sloped like the ground above: stone with
-   air over it gets a top with each corner up to half a block down, stone with air under
-   it an underside with each corner up to half a block up, and stone with air beside it
-   a slope turned on its side to face the air, by a noise of each corner's position, so
-   floors, ceilings and walls run on (ores stay whole).
-   `BiomeTest` checks most cave floor stone is sloped.
+   Their rock (and the Deep's caverns') is shaped to the cave: stone with open cave
+   over it (a floor), else under it (a ceiling), else beside it (a wall) is a slope turned
+   to face the opening, each corner where the cave's own noise field crosses from rock to
+   open along the line through the cell, so it follows the cave's curve and meets the rock
+   beside it at every shared corner (ores stay whole). `BiomeTest` checks most cave floor
+   stone is sloped, and that shaped cave rock meets its neighbours.
 3. **Features** (`Features.cpp`): trees cluster in forests, plus bushes and
    boulders. Each kind sits on a jittered grid, so a chunk can generate the parts
    of features rooted in neighbouring columns.
@@ -384,7 +384,7 @@ every biome turns up with a fair share, spawn is temperate, climate changes smoo
 and cools with height, and, deep inside each biome, that it has its ground and plants
 (cacti but no trees in deserts, pines in taigas, many more trees in jungles than on
 plains), frozen seas have ice over water, swamps have shallow water, and nothing
-floats. Chunks generate in about 0.2 ms.
+floats. Chunks generate in about 1 ms.
 
 ### Mountains
 
@@ -395,9 +395,9 @@ hills, so peaks reach around 230. Above row 44 the ground is bare rock, with not
 (trees, bushes, grass and flowers stay below that tree line); above row 70 it's snow.
 It gets colder the higher you go (a little colder every block above row 12), so high
 ground turns to taiga and tundra. They're steep: a column
-whose corners are more than a block apart is a cliff: its slope is kept but brought in to
-a block from its lowest corner to its highest, so it stands as a tilted step of bare rock
-up or down from its neighbours, rather than one slope stretched over several rows. The nearest ground above row 80 is about 750 blocks from spawn, towards
+whose corners are more than a block apart is a cliff, bare rock; like every column its
+surface is one slope in the cell its average height is in, so it stands as a tilted step
+up or down from its neighbours, meeting them at whichever corners fit in its cell. The nearest ground above row 80 is about 750 blocks from spawn, towards
 +x +z.
 
 ### Lakes

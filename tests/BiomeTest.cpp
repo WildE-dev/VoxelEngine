@@ -22,6 +22,8 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <tuple>
+#include <vector>
 #include <unordered_map>
 
 #include "world/Coords.h"
@@ -421,6 +423,42 @@ int main() {
                 }
             }
         Check(floors > 200 && sloped * 2 > floors, "cave floors are sloped stone, not flat blocks (" + std::to_string(sloped) + " of " + std::to_string(floors) + ")");
+    }
+    // Cave rock follows the cave: floors, ceilings and walls are shaped from the cave's own
+    // field, so shaped rock facing the same way meets its neighbours at the corners they
+    // share (smooth, not bumped up and down by a noise of its own).
+    {
+        TerrainGenerator rock(TerrainGenerator::Type::Normal);
+        long shared = 0, agree = 0, ceilings = 0, walls = 0;
+        constexpr int kCorner[4][2] = { { 0, 1 }, { 1, 0 }, { 0, 0 }, { 1, 1 } };
+        for (int cx = -3; cx < 3; cx++)
+            for (int cz = -3; cz < 3; cz++) {
+                TerrainGenerator::ColumnHeights h;
+                rock.ComputeColumnHeights(cx, cz, h);
+                for (int cy = -6; cy <= -1; cy++) {
+                    TerrainGenerator::Blocks blocks;
+                    rock.GenerateChunk({ cx, cy, cz }, h, blocks);
+                    constexpr int S = TerrainGenerator::S;
+                    std::map<std::tuple<int, int, int, int>, std::vector<int>> corners; // (where, which way) -> heights there
+                    for (int x = 0; x < S; x++)
+                        for (int y = 0; y < S; y++)
+                            for (int z = 0; z < S; z++) {
+                                const Block& b = blocks[x + S * (y + S * z)];
+                                if ((b.type != BlockType::STONE && b.type != BlockType::DEEPSTONE) || !b.IsPartial()) continue;
+                                const int dir = b.ShapeDir();
+                                ceilings += dir == 3, walls += dir != 0 && dir != 3;
+                                for (int e = 0; e < 4; e++) {
+                                    const glm::ivec3 tip = glm::ivec3(x, y, z) + glm::ivec3(glm::round(Block::ShapeToCell(dir, glm::vec3(kCorner[e][0], 1.0f, kCorner[e][1]))));
+                                    corners[{ tip.x, tip.y, tip.z, dir }].push_back(b.edgeData.GetTopY(e));
+                                }
+                            }
+                    for (const auto& [where, heights] : corners)
+                        for (size_t i = 1; i < heights.size(); i++) shared++, agree += heights[i] == heights[0];
+                }
+            }
+        Check(ceilings > 100 && walls > 100 && shared > 500 && agree * 100 >= shared * 95,
+              "cave floors, ceilings (" + std::to_string(ceilings) + ") and walls (" + std::to_string(walls) + ") meet their neighbours at shared corners (" +
+                  std::to_string(agree) + " of " + std::to_string(shared) + ")");
     }
     // Below the lava level: deepstone, not stone, and caves much rarer.
     {
