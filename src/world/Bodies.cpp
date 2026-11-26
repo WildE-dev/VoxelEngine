@@ -1,6 +1,7 @@
 #include "world/Bodies.h"
 
 #include <array>
+#include <atomic>
 #include <iostream>
 
 #include "world/Creatures.h"
@@ -12,19 +13,24 @@ namespace {
 
 constexpr size_t kCreatureCount = static_cast<size_t>(CreatureType::Count);
 
-Player player;
-float itemSize = 0.25f;
-
 std::array<CreatureSpec, kCreatureCount> Defaults() {
     std::array<CreatureSpec, kCreatureCount> specs{};
     for (size_t t = 0; t < kCreatureCount; t++) specs[t] = DefaultSpecOf(static_cast<CreatureType>(t));
     return specs;
 }
 
-std::array<CreatureSpec, kCreatureCount>& Specs() {
-    static std::array<CreatureSpec, kCreatureCount> specs = Defaults();
-    return specs;
+// The sizes in use. The server reads them on its own thread while the game may load the
+// file again, so a load puts in a new set and leaves the old one be (never freed).
+struct Sizes {
+    Player player;
+    float itemSize = 0.25f;
+    std::array<CreatureSpec, kCreatureCount> specs = Defaults();
+};
+std::atomic<const Sizes*>& Current() {
+    static std::atomic<const Sizes*> current{ new Sizes() };
+    return current;
 }
+const Sizes& S() { return *Current().load(std::memory_order_acquire); }
 
 // A size from the file: a number above zero (else, with a note, the one it had).
 void Size(const Json::Value& v, const char* key, float& out, const std::string& where) {
@@ -72,23 +78,26 @@ bool Load(const std::string& path, std::string& error) {
             Size(c, "height", s.height, path + ": " + id);
             s.halfWidth = width * 0.5f;
         }
-    player = p;
-    itemSize = item;
-    Specs() = specs;
+    auto* sizes = new Sizes();
+    sizes->player = p;
+    sizes->itemSize = item;
+    sizes->specs = specs;
+    Current().store(sizes, std::memory_order_release);
     return true;
 }
 
-const Player& PlayerBody() { return player; }
+const Player& PlayerBody() { return S().player; }
 
 Collision::AABB PlayerBox(const glm::vec3& feet, bool crouching) {
+    const Player& player = S().player;
     const float half = player.width * 0.5f;
     return { feet - glm::vec3(half, 0.0f, half), feet + glm::vec3(half, crouching ? player.crouchHeight : player.height, half) };
 }
-float ItemSize() { return itemSize; }
+float ItemSize() { return S().itemSize; }
 
 } // namespace Bodies
 
 const CreatureSpec& SpecOf(CreatureType type) {
     const size_t t = static_cast<size_t>(type);
-    return Bodies::Specs()[t < Bodies::kCreatureCount ? t : 0];
+    return Bodies::S().specs[t < Bodies::kCreatureCount ? t : 0];
 }

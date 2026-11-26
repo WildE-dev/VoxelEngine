@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -422,9 +423,9 @@ inline uint8_t DefaultLightEmission(BlockType type) {
     return type == BlockType::LAMP || type == BlockType::SIGNAL_LAMP_ON ? kMaxLight : type == BlockType::CAMPFIRE ? kMaxLight - 1 : type == BlockType::SMELTER_LIT ? 12
          : type == BlockType::GLOW_FUNGUS ? 11 : type == BlockType::MAGMA ? 12 : type == BlockType::LAVA || type == BlockType::FIRE ? kMaxLight : 0;
 }
-namespace BlockData { extern int8_t gLight[]; }
+namespace BlockData { extern std::atomic<const int8_t*> gLight; }
 inline uint8_t GetLightEmission(BlockType type) {
-    const int8_t set = BlockData::gLight[static_cast<size_t>(type)];
+    const int8_t set = BlockData::gLight.load(std::memory_order_acquire)[static_cast<size_t>(type)];
     return set >= 0 ? static_cast<uint8_t>(set) : DefaultLightEmission(type);
 }
 

@@ -38,6 +38,7 @@
 //   "solid": false    walked through (only aimed at); plants aren't solid, the rest are
 //   "floor": false    never stood on (a door's top)
 // Without boxes a solid block fills its cell, or its shape if it's chiselled or a slope.
+#include <atomic>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -81,7 +82,7 @@ struct Shape {
 };
 const Shape& ShapeOf(BlockType t);
 
-// Light overrides, read where light is worked out (-1: none).
-extern int8_t gLight[static_cast<size_t>(BlockType::COUNT)];
+// Light overrides, read where light is worked out (-1: none): the current table.
+extern std::atomic<const int8_t*> gLight;
 
 } // namespace BlockData

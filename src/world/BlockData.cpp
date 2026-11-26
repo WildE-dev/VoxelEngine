@@ -1,6 +1,7 @@
 #include "world/BlockData.h"
 
 #include <array>
+#include <atomic>
 #include <cstdio>
 #include <iostream>
 
@@ -9,8 +10,6 @@
 #include "world/Mining.h"
 
 namespace BlockData {
-
-int8_t gLight[static_cast<size_t>(BlockType::COUNT)];
 
 namespace {
 
@@ -23,14 +22,27 @@ struct Entry {
     std::optional<std::string> sound;
     std::optional<uint32_t> map;
 };
-std::array<Entry, kCount> entries;
-std::array<Shape, kCount> shapes;
+// What a load set. The server reads it on its own threads while the game may load the
+// files again, so a load puts in a new table and leaves the old one be (never freed:
+// loads are rare and small), as Crafting::Current does.
+struct Table {
+    std::array<Entry, kCount> entries;
+    std::array<Shape, kCount> shapes;
+    std::array<int8_t, kCount> light;
+    Table() { light.fill(-1); }
+};
+std::atomic<const Table*>& Current() {
+    static std::atomic<const Table*> current{ new Table() };
+    return current;
+}
+const Table& T() { return *Current().load(std::memory_order_acquire); }
 
-struct LightInit {
-    LightInit() {
-        for (auto& l : gLight) l = -1;
-    }
-} lightInit;
+constexpr std::array<int8_t, kCount> NoLights() {
+    std::array<int8_t, kCount> l{};
+    for (auto& v : l) v = -1;
+    return l;
+}
+constexpr std::array<int8_t, kCount> kNoLights = NoLights();
 
 std::optional<Tool> ToolFrom(const std::string& s) {
     if (s == "pickaxe") return Tool::Pickaxe;
@@ -132,6 +144,8 @@ std::vector<ShapeBox> Resolve(std::array<RawShape, kCount>& raw, BlockType t, in
 
 } // namespace
 
+std::atomic<const int8_t*> gLight{ kNoLights.data() };
+
 bool Load(const std::string& path, std::string& error) {
     Json::Value root;
     if (!Json::ParseDataPath(path, root, error)) return false;
@@ -180,28 +194,31 @@ bool Load(const std::string& path, std::string& error) {
         resolved[i] = rawShapes[i].shape;
         if (!rawShapes[i].refs.empty()) resolved[i].boxes = Resolve(rawShapes, static_cast<BlockType>(i), 0);
     }
-    entries = std::move(loaded);
-    shapes = std::move(resolved);
-    for (size_t i = 0; i < kCount; i++) gLight[i] = light[i];
+    auto* table = new Table();
+    table->entries = std::move(loaded);
+    table->shapes = std::move(resolved);
+    for (size_t i = 0; i < kCount; i++) table->light[i] = light[i];
+    Current().store(table, std::memory_order_release);
+    gLight.store(table->light.data(), std::memory_order_release);
     return true;
 }
 
 const char* NameOr(BlockType t, const char* fallback) {
-    const auto& n = entries[static_cast<size_t>(t) % kCount].name;
+    const auto& n = T().entries[static_cast<size_t>(t) % kCount].name;
     return n ? n->c_str() : fallback;
 }
 const char* SoundOr(BlockType t, const char* fallback) {
-    const auto& s = entries[static_cast<size_t>(t) % kCount].sound;
+    const auto& s = T().entries[static_cast<size_t>(t) % kCount].sound;
     return s ? s->c_str() : fallback;
 }
 
-const Shape& ShapeOf(BlockType t) { return shapes[static_cast<size_t>(t) % kCount]; }
+const Shape& ShapeOf(BlockType t) { return T().shapes[static_cast<size_t>(t) % kCount]; }
 
-std::optional<std::string> Name(BlockType t) { return entries[static_cast<size_t>(t) % kCount].name; }
-std::optional<std::string> Texture(BlockType t, int face) { return entries[static_cast<size_t>(t) % kCount].textures[static_cast<size_t>(face) % 6]; }
-std::optional<float> Hardness(BlockType t) { return entries[static_cast<size_t>(t) % kCount].hardness; }
-std::optional<Tool> BestTool(BlockType t) { return entries[static_cast<size_t>(t) % kCount].tool; }
-std::optional<std::string> Sound(BlockType t) { return entries[static_cast<size_t>(t) % kCount].sound; }
-std::optional<uint32_t> MapColour(BlockType t) { return entries[static_cast<size_t>(t) % kCount].map; }
+std::optional<std::string> Name(BlockType t) { return T().entries[static_cast<size_t>(t) % kCount].name; }
+std::optional<std::string> Texture(BlockType t, int face) { return T().entries[static_cast<size_t>(t) % kCount].textures[static_cast<size_t>(face) % 6]; }
+std::optional<float> Hardness(BlockType t) { return T().entries[static_cast<size_t>(t) % kCount].hardness; }
+std::optional<Tool> BestTool(BlockType t) { return T().entries[static_cast<size_t>(t) % kCount].tool; }
+std::optional<std::string> Sound(BlockType t) { return T().entries[static_cast<size_t>(t) % kCount].sound; }
+std::optional<uint32_t> MapColour(BlockType t) { return T().entries[static_cast<size_t>(t) % kCount].map; }
 
 } // namespace BlockData
