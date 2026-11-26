@@ -207,17 +207,22 @@ bool HitsShape(const Block& block, const glm::ivec3& cell, const glm::vec3& orig
             }
         return nearest != FLT_MAX;
     }
-    // A slope: sample along the ray through the cell (fine enough for aiming).
+    // A slope: sample along the ray through the cell (fine enough for aiming), between its
+    // underside and its surface. Met from under the underside, that's the face it's on.
     constexpr int kSamples = 24;
+    bool below = false;
     for (int i = 0; i <= kSamples; i++) {
         const float t = tEnter + (tExit - tEnter) * i / kSamples;
         const glm::vec3 p = origin + direction * t - base;
         const float fx = std::clamp(p.x, 0.0f, 1.0f), fz = std::clamp(p.z, 0.0f, 1.0f);
-        if (p.y <= block.SurfaceHeight(fx, fz)) {
+        const float under = block.UndersideHeight(fx, fz);
+        if (p.y <= block.SurfaceHeight(fx, fz) && p.y >= under) {
             onTop = i > 0;
+            if (below) face = glm::vec3(0.0f, -1.0f, 0.0f);
             tHit = t;
             return true;
         }
+        below = p.y < under;
     }
     return false;
 }

@@ -715,6 +715,31 @@ float Block::SurfaceHeight(float fx, float fz) const {
     return c11 + (c01 - c11) * (1.0f - fx) + (c10 - c11) * (1.0f - fz);
 }
 
+float Block::UndersideHeight(float fx, float fz) const {
+    if (IsPassable() || IsFullBlock()) return 0.0f;
+    // As SurfaceHeight, through the corners' bottoms (the same fold: GetFaceVertices).
+    const float c00 = edgeData.GetBottomY(2) / kSteps;
+    const float c10 = edgeData.GetBottomY(1) / kSteps;
+    const float c01 = edgeData.GetBottomY(0) / kSteps;
+    const float c11 = edgeData.GetBottomY(3) / kSteps;
+    if (IsStepped()) return fx < 0.5f ? (fz < 0.5f ? c00 : c01) : (fz < 0.5f ? c10 : c11);
+    if (fx + fz <= 1.0f) return c00 + (c10 - c00) * fx + (c01 - c00) * fz;
+    return c11 + (c01 - c11) * (1.0f - fx) + (c10 - c11) * (1.0f - fz);
+}
+
+float Block::UndersideMin(float x0, float x1, float z0, float z1) const {
+    x0 = std::max(x0, 0.0f), z0 = std::max(z0, 0.0f), x1 = std::min(x1, 1.0f), z1 = std::min(z1, 1.0f);
+    if (x0 > x1 || z0 > z1) return 0.0f;
+    // (Flat on each side of the fold, as for SurfaceMax: its lowest at a corner of the
+    // rectangle or where the fold crosses its edges.)
+    float low = std::min(std::min(UndersideHeight(x0, z0), UndersideHeight(x1, z0)), std::min(UndersideHeight(x0, z1), UndersideHeight(x1, z1)));
+    for (const float x : { x0, x1 })
+        if (const float z = 1.0f - x; z >= z0 && z <= z1) low = std::min(low, UndersideHeight(x, z));
+    for (const float z : { z0, z1 })
+        if (const float x = 1.0f - z; x >= x0 && x <= x1) low = std::min(low, UndersideHeight(x, z));
+    return low;
+}
+
 int Block::PebbleStones(int x, int y, int z, glm::vec3 lo[5], glm::vec3 hi[5]) const {
     // Four or five little stones, an eighth high, one or two eighths across.
     const float bottom = -PlantDrop();
@@ -759,7 +784,7 @@ bool UprightOverlaps(const Block& b, glm::vec3 lo, glm::vec3 hi) {
             }
         return false;
     }
-    return lo.y < b.SurfaceMax(lo.x, hi.x, lo.z, hi.z) - kShapeEpsilon;
+    return lo.y < b.SurfaceMax(lo.x, hi.x, lo.z, hi.z) - kShapeEpsilon && hi.y > b.UndersideMin(lo.x, hi.x, lo.z, hi.z) + kShapeEpsilon;
 }
 
 float UprightTop(const Block& b, float x0, float x1, float z0, float z1) {
@@ -1033,16 +1058,19 @@ std::vector<glm::vec3> Block::OutlineSegments(const glm::ivec3& cell, unsigned j
             if (h[i] > b[i]) box({ q[i].x, b[i], q[i].y }, { q[i].x + 0.5f, h[i], q[i].y + 0.5f });
         return lines;
     }
-    // A slope: its base, the corners up to their heights, the sloped top's edges, and
-    // the fold between its two triangles (along (0,1)-(1,0); see GetFaceVertices).
+    // A slope: its underside's edges (its base, unless it's been cut from below), the
+    // corners from bottom to top, the sloped top's edges, and the folds between each
+    // surface's two triangles (along (0,1)-(1,0); see GetFaceVertices).
+    const float lo[4] = { edgeData.GetBottomY(2) / kSteps, edgeData.GetBottomY(1) / kSteps, edgeData.GetBottomY(3) / kSteps, edgeData.GetBottomY(0) / kSteps };
     const glm::vec2 c[4] = { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 } };
     for (int i = 0; i < 4; i++) {
         const int j = (i + 1) % 4;
-        edge({ c[i].x, 0.0f, c[i].y }, { c[j].x, 0.0f, c[j].y });
+        edge({ c[i].x, lo[i], c[i].y }, { c[j].x, lo[j], c[j].y });
         edge({ c[i].x, h[i], c[i].y }, { c[j].x, h[j], c[j].y });
-        if (h[i] > 0.0f) edge({ c[i].x, 0.0f, c[i].y }, { c[i].x, h[i], c[i].y });
+        if (h[i] > lo[i]) edge({ c[i].x, lo[i], c[i].y }, { c[i].x, h[i], c[i].y });
     }
     if (std::abs((h[0] + h[2]) - (h[1] + h[3])) > 0.001f) edge({ 1.0f, h[1], 0.0f }, { 0.0f, h[3], 1.0f });
+    if (std::abs((lo[0] + lo[2]) - (lo[1] + lo[3])) > 0.001f) edge({ 1.0f, lo[1], 0.0f }, { 0.0f, lo[3], 1.0f });
     return lines;
 }
 
@@ -1065,8 +1093,9 @@ int Block::ResourceUnits() const {
         return steps * kUnitsPerBlock / (4 * EdgeData::kSteps);
     }
     // A slope's volume is its mean height (the two triangles it's drawn as).
-    const int c00 = edgeData.GetTopY(2), c10 = edgeData.GetTopY(1), c01 = edgeData.GetTopY(0), c11 = edgeData.GetTopY(3);
-    const int sixths = c00 + c11 + 2 * (c10 + c01); // 6 * mean height, in sixteenths
+    // (Less what's been cut from under it: its underside's mean height.)
+    auto mean6 = [&](auto get) { return get(2) + get(3) + 2 * (get(1) + get(0)); }; // 6 * mean height, in sixteenths
+    const int sixths = mean6([&](int e) { return static_cast<int>(edgeData.GetTopY(e)); }) - mean6([&](int e) { return static_cast<int>(edgeData.GetBottomY(e)); });
     return (sixths * kUnitsPerBlock + 3 * EdgeData::kSteps) / (6 * EdgeData::kSteps);
 }
 
@@ -1139,7 +1168,9 @@ Block Block::ChiselledBottom(int edge, int deltaSteps) const {
     Block b = *this;
     const int top = edgeData.GetTopY(edge);
     if (top == 0) return b; // (nothing there to cut from below)
-    const int bottom = std::clamp(edgeData.GetBottomY(edge) - deltaSteps, 0, EdgeData::kSteps);
+    // (A slope's corner keeps a pixel: no thinner, its top would have nowhere to be kept,
+    // as an empty corner is one on the floor. A quarter can be cut right through.)
+    const int bottom = std::clamp(edgeData.GetBottomY(edge) - deltaSteps, 0, IsStepped() ? EdgeData::kSteps : top - 1);
     b.edgeData.Set(edge, top, bottom);
     if (b.edgeData.IsFull()) {
         b.water = b.shown = 0;
@@ -1153,7 +1184,9 @@ Block Block::ChiselledBottom(int edge, int deltaSteps) const {
 
 Block Block::Chiselled(int edge, int deltaSteps) const {
     Block b = *this;
-    const int height = std::clamp(edgeData.GetTopY(edge) + deltaSteps, 0, EdgeData::kSteps);
+    // (A slope's corner cut from below keeps a pixel over its bottom, as in ChiselledBottom.)
+    const int floor = !IsStepped() && edgeData.GetBottomY(edge) > 0 ? edgeData.GetBottomY(edge) + 1 : 0;
+    const int height = std::clamp(edgeData.GetTopY(edge) + deltaSteps, floor, EdgeData::kSteps);
     b.edgeData.SetTopY(edge, static_cast<uint8_t>(height));
     if (b.edgeData.IsFull()) {
         b.water = b.shown = 0; // a full block holds no water

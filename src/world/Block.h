@@ -707,6 +707,11 @@ struct Block {
     // The highest point of an upright slope's surface over a footprint (the footprint
     // clipped to the cell; -1 if it misses the cell).
     float SurfaceMax(float x0, float x1, float z0, float z1) const;
+    // A slope's underside (0 unless it's been cut from below): its height at a point,
+    // through its corners' bottoms as its surface runs through their tops, and the lowest
+    // of it over a footprint.
+    float UndersideHeight(float fx, float fz) const;
+    float UndersideMin(float x0, float x1, float z0, float z1) const;
     // What water sees of a partial block: four quarter-columns (WaterStepped) or an
     // upright slope's corners, heights in sixteenths. A turned shape is its quarters each as
     // high as the most it fills of them.
@@ -805,10 +810,9 @@ struct Block {
     // a pixel, an eighth, a quarter, a half.
     static constexpr int kChiselSteps[] = { 1, 2, 4, 8 };
     static constexpr bool IsChiselStep(int s) { return s == 1 || s == 2 || s == 4 || s == 8; }
-    // `bottom`: a stroke at the shape's underside (the side opposite its top), which on a
-    // built block works its quarter's bottom instead: carving raises it, building lowers
-    // it. (A full block turns to face the stroke instead; natural ground is only ever
-    // worked from its top.)
+    // `bottom`: a stroke at the shape's underside (the side opposite its top), which works
+    // its quarter's (or slope corner's) bottom instead: carving raises it, building lowers
+    // it. (A full block turns to face the stroke instead.)
     Block ChiselledFrom(int dir, int edge, int deltaSteps, bool bottom = false) const {
         Block b = *this;
         if (b.IsFullBlock() && CanTurnShape(b.type) && dir >= 0 && dir <= 5) {
@@ -817,9 +821,9 @@ struct Block {
         }
         return bottom && b.CanCarveBottom() ? b.ChiselledBottom(edge, deltaSteps) : b.Chiselled(edge, deltaSteps);
     }
-    // Whether a shaped block's quarters can be cut from below as well (built blocks: their
-    // quarter-columns have bottoms; a natural slope has only its surface).
-    bool CanCarveBottom() const { return CanChisel() && IsStepped() && !IsFullBlock(); }
+    // Whether a shaped block can be cut from below as well: a built block's quarters, or a
+    // natural slope's corners (its underside then slopes as its surface does).
+    bool CanCarveBottom() const { return CanChisel() && !IsFullBlock(); }
     // Water in a partial block sits above its slope. For flow it's treated as a cell
     // with a raised floor at the slope's average height, so the capacity is right.
     uint8_t WaterFloor() const;

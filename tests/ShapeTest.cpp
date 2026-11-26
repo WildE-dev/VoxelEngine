@@ -171,8 +171,35 @@ int main() {
             Block through = under;
             for (int i = 0; i < 3; i++) through = through.ChiselledFrom(0, 1, -4, true);
             Check(through.edgeData.IsEmpty(1) && through.type == BlockType::STONE_BRICK, "cut right up to its top, the quarter is gone");
-            Check(Block(BlockType::STONE_BRICK).ChiselledFrom(3, 1, -4, true).ShapeDir() == 3 && Block(BlockType::DIRT).Chiselled(2, -4).ChiselledFrom(0, 1, -4, true).edgeData.GetBottomY(1) == 0,
-                  "a whole block still turns to face the stroke; natural ground is only cut from its top");
+            Check(Block(BlockType::STONE_BRICK).ChiselledFrom(3, 1, -4, true).ShapeDir() == 3, "a whole block still turns to face the stroke");
+            // Natural ground too: a slope's corner cut from below, its underside sloping up to it.
+            const Block slope = Block(BlockType::DIRT).Chiselled(2, -4);
+            const Block slopeUnder = slope.ChiselledFrom(0, 1, -4, true);
+            Check(slopeUnder.type == BlockType::DIRT && slopeUnder.edgeData.GetBottomY(1) == 4 && slopeUnder.ResourceUnits() < slope.ResourceUnits() &&
+                      std::abs(slopeUnder.UndersideHeight(1.0f, 0.0f) - 0.25f) < 1e-4f && slopeUnder.UndersideHeight(0.0f, 0.0f) == 0.0f,
+                  "a slope's corner cut from below: its underside slopes up to that corner");
+            Block thinCorner = slopeUnder;
+            for (int i = 0; i < 6; i++) thinCorner = thinCorner.ChiselledFrom(0, 1, -4, true);
+            Check(thinCorner.edgeData.GetTopY(1) == 16 && thinCorner.edgeData.GetBottomY(1) == 15 && slopeUnder.Chiselled(1, -16).edgeData.GetTopY(1) == 5,
+                  "and a corner cut from below keeps a pixel, from either end");
+            {
+                struct OneSlope : BlockAccess {
+                    Block block;
+                    bool GetBlock(int x, int y, int z, Block& out) const override {
+                        out = x == 0 && y == 0 && z == 0 ? block : Block();
+                        return true;
+                    }
+                } world;
+                world.block = slopeUnder;
+                const auto up = Raycast(world, { 0.9f, -0.5f, 0.1f }, { 0.0f, 1.0f, 0.0f }, 3.0f);
+                const Collision::AABB under{ { 0.8f, 0.0f, 0.0f }, { 1.0f, 0.15f, 0.2f } }, inside{ { 0.8f, 0.4f, 0.0f }, { 1.0f, 0.6f, 0.2f } };
+                float outlineLow = 1.0f;
+                for (const auto& q : slopeUnder.OutlineSegments())
+                    if (q.x > 0.99f && q.z < 0.01f) outlineLow = std::min(outlineLow, q.y);
+                Check(up && up->block == glm::ivec3(0) && up->normal == glm::ivec3(0, -1, 0) && up->point.y > 0.2f && !slopeUnder.ShapeOverlaps(under.min, under.max) &&
+                          slopeUnder.ShapeOverlaps(inside.min, inside.max) && std::abs(outlineLow - 0.25f) < 1e-4f,
+                      "aimed at from under it, hit on its underside; nothing under it; outlined from it");
+            }
             // Drawn with its new underside, and stood under.
             Chunk::Blocks blocks{};
             blocks[Chunk::Index(4, 4, 4)] = under;
