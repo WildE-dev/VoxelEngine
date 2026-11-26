@@ -73,6 +73,13 @@ TerrainGenerator::Column MakeColumn(float h00, float h10, float h01, float h11) 
     c.corners[1] = Quantise(h10);
     c.corners[2] = Quantise(h00);
     c.corners[3] = Quantise(h11);
+    // Steeper than a block per block, it's a cliff: levelled at its own height, a step up
+    // or down from its neighbours, rather than one slope stretched over several rows.
+    c.spread = std::max({ c.corners[0], c.corners[1], c.corners[2], c.corners[3] }) - std::min({ c.corners[0], c.corners[1], c.corners[2], c.corners[3] });
+    if (c.spread > TerrainGenerator::kCliffSpread) {
+        const float level = Quantise((c.corners[0] + c.corners[1] + c.corners[2] + c.corners[3]) * 0.25f);
+        for (float& corner : c.corners) corner = level;
+    }
     c.surfaceRow = static_cast<int>(std::floor(std::min(std::min(c.corners[0], c.corners[1]), std::min(c.corners[2], c.corners[3]))));
     return c;
 }
@@ -134,8 +141,7 @@ const char* BiomeName(Biome biome) {
 BlockType TerrainGenerator::Column::TopType(Biome biome) const {
     if (IsSandy()) return biome == Biome::Swamp ? BlockType::DIRT : BlockType::SAND; // muddy swamp beds, else beaches
     if (surfaceRow >= kSnowLine) return BlockType::SNOW;
-    const float steepness = std::max({ corners[0], corners[1], corners[2], corners[3] }) - std::min({ corners[0], corners[1], corners[2], corners[3] });
-    if (surfaceRow >= kRockLine || steepness >= 1.5f) return BlockType::STONE; // bare rock high up and on cliffs
+    if (surfaceRow >= kRockLine || spread > kCliffSpread) return BlockType::STONE; // bare rock high up and on cliffs
     switch (biome) {
     case Biome::Desert: return BlockType::SAND;
     case Biome::Savanna: return BlockType::DRY_GRASS;
@@ -512,14 +518,14 @@ float TerrainGenerator::GetMountainHeight(int x, int z) const {
     const float range = Noise::Perlin2(x / 900.0f + 31.7f, z / 900.0f - 77.3f);
     const float mask = glm::smoothstep(-0.14f, 0.44f, range);
     if (mask <= 0.0f) return 0.0f;
-    // Ridges inside them: crests where the noise crosses zero, valleys between, with
-    // smaller ridges on the flanks. The crests are rounded (smoothstep, not |n|) and the
-    // scales wide enough that slopes stay mostly under 45 degrees: each column's
-    // surface is one sloped block, so anything much steeper shows as steps.
-    auto ridge = [](float n) { return 1.0f - glm::smoothstep(0.0f, 0.6f, std::abs(n)); };
-    const float big = ridge(Noise::Perlin2(x / 620.0f + 11.3f, z / 620.0f + 5.9f));
-    const float small = ridge(Noise::Perlin2(x / 250.0f - 3.1f, z / 250.0f + 17.7f));
-    return mask * kMountainHeight * big * (0.8f + 0.25f * small);
+    // Ridges inside them: sharp crests where the noise crosses zero, valleys between,
+    // smaller ridges on the flanks and crags on top of those. Steep: where a column climbs
+    // more than a block it's a cliff, a flat-topped step of rock (kCliffSpread).
+    auto ridge = [](float n) { return std::pow(1.0f - std::min(1.0f, std::abs(n) / 0.6f), 1.7f); };
+    const float big = ridge(Noise::Perlin2(x / 430.0f + 11.3f, z / 430.0f + 5.9f));
+    const float small = ridge(Noise::Perlin2(x / 150.0f - 3.1f, z / 150.0f + 17.7f));
+    const float crags = Noise::Perlin2(x / 37.0f + 2.3f, z / 37.0f - 8.1f);
+    return mask * (kMountainHeight * big * (0.75f + 0.35f * small) + 14.0f * big * crags);
 }
 
 float TerrainGenerator::GetHillHeight(int x, int z) const {
@@ -637,7 +643,7 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                 }
             }
 
-    // Cave and cavern floors: stone with open air over it is given a sloped top, each
+    // Caves' rock is shaped: floors, ceilings and walls. Floors: stone with open air over it is given a sloped top, each
     // corner up to half a block down (by a noise of the corner's own position, so
     // neighbours share their corners and the floor runs on smoothly), instead of flat
     // blocks. Ores stay whole (so they show). (Not the chunk's top row: what's over that
@@ -662,6 +668,64 @@ void TerrainGenerator::GenerateChunk(const glm::ivec3& coords, const ColumnHeigh
                     EdgeData edges;
                     for (int e = 0; e < 4; e++) edges.SetTopY(e, static_cast<uint8_t>(EdgeData::kSteps - d[e]));
                     cell = Block(cell.type, edges);
+                }
+            }
+        // Ceilings: stone with open air under it (and rock over it) has a sloped underside,
+        // each corner up to half a block up (a natural block cut from below).
+        for (int x = 0; x < S; x++)
+            for (int z = 0; z < S; z++) {
+                const int m = rows[x * S + z];
+                for (int y = 1; y + 1 < S; y++) {
+                    const int wy = coords.y * S + y;
+                    if (wy >= m - 1) break;
+                    Block& cell = out[Index(x, y, z)];
+                    if ((cell.type != BlockType::STONE && cell.type != BlockType::DEEPSTONE) || !cell.IsFullBlock() || !out[Index(x, y - 1, z)].IsAir() ||
+                        out[Index(x, y + 1, z)].IsAir())
+                        continue;
+                    const int wx = coords.x * S + x, wz = coords.z * S + z;
+                    const int d[4] = { drop(wx, wy + 7, wz + 1), drop(wx + 1, wy + 7, wz), drop(wx, wy + 7, wz), drop(wx + 1, wy + 7, wz + 1) };
+                    if (d[0] + d[1] + d[2] + d[3] == 0) continue;
+                    EdgeData edges;
+                    for (int e = 0; e < 4; e++) edges.Set(e, EdgeData::kSteps, d[e]);
+                    cell = Block(cell.type, edges);
+                }
+            }
+        // Walls: stone with open air beside it (rock over and under it) is a slope turned
+        // on its side to face the air (Block::ShapeDir), its face pulled back up to half a
+        // block at each corner (by the corner's place in the world, so a wall runs on).
+        const glm::ivec3 kSides[4] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+        for (int x = 0; x < S; x++)
+            for (int z = 0; z < S; z++) {
+                const int m = rows[x * S + z];
+                for (int y = 1; y + 1 < S; y++) {
+                    const int wy = coords.y * S + y;
+                    if (wy >= m - 1) break;
+                    Block& cell = out[Index(x, y, z)];
+                    if ((cell.type != BlockType::STONE && cell.type != BlockType::DEEPSTONE) || !cell.IsFullBlock() || out[Index(x, y - 1, z)].IsAir() ||
+                        out[Index(x, y + 1, z)].IsAir())
+                        continue;
+                    int side = -1;
+                    for (int i = 0; i < 4 && side < 0; i++) {
+                        const int nx = x + kSides[i].x, nz = z + kSides[i].z;
+                        if (nx >= 0 && nx < S && nz >= 0 && nz < S && out[Index(nx, y, nz)].IsAir()) side = i;
+                    }
+                    if (side < 0) continue;
+                    const int dir = Block::ShapeDirFacing(kSides[side]);
+                    const glm::ivec3 cellAt(coords.x * S + x, wy, coords.z * S + z);
+                    // EdgeData's corners (x, z) in the shape's frame: 0 (0,1), 1 (1,0), 2 (0,0), 3 (1,1).
+                    constexpr float kCorner[4][2] = { { 0, 1 }, { 1, 0 }, { 0, 0 }, { 1, 1 } };
+                    EdgeData edges;
+                    int total = 0;
+                    for (int e = 0; e < 4; e++) {
+                        const glm::ivec3 w = cellAt + glm::ivec3(glm::round(Block::ShapeToCell(dir, glm::vec3(kCorner[e][0], 1.0f, kCorner[e][1]))));
+                        const int d = drop(w.x * 3 + 1, w.y, w.z * 3 + 2);
+                        total += d;
+                        edges.SetTopY(e, static_cast<uint8_t>(EdgeData::kSteps - d));
+                    }
+                    if (total == 0) continue;
+                    Block wall(cell.type, edges);
+                    wall.SetShapeDir(dir);
+                    cell = wall;
                 }
             }
     }

@@ -1176,20 +1176,22 @@ int main() {
                 const int h = t.ColumnAt(x, z).surfaceRow;
                 if (h > best) best = h, px = x, pz = z;
             }
-        Check(best > 80, "a peak rises to " + std::to_string(best) + " within 1500 blocks of spawn");
+        Check(best > 80, "a peak rises to " + std::to_string(best) + " within 1500 blocks of spawn (at " + std::to_string(px) + ", " + std::to_string(pz) + ")");
         Check(t.ColumnAt(px, pz).TopType(t.BiomeAt(px, pz)) == BlockType::SNOW, "with snow on top");
 
         // Around the peak: rock (or snow) above the tree line, nothing growing there,
-        // and slopes that mostly fit one block per column.
-        int high = 0, bare = 0, steep = 0, slopes = 0;
+        // and steep: many columns are cliffs (steeper than a block per block), each a
+        // flat-topped step of rock.
+        int high = 0, bare = 0, steep = 0, slopes = 0, flatCliffs = 0;
         bool nothingGrows = true;
         for (int x = px - 120; x <= px + 120; x += 2)
             for (int z = pz - 120; z <= pz + 120; z += 2) {
                 const auto c = t.ColumnAt(x, z);
-                const float spread = std::max({ c.corners[0], c.corners[1], c.corners[2], c.corners[3] }) - std::min({ c.corners[0], c.corners[1], c.corners[2], c.corners[3] });
+                const float level = std::max({ c.corners[0], c.corners[1], c.corners[2], c.corners[3] }) - std::min({ c.corners[0], c.corners[1], c.corners[2], c.corners[3] });
                 if (c.surfaceRow > 30) {
                     slopes++;
-                    steep += spread > 1.0f;
+                    steep += c.spread > TerrainGenerator::kCliffSpread;
+                    flatCliffs += c.spread > TerrainGenerator::kCliffSpread && level == 0.0f;
                 }
                 if (c.surfaceRow < TerrainGenerator::kRockLine) continue;
                 high++;
@@ -1203,7 +1205,8 @@ int main() {
             }
         Check(high > 0 && bare == high, "every column above the tree line is bare rock or snow (" + std::to_string(high) + " checked)");
         Check(nothingGrows, "and no trees or plants grow up there (loose pebbles may lie about)");
-        Check(steep * 50 < slopes, std::to_string(100 * steep / std::max(1, slopes)) + "% of mountain columns are steeper than a block per block");
+        Check(steep * 10 > slopes && flatCliffs == steep,
+              "steep: " + std::to_string(100 * steep / std::max(1, slopes)) + "% of mountain columns are cliffs, each flat on top (" + std::to_string(flatCliffs) + " of " + std::to_string(steep) + ")");
 
         Player player(glm::vec3(px + 0.5f, 0.0f, pz + 0.5f));
         Check(player.Spawn(world) && player.GetFeetPosition().y > best && player.GetFeetPosition().y < best + 2.5f,

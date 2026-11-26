@@ -334,9 +334,11 @@ pauses. The menus can be driven with the pad as well.
 2. **Caves** (`Caves.cpp`): winding tunnels where two 3D noise fields are both
    near zero, plus large caverns more than 24 blocks down. Tunnels that reach
    the surface form entrances. Noise is sampled every 4 blocks and interpolated.
-   Their floors (and the Deep's cavern floors) are sloped like the ground above:
-   stone with air over it gets a top with each corner up to half a block down, by a
-   noise of the corner's position, so the floor runs on smoothly (ores stay whole).
+   Their rock (and the Deep's caverns') is sloped like the ground above: stone with
+   air over it gets a top with each corner up to half a block down, stone with air under
+   it an underside with each corner up to half a block up, and stone with air beside it
+   a slope turned on its side to face the air, by a noise of each corner's position, so
+   floors, ceilings and walls run on (ores stay whole).
    `BiomeTest` checks most cave floor stone is sloped.
 3. **Features** (`Features.cpp`): trees cluster in forests, plus bushes and
    boulders. Each kind sits on a jittered grid, so a chunk can generate the parts
@@ -386,14 +388,15 @@ floats. Chunks generate in about 0.2 ms.
 ### Mountains
 
 Ranges rise out of the hills over about a third of the world: a very large-scale
-noise field decides where they run, and ridges inside them (rounded at the crests,
-with smaller ridges on their flanks) climb up to about 150 blocks above the hills, so
-peaks reach around 160. Above row 44 the ground is bare rock, with nothing growing
+noise field decides where they run, and ridges inside them (sharp at the
+crests, with smaller ridges and crags on their flanks) climb up to about 210 blocks above the
+hills, so peaks reach around 230. Above row 44 the ground is bare rock, with nothing growing
 (trees, bushes, grass and flowers stay below that tree line); above row 70 it's snow.
 It gets colder the higher you go (a little colder every block above row 12), so high
-ground turns to taiga and tundra. The slopes are kept mostly under 45 degrees, since
-each column's surface is one sloped block (a few mountain columns are steeper, and
-show a step). The nearest ground above row 80 is about 750 blocks from spawn, towards
+ground turns to taiga and tundra. They're steep: a column
+whose corners are more than a block apart is a cliff, its top levelled at its own height,
+a flat step of bare rock up or down from its neighbours, so mountainsides climb in
+rocky ledges rather than one slope stretched over several rows. The nearest ground above row 80 is about 750 blocks from spawn, towards
 +x +z.
 
 ### Lakes
@@ -846,7 +849,7 @@ sixteenth high, an old save's shapes read the same, a vertex kept to a sixteenth
 nothing and back to whole), that the mesher draws quarter-columns, joins slopes
 across rows and tapers thin water to nothing with no walls, chiselling over the
 network, and the mountains: high snowy peaks, bare rock with nothing growing above the
-tree line, gentle enough slopes, and that a player spawning on a peak lands on top.
+tree line, steep slopes (cliffs, each flat on top), and that a player spawning on a peak lands on top.
 
 ### Logs
 

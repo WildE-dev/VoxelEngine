@@ -84,6 +84,9 @@ public:
     struct Column {
         float corners[4];
         int surfaceRow;
+        // How far its corners were apart, before a cliff's were levelled (MakeColumn):
+        // more than kCliffSpread and it's a cliff, its top flat at its own height.
+        float spread = 0.0f;
 
         // Edge data for the sloped block at `row`, and whether it's a valid block.
         EdgeData EdgesAt(int row) const;
@@ -168,6 +171,9 @@ public:
     static constexpr int kMaxRiverLength = 160;
     // Water fills open cells below this row: the sea's level, or a lake's.
     int WaterLevelAt(int x, int z) const { return std::max(static_cast<int>(kSeaLevel), LakeLevelAt(x, z)); }
+    // A column whose corners are more than this many blocks apart is a cliff: its top is
+    // flat, at its own height, and it stands as a step from its neighbours (rock showing).
+    static constexpr float kCliffSpread = 1.0f;
     static constexpr int kLakeCell = 128;
     static constexpr float kLakeMinRadius = 14.0f, kLakeMaxRadius = 34.0f;
     void ComputeColumnHeights(int chunkX, int chunkZ, ColumnHeights& out) const;
@@ -191,7 +197,7 @@ private:
     static constexpr float SIZE = 120.0f;
     static constexpr float AMPLITUDE = 20.0f;
     // Mountain ranges on top of the rolling hills (see GetHeight).
-    static constexpr float kMountainHeight = 150.0f;
+    static constexpr float kMountainHeight = 210.0f;
 
     struct Lake {
         bool exists = false;

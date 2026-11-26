@@ -103,9 +103,9 @@ void Player::Update(const BlockAccess& world, const PlayerInput& input, float de
 }
 
 bool Player::Spawn(const BlockAccess& world) {
-    // Terrain heights stay well within 200 to -64 (mountains reach about 110), but the
-    // search reaches wherever we are too: a bed far down (the Deep) is below that.
-    const int kTop = std::max(200, static_cast<int>(std::floor(feet.y)) + 40);
+    // Terrain heights stay well within 320 to -64 (the highest peaks reach about 240), but
+    // the search reaches wherever we are too: a bed far down (the Deep) is below that.
+    const int kTop = std::max(320, static_cast<int>(std::floor(feet.y)) + 40);
     const int kBottom = std::min(-64, static_cast<int>(std::floor(feet.y)) - 64);
     if (resumeHere) {
         // Wait until every cell the body touches has loaded, then stay put if it fits.
